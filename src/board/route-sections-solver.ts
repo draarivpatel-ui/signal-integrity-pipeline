@@ -121,7 +121,9 @@ export class RouteSectionsSolver extends BaseSolver {
     return this.output
   }
   /** Original problem, independent of work state. */
-  override getConstructorParams(): [RouteSectionsInput] {
+  override getConstructorParams(): ConstructorParameters<
+    typeof RouteSectionsSolver
+  > {
     return [this.input]
   }
 }
