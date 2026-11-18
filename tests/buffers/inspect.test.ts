@@ -9,6 +9,7 @@ import {
   edgeSeconds,
   type InspectedPin,
   inspectPins,
+  pinCapabilities,
 } from "../../src/buffers/inspect"
 import {
   deviceAsset,
@@ -209,4 +210,27 @@ test("an unavailable typical ramp row leaves the other edge usable", async () =>
   const modelData = "[Ramp]\ndV/dt_r 0.36/na NA NA\ndV/dt_f 0.36/600p NA NA"
   const text = inspectionIbis({ modelType: "Output", modelData })
   assert.equal(Math.round(edgeSeconds(inspectedPin(board, text)) * 1e12), 800)
+})
+
+test("a model type rejected by the converter cannot be used as a receiver", async () => {
+  const board = await ibisInspectionBoard()
+  const text = inspectionIbis({ modelType: "Terminator" })
+  assert.throws(() => convertedReferences(text, board), {
+    code: "unsupported_model_type",
+  })
+  assert.throws(() => pinCapabilities(inspectedPin(board, text)), /unsupported/)
+})
+
+test("converter-supported model types declare their pin roles", async () => {
+  const board = await ibisInspectionBoard()
+  const types = [
+    ["Input", { drive: false, receive: true, disable: false }],
+    ["Output", { drive: true, receive: false, disable: false }],
+    ["I/O", { drive: true, receive: true, disable: true }],
+    ["3-state", { drive: true, receive: false, disable: true }],
+  ] as const
+  for (const [modelType, expected] of types) {
+    const pin = inspectedPin(board, inspectionIbis({ modelType }))
+    assert.deepEqual(pinCapabilities(pin), expected)
+  }
 })
