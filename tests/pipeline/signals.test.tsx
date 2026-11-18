@@ -388,6 +388,33 @@ test("PRBS31 rejects overlong captures during preparation", async () => {
   )
 })
 
+test("capture timing accommodates enabled quiet offsets", async () => {
+  const automatic = await renderSignals(<Board pattern="0" offset={3e-6} />)
+  const [prepared] = prepareBlocks({
+    circuit: automatic,
+    sources: inverterSources,
+  })
+  const [plan] = generalDeclarations(declarationInput(prepared)).plans
+  assert.ok(Math.abs(plan.durationSeconds - (3e-6 + 32 / 20e6)) < 1e-15)
+})
+
+test("capture timing rejects an explicit recording that ends at stimulus start", async () => {
+  const explicit = await renderSignals(
+    <Board pattern="0" offset={1e-6} duration={1e-6} />,
+  )
+  assert.throws(
+    () => prepareBlocks({ circuit: explicit, sources: inverterSources }),
+    /stimulus starts after/,
+  )
+})
+
+test("capture timing limits the maximum timestep for a 1 ps recording", async () => {
+  const circuit = await renderSignals(<Board pattern="01" duration={1e-12} />)
+  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [plan] = generalDeclarations(declarationInput(prepared)).plans
+  assert.ok(plan.maxStepSeconds < plan.durationSeconds)
+})
+
 const signal: SimulationPcbDriverReceiverChannel = {
   type: "simulation_pcb_driver_receiver_channel",
   simulation_pcb_driver_receiver_channel_id: "s",

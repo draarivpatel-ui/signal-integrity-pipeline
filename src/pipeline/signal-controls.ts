@@ -48,14 +48,28 @@ export function endpointPorts(endpoint: SignalEndpoint): SourcePortId[] {
   return [endpoint.p_source_port_id, endpoint.n_source_port_id]
 }
 
-/** Use the explicit block duration when present, in seconds. */
+/** Choose the capture duration in seconds and check coverage of enabled stimuli. */
 export function blockDurationSeconds(
   block: SimulationPcbTransientChannelSimulation,
   signals: SimulationPcbDriverReceiverChannel[],
 ): number {
-  if (block.duration_ms !== undefined)
-    return block.duration_ms / MILLISECONDS_PER_SECOND
-  return defaultDurationSeconds(signals)
+  const duration =
+    block.duration_ms === undefined
+      ? defaultDurationSeconds(signals)
+      : block.duration_ms / MILLISECONDS_PER_SECOND
+  if (!Number.isFinite(duration) || duration <= 0)
+    throw new Error("Recording duration must be finite and positive.")
+  for (const signal of signals) {
+    if (signal.driver_disabled) continue
+    const start = signal.offset_ms / MILLISECONDS_PER_SECOND
+    if (!Number.isFinite(start) || start < 0)
+      throw new Error(`${signal.name}: invalid stimulus offset.`)
+    if (start >= duration)
+      throw new Error(
+        `${signal.name}: stimulus starts after the experiment ends.`,
+      )
+  }
+  return duration
 }
 
 /** Include a quiet driver as the last probe after the receivers. */
