@@ -33,7 +33,12 @@ export type {
   SimulationIbisModel,
 } from "./schema"
 export { recordSchema, validateCircuitRecords } from "./schema"
-export { isQuiet, type SimulationPcbDriverReceiverChannel } from "./signals"
+export {
+  isQuiet,
+  type SignalEndpoint,
+  type SimulationPcbDriverReceiverChannel,
+  type SimulationPcbTransientChannelSimulation,
+} from "./signals"
 export {
   type BoardStackup,
   type CopperLayer,
