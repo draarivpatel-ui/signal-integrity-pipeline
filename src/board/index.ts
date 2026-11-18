@@ -14,6 +14,7 @@ export {
 } from "./connectivity"
 export { polygonContains } from "./geometry/polygon"
 export { resolveRouteVias, selectPort } from "./geometry/ports"
+export { type CopperScope, channelCopperScope } from "./geometry/scope"
 export type {
   CopperPoint,
   CopperPolygon,
