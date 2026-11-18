@@ -23,12 +23,8 @@ test("bindings compile one buffer per step and freeze the fully allocated node m
   solver.solve()
   const output = solver.getOutput()
   assert.equal(output.value.models.length, 4)
-  assert.ok(
-    output.value.models.every((model) =>
-      Object.values(model.spicePinMapping).every(
-        (port) => output.value.nodeMap[port] !== undefined,
-      ),
-    ),
-  )
+  const { models, nodeMap } = output.value
+  const ports = models.flatMap((model) => Object.values(model.spicePinMapping))
+  assert.ok(ports.every((port) => nodeMap[port] !== undefined))
   assert.ok(Object.isFrozen(output.value.nodeMap))
 })

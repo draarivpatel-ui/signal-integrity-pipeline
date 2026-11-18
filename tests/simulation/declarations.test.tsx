@@ -24,10 +24,11 @@ test("TSX model pruning removes selections and references for unused physical pi
   }
   // prepareBlocks trims physical mappings after spatial scope selection, retaining these source dictionaries.
   delete pinMap.B1
-  const definition = modelRunDefinition(
+  const plan = { durationSeconds: 2e-9, states: [], stimuli: [] }
+  const { definition } = modelRunDefinition(
     { ...model, pipelineId: "scoped" },
-    { durationSeconds: 2e-9, states: [], stimuli: [] },
-  ).definition
+    plan,
+  )
   assert.deepEqual(Object.keys(definition.modelSelections!), ["A1"])
   assert.deepEqual(Object.keys(definition.references!), ["A1"])
   assert.ok(!("B1" in definition.pinMap))
