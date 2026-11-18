@@ -5,6 +5,7 @@ import type { LayerRef } from "circuit-json"
 import type React from "react"
 import {
   type CircuitJson,
+  type CopperScope,
   channelCopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
@@ -20,7 +21,8 @@ const ACCESS_BARREL_X_MM = 7
 interface WireProps {
   name: string
   y: number
-  layer?: Extract<LayerRef, "top" | "inner1" | "inner2">
+  layer?: LayerRef
+  startPad?: React.JSX.Element
   extent?: number
 }
 
@@ -30,13 +32,14 @@ function Wire({
   y,
   layer = "top",
   extent = 8,
+  startPad,
 }: WireProps): React.JSX.Element {
   const from = `.${name} > .A`
   const to = `.${name} > .B`
   const left = { x: -ACCESS_BARREL_X_MM, y }
   const right = { x: ACCESS_BARREL_X_MM, y }
   const pcbPath: NonNullable<TraceProps["pcbPath"]> = [from]
-  if (layer !== "top") {
+  if (layer !== "top" && layer !== "bottom") {
     pcbPath.push(left, {
       ...left,
       via: true,
@@ -56,17 +59,20 @@ function Wire({
       <chip
         name={name}
         pcbY={y}
+        layer={layer === "bottom" ? "bottom" : "top"}
         pinLabels={{ pin1: "A", pin2: "B" }}
         footprint={
           <footprint>
-            <smtpad
-              portHints={["pin1"]}
-              pcbX={-extent}
-              pcbY={0}
-              width={PAD_SIZE_MM}
-              height={PAD_SIZE_MM}
-              shape="rect"
-            />
+            {startPad ?? (
+              <smtpad
+                portHints={["pin1"]}
+                pcbX={-extent}
+                pcbY={0}
+                width={PAD_SIZE_MM}
+                height={PAD_SIZE_MM}
+                shape="rect"
+              />
+            )}
             <smtpad
               portHints={["pin2"]}
               pcbX={extent}
@@ -224,4 +230,86 @@ test("TSX scope retains adjacent copper, barrel spans and return pours and omits
     "unused disconnected leads retain their explicit open-pad approximation",
   )
   assert.equal(scope.omitted.traces, 2)
+})
+
+/** Select the rendered net named SELECTED without a reference net. */
+function scopeFor(circuit: CircuitJson, distanceMm?: number): CopperScope {
+  const source = circuit.find(
+    (record) =>
+      record.type === "source_trace" && record.name === "SELECTED_route",
+  )
+  assert(source?.type === "source_trace")
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
+  const selected = sourceNetMembers(
+    connectivity,
+    source.connected_source_port_ids[0],
+  )
+  return channelCopperScope({
+    circuit,
+    connectivity,
+    selected,
+    reference: new Set(),
+    distanceMm,
+  })
+}
+
+test("rectangular plated pads do not extend the scope to distant nets", async () => {
+  const circuit = await renderCoreSignals(
+    <board width={18} height={18} routeRemaining={false} schematicDisabled>
+      <Wire
+        name="SELECTED"
+        y={0}
+        extent={3}
+        startPad={
+          <platedhole
+            portHints={["pin1"]}
+            pcbX={-3}
+            pcbY={0}
+            shape="circular_hole_with_rect_pad"
+            holeDiameter={0.25}
+            rectPadWidth={0.6}
+            rectPadHeight={0.6}
+          />
+        }
+      />
+      <Wire name="DISTANT" y={5} extent={3} />
+    </board>,
+  )
+  assert.equal(scopeFor(circuit).pcbTraceIds.length, 1)
+})
+
+test("polygonal plated pads use their board position when testing proximity", async () => {
+  const circuit = await renderCoreSignals(
+    <board width={18} height={18} routeRemaining={false} schematicDisabled>
+      <Wire name="SELECTED" y={0} extent={3} />
+      <chip
+        name="DISTANT"
+        pcbY={5}
+        pinLabels={{ pin1: "A" }}
+        footprint={
+          <footprint>
+            <platedhole
+              portHints={["pin1"]}
+              pcbX={-3}
+              pcbY={0}
+              shape="hole_with_polygon_pad"
+              holeShape="circle"
+              holeDiameter={0.25}
+              holeOffsetX={0}
+              holeOffsetY={0}
+              padOutline={[
+                { x: -0.3, y: -0.3 },
+                { x: 0.3, y: -0.3 },
+                { x: 0.3, y: 0.3 },
+                { x: -0.3, y: 0.3 },
+              ]}
+            />
+          </footprint>
+        }
+      />
+    </board>,
+  )
+  const pad = circuit.find((record) => record.type === "pcb_plated_hole")
+  assert(pad)
+  assert(!scopeFor(circuit).nearbyPadIds.includes(pad.pcb_plated_hole_id))
 })

@@ -190,32 +190,41 @@ function viaBox(via: PcbVia, layers: CopperLayers): Box {
   )
 }
 
-/** Circumscribed pad boxes preserve rotation and through-hole layer spans conservatively. */
+/** Bound pad copper in board coordinates and on every layer the pad occupies. */
 function padBox(pad: Pad, layers: CopperLayers): Box {
-  if (pad.type === "pcb_smtpad" && pad.shape === "polygon") {
-    return copperBox({ points: pad.points, names: [pad.layer] }, layers)
-  }
-  let radius = padRadius(pad)
-  if (!Number.isFinite(radius)) radius = Infinity
-  if (pad.type === "pcb_smtpad")
+  if (pad.type === "pcb_smtpad") {
+    if (pad.shape === "polygon")
+      return copperBox({ points: pad.points, names: [pad.layer] }, layers)
+    const radius =
+      pad.shape === "circle"
+        ? pad.radius
+        : Math.hypot(pad.width, pad.height) / 2
     return copperBox({ points: [pad], names: [pad.layer], radius }, layers)
-  return copperBox({ points: [pad], names: pad.layers, radius }, layers)
+  }
+  if (pad.shape === "hole_with_polygon_pad") {
+    const angle = ((pad.ccw_rotation ?? 0) * Math.PI) / 180
+    const cos = Math.cos(angle)
+    const sin = Math.sin(angle)
+    const points = pad.pad_outline.map(({ x, y }) => ({
+      x: pad.x + x * cos - y * sin,
+      y: pad.y + x * sin + y * cos,
+    }))
+    return copperBox({ points, names: pad.layers }, layers)
+  }
+  return copperBox(
+    { points: [pad], names: pad.layers, radius: platedPadRadius(pad) },
+    layers,
+  )
 }
 
-/** Use the pad bounding rectangle's circumradius where there is no circular radius. */
-function padRadius(pad: Pad): number {
-  if (pad.type === "pcb_smtpad" && pad.shape === "circle") return pad.radius
-  const width = Number(
-    Reflect.get(pad, "width") ??
-      Reflect.get(pad, "outer_width") ??
-      Reflect.get(pad, "outer_diameter"),
-  )
-  const height = Number(
-    Reflect.get(pad, "height") ??
-      Reflect.get(pad, "outer_height") ??
-      Reflect.get(pad, "outer_diameter"),
-  )
-  return Math.hypot(width, height) / 2
+/** The circumradius preserves the bounds of copper pads at any rotation. */
+function platedPadRadius(
+  pad: Exclude<PcbPlatedHole, { shape: "hole_with_polygon_pad" }>,
+): number {
+  if (pad.shape === "circle") return pad.outer_diameter / 2
+  if ("rect_pad_width" in pad)
+    return Math.hypot(pad.rect_pad_width, pad.rect_pad_height) / 2
+  return Math.hypot(pad.outer_width, pad.outer_height) / 2
 }
 
 /** The physical copper record ID for either supported pad type. */
