@@ -12,6 +12,7 @@ interface InverterProps {
   driver: boolean
   powerY?: number
   clampNet?: string
+  modelFile?: string
 }
 
 type IbisAsset = SimulationIbisModelProps["ibisModelAsset"]
@@ -46,6 +47,7 @@ export function Inverter({
   driver,
   powerY = 2,
   clampNet,
+  modelFile = "sn74lvc1g04.ibs",
 }: InverterProps): React.JSX.Element {
   const pin = driver ? "4" : "2"
   const label = driver ? "Y" : "A"
@@ -120,7 +122,7 @@ export function Inverter({
       />
       <simulation.ibismodel
         componentRef={`.${name}`}
-        ibisModelAsset={asset("sn74lvc1g04.ibs")}
+        ibisModelAsset={asset(modelFile)}
         ibisComponentName="LVC1G04_DCK"
         ibisPinNameToPortLabel={{
           [pin]: label,

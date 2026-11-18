@@ -11,13 +11,6 @@ import { type SimulationModeling, voltageSourceTerminals } from "../simulation"
 /** Allowed difference between typical IBIS voltages on one reference net. */
 const REFERENCE_VOLTAGE_TOLERANCE_V = 1e-8
 
-type PinReferencePorts = Record<
-  keyof ReturnType<typeof referenceVoltages>,
-  SourcePortId
-> & {
-  external?: SourcePortId
-}
-
 interface ReferenceBias {
   port: SourcePortId
   voltage: number
@@ -39,18 +32,6 @@ function netKey(
   return connectivity.getNetConnectedToId(id) ?? id
 }
 
-/** Resolve each reference from the explicit mapping or the inspected primary rail. */
-export function pinReferencePorts(pin: InspectedPin): PinReferencePorts {
-  const refs = pin.model.ibis_pin_name_to_reference_source_port_ids?.[pin.pin]
-  return {
-    pullup: refs?.pullup_reference_source_port_id ?? pin.power,
-    pulldown: refs?.pulldown_reference_source_port_id ?? pin.ground,
-    powerClamp: refs?.power_clamp_reference_source_port_id ?? pin.power,
-    groundClamp: refs?.ground_clamp_reference_source_port_id ?? pin.ground,
-    external: refs?.external_reference_source_port_id,
-  }
-}
-
 /** Include sources reachable from the retained nets without traversing the shared reference. */
 function retainedVoltageSources(
   circuit: CircuitJson,
@@ -69,7 +50,7 @@ function retainedVoltageSources(
     })
   const nets = new Set([...retained].map((id) => netKey(connectivity, id)))
   for (const pin of pins.values()) {
-    for (const port of Object.values(pinReferencePorts(pin))) {
+    for (const port of Object.values(pin.references)) {
       if (port !== undefined) nets.add(netKey(connectivity, port))
     }
   }
@@ -107,7 +88,7 @@ export function addBlockSupplies(
   const externalPorts = new Set<SourcePortId>()
   for (const pin of pins.values()) {
     const voltages = referenceVoltages(pin.buffer)
-    const ports = pinReferencePorts(pin)
+    const ports = pin.references
     if (ports.external) externalPorts.add(ports.external)
     const roles = Object.keys(voltages) as Array<keyof typeof voltages>
     for (const role of roles) {
