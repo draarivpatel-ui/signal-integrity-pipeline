@@ -244,6 +244,44 @@ function reachable(
   return found
 }
 
+/** Copper connected to the declared endpoints of each leg of a differential channel. */
+interface DifferentialCopper {
+  positive: ReadonlySet<CopperPointKey>
+  negative: ReadonlySet<CopperPointKey>
+}
+
+/** Find each leg's copper before adding series connections through passive components. */
+function differentialLegs(
+  {
+    signals,
+    terminals,
+  }: {
+    signals: SimulationPcbDriverReceiverChannel[]
+    terminals: ReadonlyMap<SourcePortId, CopperPointKey[]>
+  },
+  graph: CopperGraph,
+): DifferentialCopper[] {
+  return signals.flatMap(({ driver, receivers }) => {
+    if ("source_port_id" in driver) return []
+    const endpoints = [
+      driver,
+      ...receivers.filter((receiver) => "p_source_port_id" in receiver),
+    ]
+    const positive = endpoints.flatMap(
+      (endpoint) => terminals.get(endpoint.p_source_port_id) ?? [],
+    )
+    const negative = endpoints.flatMap(
+      (endpoint) => terminals.get(endpoint.n_source_port_id) ?? [],
+    )
+    return [
+      {
+        positive: reachable(positive, graph),
+        negative: reachable(negative, graph),
+      },
+    ]
+  })
+}
+
 /** Selects source traces that touch the signal without touching a reference rail. */
 function signalTraces(
   traces: readonly SourceTrace[],
@@ -385,10 +423,21 @@ export function validateSignalGraph({
     }
   }
   const copperPoints = new Set(graph.keys())
+  const differential = differentialLegs({ signals, terminals }, graph)
   for (const [pinA, pinB] of passiveBridges(circuit, rails)) {
     for (const a of terminals.get(pinA) ?? []) {
-      for (const b of terminals.get(pinB) ?? [])
+      for (const b of terminals.get(pinB) ?? []) {
+        // A passive between the two legs is a load on those paths.
+        if (
+          differential.some(
+            ({ positive, negative }) =>
+              (positive.has(a) && negative.has(b)) ||
+              (positive.has(b) && negative.has(a)),
+          )
+        )
+          continue
         joinCopperPoints(graph, { a, b })
+      }
     }
   }
   for (const [index, signal] of signals.entries()) {
