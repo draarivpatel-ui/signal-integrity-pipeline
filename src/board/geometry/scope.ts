@@ -184,8 +184,14 @@ function viaMembers(
 
 /** The physical barrel span includes any inactive stubs. */
 function viaBox(via: PcbVia, layers: CopperLayers): Box {
+  const drillLayers = [
+    via.topmost_drill_layer,
+    via.bottommost_drill_layer,
+  ].filter((layer) => layer !== undefined)
+  const names =
+    drillLayers.length === 2 ? drillLayers : [...via.layers, ...drillLayers]
   return copperBox(
-    { points: [via], names: via.layers, radius: via.outer_diameter / 2 },
+    { points: [via], names, radius: via.outer_diameter / 2 },
     layers,
   )
 }
