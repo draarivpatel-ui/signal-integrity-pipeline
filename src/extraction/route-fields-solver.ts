@@ -14,6 +14,7 @@ import {
   type RouteCoefficients,
   type RouteMaterials,
   routeCrossSection,
+  type SolvedRouteSection,
 } from "./route-lines"
 
 export interface RouteFieldsInput {
@@ -33,8 +34,6 @@ export const assumedRouteMaterials: RouteMaterials = {
   substrateLoss: 0.02,
 }
 
-type RouteSectionKey = string
-
 /** Provenance of the mask thickness recorded with the extraction. */
 function maskThicknessSource(
   input: RouteFieldsInput,
@@ -46,7 +45,10 @@ function maskThicknessSource(
 
 /** One pair screen or one unique multiconductor BEM solve per synchronous step. */
 export class RouteFieldsSolver extends BaseSolver {
-  private readonly cache = new Map<RouteSectionKey, RouteCoefficients>()
+  private readonly cache = new Map<
+    SolvedRouteSection["key"],
+    RouteCoefficients
+  >()
   private pairs?: RouteSlice[]
   private groups?: RouteSlice[]
   private readonly slices: ExtractedRouteSlice[] = []
@@ -67,10 +69,7 @@ export class RouteFieldsSolver extends BaseSolver {
       throw new Error("Field panels must be an integer at least 2")
   }
   /** Canonical relative geometry owns the cache identity, independent of source IDs and stimulus. */
-  private solveSlice(slice: RouteSlice): {
-    key: RouteSectionKey
-    line: RouteCoefficients
-  } {
+  private solveSlice(slice: RouteSlice): SolvedRouteSection {
     const section = routeCrossSection({
       geometry: this.input.geometry,
       slice,
@@ -197,7 +196,9 @@ export class RouteFieldsSolver extends BaseSolver {
     return this.output
   }
   /** The cache and work queues never enter debugger downloads. */
-  override getConstructorParams(): [RouteFieldsInput] {
+  override getConstructorParams(): ConstructorParameters<
+    typeof RouteFieldsSolver
+  > {
     return [this.input]
   }
 }

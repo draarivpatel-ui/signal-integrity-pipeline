@@ -4,13 +4,13 @@ import type { CrossSection, CrossSectionResult } from "./cross-section-types"
 import { multiply, transpose } from "./linalg"
 import type { RouteCoupling } from "./route-coupling"
 
-export interface ExtractedRouteSlice extends RouteSlice {
-  key: string
-  line: RouteCoefficients
-}
+/** A canonical section key and the coefficients solved for that section. */
+export type SolvedRouteSection = { key: string; line: RouteCoefficients }
+
+export interface ExtractedRouteSlice extends RouteSlice, SolvedRouteSection {}
 export interface ExtractedRoutes {
   slices: ExtractedRouteSlice[]
-  sections: { key: string; line: RouteCoefficients }[]
+  sections: SolvedRouteSection[]
   materials: RouteMaterials
   warnings: string[]
   coupling: RouteCoupling[]
@@ -120,6 +120,9 @@ interface RouteEndpoints {
   b: RouteXY
 }
 
+/** Closest point on each centre-line and the distance between them. */
+type ClosestRoutePoints = { first: RouteXY; second: RouteXY; distance: number }
+
 /** Closest points on two finite centre-lines, used only for the explicit oblique correction. */
 export function closestRoutePoints({
   first: { a, b },
@@ -127,7 +130,7 @@ export function closestRoutePoints({
 }: {
   first: RouteEndpoints
   second: RouteEndpoints
-}): { first: RouteXY; second: RouteXY; distance: number } {
+}): ClosestRoutePoints {
   const ux = b[0] - a[0]
   const uy = b[1] - a[1]
   const vx = d[0] - c[0]
@@ -169,11 +172,17 @@ export function closestRoutePoints({
     .sort((a, b) => a.distance - b.distance)[0]
 }
 
+/** Inductance and skin-resistance matrices with the AC rail currents accounted for. */
+type ReferenceSeries = Pick<
+  RouteCoefficients,
+  "L" | "skinResistance" | "stripSkinResistance"
+>
+
 /** Ideal AC rail voltages require induced return currents, rather than open series conductors. */
 export function referenceSeries(
   line: RouteCoefficients,
   grounded: number[],
-): Pick<CrossSectionResult, "L" | "skinResistance" | "stripSkinResistance"> {
+): ReferenceSeries {
   if (!grounded.length) return line
   const size = line.L.length
   const active = Array.from({ length: size }, (_, i) => i).filter(
