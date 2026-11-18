@@ -571,30 +571,7 @@ function prepareBlock({
   }
   // Stable physical endpoint identities order the matrix; route coordinates set coupling.
   lanes.sort((a, b) => a.from.sourcePortId!.localeCompare(b.from.sourcePortId!))
-  const retained = new Set(topology.keys())
-  const pcbTraces = circuit.filter((record) => record.type === "pcb_trace")
-  for (const trace of circuit.filter(
-    (record) => record.type === "source_trace",
-  )) {
-    const scoped = pcbTraces.some((route) => {
-      return (
-        route.source_trace_id === trace.source_trace_id &&
-        copperScope.pcbTraceIds.includes(route.pcb_trace_id)
-      )
-    })
-    if (!scoped) continue
-    for (const port of trace.connected_source_port_ids) {
-      for (const id of sourceNetMembers(connectivity, port)) retained.add(id)
-    }
-  }
-  const laneMembers = new Set(
-    lanes.flatMap((lane) =>
-      [lane.from.sourcePortId!, lane.to.sourcePortId!].flatMap((port) => [
-        ...sourceNetMembers(connectivity, port),
-      ]),
-    ),
-  )
-  for (const id of laneMembers) retained.add(id)
+  const retained = new Set(copperScope.retainedSourceIds)
   for (const [port] of pins) {
     if (!retained.has(port)) pins.delete(port)
   }
@@ -611,7 +588,7 @@ function prepareBlock({
       return (
         port.source_component_id === component.source_component_id &&
         !rails.has(port.source_port_id) &&
-        laneMembers.has(port.source_port_id)
+        retained.has(port.source_port_id)
       )
     })
   })
