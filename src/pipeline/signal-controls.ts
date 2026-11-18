@@ -111,16 +111,14 @@ export function signalBits(
     }
   }
 
+  if (!prbs && pattern !== "clock" && !isBitPattern(pattern)) {
+    throw new Error(
+      `${signal.name}: pattern must be PRBS, clock, or a literal bit string`,
+    )
+  }
   if (signal.driver_disabled) return "0"
   if (pattern === "clock") return "01"
-  if (!prbs) {
-    if (!isBitPattern(pattern)) {
-      throw new Error(
-        `${signal.name}: pattern must be PRBS, clock, or a literal bit string`,
-      )
-    }
-    return pattern
-  }
+  if (!prbs) return pattern
 
   let state = seed!
   const captureSeconds = duration - signal.offset_ms / MILLISECONDS_PER_SECOND

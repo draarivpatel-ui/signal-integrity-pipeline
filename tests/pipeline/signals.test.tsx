@@ -252,6 +252,18 @@ test("pipeline checks selected IBIS roles and disabled states after TSX renderin
   )
 })
 
+test("a disabled three-state driver still rejects a malformed literal pattern", async () => {
+  const circuit = await renderSignals(<Board driverDisabled pattern="10x" />)
+  const tristate = routedVisualIbis.replace(
+    "Model_type Output",
+    "Model_type 3-state",
+  )
+  assert.throws(
+    () => prepareBlocks({ circuit, sources: { [inverterIbisPath]: tristate } }),
+    /pattern/,
+  )
+})
+
 test("an unlisted output on the same net is diagnosed before routed branch checks", async () => {
   const circuit = await renderSignals(<Board extraDriver />)
   assert.throws(
