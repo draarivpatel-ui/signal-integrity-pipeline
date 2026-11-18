@@ -10,6 +10,8 @@ test("completed domain snapshots cannot be changed through shared inputs or cons
   assert.throws(() => {
     result.nodes[0].id = "changed"
   }, TypeError)
-  for (const value of [new Map(), new Set(), new Uint8Array(), () => undefined])
+  const unsupported = [new Map(), new Set(), new Uint8Array(), () => undefined]
+  for (const value of unsupported) {
     assert.throws(() => snapshot(value), /snapshots/)
+  }
 })
