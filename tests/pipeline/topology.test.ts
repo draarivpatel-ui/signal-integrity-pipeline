@@ -7,6 +7,7 @@ import {
 } from "../../src/pipeline/topology"
 import { driverReceiverChannel } from "../fixtures/driver-receiver-channel"
 import {
+  daisyChain,
   missingReceiverTerminal,
   unroutedExtraPin,
 } from "../fixtures/topology-board"
@@ -45,4 +46,10 @@ test("an unrouted same-net pin outside the channel does not block its routed rec
     () => validate(circuit, ["STUB"]),
     /is not routed between source_port_0 and source_port_2/,
   )
+})
+
+test("a linear copper path supports more than one receiver", async () => {
+  const circuit = await daisyChain()
+  assert.doesNotThrow(() => validate(circuit))
+  assert.doesNotThrow(() => validate(circuit, ["MID", "RX"]))
 })

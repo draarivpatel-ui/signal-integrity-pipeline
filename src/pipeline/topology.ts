@@ -238,14 +238,13 @@ export function validateSignalGraph({
       const copper = reachable(starts, copperGraph)
       const routed = [...copper].some((key) => copperGraph.has(key))
       if (routed) {
-        const multipleReceivers = signal.receivers.length > 1
         const branchAtDriver = starts.some(
           (key) => (copperGraph.get(key)?.size ?? 0) > 1,
         )
         const branchInCopper = [...connected].some(
           (key) => (copperGraph.get(key)?.size ?? 0) > 2,
         )
-        if (multipleReceivers || branchAtDriver || branchInCopper) {
+        if (branchAtDriver || branchInCopper) {
           throw new Error(
             `Signal "${signal.name}": branched routed graphs are not implemented yet.`,
           )
