@@ -32,6 +32,10 @@ domain:
   filament: an ideal thin current path used to estimate mutual inductance
   modal: describing an electrical mode or the factor that represents its stored energy
   post: a vertical conductor between a terminal and a route or reference plane
+  middleware: the local HTTP handler installed in the Vite development server
+  local: running on the user's computer through its installed native solver
+  detect: check whether a solver executable is available on PATH
+  response: the status and result returned by an HTTP request
   control: pin enable state or drive timing for a simulation
   transient: a circuit simulation that follows voltage and current through time
   startup: the time a switching channel needs to settle after its stimulus starts
@@ -40,6 +44,8 @@ domain:
   separator: a character that marks the boundary between raw fields or lines
   word: a contiguous non-whitespace field in an ASCII raw file or diagnostic
   timestamp: the time at which a waveform sample was recorded
+  worker: an isolated browser thread that can be terminated to stop a solver
+  watchdog: a host timer that terminates an engine exceeding its runtime limit
   admission: validation and derivation of one declared signal-integrity block
   network: the connected electrical cells and correction elements of routed copper
   execution: a completed invocation through the solver port
@@ -230,6 +236,8 @@ domain:
   axis: a plot scale representing a measured quantity
 
 abbreviations:
+  http: Hypertext Transfer Protocol used by the browser solver adapter
+  wasm: WebAssembly, the portable binary format used to run ngspice in a browser
   ac: alternating current; in DDR thresholds, the level a signal must reach
   args: arguments
   config: configuration
