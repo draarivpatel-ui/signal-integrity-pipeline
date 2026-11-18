@@ -235,8 +235,7 @@ export function validateSignalGraph({
     for (const [leg, port] of drivers[index].entries()) {
       const starts = terminals.get(port) ?? []
       const connected = reachable(starts, graph)
-      const copper = reachable(starts, copperGraph)
-      const routed = [...copper].some((key) => copperGraph.has(key))
+      const routed = starts.some((key) => copperGraph.has(key))
       if (routed) {
         const branchAtDriver = starts.some(
           (key) => (copperGraph.get(key)?.size ?? 0) > 1,
