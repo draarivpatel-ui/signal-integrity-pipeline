@@ -354,8 +354,8 @@ function rampRatioToken(line: string): string | undefined {
 /** Measure an edge from 10% to 90% of its voltage swing. */
 const EDGE_START_FRACTION = 0.1
 const EDGE_END_FRACTION = 0.9
-/** The 10–90% interval covers 80% of the full ramp voltage. */
-const EDGE_SWING_FRACTION = 0.8
+/** For a linear edge, 10–90% spans 80% of the swing and the IBIS ramp spans 20–80% (60%). */
+const RAMP_TO_EDGE_DURATION = 4 / 3
 /** A swing smaller than one microvolt is too flat to measure an edge. */
 const FLAT_WAVEFORM_TOLERANCE_VOLTS = 1e-6
 
@@ -383,10 +383,8 @@ export function edgeSeconds(pin: InspectedPin): number {
       const token = rampRatioToken(line)
       if (!token || token === "NA") continue
       const [dv, dt] = token.split("/")
-      const rampSeconds = ibisNumber(dt)
-      const typicalVoltage = pin.buffer.voltage[0]!
-      const edge =
-        (rampSeconds * EDGE_SWING_FRACTION * typicalVoltage) / ibisNumber(dv)
+      if (ibisNumber(dv) <= 0) continue
+      const edge = ibisNumber(dt) * RAMP_TO_EDGE_DURATION
       if (edge > 0 && Number.isFinite(edge)) edges.push(edge)
     }
   }
