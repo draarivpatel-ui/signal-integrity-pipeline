@@ -120,7 +120,9 @@ export class RouteBindingsSolver extends BaseSolver {
     return this.output
   }
   /** Original input without converter objects. */
-  override getConstructorParams(): [RouteBindingsInput] {
+  override getConstructorParams(): ConstructorParameters<
+    typeof RouteBindingsSolver
+  > {
     return [this.input]
   }
 }
