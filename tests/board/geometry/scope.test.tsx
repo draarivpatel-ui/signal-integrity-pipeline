@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import type { TraceProps } from "@tscircuit/props"
-import type { LayerRef } from "circuit-json"
+import { type LayerRef, pcb_via } from "circuit-json"
 import type React from "react"
 import {
   type CircuitJson,
@@ -95,7 +95,7 @@ function Wire({
   )
 }
 
-test("TSX scope retains adjacent copper, barrel spans and return pours and omits distant nets", async () => {
+test("TSX scope retains adjacent copper and return pours and omits distant nets", async () => {
   const board = (
     <board
       width={24}
@@ -207,7 +207,7 @@ test("TSX scope retains adjacent copper, barrel spans and return pours and omits
   assert.equal(
     scope.pcbViaIds.length,
     2,
-    "adjacent-layer full physical barrels are retained",
+    "vias on the retained adjacent route are included",
   )
   assert.equal(
     scope.pcbCopperPourIds.length,
@@ -361,4 +361,46 @@ test("a nearby non-reference pour retains its routed net and distant copper", as
   assert.equal(result.nearbyNonReferencePourIds.length, 1)
   assert(result.pcbTraceIds.includes(route.pcb_trace_id))
   assert.equal(result.pcbCopperPourIds.length, 2)
+})
+
+test("a nearby via barrel with explicit drill limits retains its otherwise distant net", async () => {
+  const circuit = await renderCoreSignals(
+    <board
+      width={18}
+      height={18}
+      layers={4}
+      allowBlindAndBuriedVias
+      routeRemaining={false}
+      schematicDisabled
+    >
+      <Wire name="SELECTED" y={0} extent={3} layer="bottom" />
+      <Wire name="DISTANT" y={5} extent={3} />
+      <trace from=".DISTANT > .A" to="net.NEIGHBOR" />
+      <via
+        pcbX={0}
+        pcbY={0.6}
+        fromLayer="top"
+        toLayer="inner1"
+        connectsTo="net.NEIGHBOR"
+      />
+    </board>,
+  )
+  const via = circuit.find((record) => record.type === "pcb_via")
+  assert(via)
+  assert.deepEqual(via.layers, ["top", "inner1"])
+  const shallow = scopeFor(circuit)
+  assert.deepEqual(shallow.pcbViaIds, [])
+  assert.equal(shallow.pcbTraceIds.length, 1)
+
+  // The TSX via supplies connected layers. Add the independent drill limits in Circuit JSON.
+  const barrel = pcb_via.parse({
+    ...via,
+    topmost_drill_layer: "top",
+    bottommost_drill_layer: "bottom",
+  })
+  const deep = scopeFor(
+    circuit.map((record) => (record === via ? barrel : record)),
+  )
+  assert.deepEqual(deep.pcbViaIds, [via.pcb_via_id])
+  assert.equal(deep.pcbTraceIds.length, 2)
 })
