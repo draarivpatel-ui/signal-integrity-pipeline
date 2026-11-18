@@ -9,6 +9,7 @@ import { driverReceiverChannel } from "../fixtures/driver-receiver-channel"
 import {
   crossingRoute,
   daisyChain,
+  differentialTerminationRoute,
   missingReceiverTerminal,
   padContactRoute,
   platedHoleRoute,
@@ -93,4 +94,23 @@ test("trace width contributes to pad contact on its layer", async () => {
   assert.throws(() => validate(gap), /is not routed between/)
   const otherLayer = await padContactRoute({ offset: 0.14, layer: "bottom" })
   assert.throws(() => validate(otherLayer), /is not routed between/)
+})
+
+test("a cross-leg termination load is not a branch in either differential path", async () => {
+  const circuit = await differentialTerminationRoute()
+  const [txp, txn, rxp, rxn] = ["TXP", "TXN", "RXP", "RXN"].map(
+    (component) =>
+      selectPort(circuit, { component, port: "SIG" }).source_port_id,
+  )
+  const signal = driverReceiverChannel({ pattern: "01", bitRateBps: 1e9 })
+  signal.driver = { p_source_port_id: txp, n_source_port_id: txn }
+  signal.receivers = [{ p_source_port_id: rxp, n_source_port_id: rxn }]
+  const rails = new Set<string>()
+  validateSignalGraph({
+    circuit,
+    signalConnectivity: signalTopology({ circuit, rails }),
+    signals: [signal],
+    rails,
+    allowUnroutedTraces: false,
+  })
 })

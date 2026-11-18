@@ -255,3 +255,41 @@ export async function padContactRoute({
     </>,
   )
 }
+
+/** Two copper paths each pass through a pad of a cross-leg termination load. */
+export async function differentialTerminationRoute(): Promise<CircuitJson> {
+  return topologyBoard(
+    <>
+      <SignalPin name="TXP" x={-4} y={-0.825} />
+      <SignalPin name="TXN" x={-4} y={0.825} />
+      <SignalPin name="RXP" x={4} y={-0.825} />
+      <SignalPin name="RXN" x={4} y={0.825} />
+      <resistor
+        name="TERM"
+        resistance="120"
+        footprint="0603"
+        pcbRotation={90}
+      />
+      <trace
+        from=".TXP > .SIG"
+        to=".TERM > .pin1"
+        pcbPath={[".TXP > .SIG", ".TERM > .pin1"]}
+      />
+      <trace
+        from=".TERM > .pin1"
+        to=".RXP > .SIG"
+        pcbPath={[".TERM > .pin1", ".RXP > .SIG"]}
+      />
+      <trace
+        from=".TXN > .SIG"
+        to=".TERM > .pin2"
+        pcbPath={[".TXN > .SIG", ".TERM > .pin2"]}
+      />
+      <trace
+        from=".TERM > .pin2"
+        to=".RXN > .SIG"
+        pcbPath={[".TERM > .pin2", ".RXN > .SIG"]}
+      />
+    </>,
+  )
+}
