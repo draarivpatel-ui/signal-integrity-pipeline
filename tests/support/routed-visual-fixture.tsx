@@ -78,3 +78,26 @@ C_pkg 0 0 0
 6 7 0.2V 0 0 0
 [Model] a_b_p${outputModel}[Model] a_b_n${outputModel}[End]
 `
+
+export const separateClampIbis = routedVisualIbis
+  .replace(
+    "5 VCC POWER\n",
+    `5 VCC POWER
+6 PC POWER
+[Pin Mapping] pulldown_ref pullup_ref gnd_clamp_ref power_clamp_ref ext_ref
+2 GND VCC GND PC NC
+3 GND NC GND NC NC
+4 GND VCC GND PC NC
+5 NC VCC NC NC NC
+6 NC NC NC PC NC
+`,
+  )
+  .replaceAll(
+    "[Voltage Range] 3.3 3.3 3.3\n",
+    `[Voltage Range] 3.3 3.3 3.3
+[Power Clamp Reference] 1.8 1.8 1.8
+[Power Clamp]
+-10 -0.1 -0.1 -0.1
+10 0.1 0.1 0.1
+`,
+  )

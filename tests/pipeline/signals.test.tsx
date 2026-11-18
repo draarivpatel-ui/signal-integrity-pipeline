@@ -16,6 +16,7 @@ import { electricalSources, generalDeclarations } from "../../src/simulation"
 import {
   differentialIbis,
   routedVisualIbis,
+  separateClampIbis,
 } from "../support/routed-visual-fixture"
 import { Inverter, Reference } from "../support/signal-parts"
 import { prepareBlocks, renderSignals } from "../support/signal-render"
@@ -32,6 +33,7 @@ interface BoardProps {
   unlisted?: boolean
   extraDriver?: boolean
   driverDisabled?: boolean
+  clampNet?: string
   pattern?: string
   offset?: number
   duration?: number
@@ -46,6 +48,7 @@ function Board({
   unlisted = false,
   extraDriver = false,
   driverDisabled = false,
+  clampNet,
   pattern,
   offset = 0,
   duration,
@@ -94,9 +97,10 @@ function Board({
       isViaInPadAllowed
       allowBlindAndBuriedVias
     >
-      <Inverter name="TX" x={-5} y={0} driver />
-      <Inverter name="RX" x={5} y={0} driver={false} />
+      <Inverter name="TX" x={-5} y={0} driver clampNet={clampNet} />
+      <Inverter name="RX" x={5} y={0} driver={false} clampNet={clampNet} />
       <Reference />
+      {clampNet === "net.PC" && <net name="PC" />}
       {missing ? (
         <>
           <resistor
@@ -453,6 +457,44 @@ test("preparation preserves a declared 2.8 V supply on a retained rail", async (
   const { lines } = electricalSources(input.circuit, input.modeling, nodes)
   assert.equal(lines.length, 1)
   assert.match(lines[0], /^VPHYSICAL0 n[0-9]+ 0 2[.]8$/)
+})
+
+test("preparation biases a distinct 1.8 V power clamp reference", async () => {
+  const circuit = await renderSignals(<Board clampNet="net.PC" />, [
+    "pcb_port_not_connected_error",
+  ])
+  const [prepared] = prepareBlocks({
+    circuit,
+    sources: { [inverterIbisPath]: separateClampIbis },
+  })
+  const input = declarationInput(prepared)
+  const { nodes } = generalDeclarations(input)
+  const { grounded, lines } = electricalSources(
+    input.circuit,
+    input.modeling,
+    nodes,
+  )
+  const clamp = circuit.find(
+    (record) => record.type === "source_net" && record.name === "PC",
+  )
+  assert.ok(clamp?.type === "source_net")
+  const clampNode = nodes.node(clamp.source_net_id)
+  assert.ok(grounded.has(clampNode))
+  assert.equal(
+    lines.filter((line) => line.endsWith(` ${clampNode} 0 1.8`)).length,
+    1,
+  )
+})
+
+test("preparation rejects incompatible typical voltages on one reference rail", async () => {
+  const circuit = await renderSignals(<Board clampNet="net.VCC" />, [
+    "pcb_port_not_connected_error",
+  ])
+  const sources = { [inverterIbisPath]: separateClampIbis }
+  assert.throws(
+    () => prepareBlocks({ circuit, sources }),
+    /shared reference has incompatible/,
+  )
 })
 
 test("a routed differential termination shares the receiver endpoint on each leg", async () => {

@@ -27,7 +27,7 @@ import {
   blockDurationSeconds,
   endpointPorts,
 } from "./signal-controls"
-import { addBlockSupplies } from "./supplies"
+import { addBlockSupplies, pinReferencePorts } from "./supplies"
 import { signalTopology, validateSignalGraph } from "./topology"
 
 export { endpointPorts, probeEndpoints, signalBits } from "./signal-controls"
@@ -265,10 +265,9 @@ function collectRailIds(
   const supplyNetIds = sourceNets
     .filter((net) => net.is_ground || net.is_power)
     .map((net) => net.source_net_id)
-  const pinReferences = [...pins.values()].flatMap((pin) => [
-    pin.ground,
-    pin.power,
-  ])
+  const pinReferences = [...pins.values()]
+    .flatMap((pin) => Object.values(pinReferencePorts(pin)))
+    .filter((port) => port !== undefined)
   for (const port of [...pinReferences, ...supplyNetIds]) {
     if (railIds.has(port)) continue
     for (const connected of sourceNetMembers(connectivity, port))
