@@ -4,25 +4,29 @@ import {
   type IbisDocument,
   parseIbis,
 } from "@tscircuit/ibis-to-spice"
-import type { CircuitJson, SimulationIbisModel } from "../board"
+import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
 import { loadModelSource } from "./source"
 import type { IbisSources } from "./types"
 
 export interface InspectedPin {
-  port: string
+  port: SourcePortId
   pin: string
   model: SimulationIbisModel
   component: IbisComponent
   document: IbisDocument
   buffer: IbisBuffer
   text: string
-  ground: string
-  power: string
+  ground: SourcePortId
+  power: SourcePortId
 }
+/** Typical IBIS reference voltages for the pullup, pulldown and clamp tables. */
+export type ReferenceVoltages = Record<
+  "pullup" | "pulldown" | "powerClamp" | "groundClamp",
+  number
+>
+
 /** Selected ideal reference voltages, including the vendor's explicit overrides. */
-export function referenceVoltages(
-  buffer: IbisBuffer,
-): Record<"pullup" | "pulldown" | "powerClamp" | "groundClamp", number> {
+export function referenceVoltages(buffer: IbisBuffer): ReferenceVoltages {
   const ranges = {
     pullup: buffer.pullupReference ?? buffer.voltage,
     pulldown: buffer.pulldownReference ?? [0, 0, 0],
@@ -36,7 +40,7 @@ export function referenceVoltages(
         throw new Error(`${buffer.name}: missing typical ${role} voltage`)
       return [role, voltage]
     }),
-  ) as ReturnType<typeof referenceVoltages>
+  ) as ReferenceVoltages
 }
 /** Index after the ASCII digits starting at the given offset. */
 function ibisDigitsEnd(text: string, start: number): number {
@@ -88,7 +92,7 @@ function referenceRail(
     port,
   }: Pick<InspectedPin, "model" | "component" | "pin" | "port">,
   role: "ground" | "power",
-): string {
+): SourcePortId {
   const refs = model.ibis_pin_name_to_reference_source_port_ids?.[pin]
   const buses = component.pinMapping[pin]
   let explicit =
@@ -119,8 +123,6 @@ function referenceRail(
     )
   return candidates[0]
 }
-
-type SourcePortId = InspectedPin["port"]
 
 /** Resolve physical pins and reference rails; ambiguous mappings always fail. */
 export function inspectPins(
@@ -268,12 +270,11 @@ export function edgeSeconds(pin: InspectedPin): number {
     throw new Error(`${pin.port}: IBIS edge rate missing at the typical corner`)
   return Math.min(...edges)
 }
+/** Whether an IBIS pin model can drive, receive or be disabled. */
+type PinCapabilities = { drive: boolean; receive: boolean; disable: boolean }
+
 /** Selected model capabilities; unsupported types cannot acquire invented receive/disable modes. */
-export function pinCapabilities(pin: InspectedPin): {
-  drive: boolean
-  receive: boolean
-  disable: boolean
-} {
+export function pinCapabilities(pin: InspectedPin): PinCapabilities {
   switch (pin.buffer.type) {
     case "input":
       return { drive: false, receive: true, disable: false }
