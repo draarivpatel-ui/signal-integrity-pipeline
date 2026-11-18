@@ -1,5 +1,14 @@
 import type { RouteWire, RouteXY } from "./route-sections"
 
+/** Treat near-vertical segments as vertical when choosing the canonical direction. */
+const DIRECTION_TOLERANCE = 1e-9
+
+/** Discard zero-length chords after simplifying, in millimeters. */
+const MIN_CHORD_LENGTH_MM = 1e-9
+
+/** Maximum separation between consecutive segments of a tessellated curve, in millimeters. */
+const WIRE_JOIN_TOLERANCE_MM = 1e-7
+
 /** Shortest point-to-chord distance in mm. */
 export function chordDistance({
   point,
@@ -37,7 +46,11 @@ export function projectRouteWire({
   const dx = b[0] - a[0]
   const dy = b[1] - a[1]
   let direction = 1
-  if (dx < -1e-9 || (Math.abs(dx) < 1e-9 && b[1] < a[1])) direction = -1
+  if (
+    dx < -DIRECTION_TOLERANCE ||
+    (Math.abs(dx) < DIRECTION_TOLERANCE && b[1] < a[1])
+  )
+    direction = -1
   const u: RouteXY = [(direction * dx) / length, (direction * dy) / length]
   const first = a[0] * u[0] + a[1] * u[1]
   const last = b[0] * u[0] + b[1] * u[1]
@@ -58,7 +71,13 @@ interface WireRun {
 
 /** Recursive chord acceptance bounds every original vertex, preserving width/layer/via boundaries. */
 function simplifyRun(
-  { start, end }: { start: number; end: number },
+  {
+    start,
+    end,
+  }: {
+    start: number
+    end: number
+  },
   run: WireRun,
 ): void {
   const { points, seed, toleranceMm, output } = run
@@ -78,7 +97,7 @@ function simplifyRun(
     return
   }
   const length = Math.hypot(b[0] - a[0], b[1] - a[1])
-  if (length < 1e-9) return
+  if (length < MIN_CHORD_LENGTH_MM) return
   output.push({
     ...seed,
     id: output.length,
@@ -89,7 +108,7 @@ function simplifyRun(
 }
 
 /** Simplified wires and the total route lengths before and after simplification. */
-type SimplifiedRouteWires = {
+interface SimplifiedRouteWires {
   wires: RouteWire[]
   originalLengthMm: number
   simplifiedLengthMm: number
@@ -111,17 +130,26 @@ export function simplifyRouteWires(
       if (
         wire.trace !== seed.trace ||
         wire.layer !== seed.layer ||
-        wire.width !== seed.width ||
-        Math.hypot(wire.a[0] - previous.b[0], wire.a[1] - previous.b[1]) > 1e-7
+        wire.width !== seed.width
       )
         break
+      const gap = Math.hypot(
+        wire.a[0] - previous.b[0],
+        wire.a[1] - previous.b[1],
+      )
+      if (gap > WIRE_JOIN_TOLERANCE_MM) break
       run.push(wire)
       index++
     }
     const points = [seed.a, ...run.map((wire) => wire.b)]
     simplifyRun(
       { start: 0, end: points.length - 1 },
-      { points, seed, toleranceMm, output },
+      {
+        points,
+        seed,
+        toleranceMm,
+        output,
+      },
     )
   }
   return {

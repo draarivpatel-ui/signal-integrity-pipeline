@@ -89,22 +89,24 @@ test("TSX touching same-net rail strips form one physical conductor before extra
       (wire) => Math.abs(wire.width - 0.6) < 1e-7 && wire.joins?.length,
     ),
   )
-  const separate = await renderCoreSignals(
-    <TouchingRail same-net={false} />,
-  ).catch((error: Error & { circuitJson: CircuitJson }) => {
-    const errors = error.circuitJson.filter((record) =>
-      record.type.endsWith("_error"),
-    )
-    assert.ok(errors.some((record) => record.type === "pcb_trace_error"))
-    assert.ok(
-      errors.every(
-        (record) =>
-          record.type === "pcb_trace_error" ||
-          record.type === "pcb_pad_trace_clearance_error",
-      ),
-    )
-    return error.circuitJson
-  })
+  const board = <TouchingRail same-net={false} />
+  const separate = await renderCoreSignals(board).catch(
+    (error: Error & { circuitJson: CircuitJson }) => {
+      const errors = error.circuitJson.filter((record) =>
+        record.type.endsWith("_error"),
+      )
+      assert.ok(errors.some((record) => record.type === "pcb_trace_error"))
+      assert.ok(
+        errors.every((record) => {
+          return (
+            record.type === "pcb_trace_error" ||
+            record.type === "pcb_pad_trace_clearance_error"
+          )
+        }),
+      )
+      return error.circuitJson
+    },
+  )
 
   assert.ok(
     segmentRoutes(separate, scope).wires.every((wire) => !wire.joins?.length),
