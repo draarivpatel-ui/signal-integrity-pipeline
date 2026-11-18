@@ -20,7 +20,7 @@ import {
   pinCapabilities,
 } from "../buffers"
 import { safeId } from "../kernel"
-import type { RunControls } from "../simulation"
+import { type RunControls, voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import {
   appendBlockControls,
@@ -58,6 +58,9 @@ type SourceComponent = Extract<
 
 /** Named source ports and nets electrically connected to block reference or power rails. */
 type RailIds = Set<SourcePortId | SourceNetId>
+
+/** Ports and nets with a node supplied by routed copper, a buffer, or a voltage source. */
+type LoadNodeIds = Set<SourcePortId | SourceNetId>
 
 interface SignalIndex {
   driven: Map<SourcePortId, SimulationPcbDriverReceiverChannel>
@@ -437,6 +440,57 @@ function pruneIbisModels(
   }
 }
 
+/** Find nodes that exist independently of the passive loads. */
+function loadNodes(
+  circuit: CircuitJson,
+  {
+    copperScope,
+    pins,
+  }: {
+    copperScope: CopperScope
+    pins: PreparedBlock["pins"]
+  },
+): LoadNodeIds {
+  const scoped = new Set(copperScope.pcbTraceIds)
+  const railTraces = new Set(copperScope.nonReferenceRailTraceIds)
+  const routed = new Set(
+    circuit
+      .filter((record) => record.type === "pcb_trace")
+      .filter(
+        (trace) =>
+          scoped.has(trace.pcb_trace_id) && !railTraces.has(trace.pcb_trace_id),
+      )
+      .map((trace) => trace.source_trace_id),
+  )
+  const traces = circuit.filter((record) => record.type === "source_trace")
+  const ideal = getSourcePortConnectivityMapFromCircuitJson(
+    traces.filter((trace) => !routed.has(trace.source_trace_id)),
+  )
+  const routeTerminals = traces
+    .filter((trace) => routed.has(trace.source_trace_id))
+    .flatMap((trace) => [
+      ...trace.connected_source_port_ids,
+      ...(trace.connected_source_net_ids ?? []),
+    ])
+  const bufferTerminals = [...pins.values()].flatMap((pin) => [
+    pin.port,
+    ...Object.values(pin.references),
+  ])
+  const sourceTerminals = circuit
+    .filter((record) => record.type === "simulation_voltage_source")
+    .flatMap(voltageSourceTerminals)
+  const nodes: LoadNodeIds = new Set()
+  for (const terminal of [
+    ...routeTerminals,
+    ...bufferTerminals,
+    ...sourceTerminals,
+  ]) {
+    if (terminal === undefined) continue
+    for (const id of sourceNetMembers(ideal, terminal)) nodes.add(id)
+  }
+  return nodes
+}
+
 /** Independent block: model overrides, copper, pin states, references and stimuli. */
 function prepareBlock({
   input,
@@ -584,23 +638,10 @@ function prepareBlock({
       "<simulation.pcbtransientchannelsimulation> needs explicit stackup dielectric constants.",
     )
   }
-  const passiveComponents = components.filter((component) => {
-    if (!hasSupportedComponentModel(component, circuit)) return false
-    return circuitPorts.some((port) => {
-      return (
-        port.source_component_id === component.source_component_id &&
-        !rails.has(port.source_port_id) &&
-        retained.has(port.source_port_id)
-      )
-    })
-  })
   const settings: NumericalSettings = {
     lanes,
     copperScope,
     channelReference: { sourcePortId: reference },
-    passiveComponents: passiveComponents.map((component) => ({
-      sourceComponentId: component.source_component_id,
-    })),
   }
   if (copperScope.pcbViaIds.length && !stack.viaPlatingMm) {
     throw new Error(
@@ -613,6 +654,26 @@ function prepareBlock({
     retained,
     reference,
     settings,
+  })
+  const nodes = loadNodes(circuit, { copperScope, pins })
+  const spiceModels = circuit.filter(
+    (record) => record.type === "simulation_spice_subcircuit",
+  )
+  // Keep a retained load only when every modeled terminal already has an external connection.
+  settings.passiveComponents = components.flatMap((component) => {
+    if (!hasSupportedComponentModel(component, circuit)) return []
+    const sourceComponentId = component.source_component_id
+    const model = spiceModels.find(
+      (record) => record.source_component_id === sourceComponentId,
+    )
+    let terminals = circuitPorts
+      .filter((port) => port.source_component_id === sourceComponentId)
+      .map((port) => port.source_port_id)
+    if (model) terminals = Object.values(model.spice_pin_to_source_port_map)
+    if (!terminals.some((port) => retained.has(port) && !rails.has(port)))
+      return []
+    if (!terminals.every((port) => nodes.has(port))) return []
+    return [{ sourceComponentId }]
   })
   const controls = appendBlockControls(circuit, {
     id,

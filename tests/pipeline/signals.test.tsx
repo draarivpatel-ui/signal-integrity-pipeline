@@ -353,6 +353,86 @@ test("preparation still loads IBIS assets for retained quiet pins", async () => 
   await assert.rejects(prepareFirstBlock(0.9), /distant[.]ibs/)
 })
 
+test("preparation omits a resistor array with a floating branch", async () => {
+  const board = Board({ unlisted: true })
+  const circuit = await renderSignals(
+    React.cloneElement(
+      board,
+      {},
+      <>
+        {board.props.children}
+        <chip
+          name="ARRAY"
+          pcbX={7}
+          pcbY={1}
+          connections={{ pin2: "net.GND" }}
+          footprint={
+            <footprint>
+              <smtpad
+                portHints={["pin1"]}
+                pcbX={-0.3}
+                pcbY={-0.25}
+                width={0.25}
+                height={0.25}
+                shape="rect"
+              />
+              <smtpad
+                portHints={["pin2"]}
+                pcbX={0.3}
+                pcbY={-0.25}
+                width={0.25}
+                height={0.25}
+                shape="rect"
+              />
+              <smtpad
+                portHints={["pin3"]}
+                pcbX={-0.3}
+                pcbY={0.25}
+                width={0.25}
+                height={0.25}
+                shape="rect"
+              />
+              <smtpad
+                portHints={["pin4"]}
+                pcbX={0.3}
+                pcbY={0.25}
+                width={0.25}
+                height={0.25}
+                shape="rect"
+              />
+            </footprint>
+          }
+        >
+          <spicemodel
+            source={
+              ".subckt ARRAY pin1 pin2 pin3 pin4\nR1 pin1 pin2 33\nR2 pin3 pin4 33\n.ends ARRAY"
+            }
+          />
+        </chip>
+        <trace
+          from=".RX1 > .A"
+          to=".ARRAY > .pin1"
+          width={0.1}
+          pcbPath={[".RX1 > .A", ".ARRAY > .pin1"]}
+        />
+      </>,
+    ),
+    ["pcb_port_not_connected_error"],
+  )
+  const model = circuit.find(
+    (record) => record.type === "simulation_spice_subcircuit",
+  )
+  assert.ok(model?.type === "simulation_spice_subcircuit")
+  const [prepared] = prepareBlocks({
+    circuit,
+    sources: inverterSources,
+    distanceMm: 1,
+  })
+  const retained = prepared.settings.copperScope.retainedSourceIds
+  assert.ok(retained.includes(model.spice_pin_to_source_port_map.pin1))
+  assert.deepEqual(prepared.settings.passiveComponents, [])
+})
+
 test("preparation keeps controls and probes independent across blocks", async () => {
   const board = TwoTraceBoard({ "data-pattern": "prbs7" })
   const circuit = await renderSignals(
