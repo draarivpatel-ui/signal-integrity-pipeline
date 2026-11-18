@@ -3,6 +3,7 @@ import {
   type IbisComponent,
   type IbisConversionMetadata,
   type IbisDocument,
+  ibisNumber,
   parseIbis,
 } from "@tscircuit/ibis-to-spice"
 import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
@@ -74,49 +75,6 @@ export function referenceVoltages(buffer: IbisBuffer): ReferenceVoltages {
       role: "groundClamp",
     }),
   }
-}
-/** Index after the ASCII digits starting at the given offset. */
-function ibisDigitsEnd(text: string, start: number): number {
-  while (start < text.length && text[start] >= "0" && text[start] <= "9")
-    start++
-  return start
-}
-
-/** Skip an optional numeric sign. */
-function skipIbisSign(text: string, start: number): number {
-  if (text[start] === "+" || text[start] === "-") return start + 1
-  return start
-}
-
-/** Multipliers for the decimal unit suffixes accepted by the IBIS reader. */
-const IBIS_UNIT_SCALES: Record<string, number> = {
-  T: 1e12,
-  G: 1e9,
-  M: 1e6,
-  k: 1e3,
-  m: 1e-3,
-  u: 1e-6,
-  n: 1e-9,
-  p: 1e-12,
-  f: 1e-15,
-}
-
-/** Parse a numeric IBIS token, including vendor unit suffixes. */
-export function ibisNumber(token: string): number {
-  const text = String(token)
-  const start = skipIbisSign(text, 0)
-  let end = ibisDigitsEnd(text, start)
-  if (text[end] === ".") {
-    const fractionEnd = ibisDigitsEnd(text, end + 1)
-    if (fractionEnd > end + 1) end = fractionEnd
-  }
-  if (end === start) throw new Error(`Missing numeric IBIS value: ${token}`)
-  if (text[end] === "e" || text[end] === "E") {
-    const exponentStart = skipIbisSign(text, end + 1)
-    const exponentEnd = ibisDigitsEnd(text, exponentStart)
-    if (exponentEnd > exponentStart) end = exponentEnd
-  }
-  return Number(text.slice(0, end)) * (IBIS_UNIT_SCALES[text[end]] ?? 1)
 }
 /** A physical IBIS pin and the Circuit JSON port that uses it. */
 type PinBinding = Pick<InspectedPin, "port" | "pin" | "model" | "component">
@@ -354,11 +312,19 @@ export function edgeSeconds(pin: InspectedPin): number {
   }
   if (!edges.length) {
     for (const token of rampRatioTokens(pin)) {
-      if (token === "NA") continue
-      const [dv, dt] = token.split("/")
-      if (ibisNumber(dv) <= 0) continue
-      const edge = ibisNumber(dt) * RAMP_TO_EDGE_DURATION
-      if (edge > 0 && Number.isFinite(edge)) edges.push(edge)
+      const [voltageToken, timeToken] = token.split("/")
+      if (!voltageToken || !timeToken) continue
+      const voltage = ibisNumber(voltageToken)
+      const duration = ibisNumber(timeToken)
+      if (
+        voltage === null ||
+        voltage <= 0 ||
+        duration === null ||
+        duration <= 0
+      )
+        continue
+      const edge = duration * RAMP_TO_EDGE_DURATION
+      if (Number.isFinite(edge)) edges.push(edge)
     }
   }
   if (!edges.length)
