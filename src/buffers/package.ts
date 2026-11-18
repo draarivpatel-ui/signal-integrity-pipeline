@@ -1,4 +1,5 @@
 import { parseIbis } from "@tscircuit/ibis-to-spice"
+import type { SourcePortId } from "../board"
 import { sha256 } from "../kernel"
 import {
   coupledPackage,
@@ -7,13 +8,12 @@ import {
   packageComparisons,
   packageRail,
 } from "./coupled-package"
-import { referenceVoltages } from "./inspect"
+import { type ReferenceVoltages, referenceVoltages } from "./inspect"
 import { convertSwitching } from "./switching"
 import { asciiLowerCase, isSpace, tokenEnd } from "./text"
 import type { ModelRunDefinition, PackagedComponent } from "./types"
 
 type SpiceTerminal = keyof PackagedComponent["spicePinMapping"]
-type SourcePortId = PackagedComponent["spicePinMapping"][SpiceTerminal]
 type PhysicalPin = keyof ReturnType<
   typeof parseIbis
 >["components"][string]["pins"]
@@ -87,8 +87,7 @@ export function convertPackaged({
     for (const [role, voltage] of Object.entries(
       referenceVoltages(document.getBuffer(pin.model)),
     )) {
-      const port =
-        pin.references[role as keyof ReturnType<typeof referenceVoltages>]
+      const port = pin.references[role as keyof ReferenceVoltages]
       if (voltages.has(port) && Math.abs(voltages.get(port)! - voltage) > 1e-8)
         throw new Error(`${port}: incompatible IBIS die voltages`)
       voltages.set(port, voltage)

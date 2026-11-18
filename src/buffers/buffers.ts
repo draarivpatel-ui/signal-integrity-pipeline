@@ -50,6 +50,9 @@ export function admitBuffers({
   return { value, artifacts }
 }
 
+/** The compiled IBIS buffers for one experiment plan. */
+type CompiledBufferPlan = CompiledBuffer[]
+
 /**
  * Convert each plan's models (plan order, then model order), exactly as today: `define` builds the
  * converter input (simulation's modelRunDefinition), its source is pinned to the admitted bytes,
@@ -65,7 +68,7 @@ export function compileBuffers<
   admitted: AdmittedBuffers,
   plans: readonly P[],
   define: (model: M, plan: P) => ModelRunDefinition,
-): CompiledBuffer[][] {
+): CompiledBufferPlan[] {
   return plans.map((plan) =>
     plan.models.map((model) => {
       const index = admitted.models.findIndex(

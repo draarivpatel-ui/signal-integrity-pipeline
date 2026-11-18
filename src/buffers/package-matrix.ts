@@ -1,3 +1,4 @@
+import type { Matrix } from "../extraction"
 import type { PackageModel } from "./package-model"
 
 export interface SelectedPackageModel {
@@ -16,7 +17,7 @@ function checkPositive({
   label,
   strict,
 }: {
-  matrix: number[][]
+  matrix: Matrix
   label: string
   strict: boolean
 }): void {
@@ -62,7 +63,7 @@ function checkPositive({
 }
 
 /** Reject sign conventions that cannot be realized with passive pair/reference capacitors. */
-function checkCapacitance(matrix: number[][], label: string): void {
+function checkCapacitance(matrix: Matrix, label: string): void {
   for (let i = 0; i < matrix.length; i++) {
     if (matrix[i].some((capacitance, j) => i !== j && capacitance > 0))
       throw new Error(

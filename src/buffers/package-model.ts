@@ -1,3 +1,4 @@
+import type { Matrix } from "../extraction"
 import {
   asciiLowerCase,
   isDigit,
@@ -5,6 +6,7 @@ import {
   isSpace,
   lineEnd,
   splitWords,
+  type TextRange,
 } from "./text"
 
 /** IBIS section 7 lumped package data; matrix order is exactly [Pin Numbers]. */
@@ -24,13 +26,11 @@ interface Section {
   lines: string[]
 }
 
+/** An IBIS package marker, its argument and the offsets of its source line. */
+type PackageHeader = Pick<Section, "key" | "argument"> & TextRange
+
 /** Scan just the package definition markers and global comment declarations. */
-function* packageHeaders(text: string): IterableIterator<{
-  key: string
-  argument: string
-  start: number
-  end: number
-}> {
+function* packageHeaders(text: string): IterableIterator<PackageHeader> {
   for (let start = 0; start < text.length; ) {
     let end = lineEnd(text, start)
     let open = start
@@ -331,7 +331,7 @@ function parseMatrix({
   sections: Section[]
   pins: string[]
   label: string
-}): number[][] {
+}): Matrix {
   const format = sections[0].argument.toLowerCase()
   if (
     !["full_matrix", "banded_matrix", "sparse_matrix"].includes(format) ||

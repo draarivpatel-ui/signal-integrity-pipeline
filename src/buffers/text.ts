@@ -31,10 +31,11 @@ export function lineEnd(text: string, start: number): number {
   return end
 }
 
+/** Start and end offsets in the source text. */
+export type TextRange = { start: number; end: number }
+
 /** Iterate lines with their offsets so callers can replace text without changing separators. */
-export function* lineRanges(
-  text: string,
-): IterableIterator<{ start: number; end: number }> {
+export function* lineRanges(text: string): IterableIterator<TextRange> {
   for (let start = 0; start < text.length; ) {
     const end = lineEnd(text, start)
     yield { start, end }
@@ -62,8 +63,13 @@ export function splitWords(text: string): string[] {
   }
 }
 
+/** The directive and name from a generated SPICE subcircuit header. */
+type GeneratedSubcircuitHeader = [directive: ".subckt", name: string]
+
 /** Find the first generated subcircuit header with a name immediately after the directive. */
-export function subcircuitHeader(source: string): [".subckt", string] | null {
+export function subcircuitHeader(
+  source: string,
+): GeneratedSubcircuitHeader | null {
   const directive = ".subckt"
   for (const { start, end } of lineRanges(source)) {
     if (!source.startsWith(directive + " ", start)) continue
