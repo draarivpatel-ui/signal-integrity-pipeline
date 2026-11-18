@@ -7,6 +7,8 @@ import {
   type SignalEndpoint,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
+  type SourceNetId,
+  type SourcePortId,
   sourceNetMembers,
   stackupFromCircuitJson,
 } from "../board"
@@ -22,13 +24,8 @@ import { safeId } from "../kernel"
 import type { RunControls } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import { defaultDurationSeconds } from "./timing"
-import {
-  type ConnectedSourceId,
-  signalTopology,
-  validateSignalGraph,
-} from "./topology"
+import { signalTopology, validateSignalGraph } from "./topology"
 
-type SourcePortId = string
 type SourceNetKey = string
 
 export interface PreparedBlock {
@@ -42,7 +39,7 @@ export interface PreparedBlock {
   warnings: string[]
 }
 /** Ordered physical ports: the sign of a differential signal is P minus N. */
-export function endpointPorts(endpoint: SignalEndpoint): string[] {
+export function endpointPorts(endpoint: SignalEndpoint): SourcePortId[] {
   if ("source_port_id" in endpoint) return [endpoint.source_port_id]
   return [endpoint.p_source_port_id, endpoint.n_source_port_id]
 }
@@ -102,6 +99,9 @@ export function signalBits(
   }
   return bits
 }
+/** Supported lanes and rejection messages from auditing the scoped copper. */
+type RoutedLanes = { lanes: NumericalSettings["lanes"]; rejections: string[] }
+
 /** Audit only selected/nearby routed nets; unsupported neighbours remain visible. */
 export function routedLanes({
   circuit,
@@ -112,10 +112,10 @@ export function routedLanes({
 }: {
   circuit: CircuitJson
   scope: CopperScope
-  topology: Map<ConnectedSourceId, string>
+  topology: Map<SourcePortId | SourceNetId, string>
   driven: Set<SourcePortId>
-  rails: Set<ConnectedSourceId>
-}): { lanes: NumericalSettings["lanes"]; rejections: string[] } {
+  rails: Set<SourcePortId | SourceNetId>
+}): RoutedLanes {
   const lanes: NumericalSettings["lanes"] = []
   const rejections: string[] = []
   for (const trace of circuit
@@ -308,7 +308,7 @@ function prepareBlock({
   const pins = inspectPins(circuit, sources)
 
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const rails = new Set<ConnectedSourceId>()
+  const rails = new Set<SourcePortId | SourceNetId>()
   for (const port of [...pins.values()]
     .flatMap((pin) => [pin.ground, pin.power])
     .concat(
@@ -333,7 +333,7 @@ function prepareBlock({
   }
   const signalConnectivity = signalTopology({ circuit, rails })
   const driven = new Map<SourcePortId, SimulationPcbDriverReceiverChannel>()
-  const topology = new Map<ConnectedSourceId, string>()
+  const topology = new Map<SourcePortId | SourceNetId, string>()
   const edges: number[] = []
   for (const signal of signals) {
     safeId(
