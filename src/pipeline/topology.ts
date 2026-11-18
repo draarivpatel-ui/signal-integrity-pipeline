@@ -125,14 +125,12 @@ function signalTraces(
 /** Verify physical connectivity through passives and reject branched routed graphs independently of source grouping. */
 export function validateSignalGraph({
   circuit,
-  connectivity,
   signalConnectivity,
   signals,
   rails,
   allowUnroutedTraces,
 }: {
   circuit: CircuitJson
-  connectivity: ConnectivityMap
   signalConnectivity: ConnectivityMap
   signals: SimulationPcbDriverReceiverChannel[]
   rails: ReadonlySet<SourcePortId | SourceNetId>
@@ -223,19 +221,6 @@ export function validateSignalGraph({
         b: vertices[index].key,
       })
     }
-  }
-  for (const source of circuit
-    .filter((r) => r.type === "source_port")
-    .filter((r) => selected.has(r.source_port_id))) {
-    if (terminals.has(source.source_port_id)) continue
-    const copper = sourceNetMembers(connectivity, source.source_port_id)
-    const connectedPorts = ports.filter((port) =>
-      copper.has(port.source_port_id),
-    )
-    const connectedTerminals = connectedPorts.flatMap(
-      (port) => terminals.get(port.source_port_id) ?? [],
-    )
-    terminals.set(source.source_port_id, connectedTerminals)
   }
   const copperGraph = new Map(
     [...graph].map(([key, values]) => [key, new Set(values)]),
