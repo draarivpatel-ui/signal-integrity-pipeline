@@ -17,6 +17,14 @@ export {
   compileBuffers,
   ibisAssembly,
 } from "./buffers"
+export type { InspectedPin } from "./inspect"
+export {
+  edgeSeconds,
+  ibisNumber,
+  inspectPins,
+  pinCapabilities,
+  referenceVoltages,
+} from "./inspect"
 export { loadModelSource, relativeFile } from "./source"
 export type {
   AdmittedBuffers,
