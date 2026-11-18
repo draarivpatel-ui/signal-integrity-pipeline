@@ -20,7 +20,6 @@ export {
 export type { InspectedPin } from "./inspect"
 export {
   edgeSeconds,
-  ibisNumber,
   inspectPins,
   pinCapabilities,
   referenceVoltages,

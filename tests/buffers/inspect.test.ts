@@ -196,3 +196,17 @@ test("only ramp rows in the selected model Ramp section are used", async () => {
   })
   assert.equal(Math.round(edgeSeconds(inspectedPin(board, text)) * 1e12), 800)
 })
+
+test("scientific notation with a trailing decimal is accepted in a ramp time", async () => {
+  const board = await ibisInspectionBoard()
+  const modelData = "[Ramp]\ndV/dt_r 0.36/1.e-9 NA NA"
+  const text = inspectionIbis({ modelType: "Output", modelData })
+  assert.equal(Math.round(edgeSeconds(inspectedPin(board, text)) * 1e12), 1333)
+})
+
+test("an unavailable typical ramp row leaves the other edge usable", async () => {
+  const board = await ibisInspectionBoard()
+  const modelData = "[Ramp]\ndV/dt_r 0.36/na NA NA\ndV/dt_f 0.36/600p NA NA"
+  const text = inspectionIbis({ modelType: "Output", modelData })
+  assert.equal(Math.round(edgeSeconds(inspectedPin(board, text)) * 1e12), 800)
+})
