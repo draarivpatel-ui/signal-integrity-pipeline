@@ -1,5 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import type { TraceProps } from "@tscircuit/props"
+import type { LayerRef } from "circuit-json"
 import type React from "react"
 import {
   type CircuitJson,
@@ -9,18 +11,46 @@ import {
 } from "../../../src/board"
 import { renderCoreSignals } from "../../support/core-render"
 
-/** World-mm paths; inner-layer access barrels sit 2 mm beyond the selected endpoints. */
+/** Size in millimetres of each square test pad. */
+const PAD_SIZE_MM = 0.3
+
+/** Distance from the route midpoint to each access barrel in millimetres. */
+const ACCESS_BARREL_X_MM = 7
+
+interface WireProps {
+  name: string
+  y: number
+  layer?: Extract<LayerRef, "top" | "inner1" | "inner2">
+  extent?: number
+}
+
+/** World-mm paths with inner-layer access barrels beyond the selected endpoints. */
 function Wire({
   name,
   y,
   layer = "top",
   extent = 8,
-}: {
-  name: string
-  y: number
-  layer?: "top" | "inner1" | "inner2"
-  extent?: number
-}): React.JSX.Element {
+}: WireProps): React.JSX.Element {
+  const from = `.${name} > .A`
+  const to = `.${name} > .B`
+  const left = { x: -ACCESS_BARREL_X_MM, y }
+  const right = { x: ACCESS_BARREL_X_MM, y }
+  const pcbPath: NonNullable<TraceProps["pcbPath"]> = [from]
+  if (layer !== "top") {
+    pcbPath.push(left, {
+      ...left,
+      via: true,
+      fromLayer: "top",
+      toLayer: layer,
+    })
+    pcbPath.push(right, {
+      ...right,
+      via: true,
+      fromLayer: layer,
+      toLayer: "top",
+    })
+  }
+  pcbPath.push(to)
   return (
     <>
       <chip
@@ -33,16 +63,16 @@ function Wire({
               portHints={["pin1"]}
               pcbX={-extent}
               pcbY={0}
-              width={0.3}
-              height={0.3}
+              width={PAD_SIZE_MM}
+              height={PAD_SIZE_MM}
               shape="rect"
             />
             <smtpad
               portHints={["pin2"]}
               pcbX={extent}
               pcbY={0}
-              width={0.3}
-              height={0.3}
+              width={PAD_SIZE_MM}
+              height={PAD_SIZE_MM}
               shape="rect"
             />
           </footprint>
@@ -50,40 +80,17 @@ function Wire({
       />
       <trace
         name={`${name}_route`}
-        from={`.${name} > .A`}
-        to={`.${name} > .B`}
+        from={from}
+        to={to}
         width={0.1}
-        pcbPath={[
-          `.${name} > .A`,
-          ...(layer === "top"
-            ? []
-            : [
-                { x: -7, y },
-                {
-                  x: -7,
-                  y,
-                  via: true as const,
-                  fromLayer: "top" as const,
-                  toLayer: layer,
-                },
-                { x: 7, y },
-                {
-                  x: 7,
-                  y,
-                  via: true as const,
-                  fromLayer: layer,
-                  toLayer: "top" as const,
-                },
-              ]),
-          `.${name} > .B`,
-        ]}
+        pcbPath={pcbPath}
       />
     </>
   )
 }
 
-test("TSX coupling scope keeps adjacent layers, full via spans and return pours while omitting distant nets", async () => {
-  const circuit = await renderCoreSignals(
+test("TSX scope retains adjacent copper, barrel spans and return pours and omits distant nets", async () => {
+  const board = (
     <board
       width={24}
       height={16}
@@ -104,8 +111,8 @@ test("TSX coupling scope keeps adjacent layers, full via spans and return pours 
               portHints={["pin1"]}
               pcbX={0}
               pcbY={0}
-              width={0.3}
-              height={0.3}
+              width={PAD_SIZE_MM}
+              height={PAD_SIZE_MM}
               shape="rect"
             />
           </footprint>
@@ -122,8 +129,8 @@ test("TSX coupling scope keeps adjacent layers, full via spans and return pours 
               portHints={["pin1"]}
               pcbX={0}
               pcbY={0}
-              width={0.3}
-              height={0.3}
+              width={PAD_SIZE_MM}
+              height={PAD_SIZE_MM}
               shape="rect"
             />
           </footprint>
@@ -148,19 +155,26 @@ test("TSX coupling scope keeps adjacent layers, full via spans and return pours 
           { x: -1, y: 1.4 },
         ]}
       />
-    </board>,
-  ).catch((error: Error & { circuitJson: CircuitJson }) => {
-    assert.deepEqual(
-      error.circuitJson
-        .filter((record) => record.type.endsWith("_error"))
-        .map((record) => record.type),
-      ["pcb_port_not_connected_error"],
-    )
-    return error.circuitJson
-  })
-  const selected = circuit
-    .filter((record) => record.type === "source_trace")
-    .find((trace) => trace.name === "SELECTED_route")!
+    </board>
+  )
+  const circuit = await renderCoreSignals(board).catch(
+    (error: Error & { circuitJson: CircuitJson }) => {
+      const errors = error.circuitJson.filter((record) =>
+        record.type.endsWith("_error"),
+      )
+      assert.deepEqual(
+        errors.map((record) => record.type),
+        ["pcb_port_not_connected_error"],
+      )
+      return error.circuitJson
+    },
+  )
+  const sourceTraces = circuit.filter(
+    (record) => record.type === "source_trace",
+  )
+  const selected = sourceTraces.find(
+    (trace) => trace.name === "SELECTED_route",
+  )!
   const ground = circuit
     .filter((record) => record.type === "source_net")
     .find((net) => net.name === "GND")!
@@ -174,15 +188,15 @@ test("TSX coupling scope keeps adjacent layers, full via spans and return pours 
     ),
     reference: sourceNetMembers(connectivity, ground.source_net_id),
   })
-  const retained = circuit
-    .filter((record) => record.type === "pcb_trace")
+  const traces = circuit.filter((record) => record.type === "pcb_trace")
+  const retained = traces
     .filter((trace) => scope.pcbTraceIds.includes(trace.pcb_trace_id))
-    .map((trace) =>
-      circuit
-        .filter((record) => record.type === "source_trace")
-        .find((source) => source.source_trace_id === trace.source_trace_id)!
-        .name!.replace("_route", ""),
-    )
+    .map((trace) => {
+      const source = sourceTraces.find(
+        (source) => source.source_trace_id === trace.source_trace_id,
+      )!
+      return source.name!.replace("_route", "")
+    })
   assert.deepEqual(retained.sort(), ["ADJACENT", "SAME", "SELECTED"])
   assert.equal(
     scope.pcbViaIds.length,
