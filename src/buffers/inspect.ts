@@ -132,31 +132,38 @@ function referenceRail(
   let explicit =
     refs?.pullup_reference_source_port_id ??
     refs?.power_clamp_reference_source_port_id
-  let bus = buses?.pullup
+  let reference: "pullup" | "pulldown" = "pullup"
   let railModel = "power"
   if (role === "ground") {
     explicit =
       refs?.pulldown_reference_source_port_id ??
       refs?.ground_clamp_reference_source_port_id
-    bus = buses?.pulldown
+    reference = "pulldown"
     railModel = "gnd"
   }
   if (explicit) return explicit
-  const candidates = Object.entries(component.pins).flatMap(
-    ([id, candidate]) => {
-      if (bus && candidate.signal !== bus) return []
-      if (!bus && candidate.model.toLowerCase() !== railModel) return []
-      const sourcePortId = model.ibis_pin_name_to_source_port_id[id]
-      if (!sourcePortId) return []
-      return [sourcePortId]
-    },
-  )
-  if (candidates.length !== 1) {
+  const bus = buses?.[reference]
+  const candidates = new Set<SourcePortId>()
+  for (const [id, sourcePortId] of Object.entries(
+    model.ibis_pin_name_to_source_port_id,
+  )) {
+    const candidate = component.pins[id]
+    if (candidate?.model.toLowerCase() !== railModel) continue
+    if (
+      bus &&
+      component.pinMapping[id]?.[reference] !== bus &&
+      candidate.signal !== bus &&
+      id !== bus
+    )
+      continue
+    candidates.add(sourcePortId)
+  }
+  if (candidates.size !== 1) {
     throw new Error(
       `${port}: IBIS ${role} reference is ambiguous; provide the chip's reference mapping`,
     )
   }
-  return candidates[0]
+  return [...candidates][0]
 }
 
 /** IBIS pin assignments that do not select a signal buffer. */
