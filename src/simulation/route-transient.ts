@@ -107,7 +107,9 @@ export class RouteTransientSolver extends BaseSolver {
     return this.output
   }
   /** The runtime capability must be supplied again when constructing a new solver. */
-  override getConstructorParams(): [RouteTransientInput] {
+  override getConstructorParams(): ConstructorParameters<
+    typeof RouteTransientSolver
+  > {
     return [this.input]
   }
 }
