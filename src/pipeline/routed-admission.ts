@@ -60,11 +60,23 @@ function receiverMappings(
   )
 }
 
+/** Copy IBIS UTF-8 bytes into immutable text without removing a BOM. */
+function modelSourceText(sources: IbisSources): Record<string, string> {
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })
+  return Object.fromEntries(
+    Object.entries(sources).map(([name, source]) => [
+      name,
+      typeof source === "string" ? source : decoder.decode(source),
+    ]),
+  )
+}
+
 /** Lower one admitted SI block into the routed stage inputs. */
 function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
+  const ibisSources = modelSourceText(input.ibisSources)
   const block = prepareBlockById({
     circuit: input.circuitJson,
-    sources: input.ibisSources,
+    sources: ibisSources,
     blockId: id,
     distanceMm: input.scopeDistanceMm ?? MAX_SCOPE_DISTANCE_MM,
   })
@@ -109,7 +121,7 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
       mappings,
       modeling: block.settings,
       controls: block.controls,
-      ibisSources: input.ibisSources,
+      ibisSources,
       options,
       artifactPrefix,
     },
