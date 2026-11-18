@@ -480,6 +480,20 @@ test("literal, clock and constant patterns and disabled drivers", () => {
   )
 })
 
+test("preparation does not add empty warnings to results or errors", async () => {
+  const circuit = await renderSignals(<Board />)
+  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  assert.equal(Object.hasOwn(prepared, "warnings"), false)
+  assert.throws(
+    () => prepareBlocks({ circuit, sources: {} }),
+    (error) => {
+      assert.ok(error instanceof Error)
+      assert.equal(Object.hasOwn(error, "warnings"), false)
+      return true
+    },
+  )
+})
+
 test("the removed modeling API cannot supply a test or synthesize a block", () => {
   assert.deepEqual(signalBlocks([]), [])
 })
