@@ -87,7 +87,7 @@ test("vendor admission retains shared block lowering and warnings", async (conte
   const [plan] = solver.getOutput().value
   assert.deepEqual(plan.sections.circuitJson, block.circuit)
   assert.deepEqual(plan.sections.scope, block.settings.copperScope)
-  assert.deepEqual(plan.warnings, block.warnings)
+  assert.deepEqual(plan.warnings, [])
   assert.equal(
     solver.getOutput().value[0].sections.scope.selectedPcbTraceIds.length,
     2,

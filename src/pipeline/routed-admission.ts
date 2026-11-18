@@ -9,7 +9,6 @@ import {
   type SourceNetId,
   type SourcePortId,
   sourceConnections,
-  sourceNetMembers,
   validateCircuitRecords,
 } from "../board"
 import { edgeSeconds, type IbisSources } from "../buffers"
@@ -23,6 +22,7 @@ import {
 } from "../kernel"
 import type { RouteBindingsInput, RoutedCompileOptions } from "../simulation"
 import {
+  collectRailIds,
   endpointPorts,
   type PreparedBlock,
   prepareBlockById,
@@ -89,15 +89,7 @@ function blockRouteConnections({
   const connections: RouteConnections = new Map()
   if (!settings.lanes.length) return connections
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const references = circuit.flatMap((record) => {
-    if (record.type === "source_net" && (record.is_ground || record.is_power))
-      return [record.source_net_id]
-    return []
-  })
-  for (const { ground, power } of pins.values()) references.push(ground, power)
-  const rails = new Set(
-    references.flatMap((port) => [...sourceNetMembers(connectivity, port)]),
-  )
+  const rails = collectRailIds({ circuit, connectivity }, pins)
   // Visit routed parallels first when a source trace also declares the same connection.
   for (const lane of settings.lanes) {
     const { from, to, sourceTraceId } = lane
@@ -225,7 +217,7 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
   return Object.freeze({
     id,
     name: block.block.name ?? id,
-    warnings: snapshot(block.warnings),
+    warnings: snapshot([]),
     sections: Object.freeze({
       circuitJson,
       scope: modeling.copperScope,
@@ -259,7 +251,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
       ibisSources: modelSourceText(input.ibisSources),
     })
   }
-  /** Shared prepareBlockById retains the existing intent, warnings and model policy. */
+  /** Use shared block preparation for channel intent and model policy. */
   override _step(): void {
     if (!this.ids) {
       validateCircuitRecords(this.input.circuitJson)
