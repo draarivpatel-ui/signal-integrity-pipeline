@@ -412,6 +412,49 @@ function declarationInput(prepared: PreparedBlock): DeclarationInput {
   }
 }
 
+test("preparation preserves a declared 2.8 V supply on a retained rail", async () => {
+  const board = TwoTraceBoard()
+  const circuit = await renderSignals(
+    React.cloneElement(
+      board,
+      {},
+      <>
+        {board.props.children}
+        <voltagesource
+          name="REG"
+          voltage={2.8}
+          connections={{ pin1: "net.VCC", pin2: "net.GND" }}
+        />
+        <net name="OTHER" />
+        <voltagesource
+          name="UNRELATED"
+          voltage={1.8}
+          connections={{ pin1: "net.OTHER", pin2: "net.GND" }}
+        />
+      </>,
+    ),
+    ["pcb_port_not_connected_error"],
+  )
+  const [prepared] = prepareBlocks({
+    circuit,
+    sources: inverterSources,
+    distanceMm: 1,
+  })
+  const physical = prepared.circuit.filter(
+    (record) => record.type === "simulation_voltage_source",
+  )
+  assert.deepEqual(
+    physical.map((source) => source.voltage),
+    [2.8],
+  )
+  assert.deepEqual(prepared.settings.supplies ?? [], [])
+  const input = declarationInput(prepared)
+  const { nodes } = generalDeclarations(input)
+  const { lines } = electricalSources(input.circuit, input.modeling, nodes)
+  assert.equal(lines.length, 1)
+  assert.match(lines[0], /^VPHYSICAL0 n[0-9]+ 0 2[.]8$/)
+})
+
 test("a routed differential termination shares the receiver endpoint on each leg", async () => {
   const circuit = await renderSignals(<Differential routedTermination />, [
     "pcb_port_not_connected_error",

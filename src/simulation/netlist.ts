@@ -249,7 +249,7 @@ type VoltageSourceTerminals = [
 ]
 
 /** Reads terminals from the Circuit JSON DC or AC source record. */
-function voltageSourceTerminals(
+export function voltageSourceTerminals(
   source: SimulationVoltageSource,
 ): VoltageSourceTerminals {
   if (source.is_dc_source) {
