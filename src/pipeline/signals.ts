@@ -83,7 +83,6 @@ export interface PreparedBlock {
   controls: Record<string, RunControls>
   pins: Map<SourcePortId, InspectedPin>
   settings: NumericalSettings
-  warnings: string[]
 }
 /** Supported lanes and rejection messages from auditing the scoped copper. */
 type RoutedLanes = {
@@ -198,18 +197,12 @@ export function prepareBlockById({
   )
   if (matches.length !== 1)
     throw new Error(`Expected exactly one signal-integrity block ${blockId}`)
-  const warnings: string[] = []
-  try {
-    return prepareBlock({
-      input: circuit,
-      block: matches[0],
-      sources,
-      warnings,
-      distanceMm,
-    })
-  } catch (error) {
-    throw Object.assign(error as Error, { warnings })
-  }
+  return prepareBlock({
+    input: circuit,
+    block: matches[0],
+    sources,
+    distanceMm,
+  })
 }
 /** Selected IBIS model for a single-ended pin or one ordered differential leg. */
 function selectedIbisModel(
@@ -456,13 +449,11 @@ function prepareBlock({
   input,
   block,
   sources,
-  warnings,
   distanceMm,
 }: {
   input: CircuitJson
   block: SimulationPcbTransientChannelSimulation
   sources: IbisSources
-  warnings: string[]
   distanceMm: number
 }): PreparedBlock {
   const id = safeId(
@@ -694,7 +685,6 @@ function prepareBlock({
     controls: { [id]: controls },
     pins,
     settings,
-    warnings,
     duration,
   }
 }
