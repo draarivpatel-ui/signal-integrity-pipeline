@@ -10,6 +10,7 @@ import {
   crossingRoute,
   daisyChain,
   missingReceiverTerminal,
+  padContactRoute,
   platedHoleRoute,
   seriesResistor,
   standaloneViaRoute,
@@ -78,4 +79,18 @@ test("a standalone via connects traces on different layers", async () => {
 test("a same-layer crossing between route vertices forms a junction", async () => {
   const circuit = await crossingRoute()
   assert.throws(() => validate(circuit), /branched routed graphs/)
+})
+
+test("a route can reach the receiver pad away from its center", async () => {
+  const circuit = await padContactRoute({ offset: 0.14 })
+  assert.doesNotThrow(() => validate(circuit))
+})
+
+test("trace width contributes to pad contact on its layer", async () => {
+  const copperContact = await padContactRoute({ offset: 0.23 })
+  assert.doesNotThrow(() => validate(copperContact))
+  const gap = await padContactRoute({ offset: 0.3 })
+  assert.throws(() => validate(gap), /is not routed between/)
+  const otherLayer = await padContactRoute({ offset: 0.14, layer: "bottom" })
+  assert.throws(() => validate(otherLayer), /is not routed between/)
 })
