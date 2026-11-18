@@ -8,11 +8,11 @@ import {
 } from "./cross-section-types"
 import { fail } from "./diagnostics"
 
+/** Relative permittivity and loss tangent of the material at a boundary. */
+type SectionMaterial = Pick<SectionDielectric, "er" | "lossTangent">
+
 /** Material adjacent to a boundary; non-overlapping slabs leave air elsewhere. */
-function material(
-  layers: SectionDielectric[],
-  z: number,
-): { er: number; lossTangent: number } {
+function material(layers: SectionDielectric[], z: number): SectionMaterial {
   return (
     layers.find(
       (layer) => z > layer.zMm && z < layer.zMm + layer.thicknessMm,
@@ -27,10 +27,11 @@ function coordinates(values: number[], tolerance: number): number[] {
     .filter((value, i, sorted) => !i || value - sorted[i - 1] > tolerance)
 }
 
+/** A shielded region and its conductor indices in the original cross-section. */
+type IndexedSectionRegion = { region: SectionRegion; indices: number[] }
+
 /** Reflect an upper-only reference, and split signals into regions shielded by solid planes. */
-export function sectionRegions(
-  section: CrossSection,
-): { region: SectionRegion; indices: number[] }[] {
+export function sectionRegions(section: CrossSection): IndexedSectionRegion[] {
   const planes = [...section.planes].sort((a, b) => a.zMm - b.zMm)
   const groups = new Map<number, number[]>()
   for (const [i, conductor] of section.conductors.entries()) {

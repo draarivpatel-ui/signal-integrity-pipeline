@@ -1,10 +1,11 @@
 import { fail } from "./diagnostics"
 import type { Matrix } from "./linalg"
 
+/** Solves a matrix of right-hand sides using saved boundary factors. */
+type SectionMatrixSolve = (values: Matrix) => Matrix
+
 /** In-place partial-pivoted LU of a small boundary matrix; reuse for every excitation/sensitivity. */
-export function sectionFactor(
-  matrix: Float64Array[],
-): (values: Matrix) => Matrix {
+export function sectionFactor(matrix: Float64Array[]): SectionMatrixSolve {
   const n = matrix.length
   const swaps = new Int32Array(n)
   for (let k = 0; k < n; k++) {

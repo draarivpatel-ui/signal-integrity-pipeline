@@ -5,15 +5,18 @@ import { type SectionMeshInput, sectionEpsilon0 } from "./cross-section-types"
 import { fail } from "./diagnostics"
 import { type Matrix, symmetrize } from "./linalg"
 
-/** Solve potential and dielectric-transmission equations; differentiate the SAME field operator
- * for material loss. This is the electrostatic energy sensitivity, not an averaged loss tangent.
- */
-export function sectionField(mesh: SectionMeshInput): {
+/** Capacitance and dielectric loss matrices with mesh size and reciprocity error. */
+type SectionFieldResult = {
   C: Matrix
   loss: Matrix
   panels: number
   residual: number
-} {
+}
+
+/** Solve potential and dielectric-transmission equations; differentiate the SAME field operator
+ * for material loss. This is the electrostatic energy sensitivity, not an averaged loss tangent.
+ */
+export function sectionField(mesh: SectionMeshInput): SectionFieldResult {
   const { region, vacuum } = mesh
   const panels = sectionPanels(mesh)
   const size = region.conductors.length
