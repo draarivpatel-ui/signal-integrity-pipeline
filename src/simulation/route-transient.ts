@@ -49,10 +49,8 @@ export class RouteTransientSolver extends BaseSolver {
     )
     const run = execution.value
     const diagnostic = (run.stdout + "\n" + run.stderr)
-      .split(/\r?\n/)
-      .find((line) =>
-        /\b(?:error|fatal|aborted|timestep too small)\b/i.test(line),
-      )
+      .split("\n")
+      .find(hasSolverDiagnostic)
     if (diagnostic)
       fail("native_solver", `${compiled.name}: ${diagnostic.trim()}`, {
         artifacts: run.logPaths,
@@ -112,4 +110,33 @@ export class RouteTransientSolver extends BaseSolver {
   override getConstructorParams(): [RouteTransientInput] {
     return [this.input]
   }
+}
+
+const solverDiagnostics = ["error", "fatal", "aborted", "timestep too small"]
+
+/** Detect a fatal diagnostic at ASCII word boundaries in ngspice's output. */
+function hasSolverDiagnostic(line: string): boolean {
+  for (let start = 0; start < line.length; start++) {
+    if (isWordCharacter(line[start - 1])) continue
+    for (const diagnostic of solverDiagnostics) {
+      const end = start + diagnostic.length
+      if (
+        line.slice(start, end).toLowerCase() === diagnostic &&
+        !isWordCharacter(line[end])
+      )
+        return true
+    }
+  }
+  return false
+}
+
+/** Recognize the letters, digits and underscore used in diagnostic word boundaries. */
+function isWordCharacter(character?: string): boolean {
+  if (character === undefined) return false
+  return (
+    character === "_" ||
+    (character >= "a" && character <= "z") ||
+    (character >= "A" && character <= "Z") ||
+    (character >= "0" && character <= "9")
+  )
 }
