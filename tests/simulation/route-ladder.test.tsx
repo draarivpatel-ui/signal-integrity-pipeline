@@ -188,10 +188,21 @@ const microstripPair: CrossSection = {
   dielectrics: [{ zMm: 0, thicknessMm: 0.5, er: 4, lossTangent: 0 }],
 }
 
-/** Sum of the values of every emitted element whose line matches `pattern`. */
-function total(lines: string[], pattern: RegExp): number {
+/** Match an emitted element name made of the prefix and a decimal index. */
+function hasNumberedElement(line: string, prefix: string): boolean {
+  if (!line.startsWith(prefix)) return false
+  const end = line.indexOf(" ", prefix.length)
+  if (end <= prefix.length) return false
+  for (let index = prefix.length; index < end; index++) {
+    if (line[index] < "0" || line[index] > "9") return false
+  }
+  return true
+}
+
+/** Sum the values of the numbered elements with the requested prefix. */
+function total(lines: string[], prefix: string): number {
   return lines
-    .filter((line) => pattern.test(line))
+    .filter((line) => hasNumberedElement(line, prefix))
     .reduce((sum, line) => sum + Number(line.split(" ")[3]), 0)
 }
 
@@ -218,19 +229,16 @@ test("golden stage 5: ladder elements integrate to L l, C l, R l and K = L12/sqr
     const ground = line.C.flat().reduce((a, b) => a + b, 0) * metres
     const pair = size > 1 ? Math.abs(line.C[0][1]) * metres : 0
     const shunts = ladder.lines
-      .filter((entry) => /^CARCCS\d+ /.test(entry))
+      .filter((entry) => hasNumberedElement(entry, "CARCCS"))
       .map((entry) => entry.split(" "))
     /** Relative agreement within the 1e-9 print-precision tolerance. */
     const near = (actual: number, expected: number): boolean =>
       Math.abs(actual - expected) <= 1e-9 * Math.abs(expected)
     assert.ok(
-      near(total(ladder.lines, /^LARCL\d+ /), inductance),
+      near(total(ladder.lines, "LARCL"), inductance),
       `${label}: series L`,
     )
-    assert.ok(
-      near(total(ladder.lines, /^RARCD\d+ /), resistance),
-      `${label}: DC R`,
-    )
+    assert.ok(near(total(ladder.lines, "RARCD"), resistance), `${label}: DC R`)
     assert.ok(
       near(
         shunts

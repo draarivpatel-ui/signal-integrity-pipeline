@@ -545,6 +545,22 @@ test.skipIf(!process.env.SI_TEST_SWITCHING_NGSPICE)(
 // and |t50_sim - t50_table| <= 10 ps at the table's mid-swing
 // (0.8% of the 1.25 ns unit interval at the board's 800 Mb/s DQ rate).
 // R_dut, L_dut, C_dut, C_fixture and L_fixture are zero in every selected table (the parser rejects others).
+/** Read the name from the first generated .subckt declaration. */
+function firstSubcircuitName(source: string): string | undefined {
+  const prefix = ".subckt "
+  const lines = source
+    .replaceAll("\r", "\n")
+    .replaceAll("\u2028", "\n")
+    .replaceAll("\u2029", "\n")
+    .split("\n")
+  for (const line of lines) {
+    if (!line.startsWith(prefix)) continue
+    let end = prefix.length
+    while (end < line.length && line[end].trim() !== "") end++
+    if (end > prefix.length) return line.slice(prefix.length, end)
+  }
+}
+
 const replays = [
   {
     file: "sprm552c.ibs",
@@ -684,7 +700,8 @@ test(
           },
           document,
         })
-        const name = /^\.subckt (\S+)/m.exec(converted.source)![1]
+        const name = firstSubcircuitName(converted.source)
+        assert.ok(name, "converted SPICE must declare a subcircuit")
         lines.push(converted.source)
         for (const wave of buffer.waveforms.filter(
           (entry) => entry.kind === edge,
