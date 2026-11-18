@@ -3,10 +3,20 @@ import { sha256 } from '../kernel'
 import { fail } from './diagnostics'
 import type { IbisSources, LoadedModelSource, ModelSourceRequest } from './types'
 
+/** NUL is invalid in a file path. */
+const NULL_CHARACTER = '\0'
+
+/** ASCII characters that can continue a word after an HTML tag name. */
+const WORD_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_'
+
 /** Portable relative paths used by the explicit Node adapter as well as file maps. */
 export function relativeFile(path: string): string {
-  if (!path || path.includes('\\') || path.includes(':') || path.includes('\0') || path.startsWith('/') || path.split('/').some(part => !part || part === '.' || part === '..'))
+  const invalidPath = !path ||
+    ['\\', ':', NULL_CHARACTER].some(character => path.includes(character)) ||
+    path.split('/').some(part => !part || part === '.' || part === '..')
+  if (invalidPath) {
     fail('file_path', `Expected a safe project-relative file path: ${path}`)
+  }
   return path
 }
 
@@ -16,11 +26,11 @@ function containsHtmlOpening(text: string): boolean {
   if (opening.slice(0, '<!doctype'.length).toLowerCase() === '<!doctype') {
     const rest = opening.slice('<!doctype'.length)
     if (rest === rest.trimStart()) return false
-    opening = '<' + rest.trimStart()
+    opening = `<${rest.trimStart()}`
   }
   if (opening.slice(0, 5).toLowerCase() !== '<html') return false
   const next = opening[5] ?? ''
-  return next === '' || !'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_'.includes(next)
+  return next === '' || !WORD_CHARACTERS.includes(next)
 }
 
 /**

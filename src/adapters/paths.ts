@@ -1,10 +1,17 @@
 import { isAbsolute, relative } from 'node:path'
 import { fail } from './diagnostics'
 
+/** NUL is invalid in a file path. */
+const NULL_CHARACTER = '\0'
+
 /** Same rule as model-source.ts relativeFile (buffers owns the IBIS copy; adapters keeps its own). */
 export function relativeFile(path: string): string {
-  if (!path || path.includes('\\') || path.includes(':') || path.includes('\0') || path.startsWith('/') || path.split('/').some(part => !part || part === '.' || part === '..'))
+  const invalidPath = !path ||
+    ['\\', ':', NULL_CHARACTER].some(character => path.includes(character)) ||
+    path.split('/').some(part => !part || part === '.' || part === '..')
+  if (invalidPath) {
     fail('file_path', `Expected a safe project-relative file path: ${path}`)
+  }
   return path
 }
 

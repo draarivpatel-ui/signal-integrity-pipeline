@@ -56,12 +56,21 @@ test('every Mermaid diagram is a workflow or a state machine', () => {
       assert.match(block, /^(flowchart|stateDiagram-v2)\b/, `${file}: diagram must be flowchart or stateDiagram-v2`)
 })
 
+/** Every image file under this directory, recursively; none when it does not exist. */
+const images = (dir: string): string[] => {
+  if (!existsSync(join(root, dir))) return []
+  const imageExtensions = ['.png', '.svg', '.jpg', '.jpeg', '.gif', '.webp']
+  return readdirSync(join(root, dir)).flatMap(name => {
+    const path = join(dir, name)
+    if (statSync(join(root, path)).isDirectory()) return images(path)
+    if (imageExtensions.some(ext => name.toLowerCase().endsWith(ext))) return [path]
+    return []
+  })
+}
+
 test('no diagram images in docs or markdown', () => {
   for (const file of markdownFiles())
     assert.doesNotMatch(readFileSync(join(root, file), 'utf8'), /!\[[^\]]*\]\([^)]*\.(png|svg|jpe?g|gif|webp)(\?[^)]*)?\)/i, `${file}: use a mermaid block instead of an image`)
-  /** Every image file under this directory, recursively; none when it does not exist. */
-  const images = (dir: string): string[] => !existsSync(join(root, dir)) ? [] : readdirSync(join(root, dir)).flatMap(n =>
-    statSync(join(root, dir, n)).isDirectory() ? images(join(dir, n)) : ['.png', '.svg', '.jpg', '.jpeg', '.gif', '.webp'].some(ext => n.toLowerCase().endsWith(ext)) ? [join(dir, n)] : [])
   assert.deepEqual(images('docs'), [])
 })
 

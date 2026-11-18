@@ -15,7 +15,10 @@ const finite = (input: unknown, label: string, positive: boolean = false): numbe
 const value = (input: unknown, label: string, positive: boolean = false): string => num(finite(input, label, positive))
 
 /** The rewritten SPICE source and name of its prefixed wrapper. */
-type NamespacedSpice = { source: string; wrapper: string }
+type NamespacedSpice = {
+  source: string
+  wrapper: string
+}
 
 /**
  * Prefixes every subcircuit name in a converter library so several IBIS models can share one deck.
@@ -42,7 +45,7 @@ export function namespaceSpice(source: string, prefix: string): NamespacedSpice 
     const start = skipSpiceWhitespace(source, copied)
     const end = spiceTokenEnd(source, start)
     const token = source.slice(start, end)
-    output += source.slice(copied, start) + (renamed.get(token.toLowerCase()) ?? token)
+    output += `${source.slice(copied, start)}${renamed.get(token.toLowerCase()) ?? token}`
     copied = end
   }
   return { source: output, wrapper: `${prefix}_${names[0]}` }
@@ -60,9 +63,14 @@ function spiceTokenEnd(source: string, start: number): number {
   return start
 }
 
-/** The line breaks recognized when matching SPICE statements at the start of a line. */
+/** SPICE terminal lists end at a carriage return or line feed. */
+const SPICE_TERMINAL_LINE_ENDINGS = '\r\n'
+/** SPICE statement scanning also recognizes the Unicode line and paragraph separators. */
+const SPICE_LINE_ENDINGS = `${SPICE_TERMINAL_LINE_ENDINGS}\u2028\u2029`
+
+/** Whether the previous character starts a new SPICE statement line. */
 function isSpiceLineBreak(char: string): boolean {
-  return char === '\n' || char === '\r' || char === '\u2028' || char === '\u2029'
+  return SPICE_LINE_ENDINGS.includes(char)
 }
 
 /** Split the trimmed terminal list, preserving an empty terminal for an empty list. */
@@ -94,16 +102,19 @@ function placedSubcircuitPins(source: string): string[] | undefined {
     if (pinsStart === source.length) {
       // A spaces-only terminal field can follow the required separator.
       for (let offset = nameEnd + 1; offset < source.length; offset++) {
-        if (source[offset] !== '\r' && source[offset] !== '\n') return ['']
+        if (!SPICE_TERMINAL_LINE_ENDINGS.includes(source[offset])) return ['']
       }
       continue
     }
     let pinsEnd = pinsStart
-    while (pinsEnd < source.length && source[pinsEnd] !== '\r' && source[pinsEnd] !== '\n') pinsEnd++
+    while (pinsEnd < source.length && !SPICE_TERMINAL_LINE_ENDINGS.includes(source[pinsEnd])) pinsEnd++
     return splitSpicePins(source.slice(pinsStart, pinsEnd).trim())
   }
   return undefined
 }
+
+/** Behavioral and controlled-source device prefixes excluded from placed passive subcircuits. */
+const UNSUPPORTED_SPICE_DEVICES = 'BESGWFTbesgwft'
 
 const unsupportedSpiceDirectives = ['include', 'lib', 'control', 'end', 'tran', 'ac', 'dc']
 
@@ -119,7 +130,7 @@ function hasUnsupportedPlacedSpice(source: string): boolean {
     if (start > 0 && !isSpiceLineBreak(source[start - 1])) continue
     start = skipSpiceWhitespace(source, start)
     const first = source[start]
-    if (first && 'BESGWFTbesgwft'.includes(first)) return true
+    if (first && UNSUPPORTED_SPICE_DEVICES.includes(first)) return true
     if (first !== '.') continue
 
     let end = start + 1
@@ -133,11 +144,14 @@ function hasUnsupportedPlacedSpice(source: string): boolean {
 /** The two terminals on a SPICE resistor or inductor line. */
 type SpiceTerminalPair = [first: string, second: string]
 
+/** Resistor and inductor device prefixes used to find DC-connected terminals. */
+const DC_SPICE_DEVICES = 'RLrl'
+
 /** Read the terminals of a resistor or inductor line that also has a separator after the second terminal. */
 function dcSpiceTerminals(line: string): SpiceTerminalPair | undefined {
   const deviceStart = skipSpiceWhitespace(line, 0)
   const device = line[deviceStart]
-  if (!device || !'RLrl'.includes(device)) return undefined
+  if (!device || !DC_SPICE_DEVICES.includes(device)) return undefined
   const first = skipSpiceWhitespace(line, spiceTokenEnd(line, deviceStart))
   const firstEnd = spiceTokenEnd(line, first)
   const second = skipSpiceWhitespace(line, firstEnd)
@@ -202,13 +216,18 @@ export function electricalSources(circuit: CircuitJson, modeling: SimulationMode
     if (components.length !== 1) fail('passive_reference', 'Selected passive component is missing or ambiguous')
     const component = components[0]
     const ports = sourcePorts.filter(e => e.source_component_id === component.source_component_id).sort((a, b) => Number(a.pin_number) - Number(b.pin_number))
-    const placed = circuit.filter(r => r.type === 'simulation_spice_subcircuit').filter(r => r.source_component_id === component.source_component_id)
+    const spiceSubcircuits = circuit.filter(record => record.type === 'simulation_spice_subcircuit')
+    const placed = spiceSubcircuits.filter(record => record.source_component_id === component.source_component_id)
     if (placed.length) {
       if (placed.length !== 1) fail('passive_capability', `${component.name}: placed SPICE model is ambiguous`)
       const model = placed[0]
       const pins = placedSubcircuitPins(model.subcircuit_source)
-      if (!pins || hasUnsupportedPlacedSpice(model.subcircuit_source)) fail('passive_capability', `${component.name}: placed SPICE model is unsupported; it cannot be discarded.`)
-      if (pins.some(pin => !model.spice_pin_to_source_port_map[pin])) fail('passive_capability', `${component.name}: placed SPICE model has unmapped terminals`)
+      if (!pins || hasUnsupportedPlacedSpice(model.subcircuit_source)) {
+        fail('passive_capability', `${component.name}: placed SPICE model is unsupported; it cannot be discarded.`)
+      }
+      if (pins.some(pin => !model.spice_pin_to_source_port_map[pin])) {
+        fail('passive_capability', `${component.name}: placed SPICE model has unmapped terminals`)
+      }
       const namespaced = namespaceSpice(model.subcircuit_source, `PLACED${i}`)
       const nodesForPins = pins.map(pin => nodes.node(model.spice_pin_to_source_port_map[pin]))
       nodesForPins.forEach(node => activeNodes.add(node))

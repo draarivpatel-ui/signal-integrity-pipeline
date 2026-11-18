@@ -25,10 +25,23 @@ export interface VoltageProbePlan {
 }
 /** Run controls lowered from channel declarations for the IBIS converter. */
 export interface RunControls {
-  states: { source_port_id: string; is_output: boolean; is_output_enabled?: boolean }[]
+  states: {
+    source_port_id: string
+    is_output: boolean
+    is_output_enabled?: boolean
+  }[]
   stimuli: {
-    name: string; source_port_id: string; bit_duration_ms: number; start_time_ms: number; initial_state: 0 | 1; inverted?: boolean
-    transmission_pattern: { transmission_type: 'bits'; bits: string; repeat: boolean }
+    name: string
+    source_port_id: string
+    bit_duration_ms: number
+    start_time_ms: number
+    initial_state: 0 | 1
+    inverted?: boolean
+    transmission_pattern: {
+      transmission_type: 'bits'
+      bits: string
+      repeat: boolean
+    }
   }[]
 }
 export interface SimulationPlan extends RunControls {

@@ -28,11 +28,11 @@ function fixTypeScriptUrls(source) {
     while (source[argument]?.trim() === '') argument++
     if (!source.startsWith(tail, argument)) continue
 
-    output += source.slice(copied, pathEnd - 3) + '.js'
+    output += `${source.slice(copied, pathEnd - 3)}.js`
     copied = pathEnd
     start = argument + tail.length - 1
   }
-  return output + source.slice(copied)
+  return `${output}${source.slice(copied)}`
 }
 
 const completeExtensions = ['.js', '.cjs', '.mjs', '.json', '.css', '.svg', '.txt']
@@ -44,14 +44,17 @@ function fixRelativeSpecifiers(source, file) {
   for (const { path, start, end } of relativeSpecifiers(source)) {
     if (completeExtensions.some(ext => path.endsWith(ext))) continue
     const absolute = resolve(dirname(file), path)
-    let full
-    if (existsSync(absolute + '.js')) full = path + '.js'
-    else if (existsSync(join(absolute, 'index.js'))) full = path.endsWith('/') ? path + 'index.js' : path + '/index.js'
-    else throw new Error(`${file}: cannot resolve '${path}'`)
-    output += source.slice(copied, start) + full
+    const jsPath = `${path}.js`
+    let full = jsPath
+    if (!existsSync(`${absolute}.js`)) {
+      if (!existsSync(join(absolute, 'index.js'))) throw new Error(`${file}: cannot resolve '${path}'`)
+      const separator = path.endsWith('/') ? '' : '/'
+      full = `${path}${separator}index.js`
+    }
+    output += `${source.slice(copied, start)}${full}`
     copied = end
   }
-  return output + source.slice(copied)
+  return `${output}${source.slice(copied)}`
 }
 
 for (const file of walk('dist').filter(path => path.endsWith('.js') || path.endsWith('.d.ts'))) {

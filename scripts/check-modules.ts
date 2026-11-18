@@ -55,7 +55,7 @@ const isWordCharacter = (char: string): boolean => char.length === 1 && WORD_CHA
 /** Whether the filename ends in a JS or TS source extension. */
 const isSourceFile = (name: string): boolean => SOURCE_EXTENSIONS.some(ext => name.endsWith(ext))
 /** Whether the filename ends in a JS or TS test extension. */
-const isTestFile = (name: string): boolean => SOURCE_EXTENSIONS.some(ext => name.endsWith('.test' + ext))
+const isTestFile = (name: string): boolean => SOURCE_EXTENSIONS.some(ext => name.endsWith(`.test${ext}`))
 
 /** Recognizes an assertion name ending at a word boundary. */
 function startsWithWord(text: string, word: string): boolean {
@@ -84,7 +84,7 @@ const todayUtc = (): string => new Date().toISOString().slice(0, 10)
 /** True when the value is a real YYYY-MM-DD date string, so malformed expiry dates are caught. */
 function isoDate(s: unknown): s is string {
   if (typeof s !== 'string' || s.length !== 10 || s[4] !== '-' || s[7] !== '-') return false
-  const digits = s.slice(0, 4) + s.slice(5, 7) + s.slice(8)
+  const digits = `${s.slice(0, 4)}${s.slice(5, 7)}${s.slice(8)}`
   for (const digit of digits) if (digit < '0' || digit > '9') return false
   return !Number.isNaN(Date.parse(s))
 }
@@ -141,7 +141,10 @@ export function findDiagnosticsCalls(root: string): DiagnosticsCall[] {
 }
 
 /** Parsed exemptions and any reported file error. */
-type LoadedExemptions = { value: Exemptions; problem?: string }
+type LoadedExemptions = {
+  value: Exemptions
+  problem?: string
+}
 
 /** Reads tools/exemptions.json, treating a missing file as no exemptions and reporting unparsable JSON as a problem. */
 function loadExemptions(path: string): LoadedExemptions {
@@ -274,7 +277,7 @@ function resolveTarget(abs: string): string {
 /** Whether the specifier names a Node built-in covered by the module rules. */
 function isNodeBuiltin(specifier: string): boolean {
   return specifier.startsWith('node:') || ['fs', 'child_process']
-    .some(name => specifier === name || specifier.startsWith(name + '/'))
+    .some(name => specifier === name || specifier.startsWith(`${name}/`))
 }
 
 /** Strip a JS/TS extension so `x.js` (specifier) and `x.ts` (file on disk) compare equal. */
@@ -283,7 +286,7 @@ function stem(p: string): string {
   return ext ? p.slice(0, -ext.length) : p
 }
 /** Converts the JS output path back to its TypeScript source extension. */
-const jsToTs = (p: string): string => p.endsWith('.js') ? p.slice(0, -3) + '.ts' : p
+const jsToTs = (p: string): string => p.endsWith('.js') ? `${p.slice(0, -3)}.ts` : p
 
 /** Checks src/ as a whole against S1-S6: ownership, import boundaries, cycles, Node built-ins, entry imports and generated unions. */
 export function checkSource(src: string, modules: ModuleInfo[], options: CheckOptions = {}): Violation[] {
@@ -397,7 +400,10 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
 }
 
 /** The literals declared in the generated module and diagnostic code unions. */
-type GeneratedModuleLiterals = { domains: Set<string>; codes: Set<string> }
+type GeneratedModuleLiterals = {
+  domains: Set<string>
+  codes: Set<string>
+}
 
 /** The string literals of the DomainName and DiagnosticCode unions, read from the AST. */
 export function parseModulesGenerated(text: string): GeneratedModuleLiterals {

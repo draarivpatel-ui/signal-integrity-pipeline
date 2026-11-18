@@ -47,6 +47,7 @@ export class VocabularyError extends Error {
 }
 
 export const DEFAULT_THRESHOLD = 85
+/** The four line terminators recognized by JavaScript. */
 const LINE_BREAKS = ['\n', '\r', '\u2028', '\u2029']
 
 /** Checks for an ASCII lowercase letter. */
@@ -70,6 +71,9 @@ function isDecimal(value: string): boolean {
   return extra.length === 0 && whole.length > 0 && Array.from(whole).every(isDigit) &&
     (fraction === undefined || (fraction.length > 0 && Array.from(fraction).every(isDigit)))
 }
+/** The ASCII vowels excluded when removing a doubled consonant. */
+const VOWELS = 'aeiou'
+
 const SECTIONS = ['domain', 'general', 'abbreviations', 'avoid'] as const
 type Section = typeof SECTIONS[number]
 /** Drops a trailing ` # comment` (a `#` preceded by whitespace) and surrounding whitespace. */
@@ -125,7 +129,10 @@ export function parseVocabulary(text: string): Vocabulary {
   let section: Section | undefined
   /** Checks a word's spelling and that it appears only once in the whole file, then records where it was found. */
   const claim = (word: string, line: number, into: Section): void => {
-    if (!isWord(word)) throw new VocabularyError(line, `"${word}" is not a valid word (lowercase letters and digits, starting with a letter)`)
+    if (!isWord(word)) {
+      const description = 'lowercase letters and digits, starting with a letter'
+      throw new VocabularyError(line, `"${word}" is not a valid word (${description})`)
+    }
     const before = seen.get(word)
     if (before) {
       const where = before.section === into ? `already listed in ${into}` : `already listed in ${before.section}; a word belongs to one section`
@@ -145,12 +152,17 @@ export function parseVocabulary(text: string): Vocabulary {
     const indented = isSpace(raw[0] ?? '')
     if (!indented) {
       const header = readEntry(body)
-      if (!header || !Array.from(header[0]).every(isLowercase)) throw new VocabularyError(line, `expected "threshold: N" or a section header (${SECTIONS.join(', ')}), got "${body}"`)
+      if (!header || !Array.from(header[0]).every(isLowercase)) {
+        const sectionNames = SECTIONS.join(', ')
+        throw new VocabularyError(line, `expected "threshold: N" or a section header (${sectionNames}), got "${body}"`)
+      }
       const [key, value] = header
       if (sectionsSeen.has(key)) throw new VocabularyError(line, `"${key}" appears twice`)
       sectionsSeen.add(key)
       if (key === 'threshold') {
-        if (value === undefined || !isDecimal(value) || Number(value) > 100) throw new VocabularyError(line, `threshold must be a number from 0 to 100, got "${value ?? ''}"`)
+        if (value === undefined || !isDecimal(value) || Number(value) > 100) {
+          throw new VocabularyError(line, `threshold must be a number from 0 to 100, got "${value ?? ''}"`)
+        }
         vocab.threshold = Number(value)
         section = undefined
         return
@@ -209,7 +221,7 @@ function formStems(word: string): string[] {
   for (const suffix of ['ed', 'ing', 'er']) for (const stem of strip(word, suffix)) {
     out.push(stem, stem + 'e')
     const last = stem.at(-1) ?? ''
-    if (stem.length >= 3 && last === stem.at(-2) && !'aeiou'.includes(last)) out.push(stem.slice(0, -1))
+    if (stem.length >= 3 && last === stem.at(-2) && !VOWELS.includes(last)) out.push(stem.slice(0, -1))
   }
   return [...out, ...strip(word, 'ly')]
 }
@@ -420,7 +432,7 @@ function sourceFiles(dir: string): string[] {
     const path = join(dir, d.name)
     if (d.isDirectory()) return sourceFiles(path)
     const extension = ['.ts', '.tsx'].find(ext => d.name.endsWith(ext))
-    return extension && !d.name.endsWith('.generated' + extension) ? [path] : []
+    return extension && !d.name.endsWith(`.generated${extension}`) ? [path] : []
   }).sort()
 }
 
@@ -479,7 +491,10 @@ export function formatReport(report: Report): string {
 }
 
 /** Command-line options for reporting vocabulary coverage. */
-type VocabularyArgs = { json: boolean; root: string }
+type VocabularyArgs = {
+  json: boolean
+  root: string
+}
 
 /** Parses `[--json] [--root <dir>]`; throws on anything else. */
 export function parseArgs(args: readonly string[], defaultRoot: string): VocabularyArgs {

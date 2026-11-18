@@ -5,7 +5,14 @@ import { subcircuitTree, selectPort } from '../board'
 import type { CircuitJson, LaneMapping } from '../board'
 import type { IbisModelDefinition, IbisRunConfig, IbisReferencePorts } from '@tscircuit/ibis-to-spice'
 import type { ModelRunDefinition } from '../buffers'
-import type { CircuitNodes, Declarations, PipelineIbisModel, RunControls, SimulationModeling, SimulationPlan } from './types'
+import type {
+  CircuitNodes,
+  Declarations,
+  PipelineIbisModel,
+  RunControls,
+  SimulationModeling,
+  SimulationPlan,
+} from './types'
 
 /** Converts a declared millisecond time to seconds, failing unless it is finite and nonnegative (or positive). */
 const milliseconds=(value: number | undefined,label: string,{positive=false}: {positive?: boolean}={}): number=>{
@@ -116,12 +123,21 @@ export function circuitNodes({ circuit, mappings, modeling }: CircuitNodesInput)
 }
 
 /**
- * Combines experiment timing and probes with the lowered IBIS run controls. Every reference is checked here, before any solver runs.
+ * Combines experiment timing and probes with the lowered IBIS run controls.
+ * Every reference is checked here, before any solver runs.
  */
 export function generalDeclarations({ circuit, mappings, modeling, controls }: CircuitNodesInput & {
   controls: Record<string, RunControls>
 }): Declarations {
-  for(const type of ['simulation_experiment','simulation_ibis_model','simulation_voltage_probe','source_port','source_net','source_component']) {
+  const referencedTypes = [
+    'simulation_experiment',
+    'simulation_ibis_model',
+    'simulation_voltage_probe',
+    'source_port',
+    'source_net',
+    'source_component',
+  ]
+  for (const type of referencedTypes) {
     const seen=new Set<string>()
     for(const record of circuit.filter(e=>e.type===type)) {
       const id: unknown=Reflect.get(record,`${type}_id`)
@@ -177,10 +193,16 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
     if(scope===undefined) fail('simulation_scope',`${experiment.name}: multiple modeled subcircuits require an explicit experiment scope`)
     const scopedModels=models.filter(model=>subcircuits.within(componentScope(model.source_component_id),scope))
     if(!scopedModels.length) fail('simulation_scope',`${experiment.name}: no models in its explicit subcircuit scope`)
-    for(const mapping of mappings) for(const endpoint of [mapping.from,mapping.to]) {
-      const port=ports.get(endpoint)
-      if(!port) fail('ibis_mapping',`${mapping.port}: missing channel endpoint ${endpoint}`)
-      if(!subcircuits.within(componentScope(port.source_component_id),scope)) fail('simulation_scope',`${experiment.name}: this explicit PCB channel belongs to another scope; separate channel configurations are required`)
+    for (const mapping of mappings) {
+      for (const endpoint of [mapping.from, mapping.to]) {
+        const port = ports.get(endpoint)
+        if (!port) fail('ibis_mapping', `${mapping.port}: missing channel endpoint ${endpoint}`)
+        if (!subcircuits.within(componentScope(port.source_component_id), scope)) {
+          const advice = 'separate channel configurations are required'
+          const detail = `this explicit PCB channel belongs to another scope; ${advice}`
+          fail('simulation_scope', `${experiment.name}: ${detail}`)
+        }
+      }
     }
     const durationSeconds=milliseconds(experiment.end_time_ms,`${id} end_time_ms`,{positive:true})
     const startTimeSeconds=milliseconds(experiment.start_time_ms??0,`${id} start_time_ms`)
@@ -189,7 +211,13 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
     let runControls: RunControls = { states: [], stimuli: [] }
     if (Object.hasOwn(controls, id)) runControls = controls[id]
     const { states, stimuli: controlsForRun } = runControls
-    const stimuli=controlsForRun.map(stimulus=>({...stimulus,transmission_pattern:{...stimulus.transmission_pattern,bits:transmittedBits(stimulus.transmission_pattern?.bits)}}))
+    const stimuli = controlsForRun.map(stimulus => ({
+      ...stimulus,
+      transmission_pattern: {
+        ...stimulus.transmission_pattern,
+        bits: transmittedBits(stimulus.transmission_pattern?.bits),
+      },
+    }))
     const stateIds=new Set<string>()
     const stimulusIds=new Set<string>()
     for(const state of states) {
@@ -199,9 +227,21 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
       const attachments=scopedModels.filter(model=>Object.values(model.ibis_pin_name_to_source_port_id).includes(state.source_port_id))
       if(attachments.length!==1) fail('ibis_state',`${experiment.name}: run state must select exactly one modeled pin`)
     }
-    for(const mapping of mappings) for(const endpoint of [mapping.from,mapping.to]) {
-      const bindings=scopedModels.flatMap(model=>Object.values(model.ibis_pin_name_to_source_port_id)).filter(port=>port===endpoint)
-      if(bindings.length > 1 || (bindings.length === 1 && !stateIds.has(endpoint)) || (bindings.length === 0 && !components.some(component => component.source_component_id === ports.get(endpoint)?.source_component_id && ['simple_resistor', 'simple_capacitor', 'simple_inductor'].includes(component.ftype)))) fail('channel_model',`${experiment.name} ${mapping.port}: endpoint ${endpoint} requires exactly one modeled physical pin and an explicit run state`)
+    const passiveTypes = ['simple_resistor', 'simple_capacitor', 'simple_inductor']
+    for (const mapping of mappings) {
+      for (const endpoint of [mapping.from, mapping.to]) {
+        const modeledPorts = scopedModels.flatMap(model => Object.values(model.ibis_pin_name_to_source_port_id))
+        const bindings = modeledPorts.filter(port => port === endpoint)
+        if (bindings.length === 1 && stateIds.has(endpoint)) continue
+        if (bindings.length === 0) {
+          const componentId = ports.get(endpoint)?.source_component_id
+          const isPassive = components.some(component =>
+            component.source_component_id === componentId && passiveTypes.includes(component.ftype))
+          if (isPassive) continue
+        }
+        const requirement = 'requires exactly one modeled physical pin and an explicit run state'
+        fail('channel_model', `${experiment.name} ${mapping.port}: endpoint ${endpoint} ${requirement}`)
+      }
     }
     for(const stimulus of stimuli) {
       if(stimulusIds.has(stimulus.source_port_id)) fail('stimulus_duplicate',`${experiment.name}: multiple stimuli drive the same physical output`)
@@ -227,7 +267,19 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
     })
     if(!probes.length) fail('simulation_probe',`${experiment.name}: at least one voltage probe required`)
 
-    return {simulationExperimentId:id,name:experiment.name,subcircuitId:scope,durationSeconds,startTimeSeconds,maxStepSeconds,experiment,states,stimuli,probes,models:scopedModels}
+    return {
+      simulationExperimentId: id,
+      name: experiment.name,
+      subcircuitId: scope,
+      durationSeconds,
+      startTimeSeconds,
+      maxStepSeconds,
+      experiment,
+      states,
+      stimuli,
+      probes,
+      models: scopedModels,
+    }
   })
   const usedModelIds=new Set(plans.flatMap(plan=>plan.models.map(model=>model.pipelineId)))
   return {models:models.filter(model=>usedModelIds.has(model.pipelineId)),nodes,plans,ports}
@@ -237,7 +289,10 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
  * Builds the converter input for one model in one experiment: its source, pin map, references, corner,
  * and the run's pin states and stimuli. Dictionaries have no prototype so any port name is safe as a key.
  */
-export function modelRunDefinition(model: PipelineIbisModel,plan: Pick<SimulationPlan, 'durationSeconds' | 'states' | 'stimuli'>): ModelRunDefinition {
+export function modelRunDefinition(
+  model: PipelineIbisModel,
+  plan: Pick<SimulationPlan, 'durationSeconds' | 'states' | 'stimuli'>,
+): ModelRunDefinition {
   const pinMap=model.ibis_pin_name_to_source_port_id
   const selected=new Set(Object.values(pinMap))
   const pinStates: IbisRunConfig['pinStates']=Object.create(null)
@@ -250,7 +305,9 @@ export function modelRunDefinition(model: PipelineIbisModel,plan: Pick<Simulatio
     }
   }
   for(const stimulus of plan.stimuli) if(selected.has(stimulus.source_port_id)) stimuli[stimulus.source_port_id]={unitInterval:stimulus.bit_duration_ms,startTime:stimulus.start_time_ms,initialState:stimulus.initial_state,inverted:stimulus.inverted??false,pattern:{type:'bits',bits:stimulus.transmission_pattern.bits,repeat:stimulus.transmission_pattern.repeat}}
-  const references: Record<string, IbisReferencePorts> = Object.fromEntries(Object.entries(model.ibis_pin_name_to_reference_source_port_ids ?? {}).filter(([pin]) => pin in pinMap).map(([pin, refs]) => {
+  const pinReferenceEntries = Object.entries(model.ibis_pin_name_to_reference_source_port_ids ?? {})
+  const selectedReferences = pinReferenceEntries.filter(([pin]) => pin in pinMap)
+  const references: Record<string, IbisReferencePorts> = Object.fromEntries(selectedReferences.map(([pin, refs]) => {
     const ports: IbisReferencePorts = {
       pullup: refs.pullup_reference_source_port_id,
       pulldown: refs.pulldown_reference_source_port_id,
@@ -262,6 +319,20 @@ export function modelRunDefinition(model: PipelineIbisModel,plan: Pick<Simulatio
   }))
   const packagePolicy: IbisModelDefinition['packagePolicy'] = 'vendor'
   let modelSelections: IbisModelDefinition['modelSelections']
-  if (model.ibis_pin_name_to_model_name) modelSelections = Object.fromEntries(Object.entries(model.ibis_pin_name_to_model_name).filter(([pin]) => pin in pinMap))
-  return {definition:{source:{file:model.ibis_model_asset.project_relative_path},component:model.ibis_component_name,pinMap,modelSelections,references,corner:'typical',packagePolicy},run:{duration:plan.durationSeconds*1000,pinStates,stimuli}}
+  if (model.ibis_pin_name_to_model_name) {
+    const selectedModels = Object.entries(model.ibis_pin_name_to_model_name).filter(([pin]) => pin in pinMap)
+    modelSelections = Object.fromEntries(selectedModels)
+  }
+  return {
+    definition: {
+      source: { file: model.ibis_model_asset.project_relative_path },
+      component: model.ibis_component_name,
+      pinMap,
+      modelSelections,
+      references,
+      corner: 'typical',
+      packagePolicy,
+    },
+    run: { duration: plan.durationSeconds * 1000, pinStates, stimuli },
+  }
 }

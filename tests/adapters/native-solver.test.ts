@@ -65,7 +65,13 @@ test('input write failure after mkdtemp still removes the workdir',async t=>{
 test('spawn failure (nonexistent tool) rejects native_solver and removes the workdir',async t=>{
   const {root,tmp}=await sandbox(t)
   const solver=createNativeSolver({tools:{ngspice:join(root,'no-such-tool')}})
-  await assert.rejects(solver({solver:'ngspice',files:{'deck.cir':'x'},args:[],outputFiles:['waveform.raw']}),code('native_solver',/^native_solver: ngspice: .*ENOENT/))
+  const result = solver({
+    solver: 'ngspice',
+    files: { 'deck.cir': 'x' },
+    args: [],
+    outputFiles: ['waveform.raw'],
+  })
+  await assert.rejects(result, code('native_solver', /^native_solver: ngspice: .*ENOENT/))
   assert.deepEqual(await readdir(tmp),[])
 })
 
@@ -82,7 +88,14 @@ test('timeout kills the tool, rejects native_timeout and removes the workdir',as
   const marker=join(root,'survived.txt')
   const solver=createNativeSolver({tools:{ngspice:process.execPath},timeoutMs:200})
   const started=Date.now()
-  await assert.rejects(solver({solver:'ngspice',files:{'deck.cir':'x'},args:tool(`setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'x'),1500)`),outputFiles:['out.txt']}),
+  const writeAfterTimeout = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'x'), 1500)`
+  const result = solver({
+    solver: 'ngspice',
+    files: { 'deck.cir': 'x' },
+    args: tool(writeAfterTimeout),
+    outputFiles: ['out.txt'],
+  })
+  await assert.rejects(result,
     code('native_timeout',/^native_timeout: ngspice: exceeded 200 ms process timeout; /))
   assert.ok(Date.now()-started<1500)
   await workdirGone().catch(async error => {

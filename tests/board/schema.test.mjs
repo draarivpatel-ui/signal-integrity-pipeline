@@ -8,7 +8,10 @@ test('malformed physical record fails registered validation before output or sol
   const circuitJson=[{type:'pcb_plated_hole',pcb_plated_hole_id:'bad-hole'}]
   await assert.rejects(async()=>validateCircuitRecords(circuitJson),
     error=>error.code==='circuit_schema'&&/^circuit_schema: pcb_plated_hole bad-hole: /.test(error.message)&&error.message.length<300)
-  assert.throws(()=>validateCircuitRecords({}),{code:'circuit_schema',message:'circuit_schema: Expected a Circuit JSON record array'})
+  assert.throws(() => validateCircuitRecords({}), {
+    code: 'circuit_schema',
+    message: 'circuit_schema: Expected a Circuit JSON record array',
+  })
 })
 
 test('registered valid records are checked without rewriting source values',()=>{

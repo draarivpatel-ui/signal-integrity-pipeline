@@ -16,14 +16,21 @@ const declare=(mutate=()=>{},m=undefined)=>impl=>{
   const {cj,m:base,controls}=fixture()
   const modeling=m?m(base):base
   const out=mutate(cj,controls.run)??cj
-  return impl.generalDeclarations({ circuit: out, mappings: impl.geometry(out, modeling).mappings, modeling, controls })
+  const { mappings } = impl.geometry(out, modeling)
+  return impl.generalDeclarations({
+    circuit: out,
+    mappings,
+    modeling,
+    controls,
+  })
 }
 const electrical=(mutate,m=base=>base)=>impl=>{
   const {cj,m:base}=fixture()
   mutate?.(cj)
   const modeling=m(base)
   const g=impl.geometry(cj,modeling)
-  return impl.electricalSources(cj,modeling,impl.circuitNodes({ circuit: cj, mappings: g.mappings, modeling }))
+  const nodes = impl.circuitNodes({ circuit: cj, mappings: g.mappings, modeling })
+  return impl.electricalSources(cj, modeling, nodes)
 }
 const square=extra=>cj=>{
   cj.push({type:'simulation_voltage_source',simulation_voltage_source_id:'sq',is_dc_source:false,terminal1_source_port_id:'v0',terminal2_source_port_id:'g0',voltage:3.3,frequency:1e6,wave_shape:'square',...extra})
@@ -72,13 +79,27 @@ test('simulation codes and messages equal the pre-module implementation', () => 
   ['native_declaration',declare(cj=>{cj.push({type:'source_invalid_component_property_error',property_name:'ibisModel',message:'bad ibisModel'})})],
   ['ibis_model',declare(cj=>cj.filter(e=>e.type!=='simulation_ibis_model'))],
   ['ibis_mapping',declare(cj=>{one(cj,'simulation_ibis_model').ibis_pin_name_to_source_port_id['9']='p2'})],
-  ['ibis_state',declare((_,run)=>{run.states.push({...run.states[0]})})],
-  ['channel_model',declare((_,run)=>{run.states=run.states.filter(state=>state.source_port_id!=='p3')})],
-  ['stimulus_duplicate',declare((_,run)=>{run.stimuli.push({...run.stimuli[0]})})],
-  ['stimulus_state',declare((_,run)=>{run.stimuli[1].source_port_id='p2'})],
-  ['stimulus_missing',declare((_,run)=>{run.stimuli.pop()})],
-  ['stimulus_pattern',declare((_,run)=>{run.stimuli[0].transmission_pattern.bits='012'})],
-  ['stimulus_coverage',declare((_,run)=>{run.stimuli[0].transmission_pattern={transmission_type:'bits',bits:'001',repeat:false}})],
+  ['ibis_state', declare((_, run) => {
+    run.states.push({...run.states[0]})
+  })],
+  ['channel_model', declare((_, run) => {
+    run.states=run.states.filter(state=>state.source_port_id!=='p3')
+  })],
+  ['stimulus_duplicate', declare((_, run) => {
+    run.stimuli.push({...run.stimuli[0]})
+  })],
+  ['stimulus_state', declare((_, run) => {
+    run.stimuli[1].source_port_id='p2'
+  })],
+  ['stimulus_missing', declare((_, run) => {
+    run.stimuli.pop()
+  })],
+  ['stimulus_pattern', declare((_, run) => {
+    run.stimuli[0].transmission_pattern.bits='012'
+  })],
+  ['stimulus_coverage', declare((_, run) => {
+    run.stimuli[0].transmission_pattern = { transmission_type: 'bits', bits: '001', repeat: false }
+  })],
   ['probe_reference',declare(cj=>{one(cj,'simulation_voltage_probe').signal_input_source_port_id='missing'})],
   ['channel_short',declare(cj=>{cj.push({type:'source_trace',source_trace_id:'short',connected_source_port_ids:['p0','p2']})})],
   ['electrical_input',electrical(undefined,m=>({...m,supplies:[{...m.supplies[0],voltageV:NaN}]}))],
@@ -103,28 +124,66 @@ test('simulation codes and messages equal the pre-module implementation', () => 
 
 
 const {circuitNodes,electricalSources}=current
-test('a channel net split into per-subcircuit records joined by net-only traces is cut like one shared net',()=>{
-  // CPU pin -> DQ@cpu, RAM pin -> DQ@ram, both joined to DQ@board, as boards built from subcircuits save them.
-  const split=cj=>{
-    for(const [id,scope] of [['dq-cpu','cpu'],['dq-ram','ram'],['dq-board','board']]) cj.push({type:'source_net',source_net_id:id,name:'DQ',subcircuit_id:scope,member_source_group_ids:[]})
-    cj.push({type:'source_trace',source_trace_id:'bind-cpu',connected_source_port_ids:['p0'],connected_source_net_ids:['dq-cpu']},
-      {type:'source_trace',source_trace_id:'bind-ram',connected_source_port_ids:['p2'],connected_source_net_ids:['dq-ram']},
-      {type:'source_trace',source_trace_id:'join-cpu',connected_source_port_ids:[],connected_source_net_ids:['dq-cpu','dq-board']},
-      {type:'source_trace',source_trace_id:'join-ram',connected_source_port_ids:[],connected_source_net_ids:['dq-board','dq-ram']})
-    return cj
+// CPU and RAM each connect to a local DQ net. Net-only traces join both to the board's DQ net.
+function splitChannelNet(circuit) {
+  for (const [id, scope] of [['dq-cpu', 'cpu'], ['dq-ram', 'ram'], ['dq-board', 'board']]) {
+    circuit.push({
+      type: 'source_net',
+      source_net_id: id,
+      name: 'DQ',
+      subcircuit_id: scope,
+      member_source_group_ids: [],
+    })
   }
-  const {cj,m,g}=fixture()
-  const nodes=circuitNodes({ circuit: split(cj), mappings: g.mappings, modeling: m })
-  assert.notEqual(nodes.node('p0'),nodes.node('p2'))
-  assert.throws(()=>nodes.node('dq-board'),/channel_net/)
-  const fanout=fixture()
-  split(fanout.cj).push({type:'source_trace',source_trace_id:'tap',connected_source_port_ids:['p1'],connected_source_net_ids:['dq-board']})
-  assert.throws(()=>circuitNodes({ circuit: fanout.cj, mappings: fanout.g.mappings, modeling: fanout.m }),/channel_fanout/)
+  const traces = [
+    ['bind-cpu', ['p0'], ['dq-cpu']],
+    ['bind-ram', ['p2'], ['dq-ram']],
+    ['join-cpu', [], ['dq-cpu', 'dq-board']],
+    ['join-ram', [], ['dq-board', 'dq-ram']],
+  ]
+  for (const [id, ports, nets] of traces) {
+    circuit.push({
+      type: 'source_trace',
+      source_trace_id: id,
+      connected_source_port_ids: ports,
+      connected_source_net_ids: nets,
+    })
+  }
+}
+
+test('a channel net split into subcircuits is cut like one shared net', () => {
+  const { cj, m, g } = fixture()
+  splitChannelNet(cj)
+  const nodes = circuitNodes({ circuit: cj, mappings: g.mappings, modeling: m })
+  assert.notEqual(nodes.node('p0'), nodes.node('p2'))
+  assert.throws(() => nodes.node('dq-board'), /channel_net/)
+  const { cj: fanoutCircuit, m: fanoutModeling, g: fanoutGeometry } = fixture()
+  splitChannelNet(fanoutCircuit)
+  fanoutCircuit.push({
+    type: 'source_trace',
+    source_trace_id: 'tap',
+    connected_source_port_ids: ['p1'],
+    connected_source_net_ids: ['dq-board'],
+  })
+  const input = { circuit: fanoutCircuit, mappings: fanoutGeometry.mappings, modeling: fanoutModeling }
+  assert.throws(() => circuitNodes(input), /channel_fanout/)
 })
 
 test('orphan ideal sources fail preflight',()=>{
   const {cj,m,g}=fixture()
-  cj.push({type:'source_component',source_component_id:'voltage',name:'ORPHAN'},{type:'source_port',source_port_id:'vspos',source_component_id:'voltage'},{type:'source_port',source_port_id:'vsneg',source_component_id:'voltage'},{type:'simulation_voltage_source',simulation_voltage_source_id:'voltage-source',terminal1_source_port_id:'vspos',terminal2_source_port_id:'vsneg',voltage:3.3,is_dc_source:false})
+  cj.push(
+    { type: 'source_component', source_component_id: 'voltage', name: 'ORPHAN' },
+    { type: 'source_port', source_port_id: 'vspos', source_component_id: 'voltage' },
+    { type: 'source_port', source_port_id: 'vsneg', source_component_id: 'voltage' },
+    {
+      type: 'simulation_voltage_source',
+      simulation_voltage_source_id: 'voltage-source',
+      terminal1_source_port_id: 'vspos',
+      terminal2_source_port_id: 'vsneg',
+      voltage: 3.3,
+      is_dc_source: false,
+    },
+  )
   const nodes=circuitNodes({ circuit: cj, mappings: g.mappings, modeling: m })
   assert.throws(()=>electricalSources(cj,m,nodes),/floating_source.*ORPHAN/)
 })

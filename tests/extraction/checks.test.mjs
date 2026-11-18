@@ -11,6 +11,9 @@ test('a reciprocal positive-definite matrix is symmetrized with its Cholesky pro
 test('nonpassive, nonreciprocal, malformed and zero matrices fail before normalization', () => {
   assert.throws(() => validateMatrix([[1, 2], [2, 1]], 'L'), /passivity/)
   assert.throws(() => validateMatrix([[1, .2], [.5, 1]], 'C'), /reciprocity/)
-  assert.throws(() => validateMatrix([[1, 2]], 'X'), { code: 'matrix_format', message: 'matrix_format: X: finite square matrix required' })
+  assert.throws(() => validateMatrix([[1, 2]], 'X'), {
+    code: 'matrix_format',
+    message: 'matrix_format: X: finite square matrix required',
+  })
   assert.throws(() => validateMatrix([[0]], 'X'), { code: 'matrix_zero' })
 })

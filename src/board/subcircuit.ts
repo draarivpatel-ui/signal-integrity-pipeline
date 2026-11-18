@@ -1,6 +1,11 @@
 import { fail } from './diagnostics'
 
-interface ScopeRecord { type: string; source_group_id?: string; subcircuit_id?: string; parent_source_group_id?: string }
+interface ScopeRecord {
+  type: string
+  source_group_id?: string
+  subcircuit_id?: string
+  parent_source_group_id?: string
+}
 
 /** Queries for subcircuit containment and the nearest common ancestor. */
 export type SubcircuitTree = {

@@ -18,7 +18,8 @@ const run=async(executable,args,cwd)=>{
 try {
   const packed=JSON.parse((await run('npm',['pack','--json','--pack-destination',temporary],root)).stdout)[0]
   assert.ok(packed.files.every(file=>file.path.startsWith('dist/')||['README.md','LICENSE','package.json'].includes(file.path)))
-  assert.ok(!packed.files.some(file=>['setup', 'runtime', 'cli', 'pipeline'].some(name => file.path.includes(`dist/${name}.`))))
+  const privateModules = ['setup', 'runtime', 'cli', 'pipeline']
+  assert.ok(!packed.files.some(file => privateModules.some(name => file.path.includes(`dist/${name}.`))))
   const consumer=join(temporary,'consumer')
   await mkdir(consumer)
   await writeFile(join(consumer,'package.json'),JSON.stringify({type:'module',private:true}))
@@ -40,8 +41,10 @@ try {
   const smoke=`import assert from 'node:assert/strict';
 import {stackupFromCircuitJson,transmittedBits} from '@tscircuit/signal-integrity-pipeline';
 import {createNativeSolver,loadIbisSources} from '@tscircuit/signal-integrity-pipeline/node';
-assert.equal(typeof stackupFromCircuitJson,'function');assert.equal(typeof transmittedBits,'function');
-assert.equal(typeof createNativeSolver,'function');assert.equal(typeof loadIbisSources,'function');`
+assert.equal(typeof stackupFromCircuitJson,'function')
+assert.equal(typeof transmittedBits,'function')
+assert.equal(typeof createNativeSolver,'function')
+assert.equal(typeof loadIbisSources,'function')`
   await writeFile(join(consumer,'smoke.mjs'),smoke)
   await run(process.execPath,['smoke.mjs'],consumer)
 } finally {await rm(temporary,{recursive:true,force:true})}

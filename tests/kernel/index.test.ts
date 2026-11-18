@@ -24,7 +24,10 @@ test('artifact paths reject traversal, absolute and empty segments', () => {
 
 test('diagnostics keeps the `${code}: ${text}` message and records the domain', () => {
   const fail = diagnostics('board', ['stackup'] as const)
-  assert.throws(() => fail('stackup', 'bad'), (e: unknown) => e instanceof Diagnostic && e.message === 'stackup: bad' && e.domain === 'board')
+  assert.throws(
+    () => fail('stackup', 'bad'),
+    (error: unknown) => error instanceof Diagnostic && error.message === 'stackup: bad' && error.domain === 'board',
+  )
 })
 
 test('safeId and sha256 match the pre-module behaviour', () => {

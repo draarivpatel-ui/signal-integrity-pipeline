@@ -3,6 +3,10 @@ import * as converter from '@tscircuit/ibis-to-spice'
 import { sha256, type Artifact, type ArtifactScope, type Produced } from '../kernel'
 import { fail } from './diagnostics'
 import { loadModelSource } from './source'
+
+/** SHA-256 hashes are written as 64 hexadecimal digits. */
+const SHA256_HEX_LENGTH = 64
+const HEX_DIGITS = '0123456789abcdefABCDEF'
 import type { AdmittedBuffers, AssemblyEntry, BufferModeling, CompiledBuffer, IbisSources, LoadedModelSource, ModelRunDefinition, ModelSourceRequest } from './types'
 
 /** Fails 'converter_version' unless the pinned upstream general converter is installed. Today's first IBIS check. */
@@ -25,7 +29,12 @@ export function admitBuffers(models: readonly ModelSourceRequest[], ibisSources:
     let expected: string | undefined
     if (hashes !== undefined) {
       const pinned = hashes[path]
-      if (typeof pinned !== 'string' || pinned.length !== 64 || Array.from(pinned).some(char => !'0123456789abcdefABCDEF'.includes(char))) fail('vendor_hash', `${path}: modeling.ibisModelAssetSha256 requires an expected 64-digit SHA-256 hash for each used IBIS asset`)
+      const isSha256 = typeof pinned === 'string' && pinned.length === SHA256_HEX_LENGTH &&
+        Array.from(pinned).every(char => HEX_DIGITS.includes(char))
+      if (!isSha256) {
+        const requirement = 'requires an expected 64-digit SHA-256 hash for each used IBIS asset'
+        fail('vendor_hash', `${path}: modeling.ibisModelAssetSha256 ${requirement}`)
+      }
       expected = pinned
     }
     const source = loadModelSource(model, ibisSources)

@@ -6,7 +6,8 @@ export interface MatrixCheck { matrix: Matrix; reciprocityResidual: number; chol
 
 /** Checks finite square shape and returns max absolute transpose mismatch divided by max absolute entry. */
 function reciprocityResidual(a: Matrix, name: string): number {
-  if (!a.length || a.some(r => r.length !== a.length || r.some(v => !Number.isFinite(v)))) fail('matrix_format', `${name}: finite square matrix required`)
+  const invalidRow = a.some(row => row.length !== a.length || row.some(value => !Number.isFinite(value)))
+  if (!a.length || invalidRow) fail('matrix_format', `${name}: finite square matrix required`)
   const norm = Math.max(...a.flat().map(Math.abs))
   if (!norm) fail('matrix_zero', name)
   return Math.max(...a.flatMap((r, i) => r.map((v, j) => Math.abs(v - a[j][i])))) / norm

@@ -15,7 +15,8 @@ const RAISED = [
   'ibis_asset_missing', 'ibis_contract', 'ibis_mapping', 'ibis_model', 'ibis_state', 'matrix_format',
   'matrix_zero', 'native_declaration', 'native_output', 'native_solver', 'native_timeout', 'passive_capability',
   'passive_reference', 'passivity', 'pin_mapping', 'probe_reference', 'reciprocity', 'route_type',
-  'simulation_capability', 'simulation_experiment', 'simulation_id', 'simulation_probe', 'simulation_reference', 'simulation_scope',
+  'simulation_capability', 'simulation_experiment', 'simulation_id',
+  'simulation_probe', 'simulation_reference', 'simulation_scope',
   'simulation_timing', 'solver_result', 'source_capability', 'source_edge', 'stackup', 'stimulus_coverage',
   'stimulus_duplicate', 'stimulus_missing', 'stimulus_pattern', 'stimulus_state', 'supply_missing', 'supply_reference',
   'supply_short', 'vendor_hash', 'via_geometry',
@@ -42,7 +43,9 @@ function sources(dir: string): string[] {
   return readdirSync(dir).flatMap(name => {
     const path = join(dir, name)
     if (statSync(path).isDirectory()) return name === 'legacy' && dir === src ? [] : sources(path)
-    return ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs'].some(ext => name.endsWith(ext)) && !name.endsWith('.d.ts') ? [path] : []
+    const isSource = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs'].some(ext => name.endsWith(ext))
+    if (isSource && !name.endsWith('.d.ts')) return [path]
+    return []
   })
 }
 

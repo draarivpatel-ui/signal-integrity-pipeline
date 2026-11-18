@@ -1,7 +1,13 @@
 // The import checks and dist rewrite look for relative strings after `from` or `import`.
 const sourceExtensions = ['.js', '.ts', '.tsx']
 
-/** @typedef {{ path: string, start: number, end: number }} RelativeSpecifier A relative import path and its source offsets. */
+/**
+ * A relative import path and its source offsets.
+ * @typedef {object} RelativeSpecifier
+ * @property {string} path
+ * @property {number} start
+ * @property {number} end
+ */
 
 /**
  * Finds relative specifiers, with their offsets in the source text.
