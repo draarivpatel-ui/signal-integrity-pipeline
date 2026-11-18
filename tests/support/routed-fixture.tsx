@@ -6,7 +6,8 @@ import {
   type CircuitJson,
   type CopperScope,
   channelCopperScope,
-  connectedSourceIds,
+  getSourcePortConnectivityMapFromCircuitJson,
+  sourceNetMembers,
 } from "../../src/board"
 import type { RoutedProblem } from "../../src/pipeline"
 import { renderCoreSignals } from "./core-render"
@@ -72,15 +73,17 @@ export async function routedCopper(): Promise<{
   if (trace.type !== "source_trace") throw new Error("Missing TSX trace")
   const ground = circuitJson.find((record) => record.type === "source_net")!
   if (ground.type !== "source_net") throw new Error("Missing TSX ground")
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuitJson)
   return {
     circuitJson,
     scope: channelCopperScope({
       circuit: circuitJson,
-      selected: connectedSourceIds(
-        circuitJson,
+      connectivity,
+      selected: sourceNetMembers(
+        connectivity,
         trace.connected_source_port_ids[0],
       ),
-      reference: connectedSourceIds(circuitJson, ground.source_net_id),
+      reference: sourceNetMembers(connectivity, ground.source_net_id),
       distanceMm: 1,
     }),
   }
