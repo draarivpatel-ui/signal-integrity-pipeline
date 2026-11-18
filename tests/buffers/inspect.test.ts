@@ -25,7 +25,10 @@ function inspectedPin(
   { circuit, pinMap }: InspectionBoard,
   text: string,
 ): InspectedPin {
-  const pin = inspectPins(circuit, { [deviceAsset]: text }).get(pinMap[1])
+  const pin = inspectPins(circuit, {
+    sources: { [deviceAsset]: text },
+    ports: new Set([pinMap[1]]),
+  }).get(pinMap[1])
   assert.ok(pin)
   return pin
 }
@@ -233,4 +236,26 @@ test("converter-supported model types declare their pin roles", async () => {
     const pin = inspectedPin(board, inspectionIbis({ modelType }))
     assert.deepEqual(pinCapabilities(pin), expected)
   }
+})
+
+test("inspecting an endpoint does not require the unrelated chip asset", async () => {
+  const board = await ibisInspectionBoard({ extraChip: true })
+  const models = board.circuit.filter(
+    (row) => row.type === "simulation_ibis_model",
+  )
+  assert.equal(models.length, 2)
+  const { circuit, pinMap } = board
+  const sources = { [deviceAsset]: inspectionIbis() }
+  const pins = inspectPins(circuit, { sources, ports: new Set([pinMap[1]]) })
+  assert.deepEqual([...pins.keys()], [pinMap[1]])
+
+  const other = models.find(
+    (model) => model.ibis_model_asset.project_relative_path === "other.ibs",
+  )
+  assert.ok(other)
+  const otherPort = other.ibis_pin_name_to_source_port_id[1]
+  assert.throws(
+    () => inspectPins(circuit, { sources, ports: new Set([otherPort]) }),
+    { code: "ibis_asset_missing" },
+  )
 })
