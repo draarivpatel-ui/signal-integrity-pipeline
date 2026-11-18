@@ -393,6 +393,24 @@ export function channelCopperScope({
     if (!portId || !ports.has(portId)) continue
     retain({ ids: [ports.get(portId)!], label: portId }, retainedCopper)
   }
+  const nearbyPours = new Set(
+    pours.filter((pour) => {
+      if (pour.shape !== "brep") return false
+      const box = copperBox(
+        { points: pour.brep_shape.outer_ring.vertices, names: [pour.layer] },
+        layers,
+      )
+      return isNearby(box, proximity)
+    }),
+  )
+  for (const pour of nearbyPours) {
+    const id = pour.source_net_id
+    if (!id || reference.has(id)) continue
+    retain(
+      { ids: [id], label: `pour ${pour.pcb_copper_pour_id}` },
+      retainedCopper,
+    )
+  }
   const passivePorts = passiveBridges(
     circuit,
     new Set([...rails, ...reference]),
@@ -407,14 +425,11 @@ export function channelCopperScope({
     ),
   )
   const keptPours = pours.filter((pour) => {
-    if (pour.source_net_id && reference.has(pour.source_net_id)) return true
     if (pour.shape !== "brep") return true // Unsupported shapes cannot disappear by scoping.
-    return isNearby(
-      copperBox(
-        { points: pour.brep_shape.outer_ring.vertices, names: [pour.layer] },
-        layers,
-      ),
-      proximity,
+    const id = pour.source_net_id
+    return (
+      nearbyPours.has(pour) ||
+      (id !== undefined && (reference.has(id) || retained.has(id)))
     )
   })
   const padOnlySourcePortIds = new Set<SourcePortId>()
@@ -446,9 +461,10 @@ export function channelCopperScope({
       !members.some((id) => reference.has(id))
     )
   })
-  const nonReferencePours = keptPours.filter(
-    (pour) => !pour.source_net_id || !reference.has(pour.source_net_id),
-  )
+  const nonReferencePours = keptPours.filter((pour) => {
+    if (pour.source_net_id && reference.has(pour.source_net_id)) return false
+    return pour.shape !== "brep" || nearbyPours.has(pour)
+  })
   return {
     lateralDistanceMm: distanceMm,
     selectedPcbTraceIds: selectedTraces.map((trace) => trace.pcb_trace_id),
