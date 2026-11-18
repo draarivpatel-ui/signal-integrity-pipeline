@@ -62,30 +62,30 @@ test("TSX coupled package replaces scalar values, preserves ideal die rails and 
     )?.resistanceOhms,
     1,
   )
-  assert.ok(
-    converted.warnings.some((warning) => /A1.*resistance.*9.*1/.test(warning)),
+  const resistanceWarning = converted.warnings.find((warning) =>
+    warning.startsWith("A1:"),
   )
+  assert.match(resistanceWarning ?? "", /A1.*resistance.*9.*1/)
+  const missingPackage = source.replace(
+    "[Define Package Model] coupled",
+    "[Define Package Model] absent",
+  )
+  const variantInput = {
+    ...input,
+    definition: { ...input.definition, source: { file: "fixture.ibs" } },
+  }
   assert.throws(
     () =>
       convertPackaged({
-        bytes: new TextEncoder().encode(
-          source.replace(
-            "[Define Package Model] coupled",
-            "[Define Package Model] absent",
-          ),
-        ),
-        input: {
-          ...input,
-          definition: { ...input.definition, source: { file: "fixture.ibs" } },
-        },
+        bytes: new TextEncoder().encode(missingPackage),
+        input: variantInput,
       }),
     /missing.*scalar fallback is forbidden/i,
   )
   // IBIS 6.1 section 7: unlisted pins use [Pin] then [Package], while
   // an unlisted member of a modeled [Pin Mapping] rail bus is merged.
-  const partial =
-    source.slice(0, source.indexOf("[Define Package Model]")) +
-    `[Define Package Model] coupled
+  const prefix = source.slice(0, source.indexOf("[Define Package Model]"))
+  const partial = `${prefix}[Define Package Model] coupled
 [Manufacturer] Test
 [OEM] Test
 [Description] Only the signal pins have matrix data
@@ -116,10 +116,6 @@ A1
     "G1 VSS GND 6 6n 6p",
     "G1 VSS GND NA NA NA",
   )
-  const variantInput = {
-    ...input,
-    definition: { ...input.definition, source: { file: "fixture.ibs" } },
-  }
   const unlisted = convertPackaged({
     bytes: new TextEncoder().encode(partialSource),
     input: variantInput,
@@ -133,14 +129,14 @@ A1
   assert.match(unlisted.source, /CPKGU3a REF1 DIE3 4\.95e-11/)
   assert.match(unlisted.source, /VPDN2 DIE2 0 1\.5/)
   assert.match(unlisted.source, /VPDN3 DIE3 0 0/)
-  const identifiers = unlisted.source
+  const packageElements = unlisted.source
     .split("\n")
     .filter((line) =>
       ["R", "V", "L", "C", "H", "K"].some((kind) =>
-        line.startsWith(kind + "PKG"),
+        line.startsWith(`${kind}PKG`),
       ),
     )
-    .map((line) => line.split(" ")[0])
+  const identifiers = packageElements.map((line) => line.split(" ")[0])
   assert.equal(
     new Set(identifiers).size,
     identifiers.length,
@@ -175,27 +171,27 @@ V2 NC VDD NC NC
       "[Pin] signal_name model_name R_pin L_pin C_pin\nG2 VSS GND\nV2 VDD POWER",
     )
   const busStart = busSource.indexOf("[Define Package Model]")
-  const mergedSource =
-    busSource.slice(0, busStart) +
-    busSource.slice(busStart).replaceAll("G1", "G2").replaceAll("V1", "V2")
+  const mergedDefinition = busSource
+    .slice(busStart)
+    .replaceAll("G1", "G2")
+    .replaceAll("V1", "V2")
+  const mergedSource = `${busSource.slice(0, busStart)}${mergedDefinition}`
+  const references = Object.fromEntries(
+    ["A1", "B1"].map((pin) => [
+      pin,
+      {
+        pullup: pinMap.V1,
+        powerClamp: pinMap.V1,
+        pulldown: pinMap.G1,
+        groundClamp: pinMap.G1,
+      },
+    ]),
+  )
   const merged = convertPackaged({
     bytes: new TextEncoder().encode(mergedSource),
     input: {
       ...variantInput,
-      definition: {
-        ...variantInput.definition,
-        references: Object.fromEntries(
-          ["A1", "B1"].map((pin) => [
-            pin,
-            {
-              pullup: pinMap.V1,
-              powerClamp: pinMap.V1,
-              pulldown: pinMap.G1,
-              groundClamp: pinMap.G1,
-            },
-          ]),
-        ),
-      },
+      definition: { ...variantInput.definition, references },
     },
   })
   assert.deepEqual(merged.metadata.packageData.matrices?.pins, [
@@ -216,12 +212,11 @@ V2 NC VDD NC NC
     "C1 C input\nD1 D input\n[Model] input",
   )
   const noSelectedStart = noSelectedRows.indexOf("[Define Package Model]")
-  const scalarSource =
-    noSelectedRows.slice(0, noSelectedStart) +
-    noSelectedRows
-      .slice(noSelectedStart)
-      .replaceAll("A1", "C1")
-      .replaceAll("B1", "D1")
+  const scalarDefinition = noSelectedRows
+    .slice(noSelectedStart)
+    .replaceAll("A1", "C1")
+    .replaceAll("B1", "D1")
+  const scalarSource = `${noSelectedRows.slice(0, noSelectedStart)}${scalarDefinition}`
   const scalar = convertPackaged({
     bytes: new TextEncoder().encode(scalarSource),
     input: variantInput,
@@ -265,36 +260,33 @@ V2 NC VDD NC NC
     ".endc",
     ".end",
   ].join("\n")
-  const solve = createNativeSolver({
-    timeoutMs: 10000,
-    tools: { ngspice: process.env.NGSPICE_BIN ?? "/opt/homebrew/bin/ngspice" },
-  })
+  const ngspice = process.env.NGSPICE_BIN ?? "/opt/homebrew/bin/ngspice"
+  const solve = createNativeSolver({ timeoutMs: 10000, tools: { ngspice } })
   const result = await solve({
     solver: "ngspice",
     files: { "package.cir": deck },
     args: ["-n", "-b", "package.cir"],
     outputFiles: ["package.dat"],
   })
-  assert.doesNotMatch(result.stdout + result.stderr, /error|fatal|aborted/i)
+  assert.doesNotMatch(
+    `${result.stdout}${result.stderr}`,
+    /error|fatal|aborted/i,
+  )
   const values = splitWords(
     result.files["package.dat"].trim().split("\n")[1].trim(),
   ).map(Number)
   const omega = 2 * Math.PI * 1e6
   for (let i = 0; i < 2; i++) {
-    const real = [0, 1].reduce(
-      (sum, j) =>
-        sum +
-        data.R[i][j] * values[5 + 2 * j] -
-        omega * data.L[i][j] * values[6 + 2 * j],
-      0,
-    )
-    const imaginary = [0, 1].reduce(
-      (sum, j) =>
-        sum +
-        data.R[i][j] * values[6 + 2 * j] +
-        omega * data.L[i][j] * values[5 + 2 * j],
-      0,
-    )
+    const real = [0, 1].reduce((sum, j) => {
+      const resistance = data.R[i][j] * values[5 + 2 * j]
+      const reactance = omega * data.L[i][j] * values[6 + 2 * j]
+      return sum + resistance - reactance
+    }, 0)
+    const imaginary = [0, 1].reduce((sum, j) => {
+      const resistance = data.R[i][j] * values[6 + 2 * j]
+      const reactance = omega * data.L[i][j] * values[5 + 2 * j]
+      return sum + resistance + reactance
+    }, 0)
     assert.ok(
       Math.abs(real - values[1 + 2 * i]) < 1e-7,
       "real series impedance matches the full R matrix",
@@ -303,10 +295,10 @@ V2 NC VDD NC NC
       Math.abs(imaginary - values[2 + 2 * i]) < 1e-7,
       "imaginary series impedance matches signed mutual L",
     )
+    const capacitanceError =
+      -values[10 + 2 * i] - values[6 + 2 * i] - (omega * data.C[i][0]) / 2
     assert.ok(
-      Math.abs(
-        -values[10 + 2 * i] - values[6 + 2 * i] - (omega * data.C[i][0]) / 2,
-      ) < 1e-8,
+      Math.abs(capacitanceError) < 1e-8,
       "board-side pi capacitance matches Maxwell C",
     )
   }
@@ -333,7 +325,7 @@ V2 NC VDD NC NC
       outputFiles: [],
     })
     assert.doesNotMatch(
-      result.stdout + result.stderr,
+      `${result.stdout}${result.stderr}`,
       /error|fatal|aborted|singular/i,
       "mixed scalar/matrix and merged rail netlists are valid in ngspice",
     )

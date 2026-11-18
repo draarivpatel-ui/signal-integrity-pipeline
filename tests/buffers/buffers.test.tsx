@@ -10,35 +10,33 @@ import Single from "../support/unit-single-ended"
 
 const modelDir = process.env.IBIS_MODEL_DIR
 
-test(
-  "real vendor packages and optional references survive public preflight; source hashes are evidence",
-  { skip: !modelDir },
-  async () => {
-    const bytes = await readFile(`${modelDir}/sn74lvc1g04.ibs`)
-    const ibis = { "models/sn74lvc1g04.ibs": bytes }
-    const bindings = admittedBindings(await renderSignals(<Single />), ibis)
-    const declarations = generalDeclarations({
-      circuit: bindings.circuitJson,
-      mappings: bindings.mappings,
-      modeling: bindings.modeling,
-      controls: bindings.controls,
-    })
-    const admitted = admitBuffers({
-      models: declarations.models,
-      ibisSources: ibis,
-      scope: rootScope("buffers"),
-    })
-    const compiled = compileBuffers(
-      admitted.value,
-      declarations.plans,
-      modelRunDefinition,
-    )
-    for (const model of compiled[0]) {
-      assert.equal(model.sourceEvidence.sourceSha256, sha256(bytes))
-      assert.equal(model.metadata.packagePolicy, "vendor")
-      assert.match(model.source, /RPKG/)
-      for (const pin of model.metadata.pins)
-        assert.ok(!Object.hasOwn(pin.references, "external"))
-    }
-  },
-)
+const description =
+  "real vendor packages and optional references survive public preflight; source hashes are evidence"
+test.skipIf(!modelDir)(description, async () => {
+  const bytes = await readFile(`${modelDir}/sn74lvc1g04.ibs`)
+  const ibis = { "models/sn74lvc1g04.ibs": bytes }
+  const bindings = admittedBindings(await renderSignals(<Single />), ibis)
+  const declarations = generalDeclarations({
+    circuit: bindings.circuitJson,
+    mappings: bindings.mappings,
+    modeling: bindings.modeling,
+    controls: bindings.controls,
+  })
+  const admitted = admitBuffers({
+    models: declarations.models,
+    ibisSources: ibis,
+    scope: rootScope("buffers"),
+  })
+  const compiled = compileBuffers(
+    admitted.value,
+    declarations.plans,
+    modelRunDefinition,
+  )
+  for (const model of compiled[0]) {
+    assert.equal(model.sourceEvidence.sourceSha256, sha256(bytes))
+    assert.equal(model.metadata.packagePolicy, "vendor")
+    assert.match(model.source, /RPKG/)
+    for (const pin of model.metadata.pins)
+      assert.ok(!Object.hasOwn(pin.references, "external"))
+  }
+})

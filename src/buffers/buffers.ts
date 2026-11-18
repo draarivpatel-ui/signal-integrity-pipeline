@@ -14,7 +14,6 @@ import type {
   AssemblyEntry,
   CompiledBuffer,
   IbisSources,
-  LoadedModelSource,
   ModelRunDefinition,
   ModelSourceRequest,
 } from "./types"
@@ -80,11 +79,8 @@ export function compileBuffers<
         file: source.evidence.ibsFile,
         sha256: source.evidence.sourceSha256,
       }
-      const result = convertPackaged({
-        bytes: source.bytes,
-        input,
-        sourceFile: source.evidence.ibisModelAsset.project_relative_path,
-      })
+      const sourceFile = source.evidence.ibisModelAsset.project_relative_path
+      const result = convertPackaged({ bytes: source.bytes, input, sourceFile })
       return {
         ...result,
         name: model.ibis_component_name,

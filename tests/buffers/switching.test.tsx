@@ -96,6 +96,37 @@ function points(text: string, label: "KU" | "KD"): Array<[number, number]> {
     .map((value, i) => [value, values[i * 2 + 1]])
 }
 
+/** Alter the explicit run without altering caller-owned inputs. */
+function run(
+  input: ModelRunDefinition,
+  {
+    bits,
+    interval,
+    duration = "5ns",
+  }: {
+    bits: string
+    interval: string
+    duration?: string
+  },
+): ModelRunDefinition {
+  const next = structuredClone(input)
+  next.run.duration = duration
+  const stimulus = next.run.stimuli[next.definition.pinMap["1"]]
+  stimulus.unitInterval = interval
+  stimulus.pattern.bits = bits
+  return next
+}
+
+/** Run an original inline model through the same package and switching boundary. */
+function convert(
+  next: ModelRunDefinition,
+  text: string = source,
+): ReturnType<typeof convertPackaged> {
+  const bytes = new TextEncoder().encode(text)
+  const definition = { ...next.definition, source: { content: text } }
+  return convertPackaged({ bytes, input: { ...next, definition } })
+}
+
 test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.25 ns bit", async () => {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
   circuit.add(
@@ -168,16 +199,14 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
   assert.match(converted.source, /VKD0 .*PWL/)
   assert.equal(converted.sourceSha256, sha256(source))
   assert.deepEqual(input, saved)
-  assert.deepEqual(
-    converted.metadata.switchingTails?.map((tail) => [
-      tail.edge,
-      tail.originalDurationSeconds,
-    ]),
-    [
-      ["rising", 4e-9],
-      ["falling", 4e-9],
-    ],
-  )
+  const originalDurations = converted.metadata.switchingTails?.map((tail) => [
+    tail.edge,
+    tail.originalDurationSeconds,
+  ])
+  assert.deepEqual(originalDurations, [
+    ["rising", 4e-9],
+    ["falling", 4e-9],
+  ])
   for (const tail of converted.metadata.switchingTails!) {
     assert.ok(Math.abs(tail.retainedDurationSeconds - 0.8e-9) < 1e-20)
     assert.equal(tail.coefficientTolerance, 0.01)
@@ -190,31 +219,6 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
       warning.includes("inactive tails truncated"),
     ),
   )
-  /** Alter the explicit run without altering caller-owned inputs. */
-  function run(
-    bits: string,
-    interval: string,
-    duration = "5ns",
-  ): ModelRunDefinition {
-    const next = structuredClone(input)
-    next.run.duration = duration
-    next.run.stimuli[pinMap["1"]].unitInterval = interval
-    next.run.stimuli[pinMap["1"]].pattern.bits = bits
-    return next
-  }
-  /** Run an original inline model through the same package and switching boundary. */
-  function convert(
-    next: ModelRunDefinition,
-    text: string = source,
-  ): ReturnType<typeof convertPackaged> {
-    return convertPackaged({
-      bytes: new TextEncoder().encode(text),
-      input: {
-        ...next,
-        definition: { ...next.definition, source: { content: text } },
-      },
-    })
-  }
   const knots = points(converted.source, "KU")
   assert.ok(knots.every((row, i) => i === 0 || row[0] > knots[i - 1][0]))
   assert.equal(knots.at(-1)![0], 5e-9)
@@ -231,11 +235,12 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
   )
   for (const label of ["KU", "KD"] as const) {
     const column = points(converted.source, label)
+    const minimumInterval = resolution * (1 - 1e-9)
+    const intervalsValid = column.every(
+      (row, i) => i === 0 || row[0] - column[i - 1][0] >= minimumInterval,
+    )
     assert.ok(
-      column.every(
-        (row, i) =>
-          i === 0 || row[0] - column[i - 1][0] >= resolution * (1 - 1e-9),
-      ),
+      intervalsValid,
       `${label} has no stitch interval finer than the IBIS table`,
     )
     const edge = column.findIndex((row) => Math.abs(row[0] - 1.25e-9) < 1e-18)
@@ -245,14 +250,16 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
       `${label} falling edge starts from the held coefficient`,
     )
   }
-  const repeated = convert(run("1111100000", "0.25ns"))
+  const repeated = convert(
+    run(input, { bits: "1111100000", interval: "0.25ns" }),
+  )
   assert.deepEqual(
     points(repeated.source, "KU"),
     knots,
     "identical bits never retrigger an edge",
   )
   assert.throws(
-    () => convert(run("10", "0.25ns")),
+    () => convert(run(input, { bits: "10", interval: "0.25ns" })),
     /has not settled before the next edge/,
   )
   const late = source.replace("2n 0.75 0.75 0.75", "2n 0.5 0.5 0.5")
@@ -269,33 +276,32 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
   )
   // A 100 pF die has a 2.5 ns fixture time constant. Its coefficients are
   // already steady, but the measured voltage is still changing at 1.25 ns.
-  const slowFixture =
-    source
-      .slice(0, source.indexOf("[Rising Waveform]"))
-      .replace("C_comp 1p 1p 1p", "C_comp 100p 100p 100p") +
-    (["rising", "falling"] as const)
-      .flatMap((edge) =>
-        [0, 1.5].map(
-          (voltage) =>
-            `[${edge === "rising" ? "Rising" : "Falling"} Waveform]\nR_fixture = 50\nV_fixture = ${voltage}\n` +
-            Array.from({ length: 801 }, (_, i) => {
-              const time = i * 0.025
-              const fraction = Math.exp(-time / 2.5)
-              const value =
-                voltage / 2 +
-                0.75 * (edge === "rising" ? 1 - fraction : fraction)
-              return `${time}n ${value} ${value} ${value}`
-            }).join("\n"),
-        ),
-      )
-      .join("\n") +
-    "\n[End]"
+  const preamble = source
+    .slice(0, source.indexOf("[Rising Waveform]"))
+    .replace("C_comp 1p 1p 1p", "C_comp 100p 100p 100p")
+  const waveforms = (["Rising", "Falling"] as const).flatMap((edge) =>
+    [0, 1.5].map((voltage) => {
+      const header = `[${edge} Waveform]\nR_fixture = 50\nV_fixture = ${voltage}`
+      const rows = Array.from({ length: 801 }, (_, i) => {
+        const time = i * 0.025
+        let fraction = Math.exp(-time / 2.5)
+        if (edge === "Rising") fraction = 1 - fraction
+        const value = voltage / 2 + 0.75 * fraction
+        return `${time}n ${value} ${value} ${value}`
+      })
+      return `${header}\n${rows.join("\n")}`
+    }),
+  )
+  const slowFixture = `${preamble}${waveforms.join("\n")}\n[End]`
+  const slowWeights = switchingWeights(
+    parseIbis(slowFixture).getBuffer("driver"),
+    "typical",
+    "rising",
+  )
   assert.ok(
-    switchingWeights(
-      parseIbis(slowFixture).getBuffer("driver"),
-      "typical",
-      "rising",
-    ).every((row) => Math.abs(row[1] - 1) <= 0.01 && Math.abs(row[2]) <= 0.01),
+    slowWeights.every(
+      (row) => Math.abs(row[1] - 1) <= 0.01 && Math.abs(row[2]) <= 0.01,
+    ),
   )
   assert.throws(
     () => convert(input, slowFixture),
@@ -304,15 +310,16 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
   )
   const slow = source.replace("2n 0.75 0.75 0.75", "2n 0.75 0.5 0.75")
   assert.doesNotThrow(() => convert(input, slow))
-  assert.throws(
-    () =>
-      convert(
-        { ...input, definition: { ...input.definition, corner: "minimum" } },
-        slow,
-      ),
-    /has not settled/,
-  )
-  const finite = run("1", "1.25ns", "0.5ns")
+  const minimum = {
+    ...input,
+    definition: { ...input.definition, corner: "minimum" as const },
+  }
+  assert.throws(() => convert(minimum, slow), /has not settled/)
+  const finite = run(input, {
+    bits: "1",
+    interval: "1.25ns",
+    duration: "0.5ns",
+  })
   const original = convertIbisModelToSpice(
     source,
     { ...finite.definition, packagePolicy: "omit" },
@@ -323,53 +330,59 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
     points(original.source, "KU"),
     "finite window interpolates inside the measured transition",
   )
-  const idle = run("0", "1.25ns")
+  const idle = run(input, { bits: "0", interval: "1.25ns" })
   assert.equal(convert(idle).metadata.switchingTails, undefined)
   assert.doesNotThrow(() =>
     convert(idle, source.replaceAll("[Rising Waveform]", "[Falling Waveform]")),
   )
-  assert.throws(() => convert(run("2", "1.25ns")), { code: "invalid_pattern" })
-  const inverted = run("10", "1.25ns")
+  assert.throws(() => convert(run(input, { bits: "2", interval: "1.25ns" })), {
+    code: "invalid_pattern",
+  })
+  const inverted = run(input, { bits: "10", interval: "1.25ns" })
   inverted.run.stimuli[pinMap["1"]].inverted = true
   inverted.run.stimuli[pinMap["1"]].startTime = "0.625ns"
   const shifted = convert(inverted)
-  assert.equal(
-    shifted.metadata.pins[0].stimulusHash,
-    logicalBitSchedule(inverted.run.stimuli[pinMap["1"]], "5ns").sha256,
+  const invertedSchedule = logicalBitSchedule(
+    inverted.run.stimuli[pinMap["1"]],
+    "5ns",
   )
+  assert.equal(shifted.metadata.pins[0].stimulusHash, invertedSchedule.sha256)
   assert.equal(points(shifted.source, "KU")[0][1], 1)
   assert.ok(interpolate(points(shifted.source, "KU"), 0.6e-9) > 0.99)
-  const long = run("10", "5ns", "10ns")
+  const long = run(input, { bits: "10", interval: "5ns", duration: "10ns" })
   assert.equal(convert(long).metadata.switchingTails, undefined)
-  const upstream = points(
-    convertIbisModelToSpice(
-      source,
-      { ...long.definition, packagePolicy: "omit" },
-      long.run,
-    ).source,
-    "KU",
+  const longDie = convertIbisModelToSpice(
+    source,
+    { ...long.definition, packagePolicy: "omit" },
+    long.run,
+  )
+  const upstream = points(longDie.source, "KU")
+  const upstreamKnots = upstream.filter(
+    (row, i) => !(upstream[i + 1]?.[0] - row[0] < resolution / 2),
   )
   assert.deepEqual(
     points(convert(long).source, "KU"),
-    upstream.filter(
-      (row, i) => !(upstream[i + 1]?.[0] - row[0] < resolution / 2),
-    ),
+    upstreamKnots,
     "upstream knots without its femtosecond hold",
   )
   assert.doesNotThrow(
-    () => convert(run("10", "4ns", "8ns")),
+    () => convert(run(input, { bits: "10", interval: "4ns", duration: "8ns" })),
     "a settled table ending exactly at the next trigger is valid",
   )
   const inversePolarity = source.replace(
     "Polarity Non-Inverting",
     "Polarity Inverting",
   )
-  const polarity = convert(run("10", "1.25ns"), inversePolarity)
-  assert.equal(
-    polarity.metadata.pins[0].stimulusHash,
-    logicalBitSchedule(input.run.stimuli[pinMap["1"]], "5ns", "inverting")
-      .sha256,
+  const polarity = convert(
+    run(input, { bits: "10", interval: "1.25ns" }),
+    inversePolarity,
   )
+  const invertingSchedule = logicalBitSchedule(
+    input.run.stimuli[pinMap["1"]],
+    "5ns",
+    "inverting",
+  )
+  assert.equal(polarity.metadata.pins[0].stimulusHash, invertingSchedule.sha256)
   assert.equal(points(polarity.source, "KU")[0][1], 1)
 
   if (!process.env.SI_TEST_SWITCHING_NGSPICE) return
@@ -382,11 +395,27 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
     [converted, "5n"],
     [convert(long), "10n"],
   ] as const) {
-    const nodes = Object.values(model.spicePinMapping).map((port) =>
-      port === pinMap["1"] ? "out" : port === pinMap["2"] ? "vdd" : "vss",
-    )
+    const nodes = Object.values(model.spicePinMapping).map((port) => {
+      if (port === pinMap["1"]) return "out"
+      if (port === pinMap["2"]) return "vdd"
+      return "vss"
+    })
     const name = subcircuitHeader(model.source)![1]
-    const deck = `Buffer-only settled tail oracle\n${model.source}\nXU ${nodes.join(" ")} ${name}\nRload out vss 50\n.control\nset wr_singlescale\nset wr_vecnames\ntran 2p ${duration}\nwrdata waveform.dat v(out)\nquit\n.endc\n.end\n`
+    const deck = [
+      "Buffer-only settled tail oracle",
+      model.source,
+      `XU ${nodes.join(" ")} ${name}`,
+      "Rload out vss 50",
+      ".control",
+      "set wr_singlescale",
+      "set wr_vecnames",
+      `tran 2p ${duration}`,
+      "wrdata waveform.dat v(out)",
+      "quit",
+      ".endc",
+      ".end",
+      "",
+    ].join("\n")
     const output = await solve({
       solver: "ngspice",
       files: { "buffer.cir": deck },
@@ -394,15 +423,14 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
       outputFiles: ["waveform.dat"],
     })
     assert.doesNotMatch(
-      output.stdout + output.stderr,
+      `${output.stdout}${output.stderr}`,
       /error|fatal|aborted|timestep too small/i,
     )
+    const rows = output.files["waveform.dat"].trim().split("\n").slice(1)
     traces.push(
-      output.files["waveform.dat"]
-        .trim()
-        .split("\n")
-        .slice(1)
-        .map((line) => splitWords(line.trim()).map(Number) as [number, number]),
+      rows.map(
+        (line) => splitWords(line.trim()).map(Number) as [number, number],
+      ),
     )
   }
   for (const time of [0.1e-9, 0.3e-9, 0.5e-9, 0.7e-9, 1e-9]) {
@@ -410,11 +438,11 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
       Math.abs(interpolate(traces[0], time) - interpolate(traces[1], time)) <
         0.002,
     )
+    const shortBit = interpolate(traces[0], 1.25e-9 + time)
+    const fullAcquisition = interpolate(traces[1], 5e-9 + time)
+    const difference = Math.abs(shortBit - fullAcquisition)
     assert.ok(
-      Math.abs(
-        interpolate(traces[0], 1.25e-9 + time) -
-          interpolate(traces[1], 5e-9 + time),
-      ) < 0.002,
+      difference < 0.002,
       "short-bit and full-acquisition falling responses agree within 2 mV",
     )
   }
@@ -425,5 +453,6 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
 // exactly these tables (two per edge), so replaying the converted die buffer into the same fixture must reproduce them.
 // Declared metric and tolerance, fixed before any replay: max |V_sim - V_table| over the table's own time points
 // <= 2% of the table swing (30 mV on 1.5 V, well inside DDR3's 175 mV VIH(ac) - VREF margin, JESD79-3F section 9),
-// and |t50_sim - t50_table| <= 10 ps at the table's mid-swing (0.8% of the 1.25 ns unit interval at the board's 800 Mb/s DQ rate).
+// and |t50_sim - t50_table| <= 10 ps at the table's mid-swing
+// (0.8% of the 1.25 ns unit interval at the board's 800 Mb/s DQ rate).
 // R_dut, L_dut, C_dut, C_fixture and L_fixture are zero in every selected table (the parser rejects others).

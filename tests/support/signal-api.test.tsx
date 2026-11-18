@@ -13,15 +13,16 @@ import Single from "./unit-single-ended"
 
 const modelDir = process.env.IBIS_MODEL_DIR
 /** Read actual vendor bytes only; no synthetic IBIS fallback. */
-const sources = async (): Promise<Record<string, Uint8Array>> =>
-  Object.fromEntries(
-    await Promise.all(
-      ["sn74lvc1g04.ibs", "sn65hvd72.ibs"].map(async (file) => [
-        `models/${file}`,
-        await readFile(`${modelDir}/${file}`),
-      ]),
-    ),
+async function sources(): Promise<Record<string, Uint8Array>> {
+  const files = ["sn74lvc1g04.ibs", "sn65hvd72.ibs"]
+  const entries = await Promise.all(
+    files.map(async (file) => [
+      `models/${file}`,
+      await readFile(`${modelDir}/${file}`),
+    ]),
   )
+  return Object.fromEntries(entries)
+}
 
 /** More than three physical conductors, expressed as real TSX. */
 function Four(): React.JSX.Element {
@@ -102,15 +103,14 @@ test(
     const circuit = await renderSignals(<Four />)
     const ibis = await sources()
     const a = prepareBlocks({ circuit, sources: ibis })[0]
+    const channels = circuit.filter(
+      (r) => r.type === "simulation_pcb_driver_receiver_channel",
+    )
+    const otherRecords = circuit.filter(
+      (r) => r.type !== "simulation_pcb_driver_receiver_channel",
+    )
     const b = prepareBlocks({
-      circuit: [
-        ...circuit.filter(
-          (r) => r.type !== "simulation_pcb_driver_receiver_channel",
-        ),
-        ...circuit
-          .filter((r) => r.type === "simulation_pcb_driver_receiver_channel")
-          .reverse(),
-      ],
+      circuit: [...otherRecords, ...channels.reverse()],
       sources: ibis,
     })[0]
     assert.equal(a.settings.lanes.length, 4)
@@ -118,84 +118,80 @@ test(
   },
 )
 
-test(
-  "RS485 differential identity and the placed termination are derived from real vendor data and TSX",
-  { skip: !modelDir },
-  async () => {
-    const circuit = await renderSignals(<Differential />)
-    const ibis = await sources()
-    const prepared = prepareBlocks({ circuit, sources: ibis })[0]
-    const receiver = prepared.signals[0].receivers[0]
-    assert.ok("p_source_port_id" in receiver)
-    if (!("p_source_port_id" in receiver)) return
-    const resistor = circuit
-      .filter((r) => r.type === "source_component")
-      .find((r) => r.name === "RTERM")!
-    assert.ok(
-      prepared.settings.passiveComponents?.some(
-        (p) => p.sourceComponentId === resistor.source_component_id,
-      ),
-    )
-    const reversed = await renderSignals(<Differential reversed />)
-    assert.throws(
-      () => prepareBlocks({ circuit: reversed, sources: ibis }),
-      /Signal "BUS": differential pin order disagrees with IBIS/,
-    )
-  },
-)
+const differentialDescription =
+  "RS485 differential identity and the placed termination are derived from real vendor data and TSX"
+test(differentialDescription, { skip: !modelDir }, async () => {
+  const circuit = await renderSignals(<Differential />)
+  const ibis = await sources()
+  const prepared = prepareBlocks({ circuit, sources: ibis })[0]
+  const receiver = prepared.signals[0].receivers[0]
+  assert.ok("p_source_port_id" in receiver)
+  if (!("p_source_port_id" in receiver)) return
+  const resistor = circuit
+    .filter((r) => r.type === "source_component")
+    .find((r) => r.name === "RTERM")!
+  assert.ok(
+    prepared.settings.passiveComponents?.some(
+      (p) => p.sourceComponentId === resistor.source_component_id,
+    ),
+  )
+  const reversed = await renderSignals(<Differential reversed />)
+  assert.throws(
+    () => prepareBlocks({ circuit: reversed, sources: ibis }),
+    /Signal "BUS": differential pin order disagrees with IBIS/,
+  )
+})
 
-test(
-  "signal packages and vendor reference evidence remain present; disabled drivers reject output-only buffers",
-  { skip: !modelDir },
-  async () => {
-    const circuit = await renderSignals(<Single />)
-    const signal = circuit.find(
-      (r) => r.type === "simulation_pcb_driver_receiver_channel",
-    )!
-    if (signal.type !== "simulation_pcb_driver_receiver_channel")
-      throw new Error("missing signal")
-    signal.driver_disabled = true
-    const ibis = await sources()
-    assert.throws(
-      () => prepareBlocks({ circuit, sources: ibis }),
-      /has no disabled state/,
+const signalDescription =
+  "signal packages and vendor reference evidence remain present; disabled drivers reject output-only buffers"
+test(signalDescription, { skip: !modelDir }, async () => {
+  const circuit = await renderSignals(<Single />)
+  const signal = circuit.find(
+    (r) => r.type === "simulation_pcb_driver_receiver_channel",
+  )!
+  if (signal.type !== "simulation_pcb_driver_receiver_channel")
+    throw new Error("missing signal")
+  signal.driver_disabled = true
+  const ibis = await sources()
+  assert.throws(
+    () => prepareBlocks({ circuit, sources: ibis }),
+    /has no disabled state/,
+  )
+  signal.driver_disabled = false
+  signal.pattern = "0"
+  delete signal.seed
+  const bindings = admittedBindings(circuit, ibis)
+  const declarations = generalDeclarations({
+    circuit: bindings.circuitJson,
+    mappings: bindings.mappings,
+    modeling: bindings.modeling,
+    controls: bindings.controls,
+  })
+  const admitted = admitBuffers({
+    models: declarations.models,
+    ibisSources: ibis,
+    scope: rootScope("buffers"),
+  })
+  const compiled = compileBuffers(
+    admitted.value,
+    declarations.plans,
+    modelRunDefinition,
+  )[0]
+  for (const model of compiled) {
+    assert.equal(model.metadata.packagePolicy, "vendor")
+    assert.match(model.source, /RPKG/)
+    assert.match(model.source, /LPKG/)
+    assert.match(model.source, /CPKG/)
+    assert.equal(
+      model.metadata.packageData.mappedPins.filter(
+        (p) => p.role === "reference",
+      ).length,
+      2,
     )
-    signal.driver_disabled = false
-    signal.pattern = "0"
-    delete signal.seed
-    const bindings = admittedBindings(circuit, ibis)
-    const declarations = generalDeclarations({
-      circuit: bindings.circuitJson,
-      mappings: bindings.mappings,
-      modeling: bindings.modeling,
-      controls: bindings.controls,
-    })
-    const admitted = admitBuffers({
-      models: declarations.models,
-      ibisSources: ibis,
-      scope: rootScope("buffers"),
-    })
-    const compiled = compileBuffers(
-      admitted.value,
-      declarations.plans,
-      modelRunDefinition,
-    )[0]
-    for (const model of compiled) {
-      assert.equal(model.metadata.packagePolicy, "vendor")
-      assert.match(model.source, /RPKG/)
-      assert.match(model.source, /LPKG/)
-      assert.match(model.source, /CPKG/)
-      assert.equal(
-        model.metadata.packageData.mappedPins.filter(
-          (p) => p.role === "reference",
-        ).length,
-        2,
-      )
-    }
-    assert.ok(
-      compiled[0].metadata.pins.some(
-        (p) => p.runState.mode === "output" && p.runState.enabled,
-      ),
-    )
-  },
-)
+  }
+  assert.ok(
+    compiled[0].metadata.pins.some(
+      (p) => p.runState.mode === "output" && p.runState.enabled,
+    ),
+  )
+})

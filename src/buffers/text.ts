@@ -1,8 +1,15 @@
+/** ECMAScript line terminators: line feed, carriage return, line separator and paragraph separator. */
+const LINE_TERMINATORS = ["\n", "\r", "\u2028", "\u2029"]
+
 /** Lowercase ASCII keywords without folding non-ASCII characters into them. */
 export function asciiLowerCase(text: string): string {
   let lower = ""
   for (const char of text) {
-    lower += char >= "A" && char <= "Z" ? char.toLowerCase() : char
+    if (char >= "A" && char <= "Z") {
+      lower += char.toLowerCase()
+      continue
+    }
+    lower += char
   }
   return lower
 }
@@ -19,9 +26,7 @@ export function isDigit(char: string | undefined): boolean {
 
 /** Test for a line terminator in source text. */
 export function isLineBreak(char: string): boolean {
-  return (
-    char === "\n" || char === "\r" || char === "\u2028" || char === "\u2029"
-  )
+  return LINE_TERMINATORS.includes(char)
 }
 
 /** Find the next ECMAScript line terminator or the end of the source. */
@@ -32,7 +37,10 @@ export function lineEnd(text: string, start: number): number {
 }
 
 /** Start and end offsets in the source text. */
-export type TextRange = { start: number; end: number }
+export type TextRange = {
+  start: number
+  end: number
+}
 
 /** Iterate lines with their offsets so callers can replace text without changing separators. */
 export function* lineRanges(text: string): IterableIterator<TextRange> {
@@ -72,7 +80,7 @@ export function subcircuitHeader(
 ): GeneratedSubcircuitHeader | null {
   const directive = ".subckt"
   for (const { start, end } of lineRanges(source)) {
-    if (!source.startsWith(directive + " ", start)) continue
+    if (!source.startsWith(`${directive} `, start)) continue
     const nameStart = start + directive.length + 1
     if (nameStart >= end) continue
     const nameEnd = tokenEnd(source, nameStart)

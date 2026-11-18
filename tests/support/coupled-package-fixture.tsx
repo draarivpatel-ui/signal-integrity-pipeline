@@ -67,7 +67,12 @@ export function Board(): React.JSX.Element {
     <board width={10} height={10} routingDisabled schematicDisabled>
       <chip
         name="U1"
-        pinLabels={{ A1: "A", B1: "B", V1: "VDD", G1: "VSS" }}
+        pinLabels={{
+          A1: "A",
+          B1: "B",
+          V1: "VDD",
+          G1: "VSS",
+        }}
         footprint={
           <footprint>
             {["A1", "B1", "V1", "G1"].map((pin, i) => (
@@ -93,7 +98,12 @@ export function Board(): React.JSX.Element {
           mimetype: "text/plain",
         }}
         ibisComponentName="fixture"
-        ibisPinNameToPortLabel={{ A1: "A", B1: "B", V1: "VDD", G1: "VSS" }}
+        ibisPinNameToPortLabel={{
+          A1: "A",
+          B1: "B",
+          V1: "VDD",
+          G1: "VSS",
+        }}
       />
     </board>
   )

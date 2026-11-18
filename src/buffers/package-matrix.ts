@@ -1,14 +1,24 @@
 import type { Matrix } from "../extraction"
 import type { PackageModel } from "./package-model"
 
+/** Threshold for near-zero pivots in the scale-normalized LDL factorization. */
+const PIVOT_TOLERANCE = 1e-12
+
 export interface SelectedPackageModel {
   pins: string[]
   unusedPins: string[]
   R: number[][]
   L: number[][]
   C: number[][]
-  selfTerms: { R: number[]; L: number[]; C: number[] }
-  capacitanceSignCorrection?: { packageModel: string; negatedEntries: number }
+  selfTerms: {
+    R: number[]
+    L: number[]
+    C: number[]
+  }
+  capacitanceSignCorrection?: {
+    packageModel: string
+    negatedEntries: number
+  }
 }
 
 /** Scale-normalized LDL factorization: L/C must be definite, R may be semidefinite. */
@@ -24,52 +34,55 @@ function checkPositive({
   let requirement = "semidefinite"
   if (strict) requirement = "definite"
   const size = matrix.length
-  if (
-    matrix.some(
-      (row) =>
-        row.length !== size ||
-        row.some((coefficient) => !Number.isFinite(coefficient)),
-    )
+  const invalidRow = matrix.some(
+    (row) =>
+      row.length !== size || row.some((value) => !Number.isFinite(value)),
   )
-    throw new Error(`${label}: finite square matrix required`)
-  if (matrix.some((row, i) => row[i] < 0))
+  if (invalidRow) throw new Error(`${label}: finite square matrix required`)
+  if (matrix.some((row, i) => row[i] < 0)) {
     throw new Error(
       `${label}: negative diagonal; matrix is not positive ${requirement}`,
     )
+  }
   const scale = Math.max(...matrix.map((row, i) => Math.abs(row[i])))
   const work = matrix.map((row) =>
     row.map((coefficient) => coefficient / (scale || 1)),
   )
-  const tolerance = 1e-12
   for (let k = 0; k < size; k++) {
     const pivot = work[k][k]
-    if (
-      pivot < -tolerance ||
-      (strict && pivot <= tolerance) ||
-      (!strict &&
-        pivot <= tolerance &&
-        work.slice(k + 1).some((row) => Math.abs(row[k]) > tolerance))
-    ) {
+    const nearZero = pivot <= PIVOT_TOLERANCE
+    const nonzeroColumn =
+      nearZero &&
+      !strict &&
+      work.slice(k + 1).some((row) => Math.abs(row[k]) > PIVOT_TOLERANCE)
+    if (pivot < -PIVOT_TOLERANCE || (nearZero && strict) || nonzeroColumn) {
       throw new Error(
         `${label}: matrix is not positive ${requirement} at pivot ${k + 1}; passive package required`,
       )
     }
-    if (pivot <= tolerance) continue
-    for (let i = k + 1; i < size; i++)
+    if (nearZero) continue
+    for (let i = k + 1; i < size; i++) {
       for (let j = i; j < size; j++) {
-        work[j][i] = work[i][j] -= (work[i][k] * work[j][k]) / pivot
+        work[i][j] -= (work[i][k] * work[j][k]) / pivot
+        work[j][i] = work[i][j]
       }
+    }
   }
 }
 
 /** Reject sign conventions that cannot be realized with passive pair/reference capacitors. */
 function checkCapacitance(matrix: Matrix, label: string): void {
   for (let i = 0; i < matrix.length; i++) {
-    if (matrix[i].some((capacitance, j) => i !== j && capacitance > 0))
+    const row = matrix[i]
+    if (row.some((capacitance, j) => i !== j && capacitance > 0)) {
+      const requirement =
+        "correction requires uniformly positive couplings and diagonally dominant rows"
       throw new Error(
-        `${label}: Maxwell capacitance has positive off-diagonal entries; correction requires uniformly positive couplings and diagonally dominant rows`,
+        `${label}: Maxwell capacitance has positive off-diagonal entries; ${requirement}`,
       )
-    if (matrix[i].reduce((sum, capacitance) => sum + capacitance, 0) < 0)
+    }
+    const reference = row.reduce((sum, capacitance) => sum + capacitance, 0)
+    if (reference < 0)
       throw new Error(
         `${label}: negative reference capacitance (Maxwell row sum)`,
       )
@@ -89,10 +102,10 @@ export function selectPackageModel(
     throw new Error(`${model.name}: distinct selected package pins required`)
   const indices = pins.map((pin) => {
     const index = model.pins.indexOf(pin)
-    if (index < 0)
-      throw new Error(
-        `${model.name}: selected package pin ${pin} missing from [Pin Numbers]; scalar fallback is forbidden`,
-      )
+    if (index < 0) {
+      const detail = `selected package pin ${pin} missing from [Pin Numbers]`
+      throw new Error(`${model.name}: ${detail}; scalar fallback is forbidden`)
+    }
     return index
   })
   checkPositive({
@@ -108,17 +121,18 @@ export function selectPackageModel(
   const offDiagonal = model.C.flatMap((row, i) =>
     row.filter((capacitance, j) => i !== j && capacitance !== 0),
   )
-  const correct =
+  const uniformlyPositive =
     offDiagonal.length > 0 &&
-    offDiagonal.every((capacitance) => capacitance > 0) &&
-    model.C.every(
-      (row, i) =>
-        row[i] >=
-        row.reduce((sum, capacitance, j) => {
-          if (i === j) return sum
-          return sum + Math.abs(capacitance)
-        }, 0),
-    )
+    offDiagonal.every((capacitance) => capacitance > 0)
+  const correct =
+    uniformlyPositive &&
+    model.C.every((row, i) => {
+      const coupling = row.reduce((sum, capacitance, j) => {
+        if (i === j) return sum
+        return sum + Math.abs(capacitance)
+      }, 0)
+      return row[i] >= coupling
+    })
   const C = model.C.map((row, i) =>
     row.map((capacitance, j) => {
       if (correct && i !== j && capacitance !== 0) return -capacitance
@@ -132,9 +146,11 @@ export function selectPackageModel(
   let active = model.pins.map((_, i) => i)
   for (const k of unused) {
     active = active.filter((i) => i !== k)
-    for (const i of active)
-      for (const j of active)
+    for (const i of active) {
+      for (const j of active) {
         work[i][j] -= (work[i][k] * work[k][j]) / work[k][k]
+      }
+    }
   }
   const selected = {
     pins,

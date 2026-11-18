@@ -1,4 +1,4 @@
-import { test } from "bun:test"
+import { afterEach, mock, spyOn, test } from "bun:test"
 import assert from "node:assert/strict"
 import { Circuit } from "@tscircuit/core"
 import React from "react"
@@ -6,13 +6,14 @@ import { convertPackaged } from "../../src/buffers/package"
 import { sha256 } from "../../src/kernel"
 import { Board, source } from "./coupled-package-fixture"
 
+afterEach(() => mock.restore())
+
 test("TSX positive vendor capacitance magnitudes require a visible, hashed Maxwell correction", async () => {
-  const bytes = new TextEncoder().encode(
-    source
-      .replaceAll("-.2p", ".2p")
-      .replaceAll("-.5p", ".5p")
-      .replaceAll("-.1p", ".1p"),
-  )
+  const positive = source
+    .replaceAll("-.2p", ".2p")
+    .replaceAll("-.5p", ".5p")
+    .replaceAll("-.1p", ".1p")
+  const bytes = new TextEncoder().encode(positive)
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
   circuit.add(<Board />)
   await circuit.renderUntilSettled()
@@ -37,9 +38,7 @@ test("TSX positive vendor capacitance magnitudes require a visible, hashed Maxwe
       stimuli: {},
     },
   }
-  const log = test.mock.method(
-    console,
-    "warn",
+  const log = spyOn(console, "warn").mockImplementation(
     (..._args: unknown[]): void => {},
   )
   const converted = convertPackaged({ bytes, input })
@@ -52,20 +51,21 @@ test("TSX positive vendor capacitance magnitudes require a visible, hashed Maxwe
       warning.includes(sha256(bytes)) &&
       warning.includes("coupled"),
   )
-  assert.ok(log.mock.calls.some((call) => call.arguments.includes(warning)))
+  assert.ok(log.mock.calls.some((args) => args.includes(warning)))
   assert.equal(
     converted.sourceSha256,
     sha256(bytes),
     "evidence hashes the unchanged vendor bytes",
   )
   assert.match(converted.source, /CPKG0_1a PAD0 PAD1 2\.5e-13/)
-  for (const invalid of [
-    source.replace("-.2p", ".2p"),
-    source.replace("3p -.2p -.5p", ".1p .2p .5p").replaceAll("-.1p", ".1p"),
-  ]) {
+  const mixedSigns = source.replace("-.2p", ".2p")
+  const nonDominant = source
+    .replace("3p -.2p -.5p", ".1p .2p .5p")
+    .replaceAll("-.1p", ".1p")
+  for (const invalid of [mixedSigns, nonDominant]) {
+    const bytes = new TextEncoder().encode(invalid)
     assert.throws(
-      () =>
-        convertPackaged({ bytes: new TextEncoder().encode(invalid), input }),
+      () => convertPackaged({ bytes, input }),
       /Maxwell capacitance|positive definite/,
     )
   }

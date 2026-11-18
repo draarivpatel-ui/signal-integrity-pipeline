@@ -10,6 +10,8 @@ import { admittedBindings, renderSignals } from "../support/signal-render"
 import Differential from "../support/unit-differential"
 import Single from "../support/unit-single-ended"
 
+const DEFAULT_DIFFERENTIAL_FIXTURE = false
+
 const modelDir = process.env.IBIS_MODEL_DIR
 
 /** Read the netlist lines with any of the requested element prefixes. */
@@ -39,6 +41,9 @@ function normalizeNodes(line: string, terminals: string[]): string {
   return result
 }
 
+/** Detect the tiny upstream hold step when comparing PWL knots. */
+const HOLD_STEP_THRESHOLD_SECONDS = 1e-14
+
 /** Upstream holds each state until 1 fs before an edge; the pipeline starts the edge from that held state. */
 function held(line: string): string {
   const open = line.indexOf("PWL(")
@@ -47,18 +52,29 @@ function held(line: string): string {
   const knots = line.slice(open + 4, close).split(" ")
   const kept: string[] = []
   for (let i = 0; i < knots.length; i += 2) {
-    if (i + 2 < knots.length && Number(knots[i + 2]) - Number(knots[i]) < 1e-14)
-      kept.push(knots[(i += 2)], knots[i - 1])
-    else kept.push(knots[i], knots[i + 1])
+    if (
+      i + 2 < knots.length &&
+      Number(knots[i + 2]) - Number(knots[i]) < HOLD_STEP_THRESHOLD_SECONDS
+    ) {
+      i += 2
+      kept.push(knots[i], knots[i - 1])
+      continue
+    }
+    kept.push(knots[i], knots[i + 1])
   }
-  return line.slice(0, open) + `PWL(${kept.join(" ")})` + line.slice(close + 1)
+  return `${line.slice(0, open)}PWL(${kept.join(" ")})${line.slice(close + 1)}`
+}
+
+/** Vendor source bytes and declarations for a rendered package fixture. */
+interface PackageFixture {
+  bytes: Uint8Array
+  declarations: ReturnType<typeof generalDeclarations>
 }
 
 /** Use the real TSX board and unmodified vendor model, without invoking extraction. */
-async function fixture(differential = false): Promise<{
-  bytes: Uint8Array
-  declarations: ReturnType<typeof generalDeclarations>
-}> {
+async function fixture(
+  differential: boolean = DEFAULT_DIFFERENTIAL_FIXTURE,
+): Promise<PackageFixture> {
   let file = "sn74lvc1g04.ibs"
   let board = <Single />
   if (differential) {
@@ -69,15 +85,13 @@ async function fixture(differential = false): Promise<{
   const bindings = admittedBindings(await renderSignals(board), {
     [`models/${file}`]: bytes,
   })
-  return {
-    bytes,
-    declarations: generalDeclarations({
-      circuit: bindings.circuitJson,
-      mappings: bindings.mappings,
-      modeling: bindings.modeling,
-      controls: bindings.controls,
-    }),
-  }
+  const declarations = generalDeclarations({
+    circuit: bindings.circuitJson,
+    mappings: bindings.mappings,
+    modeling: bindings.modeling,
+    controls: bindings.controls,
+  })
+  return { bytes, declarations }
 }
 
 test.skipIf(!modelDir)(
@@ -102,14 +116,16 @@ test.skipIf(!modelDir)(
             (pin) => input.definition.pinMap[pin] === port,
           )!
           const pin = component.pins[physical]
+          const resistance = pin.resistance ?? component.package.resistance![0]
+          const inductance = pin.inductance ?? component.package.inductance![0]
           assert.ok(
             converted.source.includes(
-              `RPKG${i} ${terminal} PKGR${i} ${pin.resistance ?? component.package.resistance![0]}`,
+              `RPKG${i} ${terminal} PKGR${i} ${resistance}`,
             ),
           )
           assert.ok(
             converted.source.includes(
-              `LPKG${i} PKGR${i} PKGL${i} ${pin.inductance ?? component.package.inductance![0]}`,
+              `LPKG${i} PKGR${i} PKGL${i} ${inductance}`,
             ),
           )
           assert.ok(converted.source.includes(`CPKG${i}a ${terminal} `))
@@ -117,10 +133,9 @@ test.skipIf(!modelDir)(
           const modelName = pin.model.toLowerCase()
           if (modelName === "power" || modelName === "gnd") {
             const buffer = document.getBuffer(converted.metadata.pins[0].model)
-            const voltage =
-              modelName === "power"
-                ? (buffer.pullupReference ?? buffer.voltage)[0]
-                : (buffer.pulldownReference ?? [0, 0, 0])[0]
+            let voltage = (buffer.pulldownReference ?? [0, 0, 0])[0]
+            if (modelName === "power")
+              voltage = (buffer.pullupReference ?? buffer.voltage)[0]
             assert.ok(
               converted.source.includes(`VPDN${i} DIE${i} 0 ${voltage}`),
             )
@@ -128,18 +143,15 @@ test.skipIf(!modelDir)(
         }
         // Renaming only package nodes must preserve the converter's rail references and KU/KD.
         const terminals = Object.keys(converted.spicePinMapping)
-        assert.deepEqual(
-          sourceLines(converted.source, ["XBUF"]).map((line) =>
-            normalizeNodes(line, terminals),
-          ),
-          sourceLines(die.source, ["XBUF"]),
+        const buffers = sourceLines(converted.source, ["XBUF"]).map((line) =>
+          normalizeNodes(line, terminals),
         )
-        assert.deepEqual(
-          sourceLines(converted.source, ["VKU", "VKD"]).map((line) =>
-            normalizeNodes(line, terminals),
-          ),
-          sourceLines(die.source, ["VKU", "VKD"]).map(held),
+        assert.deepEqual(buffers, sourceLines(die.source, ["XBUF"]))
+        const drive = ["VKU", "VKD"]
+        const driveTables = sourceLines(converted.source, drive).map((line) =>
+          normalizeNodes(line, terminals),
         )
+        assert.deepEqual(driveTables, sourceLines(die.source, drive).map(held))
         assert.deepEqual(converted.metadata.omissions, [])
       }
     }

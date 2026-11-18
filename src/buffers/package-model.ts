@@ -9,6 +9,34 @@ import {
   type TextRange,
 } from "./text"
 
+/** Horizontal space permitted before and within a package marker. */
+const HEADER_SPACING = [" ", "\t"]
+/** Carriage return in an IBIS CRLF line ending. */
+const CARRIAGE_RETURN = "\r"
+/** Line feed separating IBIS package data lines. */
+const LINE_FEED = "\n"
+/** Default IBIS line-comment marker. */
+const DEFAULT_COMMENT = "|"
+/** Suffix immediately following the marker in a [Comment Char] declaration. */
+const COMMENT_CHAR_SUFFIX = "_char"
+const COMMENT_CHAR_END = 1 + COMMENT_CHAR_SUFFIX.length
+/** IBIS length limits on package names, text metadata, and physical pin names. */
+const PACKAGE_NAME_LIMIT = 40
+const DESCRIPTION_LIMIT = 59
+const PACKAGE_PIN_LIMIT = 5
+/** IBIS matrix multipliers, case-sensitive and independent of the trailing unit. */
+const MATRIX_SCALES: Record<string, number> = {
+  T: 1e12,
+  G: 1e9,
+  M: 1e6,
+  k: 1e3,
+  m: 1e-3,
+  u: 1e-6,
+  n: 1e-9,
+  p: 1e-12,
+  f: 1e-15,
+}
+
 /** IBIS section 7 lumped package data; matrix order is exactly [Pin Numbers]. */
 export interface PackageModel {
   name: string
@@ -20,6 +48,7 @@ export interface PackageModel {
   L: number[][]
   C: number[][]
 }
+
 interface Section {
   key: string
   argument: string
@@ -34,7 +63,7 @@ function* packageHeaders(text: string): IterableIterator<PackageHeader> {
   for (let start = 0; start < text.length; ) {
     let end = lineEnd(text, start)
     let open = start
-    while (text[open] === " " || text[open] === "\t") open++
+    while (HEADER_SPACING.includes(text[open])) open++
     if (text[open] === "[") {
       const header = text.slice(open + 1, end)
       const close = header.indexOf("]")
@@ -46,11 +75,20 @@ function* packageHeaders(text: string): IterableIterator<PackageHeader> {
           key === "comment char"
         ) {
           let argument = open + close + 2
-          while (text[argument] === " " || text[argument] === "\t") argument++
+          while (HEADER_SPACING.includes(text[argument])) argument++
           // Marker arguments end at CR or LF, even when they contain a Unicode line separator.
-          while (end < text.length && text[end] !== "\r" && text[end] !== "\n")
+          while (
+            end < text.length &&
+            text[end] !== CARRIAGE_RETURN &&
+            text[end] !== LINE_FEED
+          )
             end++
-          yield { key, argument: text.slice(argument, end), start, end }
+          yield {
+            key,
+            argument: text.slice(argument, end),
+            start,
+            end,
+          }
         }
       }
     }
@@ -60,10 +98,8 @@ function* packageHeaders(text: string): IterableIterator<PackageHeader> {
 
 /** Read a comment marker followed by the IBIS "_char" suffix. */
 function commentCharacter(argument: string): string | undefined {
-  if (
-    isLineBreak(argument[0]) ||
-    argument.slice(1, 6).toLowerCase() !== "_char"
-  )
+  const suffix = argument.slice(1, COMMENT_CHAR_END).toLowerCase()
+  if (isLineBreak(argument[0]) || suffix !== COMMENT_CHAR_SUFFIX)
     return undefined
   return argument[0]
 }
@@ -93,15 +129,20 @@ export function parsePackageModel(text: string, name: string): PackageModel {
   let body: string | undefined
   let active: string | undefined
   let start = 0
-  let comment = "|"
-  let initialComment = "|"
+  let comment = DEFAULT_COMMENT
+  let initialComment = DEFAULT_COMMENT
   // Comment changes outside the selected definition still affect its contents.
   for (const header of packageHeaders(text)) {
     const { key, argument } = header
     if (key === "comment char") {
       const next = commentCharacter(argument)
-      if (next === undefined || (argument.length > 6 && !isSpace(argument[6])))
+      const nextCharacter = argument[COMMENT_CHAR_END]
+      if (
+        next === undefined ||
+        (nextCharacter !== undefined && !isSpace(nextCharacter))
+      ) {
         throw new Error(`${name}: invalid [Comment Char]`)
+      }
       comment = next
       continue
     }
@@ -115,25 +156,30 @@ export function parsePackageModel(text: string, name: string): PackageModel {
       continue
     }
     if (key === "end package model") {
-      if (active === name && argument.split(comment)[0].trim())
+      if (active === name && argument.split(comment)[0].trim()) {
         throw new Error(`${name}: unexpected data after [End Package Model]`)
+      }
       if (active === name) body = text.slice(start, header.start)
       active = undefined
     }
   }
   if (active === name) throw new Error(`${name}: missing [End Package Model]`)
-  if (body === undefined)
+  if (body === undefined) {
+    const reason =
+      "external .pkg lookup is unsupported; scalar fallback is forbidden"
     throw new Error(
-      `${name}: [Define Package Model] missing in IBIS source; external .pkg lookup is unsupported; scalar fallback is forbidden`,
+      `${name}: [Define Package Model] missing in IBIS source; ${reason}`,
     )
-  if (!name || name.length > 40)
+  }
+  if (!name || name.length > PACKAGE_NAME_LIMIT)
     throw new Error(`${name}: invalid package name`)
   const sections: Section[] = []
   comment = initialComment
-  const lines = body.split("\n")
+  const lines = body.split(LINE_FEED)
   for (const [i, raw] of lines.entries()) {
-    const lineText =
-      i < lines.length - 1 && raw.endsWith("\r") ? raw.slice(0, -1) : raw
+    let lineText = raw
+    if (i < lines.length - 1 && raw.endsWith(CARRIAGE_RETURN))
+      lineText = raw.slice(0, -1)
     const trimmed = lineText.trimStart()
     const commentHeader = "[comment char]"
     if (
@@ -157,10 +203,11 @@ export function parsePackageModel(text: string, name: string): PackageModel {
     const line = lineText.split(comment)[0].trim()
     if (!line) continue
     const header = sectionHeader(line)
-    if (header?.key === "number of sections")
+    if (header?.key === "number of sections") {
       throw new Error(
         `${name}: package sections are unsupported ([Number Of Sections]); scalar fallback is forbidden`,
       )
+    }
     if (header) {
       sections.push({ ...header, lines: [] })
       continue
@@ -180,48 +227,51 @@ export function parsePackageModel(text: string, name: string): PackageModel {
     if (
       ["manufacturer", "oem", "description", "number of pins"].includes(key)
     ) {
-      if (phase !== "metadata" || key in metadata || lines.length)
+      if (phase !== "metadata" || key in metadata || lines.length) {
         throw new Error(`${name}: invalid or duplicate [${key}]`)
+      }
       metadata[key] = argument
       if (key === "number of pins") {
+        const pinCount = Number(argument)
         if (
           !isUnsignedInteger(argument) ||
-          Number(argument) < 1 ||
-          !Number.isSafeInteger(Number(argument))
-        )
+          pinCount < 1 ||
+          !Number.isSafeInteger(pinCount)
+        ) {
           throw new Error(`${name}: invalid [Number Of Pins]`)
-        count = Number(argument)
+        }
+        count = pinCount
         continue
       }
-      let maxLength = 40
-      if (key === "description") maxLength = 59
+      let maxLength = PACKAGE_NAME_LIMIT
+      if (key === "description") maxLength = DESCRIPTION_LIMIT
       if (!argument || argument.length > maxLength)
         throw new Error(`${name}: invalid [${key}]`)
       continue
     }
     if (key === "pin numbers") {
-      if (phase !== "metadata" || !count || argument)
+      if (phase !== "metadata" || !count || argument) {
         throw new Error(`${name}: [Number Of Pins] must precede [Pin Numbers]`)
+      }
       for (const line of lines) {
         const pinKey = asciiLowerCase(line)
-        if (
-          [...line].some(isSpace) ||
-          line.includes("=") ||
-          line.includes("/") ||
-          pinKey === "fork" ||
-          pinKey === "endfork"
-        )
+        const sectionSyntax =
+          [...line].some(isSpace) || line.includes("=") || line.includes("/")
+        if (sectionSyntax || pinKey === "fork" || pinKey === "endfork") {
           throw new Error(
             `${name}: package section syntax is unsupported in [Pin Numbers]`,
           )
-        if (line.length > 5 || pins.includes(line))
+        }
+        if (line.length > PACKAGE_PIN_LIMIT || pins.includes(line)) {
           throw new Error(`${name}: invalid or duplicate package pin ${line}`)
+        }
         pins.push(line)
       }
-      if (pins.length !== count)
+      if (pins.length !== count) {
         throw new Error(
           `${name}: package pin count ${pins.length} differs from [Number Of Pins] ${count}`,
         )
+      }
       phase = "pins"
       continue
     }
@@ -258,9 +308,10 @@ export function parsePackageModel(text: string, name: string): PackageModel {
     })
     i = end - 1
   }
-  for (const key of ["manufacturer", "oem", "description"])
+  for (const key of ["manufacturer", "oem", "description"]) {
     if (!(key in metadata))
       throw new Error(`${name}: required [${key.toUpperCase()}] missing`)
+  }
   if (phase !== "end") throw new Error(`${name}: missing [End Model Data]`)
   if (!matrices.L || !matrices.C)
     throw new Error(`${name}: required inductance/capacitance matrix missing`)
@@ -298,19 +349,9 @@ function matrixNumber(token: string, label: string): number {
       end = exponent
     }
   }
-  const scales: Record<string, number> = {
-    T: 1e12,
-    G: 1e9,
-    M: 1e6,
-    k: 1e3,
-    m: 1e-3,
-    u: 1e-6,
-    n: 1e-9,
-    p: 1e-12,
-    f: 1e-15,
-  }
-  const scale = scales[token[end]]
-  const unit = scale === undefined ? end : end + 1
+  const scale = MATRIX_SCALES[token[end]]
+  let unit = end
+  if (scale !== undefined) unit++
   for (let i = unit; i < token.length; i++) {
     const char = token[i]
     if ((char >= "a" && char <= "z") || (char >= "A" && char <= "Z")) continue
@@ -333,36 +374,38 @@ function parseMatrix({
   label: string
 }): Matrix {
   const format = sections[0].argument.toLowerCase()
-  if (
-    !["full_matrix", "banded_matrix", "sparse_matrix"].includes(format) ||
-    sections[0].lines.length
+  const supported = ["full_matrix", "banded_matrix", "sparse_matrix"].includes(
+    format,
   )
+  if (!supported || sections[0].lines.length)
     throw new Error(`${label}: invalid matrix format`)
   const banded = format === "banded_matrix"
   const hasBand = sections[1]?.key === "bandwidth"
   let width = pins.length - 1
-  if (
-    banded !== hasBand ||
-    (hasBand &&
-      (!isUnsignedInteger(sections[1].argument) || sections[1].lines.length))
-  )
+  const invalidBandwidth =
+    hasBand &&
+    (!isUnsignedInteger(sections[1].argument) || sections[1].lines.length)
+  if (banded !== hasBand || invalidBandwidth) {
     throw new Error(
       `${label}: [Bandwidth] required only for Banded_matrix before rows`,
     )
+  }
   if (hasBand) width = Number(sections[1].argument)
   if (!Number.isSafeInteger(width) || width >= pins.length)
     throw new Error(`${label}: invalid bandwidth ${width}`)
   const rows = sections.slice(1 + Number(hasBand))
-  if (
-    rows.length !== pins.length ||
-    rows.some((row, i) => row.key !== "row" || row.argument !== pins[i])
+  const outOfOrder = rows.some(
+    (row, i) => row.key !== "row" || row.argument !== pins[i],
   )
+  if (rows.length !== pins.length || outOfOrder)
     throw new Error(`${label}: row order must match [Pin Numbers] exactly`)
   const values = rows.map((row) => row.lines.flatMap(splitWords))
   const circular =
     banded && width > 0 && values.every((row) => row.length === width + 1)
-  if (circular && width > Math.floor((pins.length - 1) / 2))
+  const maxCircularBandwidth = Math.floor((pins.length - 1) / 2)
+  if (circular && width > maxCircularBandwidth) {
     throw new Error(`${label}: circular bandwidth creates redundant entries`)
+  }
   const matrix = pins.map(() => pins.map(() => 0))
   const indices = new Map(pins.map((pin, i) => [pin, i]))
   for (let i = 0; i < rows.length; i++) {
@@ -370,10 +413,11 @@ function parseMatrix({
       const seen = new Set<number>()
       for (const line of rows[i].lines) {
         const tokens = splitWords(line)
-        if (tokens.length !== 2)
+        if (tokens.length !== 2) {
           throw new Error(
             `${label} ${pins[i]}: each sparse (index, value) pair needs its own line`,
           )
+        }
         const j = indices.get(tokens[0])
         if (j === undefined)
           throw new Error(`${label}: unknown sparse column pin ${tokens[0]}`)
@@ -384,19 +428,26 @@ function parseMatrix({
         if (seen.has(j))
           throw new Error(`${label}: duplicate sparse column ${tokens[0]}`)
         seen.add(j)
-        matrix[i][j] = matrix[j][i] = matrixNumber(tokens[1], label)
+        const value = matrixNumber(tokens[1], label)
+        matrix[j][i] = value
+        matrix[i][j] = value
       }
       continue
     }
     let count = width + 1
     if (!circular) count = Math.min(count, pins.length - i)
-    if (values[i].length !== count)
+    const rowLength = values[i].length
+    if (rowLength !== count) {
+      const detail = `expected ${count} entries, got ${rowLength}`
       throw new Error(
-        `${label} ${pins[i]}: expected ${count} entries, got ${values[i].length}; inconsistent bandwidth or truncated row`,
+        `${label} ${pins[i]}: ${detail}; inconsistent bandwidth or truncated row`,
       )
+    }
     for (let k = 0; k < count; k++) {
       const j = (i + k) % pins.length
-      matrix[i][j] = matrix[j][i] = matrixNumber(values[i][k], label)
+      const value = matrixNumber(values[i][k], label)
+      matrix[j][i] = value
+      matrix[i][j] = value
     }
   }
   return matrix

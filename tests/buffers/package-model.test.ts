@@ -11,16 +11,14 @@ function underscoreKeywords(source: string): string {
     if (open < 0) break
     const close = source.indexOf("]", open + 1)
     if (close < 0) break
-    text +=
-      source.slice(start, open + 1) +
-      source
-        .slice(open + 1, close)
-        .replaceAll(" ", "_")
-        .toUpperCase() +
-      "]"
+    const key = source
+      .slice(open + 1, close)
+      .replaceAll(" ", "_")
+      .toUpperCase()
+    text += `${source.slice(start, open + 1)}${key}]`
     start = close + 1
   }
-  return text + source.slice(start)
+  return `${text}${source.slice(start)}`
 }
 
 /** Small original fixture; numeric-looking names still follow the declared pin order. */
@@ -42,26 +40,25 @@ test("IBIS package matrices use named upper-triangle rows, exact widths and expl
   const full = "[Row] Z9\n4nH 1n\n-0.5n\n[Row] A1\n3n 0.2n\n[Row] 7\n2n"
   const sparse =
     "[Row] Z9\n7 -0.5n\nZ9 4n\nA1 1n\n[Row] A1\n7 0.2n\nA1 3n\n[Row] 7\n7 2n"
-  for (const [format, rows] of [
+  const formats = [
     ["Full_matrix", full],
     ["Sparse_matrix", sparse],
     ["Banded_matrix", `[Bandwidth] 2\n${full}`],
-  ]) {
-    const parsed = parsePackageModel(
-      fixture(
-        `[Inductance Matrix] ${format}\n${rows}\n[Capacitance Matrix] ${format}\n${rows}`,
-      ),
-      "Example package",
-    )
+  ]
+  for (const [format, rows] of formats) {
+    const data = `[Inductance Matrix] ${format}\n${rows}\n[Capacitance Matrix] ${format}\n${rows}`
+    const parsed = parsePackageModel(fixture(data), "Example package")
     assert.deepEqual(parsed.pins, ["Z9", "A1", "7"])
     const expected = [
       [4e-9, 1e-9, -5e-10],
       [1e-9, 3e-9, 2e-10],
       [-5e-10, 2e-10, 2e-9],
     ]
-    for (let i = 0; i < 3; i++)
-      for (let j = 0; j < 3; j++)
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
         assert.ok(Math.abs(parsed.L[i][j] - expected[i][j]) < 1e-24)
+      }
+    }
     assert.deepEqual(
       parsed.R,
       Array.from({ length: 3 }, () => [0, 0, 0]),
@@ -70,47 +67,44 @@ test("IBIS package matrices use named upper-triangle rows, exact widths and expl
     assert.equal(parsed.manufacturer, "Example Semiconductor")
   }
   const band = "[Bandwidth] 1\n[Row] Z9\n4n 1n\n[Row] A1\n3n .2n\n[Row] 7\n2n"
-  const ring = band + " -.5n"
+  const ring = `${band} -.5n`
   for (const [rows, corner] of [
     [band, 0],
     [ring, -5e-10],
   ] as const) {
-    const parsed = parsePackageModel(
-      fixture(
-        `[Inductance Matrix] Banded_matrix\n${rows}\n[Capacitance Matrix] Banded_matrix\n${rows}`,
-      ),
-      "Example package",
-    )
+    const data = `[Inductance Matrix] Banded_matrix\n${rows}\n[Capacitance Matrix] Banded_matrix\n${rows}`
+    const parsed = parsePackageModel(fixture(data), "Example package")
     assert.equal(
       parsed.L[0][2],
       corner,
       "last row distinguishes truncated and wrap-around bands",
     )
   }
-  const valid = fixture(
-    `[Resistance Matrix] Banded_matrix\n[Bandwidth] 0\n[Row] Z9\n1m\n[Row] A1\n2m\n[Row] 7\n3m\n[Inductance Matrix] Sparse_matrix\n${sparse}\n[Capacitance Matrix] Full_matrix\n${full}`,
-  )
+  const resistance =
+    "[Resistance Matrix] Banded_matrix\n[Bandwidth] 0\n[Row] Z9\n1m\n[Row] A1\n2m\n[Row] 7\n3m"
+  const inductance = `[Inductance Matrix] Sparse_matrix\n${sparse}`
+  const capacitance = `[Capacitance Matrix] Full_matrix\n${full}`
+  const valid = fixture([resistance, inductance, capacitance].join("\n"))
   assert.equal(parsePackageModel(valid, "Example package").R[1][1], 0.002)
   assert.deepEqual(
     parsePackageModel(underscoreKeywords(valid), "Example package").pins,
     ["Z9", "A1", "7"],
   )
-  assert.deepEqual(
-    parsePackageModel(
-      "[Comment Char] #_char\n" +
-        valid.replace("7 -0.5n", "7 -0.5n # ignored column"),
-      "Example package",
-    ).pins,
-    ["Z9", "A1", "7"],
+  const comment = valid.replace("7 -0.5n", "7 -0.5n # ignored column")
+  const changedMarker = valid.replace(
+    "[Model Data]",
+    "[Comment Char] #_char\n[Model Data]",
   )
   assert.deepEqual(
-    parsePackageModel(
-      "[Comment Char] |_char\n" +
-        valid.replace("[Model Data]", "[Comment Char] #_char\n[Model Data]"),
-      "Example package",
-    ).pins,
+    parsePackageModel(`[Comment Char] #_char\n${comment}`, "Example package")
+      .pins,
     ["Z9", "A1", "7"],
   )
+  const changedComment = parsePackageModel(
+    `[Comment Char] |_char\n${changedMarker}`,
+    "Example package",
+  )
+  assert.deepEqual(changedComment.pins, ["Z9", "A1", "7"])
   for (const [text, error] of [
     [valid.replace("[OEM] Example Packaging\n", ""), /OEM/],
     [valid.replace("[End Model Data]", ""), /End Model Data/],
@@ -153,11 +147,10 @@ test("IBIS package matrices use named upper-triangle rows, exact widths and expl
   const ringRows = five
     .map((pin, i) => `[Row] ${pin}\n${i + 10} ${i + 1} ${i + 2}`)
     .join("\n")
+  const ringBand = `Banded_matrix\n[Bandwidth] 2\n${ringRows}`
+  const ringData = `[Inductance Matrix] ${ringBand}\n[Capacitance Matrix] ${ringBand}`
   const ringModel = parsePackageModel(
-    fixture(
-      `[Inductance Matrix] Banded_matrix\n[Bandwidth] 2\n${ringRows}\n[Capacitance Matrix] Banded_matrix\n[Bandwidth] 2\n${ringRows}`,
-      five,
-    ),
+    fixture(ringData, five),
     "Example package",
   )
   assert.deepEqual(ringModel.L, [

@@ -28,7 +28,11 @@ export function packageCapacitanceWarnings({
 }): string[] {
   const correction = selected?.capacitanceSignCorrection
   if (!correction) return []
-  const warning = `${file} SHA-256 ${sourceSha256}: package model ${correction.packageModel}: negated ${correction.negatedEntries} off-diagonal capacitance entries (uniform positive magnitudes, diagonally dominant rows) before Maxwell sign/passivity validation`
+  const model = `package model ${correction.packageModel}`
+  const entries = `negated ${correction.negatedEntries} off-diagonal capacitance entries`
+  const reason =
+    "(uniform positive magnitudes, diagonally dominant rows) before Maxwell sign/passivity validation"
+  const warning = `${file} SHA-256 ${sourceSha256}: ${model}: ${entries} ${reason}`
   console.warn(warning)
   return [warning]
 }
@@ -57,12 +61,12 @@ export function coupledPackage({
     if (!role) continue
     const bus = component.pinMapping[pin]?.[role]
     if (!bus) continue
-    const first = model.pins.find(
-      (other) =>
+    const first = model.pins.find((other) => {
+      const sameModel =
         component.pins[other]?.model.toLowerCase() ===
-          physical.model.toLowerCase() &&
-        component.pinMapping[other]?.[role] === bus,
-    )
+        physical.model.toLowerCase()
+      return sameModel && component.pinMapping[other]?.[role] === bus
+    })
     if (first) mergedPins[pin] = first
   }
   const selected = [
@@ -80,22 +84,23 @@ export function packageComparisons(
   component: IbisComponent,
   selected: SelectedPackageModel,
 ): string[] {
-  return selected.pins.flatMap((pin, i) =>
-    (["resistance", "inductance", "capacitance"] as const).flatMap(
-      (field, j) => {
-        const scalar = component.pins[pin]?.[field]
-        const matrix = [
-          selected.selfTerms.R,
-          selected.selfTerms.L,
-          selected.selfTerms.C,
-        ][j][i]
-        if (scalar === undefined || scalar === matrix) return []
-        return [
-          `${pin}: [Pin] ${field} ${scalar}; [Package Model] self term ${matrix} (matrix takes precedence before unused-pin reduction)`,
-        ]
-      },
-    ),
-  )
+  const { R, L, C } = selected.selfTerms
+  const terms = [
+    ["resistance", R],
+    ["inductance", L],
+    ["capacitance", C],
+  ] as const
+  const differences: string[] = []
+  for (const [i, pin] of selected.pins.entries()) {
+    for (const [field, values] of terms) {
+      const scalar = component.pins[pin]?.[field]
+      const matrix = values[i]
+      if (scalar === undefined || scalar === matrix) continue
+      const detail = `[Package Model] self term ${matrix} (matrix takes precedence before unused-pin reduction)`
+      differences.push(`${pin}: [Pin] ${field} ${scalar}; ${detail}`)
+    }
+  }
+  return differences
 }
 
 /**
@@ -122,35 +127,37 @@ export function coupledPackageElements({
       elements.push(`RPKG${i} ${node} PKGR${i} ${matrices.R[i][i]}`)
       node = `PKGR${i}`
     }
-    for (let j = 0; j < terminals.length; j++)
-      if (i !== j && matrices.R[i][j] !== 0) {
-        const next = `PKGR${i}_${j}`
-        elements.push(
-          `HPKG${i}_${j} ${node} ${next} VPKGS${j} ${matrices.R[i][j]}`,
-        )
-        node = next
-      }
+    for (let j = 0; j < terminals.length; j++) {
+      if (i === j || matrices.R[i][j] === 0) continue
+      const next = `PKGR${i}_${j}`
+      elements.push(
+        `HPKG${i}_${j} ${node} ${next} VPKGS${j} ${matrices.R[i][j]}`,
+      )
+      node = next
+    }
     elements.push(`LPKG${i} ${node} ${die[i]} ${matrices.L[i][i]}`)
     const reference = matrices.C[i].reduce(
       (sum, capacitance) => sum + capacitance,
       0,
     )
-    if (reference > 0)
+    if (reference > 0) {
+      const half = reference / 2
       elements.push(
-        `CPKG${i}a ${terminals[i]} ${ground} ${reference / 2}`,
-        `CPKG${i}b ${die[i]} ${ground} ${reference / 2}`,
+        `CPKG${i}a ${terminals[i]} ${ground} ${half}`,
+        `CPKG${i}b ${die[i]} ${ground} ${half}`,
       )
+    }
     for (let j = i + 1; j < terminals.length; j++) {
       const coupling =
         matrices.L[i][j] / Math.sqrt(matrices.L[i][i] * matrices.L[j][j])
       if (coupling !== 0)
         elements.push(`KPKG${i}_${j} LPKG${i} LPKG${j} ${coupling}`)
       const capacitance = -matrices.C[i][j] / 2
-      if (capacitance > 0)
-        elements.push(
-          `CPKG${i}_${j}a ${terminals[i]} ${terminals[j]} ${capacitance}`,
-          `CPKG${i}_${j}b ${die[i]} ${die[j]} ${capacitance}`,
-        )
+      if (!(capacitance > 0)) continue
+      elements.push(
+        `CPKG${i}_${j}a ${terminals[i]} ${terminals[j]} ${capacitance}`,
+        `CPKG${i}_${j}b ${die[i]} ${die[j]} ${capacitance}`,
+      )
     }
   }
   return elements
