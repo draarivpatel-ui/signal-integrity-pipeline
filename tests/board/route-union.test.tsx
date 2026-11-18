@@ -4,8 +4,9 @@ import type React from "react"
 import {
   type CircuitJson,
   channelCopperScope,
-  connectedSourceIds,
+  getSourcePortConnectivityMapFromCircuitJson,
   segmentRoutes,
+  sourceNetMembers,
 } from "../../src/board"
 import { renderCoreSignals } from "../support/core-render"
 
@@ -75,10 +76,12 @@ test("TSX touching same-net rail strips form one physical conductor before extra
   const ground = circuit
     .filter((record) => record.type === "source_net")
     .find((net) => net.name === "GND")!
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const scope = channelCopperScope({
     circuit,
-    selected: connectedSourceIds(circuit, rail.source_net_id),
-    reference: connectedSourceIds(circuit, ground.source_net_id),
+    connectivity,
+    selected: sourceNetMembers(connectivity, rail.source_net_id),
+    reference: sourceNetMembers(connectivity, ground.source_net_id),
   })
   const geometry = segmentRoutes(circuit, scope)
   assert.ok(
