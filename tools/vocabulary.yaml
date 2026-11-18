@@ -43,6 +43,7 @@ domain:
   admission: validation and derivation of one declared signal-integrity block
   network: the connected electrical cells and correction elements of routed copper
   execution: a completed invocation through the solver port
+  visualize: draw a solver's current physical work in the shared graphics atlas
   snapshot: a copied and frozen domain value published by a completed stage
   pair: two conductors screened together for mutual coupling
   arc: distance measured along a routed polyline including its bends
@@ -214,6 +215,17 @@ domain:
   via: a plated hole that carries a signal between layers
   waveform: voltage over time at one probe
   wire: a piece of copper that carries a signal; in plain words, a trace or via
+  picture: the real board drawn by circuit-to-svg with a stage drawing on top, both in one camera
+  focus: the board region a stage drawing keeps in view, around the selected copper
+  pane: an opaque panel beside the board in a stage drawing, holding a cross-section or a waveform plot
+  mark: a dot or ring drawn at a pin; a dot for a driver, a ring for a receiver
+  tone: a fixed drawing colour with one meaning, such as the slice cut or a failure
+  strip: a pane showing each selected net unrolled into a to-scale bar
+  eye: a waveform folded every two bit periods so all transitions overlay
+  envelope: the band between the lowest and highest of many probe curves at each moment
+  excursion: how far a curve goes beyond the band most samples stay in
+  camera: the fixed board region a problem's stage drawings show
+  halo: a dark outline behind a mark so it reads over copper
 
 abbreviations:
   ac: alternating current; in DDR thresholds, the level a signal must reach
@@ -244,6 +256,7 @@ abbreviations:
   spice: the standard circuit simulation netlist format (run by ngspice)
   stderr: standard error output of a program
   stdout: standard output of a program
+  svg: Scalable Vector Graphics, the image format of board pictures
   ui: unit interval, one bit period
   url: web address
   v: volt

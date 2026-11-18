@@ -2,9 +2,11 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { BasePipelineSolver } from "@tscircuit/solver-utils"
+import type { GraphicsObject } from "graphics-debug"
 import React from "react"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import type { CircuitJson } from "../../src/board"
+import { boardPictureView } from "../../src/board/board-picture"
 import { sha256 } from "../../src/kernel"
 import { formatSpiceVectors } from "../../src/observation"
 import {
@@ -27,7 +29,6 @@ import {
   transientDurationSeconds,
   voltageNames,
 } from "../fixtures/routed-deck"
-import { routedVisualFixture } from "../fixtures/routed-visual"
 import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
 import { vendorAvailable } from "../support/vendor-models"
@@ -142,6 +143,7 @@ test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
       )
       assert.equal(child.activeSubSolver, undefined)
       assert.ok(Object.keys(child.stats).length > 0)
+      assert.ok(JSON.stringify(child.visualize()).length > 30)
     }
     const output = solver.getOutput()
     assert.equal(output.blocks[0].capture.kind, "completed")
@@ -157,6 +159,7 @@ test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
     })
     await repeat.solveAsync()
     assert.deepEqual(repeat.getOutput(), output)
+    assert.ok(solver.visualize().lines!.length > 0)
     const renamed = structuredClone(input)
     for (const record of renamed.circuitJson) {
       if (
@@ -190,6 +193,45 @@ test("root with no SI blocks seals only admission and the tuple manifest", () =>
     JSON.parse(solver.getOutput().files["stages.json"]),
     routedStages.map((stage) => stage.solverName),
   )
+})
+
+import {
+  assertRouteVisual,
+  routedVisualFixture,
+} from "../support/routed-visual-fixture"
+
+test("two-trace TSX root initial and final visual SVG snapshots", async () => {
+  const { root } = await routedVisualFixture()
+  const initial = new RoutedPipelineSolver(root.inputProblem, synthetic)
+  assertRouteVisual(
+    initial.initialVisualize(),
+    "pipeline",
+    "routed-pipeline-initial",
+  )
+  assertRouteVisual(root.finalVisualize(), "pipeline", "routed-pipeline-final")
+})
+
+test("every completed stage retains its own final drawing with few, readable labels", async () => {
+  const { root } = await routedVisualFixture()
+  const drawing = root.visualize()
+  assert.deepEqual(drawing, root.getSolver("RouteTransientSolver")!.visualize())
+  for (const definition of root.pipelineDef) {
+    const graphics = root.getSolver(definition.solverName)!.visualize()
+    const texts = graphics.texts ?? []
+    assert.ok(
+      texts.length <= 12,
+      `${definition.solverName}: no titles, legends or footers`,
+    )
+    const view = boardPictureView(root.inputProblem.circuitJson, graphics)
+    const scale = Math.min(
+      1000 / (view.maxX - view.minX),
+      540 / (view.maxY - view.minY),
+    )
+    assert.ok(
+      texts.every((text) => text.fontSize! * scale >= 10),
+      `${definition.solverName}: a 1080 x 620 picture keeps every label readable`,
+    )
+  }
 })
 
 /** A sample from the driver weight waveform. */
@@ -272,9 +314,24 @@ test("actual two-block TSX advances every flat stage and invokes transients sequ
   assert.equal(root.stageOutput("RoutedAdmissionSolver").value.length, 2)
   assert.equal(root.stageOutput("RouteSectionsSolver").value.length, 2)
   assert.equal(root.stageOutput("RouteFieldsSolver").value.length, 2)
+  const sections = root.getSolver("RouteSectionsSolver")!.visualize()
+  assertRouteVisual(
+    root.visualizeStage(3),
+    "pipeline",
+    "routed-pipeline-fields",
+  )
+  assert.ok(
+    root.visualize().lines!.length > 0,
+    "stage boundaries draw the incoming bindings input",
+  )
   await root.solveAsync()
   assert.equal(calls, 2)
   assert.equal(root.getOutput().blocks.length, 2)
+  assert.deepEqual(
+    root.getSolver("RouteSectionsSolver")!.visualize(),
+    sections,
+    "later stages preserve the final Sections drawing",
+  )
   assert.equal(root.getSolver("RouteTransientSolver")!.stats.invocations, 2)
   for (const stage of root.pipelineDef.slice(1)) {
     const child = root.getSolver(stage.solverName)!
@@ -283,3 +340,71 @@ test("actual two-block TSX advances every flat stage and invokes transients sequ
     assert.ok(root.timeSpentOnStage[stage.solverName] >= 0)
   }
 })
+
+/** Every frame must give the board picture a finite, nondegenerate camera, including async waits. */
+function assertDrawing(
+  circuit: CircuitJson,
+  drawing: GraphicsObject,
+  state: string,
+): void {
+  const view = boardPictureView(circuit, drawing)
+  assert.ok(
+    Object.values(view).every(Number.isFinite),
+    `${state}: nonfinite camera ${JSON.stringify(view)}`,
+  )
+  assert.ok(
+    view.maxX > view.minX && view.maxY > view.minY,
+    `${state}: degenerate camera`,
+  )
+}
+
+for (const name of ["two-trace"])
+  test(`${name}: every iteration, stage boundary and pending transient has a physical drawing`, async () => {
+    const input = (await routedVisualFixture()).root.inputProblem
+    const circuit: CircuitJson = input.circuitJson
+    let calls = 0
+    const solver: RoutedPipelineSolver = new RoutedPipelineSolver(input, {
+      progress: (): void => undefined,
+      runSolver: async (request) => {
+        calls++
+        const drawing: GraphicsObject = solver.visualize()
+        assertDrawing(circuit, drawing, `${name}: ngspice pending`)
+        assert.equal(
+          drawing.lines!.filter((line) => line.layer === "waveform").length,
+          0,
+          "no curves while ngspice runs",
+        )
+        await new Promise<void>((resolve) => setImmediate(resolve))
+        return synthetic.runSolver(request)
+      },
+    })
+    assertDrawing(circuit, solver.visualize(), `${name}: initial`)
+    while (!solver.solved && !solver.failed) {
+      assert.ok(solver.iterations < 200, "bounded iteration check")
+      const pending = solver.stepAsync()
+      assertDrawing(
+        circuit,
+        solver.visualize(),
+        `${name}: iteration ${solver.iterations} pending`,
+      )
+      await pending
+      assertDrawing(
+        circuit,
+        solver.visualize(),
+        `${name}: iteration ${solver.iterations}`,
+      )
+      if (solver.getStageOutput("RoutedAdmissionSolver"))
+        assert.ok(
+          solver.visualize().lines!.length > 0,
+          `${name}: once admitted, every stage draws the selected copper`,
+        )
+    }
+    assert.equal(solver.failed, false)
+    assert.equal(calls, 1)
+    for (const number of [1, 2, 3, 4, 5, 6])
+      assertDrawing(
+        circuit,
+        solver.visualizeStage(number),
+        `${name}: retained ${number}`,
+      )
+  })
