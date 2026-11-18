@@ -11,6 +11,7 @@ interface InverterProps {
   y: number
   driver: boolean
   powerY?: number
+  clampNet?: string
 }
 
 type IbisAsset = SimulationIbisModelProps["ibisModelAsset"]
@@ -44,9 +45,12 @@ export function Inverter({
   y,
   driver,
   powerY = 2,
+  clampNet,
 }: InverterProps): React.JSX.Element {
   const pin = driver ? "4" : "2"
   const label = driver ? "Y" : "A"
+  const references = referenceLabels()
+  if (clampNet) references.powerClamp = "PC"
   return (
     <>
       <chip
@@ -58,8 +62,13 @@ export function Inverter({
           pin3: "GND",
           pin4: "Y",
           pin5: "VCC",
+          ...(clampNet && { pin6: "PC" }),
         }}
-        connections={{ VCC: "net.VCC", GND: "net.GND" }}
+        connections={{
+          VCC: "net.VCC",
+          GND: "net.GND",
+          ...(clampNet && { PC: clampNet }),
+        }}
         footprint={
           <footprint>
             <smtpad
@@ -78,6 +87,16 @@ export function Inverter({
               height={0.5}
               shape="rect"
             />
+            {clampNet && (
+              <smtpad
+                portHints={["pin6"]}
+                pcbX={0}
+                pcbY={1.2}
+                width={0.2}
+                height={0.2}
+                shape="rect"
+              />
+            )}
             <smtpad
               portHints={["pin5"]}
               pcbX={0}
@@ -103,11 +122,16 @@ export function Inverter({
         componentRef={`.${name}`}
         ibisModelAsset={asset("sn74lvc1g04.ibs")}
         ibisComponentName="LVC1G04_DCK"
-        ibisPinNameToPortLabel={{ [pin]: label, "3": "GND", "5": "VCC" }}
+        ibisPinNameToPortLabel={{
+          [pin]: label,
+          "3": "GND",
+          "5": "VCC",
+          ...(clampNet && { "6": "PC" }),
+        }}
         ibisPinNameToModelName={{
           [pin]: driver ? "LVC1G04_OUT_33" : "LVC1G04_IN_33",
         }}
-        ibisPinNameToReferencePortLabels={{ [pin]: referenceLabels() }}
+        ibisPinNameToReferencePortLabels={{ [pin]: references }}
       />
     </>
   )

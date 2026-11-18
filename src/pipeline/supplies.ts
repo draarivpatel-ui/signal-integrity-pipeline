@@ -11,6 +11,18 @@ import { type SimulationModeling, voltageSourceTerminals } from "../simulation"
 /** Allowed difference between typical IBIS voltages on one reference net. */
 const REFERENCE_VOLTAGE_TOLERANCE_V = 1e-8
 
+type PinReferencePorts = Record<
+  keyof ReturnType<typeof referenceVoltages>,
+  SourcePortId
+> & {
+  external?: SourcePortId
+}
+
+interface ReferenceBias {
+  port: SourcePortId
+  voltage: number
+}
+
 interface BlockSupplyOptions {
   connectivity: ConnectivityMap
   pins: Map<SourcePortId, InspectedPin>
@@ -25,6 +37,18 @@ function netKey(
   id: SourcePortId | SourceNetId,
 ): string {
   return connectivity.getNetConnectedToId(id) ?? id
+}
+
+/** Resolve each reference from the explicit mapping or the inspected primary rail. */
+export function pinReferencePorts(pin: InspectedPin): PinReferencePorts {
+  const refs = pin.model.ibis_pin_name_to_reference_source_port_ids?.[pin.pin]
+  return {
+    pullup: refs?.pullup_reference_source_port_id ?? pin.power,
+    pulldown: refs?.pulldown_reference_source_port_id ?? pin.ground,
+    powerClamp: refs?.power_clamp_reference_source_port_id ?? pin.power,
+    groundClamp: refs?.ground_clamp_reference_source_port_id ?? pin.ground,
+    external: refs?.external_reference_source_port_id,
+  }
 }
 
 /** Include sources reachable from the retained nets without traversing the shared reference. */
@@ -45,9 +69,7 @@ function retainedVoltageSources(
     })
   const nets = new Set([...retained].map((id) => netKey(connectivity, id)))
   for (const pin of pins.values()) {
-    const references =
-      pin.model.ibis_pin_name_to_reference_source_port_ids?.[pin.pin] ?? {}
-    for (const port of [pin.power, pin.ground, ...Object.values(references)]) {
+    for (const port of Object.values(pinReferencePorts(pin))) {
       if (port !== undefined) nets.add(netKey(connectivity, port))
     }
   }
@@ -72,7 +94,7 @@ export function addBlockSupplies(
   circuit: CircuitJson,
   options: BlockSupplyOptions,
 ): void {
-  const { connectivity, pins, settings } = options
+  const { connectivity, pins, reference, settings } = options
   const sources = retainedVoltageSources(circuit, options)
   const sourceNets = new Set([...sources.values()].flat())
   for (const source of circuit.filter(
@@ -80,37 +102,56 @@ export function addBlockSupplies(
   )) {
     if (!sources.has(source)) circuit.splice(circuit.indexOf(source), 1)
   }
-  const netVoltages = new Map<string, number>()
+  const ground = netKey(connectivity, reference)
+  const netVoltages = new Map<string, ReferenceBias>()
+  const externalPorts = new Set<SourcePortId>()
   for (const pin of pins.values()) {
     const voltages = referenceVoltages(pin.buffer)
-    const refs = pin.model.ibis_pin_name_to_reference_source_port_ids![pin.pin]
-    const ports = {
-      pullup: refs.pullup_reference_source_port_id ?? pin.power,
-      pulldown: refs.pulldown_reference_source_port_id ?? pin.ground,
-      powerClamp: refs.power_clamp_reference_source_port_id ?? pin.power,
-      groundClamp: refs.ground_clamp_reference_source_port_id ?? pin.ground,
-    }
-    const net = netKey(connectivity, pin.power)
-    const supplied = sourceNets.has(net) || netVoltages.has(net)
-    for (const [role, voltage] of Object.entries(voltages)) {
-      const key = netKey(connectivity, ports[role as keyof typeof ports])
+    const ports = pinReferencePorts(pin)
+    if (ports.external) externalPorts.add(ports.external)
+    const roles = Object.keys(voltages) as Array<keyof typeof voltages>
+    for (const role of roles) {
+      const voltage = voltages[role]
+      const port = ports[role]
+      if (!Number.isFinite(voltage))
+        throw new Error(
+          `${pin.port}: invalid typical ${role} reference voltage.`,
+        )
+      const key = netKey(connectivity, port)
       const previous = netVoltages.get(key)
       if (
-        previous !== undefined &&
-        Math.abs(previous - voltage) > REFERENCE_VOLTAGE_TOLERANCE_V
+        previous &&
+        Math.abs(previous.voltage - voltage) > REFERENCE_VOLTAGE_TOLERANCE_V
       ) {
         throw new Error(
           `${pin.port}: shared reference has incompatible IBIS typical voltages.`,
         )
       }
-      netVoltages.set(key, voltage)
+      if (!previous) netVoltages.set(key, { port, voltage })
     }
-    if (supplied) continue
+  }
+  for (const port of externalPorts) {
+    const key = netKey(connectivity, port)
+    if (key === ground || netVoltages.has(key) || sourceNets.has(key)) continue
+    throw new Error(
+      `${port}: external IBIS reference has no declared or nominal bias.`,
+    )
+  }
+  for (const [key, { port, voltage }] of netVoltages) {
+    if (key === ground) {
+      if (Math.abs(voltage) > REFERENCE_VOLTAGE_TOLERANCE_V) {
+        throw new Error(
+          `${port}: nonzero IBIS reference shares the channel ground.`,
+        )
+      }
+      continue
+    }
+    if (sourceNets.has(key)) continue
     settings.supplies ??= []
     settings.supplies.push({
-      positive: { sourcePortId: pin.power },
-      negative: { sourcePortId: pin.ground },
-      voltageV: voltages.pullup,
+      positive: { sourcePortId: port },
+      negative: { sourcePortId: reference },
+      voltageV: voltage,
     })
   }
 }
