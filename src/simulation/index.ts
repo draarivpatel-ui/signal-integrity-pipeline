@@ -13,7 +13,11 @@ export {
   generalDeclarations,
   modelRunDefinition,
 } from "./declarations"
-export { electricalSources, namespaceSpice } from "./netlist"
+export {
+  electricalSources,
+  namespaceSpice,
+  voltageSourceTerminals,
+} from "./netlist"
 export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
 export type {
   CircuitNodes,

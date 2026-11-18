@@ -18,7 +18,6 @@ import {
   type InspectedPin,
   inspectPins,
   pinCapabilities,
-  referenceVoltages,
 } from "../buffers"
 import { safeId } from "../kernel"
 import type { RunControls } from "../simulation"
@@ -28,6 +27,7 @@ import {
   blockDurationSeconds,
   endpointPorts,
 } from "./signal-controls"
+import { addBlockSupplies } from "./supplies"
 import { signalTopology, validateSignalGraph } from "./topology"
 
 export { endpointPorts, probeEndpoints, signalBits } from "./signal-controls"
@@ -44,9 +44,6 @@ const STEPS_PER_EDGE = 20
 /** Ensure the maximum step is strictly shorter than the recording. */
 const MIN_STEPS_PER_RECORDING = 2
 
-/** Allowed difference between typical IBIS voltages on one reference net. */
-const REFERENCE_VOLTAGE_TOLERANCE_V = 1e-8
-
 /** Simulation records needed while lowering one selected block. */
 const BLOCK_MODEL_RECORDS = [
   "simulation_ibis_model",
@@ -54,7 +51,6 @@ const BLOCK_MODEL_RECORDS = [
   "simulation_spice_subcircuit",
 ]
 
-type SourceNetKey = string
 type SourceComponent = Extract<
   CircuitJson[number],
   { type: "source_component" }
@@ -605,46 +601,13 @@ function prepareBlock({
       "pcb_stackup must specify plated_hole_copper_thickness for routed vias",
     )
   }
-  const netVoltages = new Map<SourceNetKey, number>()
-  for (const pin of pins.values()) {
-    const voltages = referenceVoltages(pin.buffer)
-    const refs = pin.model.ibis_pin_name_to_reference_source_port_ids![pin.pin]
-    const ports = {
-      pullup: refs.pullup_reference_source_port_id ?? pin.power,
-      pulldown: refs.pulldown_reference_source_port_id ?? pin.ground,
-      powerClamp: refs.power_clamp_reference_source_port_id ?? pin.power,
-      groundClamp: refs.ground_clamp_reference_source_port_id ?? pin.ground,
-    }
-    const net = [...sourceNetMembers(connectivity, pin.power)].sort().join(",")
-    const supplied = netVoltages.has(net)
-    for (const [role, voltage] of Object.entries(voltages)) {
-      const key = [
-        ...sourceNetMembers(connectivity, ports[role as keyof typeof ports]),
-      ]
-        .sort()
-        .join(",")
-      const previous = netVoltages.get(key)
-      if (
-        previous !== undefined &&
-        Math.abs(previous - voltage) > REFERENCE_VOLTAGE_TOLERANCE_V
-      ) {
-        throw new Error(
-          `${pin.port}: shared reference has incompatible IBIS typical voltages.`,
-        )
-      }
-      netVoltages.set(key, voltage)
-    }
-    if (supplied) continue
-    settings.supplies ??= []
-    settings.supplies.push({
-      positive: { sourcePortId: pin.power },
-      negative: { sourcePortId: pin.ground },
-      voltageV: voltages.pullup,
-    })
-  }
-  for (let i = circuit.length - 1; i >= 0; i--) {
-    if (circuit[i].type === "simulation_voltage_source") circuit.splice(i, 1)
-  }
+  addBlockSupplies(circuit, {
+    connectivity,
+    pins,
+    retained,
+    reference,
+    settings,
+  })
   const controls = appendBlockControls(circuit, {
     id,
     block,
