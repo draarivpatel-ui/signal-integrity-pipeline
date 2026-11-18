@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { simulation } from "@tscircuit/core"
 import React from "react"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import { sha256 } from "../../src/kernel"
@@ -66,5 +67,54 @@ ${routedVisualIbis}`)
   assert.equal(
     JSON.parse(manifest.body).models[inverterModelPath],
     sha256(bytes),
+  )
+})
+
+test("all blocks and the manifest use the same captured inputs", async () => {
+  const board = TwoTraceBoard()
+  const circuitJson = await renderCoreSignals(
+    React.cloneElement(
+      board,
+      {},
+      <>
+        {board.props.children}
+        <simulation.pcbtransientchannelsimulation name="ALT" bitRate="50Mbps">
+          <simulation.pcbdriverreceiverchannel
+            name="ALT_DATA"
+            driverRef=".TX0 > .Y"
+            receiverRef=".RX0 > .A"
+          />
+        </simulation.pcbtransientchannelsimulation>
+      </>,
+    ),
+  )
+  const ibisSources = { [inverterModelPath]: routedVisualIbis }
+  const input = { circuitJson, ibisSources, scopeDistanceMm: 1 }
+  const solver = new RoutedAdmissionSolver(input)
+  solver.step()
+  assert.equal(solver.solved, false)
+  ibisSources[inverterModelPath] += "| Modified after the first step\n"
+  signalBlocks(circuitJson)[1].name = "Changed"
+  input.scopeDistanceMm = 2
+  solver.step()
+  const {
+    value: plans,
+    artifacts: [manifest],
+  } = solver.getOutput()
+  assert.deepEqual(
+    plans.map((plan) => plan.bindings.ibisSources[inverterModelPath]),
+    [routedVisualIbis, routedVisualIbis],
+  )
+  assert.deepEqual(
+    plans.map((plan) => plan.name),
+    ["TWO", "ALT"],
+  )
+  assert.deepEqual(
+    plans.map((plan) => plan.sections.scope.lateralDistanceMm),
+    [1, 1],
+  )
+  assert.equal(
+    JSON.parse(manifest.body).models[inverterModelPath],
+    sha256(routedVisualIbis),
   )
 })

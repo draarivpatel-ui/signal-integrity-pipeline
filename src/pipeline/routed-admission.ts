@@ -73,10 +73,9 @@ function modelSourceText(sources: IbisSources): Record<string, string> {
 
 /** Lower one admitted SI block into the routed stage inputs. */
 function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
-  const ibisSources = modelSourceText(input.ibisSources)
   const block = prepareBlockById({
     circuit: input.circuitJson,
-    sources: ibisSources,
+    sources: input.ibisSources,
     blockId: id,
     distanceMm: input.scopeDistanceMm ?? MAX_SCOPE_DISTANCE_MM,
   })
@@ -121,7 +120,7 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
       mappings,
       modeling: block.settings,
       controls: block.controls,
-      ibisSources,
+      ibisSources: input.ibisSources,
       options,
       artifactPrefix,
     },
@@ -130,12 +129,17 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
 
 /** Root admission performs exactly one SI block's lowering per step. */
 export class RoutedAdmissionSolver extends BaseSolver {
+  private readonly input: RoutedProblem
   private ids?: string[]
   private readonly plans: RoutedBlockPlan[] = []
   private output?: Produced<RoutedBlockPlan[]>
-  /** No native capability is available during admission. */
-  constructor(private readonly input: RoutedProblem) {
+  /** Capture a single board and model version for the whole admission run. */
+  constructor(input: RoutedProblem) {
     super()
+    this.input = snapshot({
+      ...input,
+      ibisSources: modelSourceText(input.ibisSources),
+    })
   }
   /** Shared prepareBlockById retains the existing intent, warnings and model policy. */
   override _step(): void {
@@ -184,7 +188,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
     if (!this.output) throw new Error("Routed admission is incomplete")
     return this.output
   }
-  /** Original input only. */
+  /** The input captured at construction. */
   override getConstructorParams(): ConstructorParameters<
     typeof RoutedAdmissionSolver
   > {
