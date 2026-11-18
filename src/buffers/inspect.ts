@@ -338,7 +338,7 @@ type PinCapabilities = {
   disable: boolean
 }
 
-/** Selected model capabilities; unsupported types cannot acquire invented receive/disable modes. */
+/** Drive, receive and disable roles for the pinned converter’s supported IBIS model types. */
 export function pinCapabilities(pin: InspectedPin): PinCapabilities {
   switch (pin.buffer.type) {
     case "input":
@@ -349,8 +349,6 @@ export function pinCapabilities(pin: InspectedPin): PinCapabilities {
       return { drive: true, receive: true, disable: true }
     case "3-state":
       return { drive: true, receive: false, disable: true }
-    case "terminator":
-      return { drive: false, receive: true, disable: false }
     default:
       throw new Error(
         `${pin.port}: unsupported IBIS model capability ${pin.buffer.type}`,
