@@ -21,7 +21,6 @@ domain:
   bandwidth: the number of stored off-diagonals in a banded IBIS package matrix
   header: a named section or directive at the start of a line
   hold: the interval over which a switching coefficient stays fixed
-  ramp: the rise or fall slope specified for an IBIS buffer
   open: disconnected from the electrical network
   control: pin enable state or drive timing for a simulation
   transient: a circuit simulation that follows voltage and current through time
