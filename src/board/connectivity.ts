@@ -42,9 +42,11 @@ export function passiveBridges(circuit: CircuitJson, excluded: ReadonlySet<Sourc
     if (pins) pins.push(port.source_port_id)
     else ports.set(port.source_component_id, [port.source_port_id])
   }
+  const passiveTypes = ['simple_resistor', 'simple_capacitor', 'simple_inductor']
   const connections: PassiveBridge[] = []
   for (const component of circuit) {
-    if (component.type !== 'source_component' || !['simple_resistor', 'simple_capacitor', 'simple_inductor'].includes(component.ftype)) continue
+    if (component.type !== 'source_component') continue
+    if (!passiveTypes.includes(component.ftype)) continue
     const pins = ports.get(component.source_component_id)
     if (pins?.length === 2 && pins.every(pin => !excluded.has(pin))) connections.push(pins as PassiveBridge)
   }
