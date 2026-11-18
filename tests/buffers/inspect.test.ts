@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import {
   convertIbisModelToSpice,
   type IbisConversionMetadata,
+  type IbisModelDefinition,
 } from "@tscircuit/ibis-to-spice"
 import { type InspectedPin, inspectPins } from "../../src/buffers/inspect"
 import {
@@ -30,9 +31,11 @@ function convertedReferences(
   {
     pinMap,
     extraSignal,
+    references,
   }: {
     pinMap: InspectionBoard["pinMap"]
     extraSignal?: string
+    references?: IbisModelDefinition["references"]
   },
 ): ReferencePorts {
   const pinStates = { [pinMap[1]]: { mode: "input" as const } }
@@ -44,6 +47,7 @@ function convertedReferences(
       component: "Device",
       corner: "typical",
       pinMap,
+      references,
       packagePolicy: "omit",
     },
     {
@@ -66,8 +70,7 @@ test("rail bus aliases resolve to the mapped POWER and GND pin ports", async () 
   assert.equal(expected.pullup, board.pinMap[2])
   assert.equal(expected.pulldown, board.pinMap[3])
   const pin = inspectedPin(board, text)
-  assert.equal(pin.power, expected.pullup)
-  assert.equal(pin.ground, expected.pulldown)
+  assert.deepEqual(pin.references, expected)
 })
 
 test("a signal named after a pin mapping bus cannot serve as its rail", async () => {
@@ -82,5 +85,40 @@ test("a signal named after a pin mapping bus cannot serve as its rail", async ()
     extraSignal: board.pinMap[4],
   })
   assert.equal(expected.pullup, board.pinMap[2])
-  assert.equal(inspectedPin(board, text).power, expected.pullup)
+  assert.deepEqual(inspectedPin(board, text).references, expected)
+})
+
+test("an explicit clamp rail preserves the separate vendor pullup rail", async () => {
+  const board = await ibisInspectionBoard({
+    extraPin: true,
+    powerClamp: "VCLAMP",
+  })
+  const text = inspectionIbis({
+    mapping: railMapping
+      .replaceAll("GROUND_BUS", "VSS")
+      .replaceAll("POWER_BUS", "VDD"),
+    extraPin: "4 VCLAMP POWER",
+  })
+  const expected = convertedReferences(text, {
+    ...board,
+    references: { 1: { powerClamp: board.pinMap[4] } },
+  })
+  assert.equal(expected.pullup, board.pinMap[2])
+  assert.equal(expected.powerClamp, board.pinMap[4])
+  assert.deepEqual(inspectedPin(board, text).references, expected)
+})
+
+test("a separate clamp bus resolves even without a channel override", async () => {
+  const board = await ibisInspectionBoard({ extraPin: true })
+  const text = inspectionIbis({
+    mapping: `[Pin Mapping] pulldown_ref pullup_ref power_clamp_ref
+1 VSS VDD CLAMP_BUS
+2 NC VDD NC
+3 VSS NC NC
+4 NC NC CLAMP_BUS`,
+    extraPin: "4 VCLAMP POWER",
+  })
+  const expected = convertedReferences(text, board)
+  assert.equal(expected.powerClamp, board.pinMap[4])
+  assert.deepEqual(inspectedPin(board, text).references, expected)
 })

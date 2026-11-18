@@ -8,6 +8,7 @@ const powerPins = { 1: "DQ", 2: "VDD", 3: "VSS" }
 
 type BoardOptions = {
   extraPin?: boolean
+  powerClamp?: string
 }
 
 type InspectionBoard = {
@@ -16,9 +17,10 @@ type InspectionBoard = {
 }
 
 /** Render a chip bound to synthetic IBIS text, with an optional fourth mapped pin. */
-export async function ibisInspectionBoard({
-  extraPin = false,
-}: BoardOptions = {}): Promise<InspectionBoard> {
+export async function ibisInspectionBoard(
+  options: BoardOptions = {},
+): Promise<InspectionBoard> {
+  const { extraPin, powerClamp } = options
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
   circuit.add(
     <board width={10} height={10} schematicDisabled routeRemaining={false}>
@@ -52,6 +54,9 @@ export async function ibisInspectionBoard({
         ibisComponentName="Device"
         ibisPinNameToPortLabel={
           extraPin ? { ...powerPins, 4: "VCLAMP" } : powerPins
+        }
+        ibisPinNameToReferencePortLabels={
+          powerClamp ? { 1: { powerClamp } } : undefined
         }
       />
     </board>,
