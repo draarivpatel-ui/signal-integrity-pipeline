@@ -56,3 +56,25 @@ C_comp 1p 1p 1p
 [Voltage Range] 3.3 3.3 3.3
 [End]
 `
+
+const outputModel = routedVisualIbis
+  .split("[Model] LVC1G04_OUT_33")[1]
+  .split("[Model] LVC1G04_IN_33")[0]
+  .replace("Model_type Output", "Model_type I/O")
+
+export const differentialIbis = `[IBIS Ver] 4.2
+[Component] SN65HVD72D
+[Manufacturer] Synthetic fixture
+[Package]
+R_pkg 0 0 0
+L_pkg 0 0 0
+C_pkg 0 0 0
+[Pin] signal_name model_name
+5 GND GND
+6 A a_b_p
+7 B a_b_n
+8 VCC POWER
+[Diff_pin] inv_pin vdiff tdelay_typ tdelay_min tdelay_max
+6 7 0.2V 0 0 0
+[Model] a_b_p${outputModel}[Model] a_b_n${outputModel}[End]
+`
