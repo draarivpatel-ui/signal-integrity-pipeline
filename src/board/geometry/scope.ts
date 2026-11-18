@@ -63,6 +63,7 @@ export interface CopperScope {
     pours: number
   }
   approximation: string
+  retainedSourceIds: SourceConnectionGroup
 }
 
 /** Bounds in board millimetres and the inclusive span of occupied layer indices. */
@@ -614,5 +615,6 @@ export function channelCopperScope({
       distanceMm,
       openPads: openPadIds.length,
     }),
+    retainedSourceIds: [...retained],
   }
 }

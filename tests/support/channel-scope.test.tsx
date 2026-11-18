@@ -10,9 +10,11 @@ import { prepareBlocks, renderSignals } from "./signal-render"
 function Board({
   unrelatedY = 20,
   neighbour = false,
+  termination = false,
 }: {
   unrelatedY?: number
   neighbour?: boolean
+  termination?: boolean
 }): React.JSX.Element {
   return (
     <board
@@ -37,6 +39,43 @@ function Board({
             to=".QUIET_RX > .A"
             width={0.2}
             pcbPath={[".QUIET_TX > .Y", ".QUIET_RX > .A"]}
+          />
+        </>
+      )}
+      {termination && (
+        <>
+          <resistor
+            name="QUIET_TERM"
+            resistance={50}
+            pcbX={7}
+            pcbY={0.8}
+            connections={{ pin2: "net.GND" }}
+            footprint={
+              <footprint>
+                <smtpad
+                  portHints={["pin1"]}
+                  pcbX={-0.2}
+                  pcbY={0}
+                  width={0.25}
+                  height={0.25}
+                  shape="rect"
+                />
+                <smtpad
+                  portHints={["pin2"]}
+                  pcbX={0.2}
+                  pcbY={0}
+                  width={0.25}
+                  height={0.25}
+                  shape="rect"
+                />
+              </footprint>
+            }
+          />
+          <trace
+            from=".QUIET_RX > .A"
+            to=".QUIET_TERM > .pin1"
+            width={0.1}
+            pcbPath={[".QUIET_RX > .A", ".QUIET_TERM > .pin1"]}
           />
         </>
       )}
@@ -143,4 +182,40 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
     branched.settings.copperScope.pcbTraceIds.length >
       branched.settings.copperScope.selectedPcbTraceIds.length,
   )
+})
+
+test("a shunt on retained quiet copper remains a modeled load", async () => {
+  const circuit = await renderSignals(<Board neighbour termination />, [
+    "pcb_port_not_connected_error",
+  ])
+  const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
+  const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
+  const termination = circuit.find(
+    (record) =>
+      record.type === "source_component" && record.name === "QUIET_TERM",
+  )
+  assert.ok(termination?.type === "source_component")
+  const signalPort = circuit.find(
+    (record) =>
+      record.type === "source_port" &&
+      record.source_component_id === termination.source_component_id &&
+      record.pin_number === 1,
+  )
+  assert.ok(signalPort?.type === "source_port")
+  const trace = circuit.find(
+    (record) =>
+      record.type === "source_trace" &&
+      record.connected_source_port_ids.includes(signalPort.source_port_id),
+  )
+  assert.ok(trace?.type === "source_trace")
+  const route = circuit.find(
+    (record) =>
+      record.type === "pcb_trace" &&
+      record.source_trace_id === trace.source_trace_id,
+  )
+  assert.ok(route?.type === "pcb_trace")
+  assert.ok(block.settings.copperScope.pcbTraceIds.includes(route.pcb_trace_id))
+  assert.deepEqual(block.settings.passiveComponents, [
+    { sourceComponentId: termination.source_component_id },
+  ])
 })
