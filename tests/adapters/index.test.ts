@@ -1,19 +1,24 @@
 // Copied from tests/node.test.ts, repointed at src/adapters. Assertions unchanged.
-import test from 'node:test'
+import { afterEach, test } from 'bun:test'
 import assert from 'node:assert/strict'
 import {mkdtemp,writeFile,readFile,rm,stat} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {createNativeSolver,loadIbisSources} from '../../src/adapters'
 
+const temporaryRoots: string[] = []
+afterEach(async () => {
+  for (const path of temporaryRoots.splice(0)) await rm(path, { recursive: true, force: true })
+})
+
 /** Makes a scratch directory that is deleted when the test finishes. */
-const temporary=async(t: {after:(fn:()=>Promise<void>)=>void}): Promise<string>=>{
+const temporary=async(): Promise<string>=>{
   const path=await mkdtemp(join(tmpdir(),'pcb-node-test-'))
-  t.after(()=>rm(path,{recursive:true,force:true}))
+  temporaryRoots.push(path)
   return path
 }
-test('native adapter isolates requests, captures files and logs, and cleans up success and failure',async t=>{
-  const root=await temporary(t)
+test('native adapter isolates requests, captures files and logs, and cleans up success and failure', async () => {
+  const root=await temporary()
   const entry=join(root,'solver.mjs')
   const location=join(root,'location.txt')
   const toolSource = `import { readFileSync, writeFileSync } from 'node:fs'
@@ -54,4 +59,4 @@ if (process.argv.includes('timeout')) {
   await assert.rejects(stat(await readFile(location,'utf8')),{code:'ENOENT'})
   await assert.rejects(solver({...request,files:{'../escape':'bad'}}),/file_path/)
   assert.throws(()=>createNativeSolver({timeoutMs:0}),/native_timeout/)
-})
+}, 15_000)

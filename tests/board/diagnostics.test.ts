@@ -1,5 +1,5 @@
 // One minimal trigger per board diagnostic code not already exercised by the other board tests.
-import test from 'node:test'
+import { test } from 'bun:test'
 import assert from 'node:assert/strict'
 import { resolveRouteVias, selectPort, subcircuitTree, type PcbTrace } from '../../src/board'
 

@@ -1,7 +1,7 @@
 // Every code in src/simulation/diagnostics.ts raised with today's code AND message (module rule M3).
 // MESSAGES are the pre-module implementation's messages, recorded on 2026-11-07 while the old flat src/
 // still existed and this test compared old and new raisers directly.
-import test from 'node:test'
+import { test } from 'bun:test'
 import assert from 'node:assert/strict'
 import {Diagnostic} from '../../src/kernel/index.js'
 import {fixtureGeometry as geometryFromCircuitJson} from './fixtures.mjs'

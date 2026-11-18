@@ -1,5 +1,5 @@
 // Copied from tests/model-source.test.mjs.
-import test from 'node:test'
+import { test } from 'bun:test'
 import assert from 'node:assert/strict'
 import {loadModelSource} from '../../src/buffers/index.js'
 import {sha256} from '../../src/kernel/index.js'

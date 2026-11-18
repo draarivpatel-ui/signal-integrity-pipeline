@@ -34,9 +34,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: npm install --global pver@0.0.43
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm test:package
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run test:package
       - name: Tag the next version
         # git + package-json only: bump the version in the tag commit and push
         # the tag. No npm publication and no push to main.

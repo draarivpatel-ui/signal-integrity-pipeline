@@ -22,7 +22,7 @@ This is the only agent rules file. Do not add CLAUDE.md, GEMINI.md, .cursorrules
 ## Code
 
 - Install dependencies with `pnpm install --frozen-lockfile`.
-- `pnpm lint && pnpm check:modules && pnpm check:vocabulary && pnpm typecheck && pnpm test` must pass before a PR is ready.
+- `bun run lint && bun run check:modules && bun run check:vocabulary && bun run typecheck && bun test` must pass before a PR is ready.
 - Relative imports have no extension: `from './stages'`, and `from '../board'` for another module (enforced by `tests/tooling/imports.test.ts`). The build adds `.js` back in `dist/`.
 - Module rules, verification and migration notes: `docs/ARCHITECTURE.md`.
 - Output must stay byte-identical unless the PR says otherwise: `tests/compat/` pins exports and error codes. Preserve artifact paths and hashes for any stages you add.
@@ -105,7 +105,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 - The only approved paths for board-derived example files are `examples/level4-ddr3-write/` and `examples/ddr3-parts.tsx`.
 - Check `git status` and the diff before every commit.
 
-## Lint (`pnpm lint`, config in `eslint.config.mjs`, custom rules in `tools/eslint/rules.mjs`)
+## Lint (`bun run lint`, config in `eslint.config.mjs`, custom rules in `tools/eslint/rules.mjs`)
 
 | Rule | What it means |
 |---|---|
@@ -118,7 +118,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 | TypeScript files over 500 lines warn | Split the file. If it is important to keep it whole, add `/* eslint-disable local/max-file-lines -- <reason> */` at the top. |
 | One test file per source file | `tests/<module>/<name>.test.ts` tests `src/<module>/<name>.ts` (or `<name>/index.ts`). Many tests per file are fine. `tests/compat`, `tests/tooling` and `tests/support` test the package as a whole and are exempt. |
 
-## Naming vocabulary (`pnpm check:vocabulary`, dictionary in `tools/vocabulary.yaml`)
+## Naming vocabulary (`bun run check:vocabulary`, dictionary in `tools/vocabulary.yaml`)
 
 Build names in `src/` from the words in `tools/vocabulary.yaml`. The checker splits every declared name into words (`foldProbeEye` → fold, probe, eye) and reports the share of names made only of dictionary words. It must stay at or above the file's `threshold` (85%). 100% is not the goal.
 

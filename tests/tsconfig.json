@@ -1,5 +1,15 @@
 {
   "extends": "../tsconfig.json",
-  "compilerOptions": { "rootDir": "..", "noEmit": true },
-  "include": ["**/*.test.ts"]
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "types": [
+      "bun",
+      "node"
+    ]
+  },
+  "include": [
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
 }

@@ -30,6 +30,9 @@ importers:
       '@tscircuit/props':
         specifier: 0.0.735
         version: 0.0.735(circuit-json@0.0.552(format-si-unit@0.0.12(typescript@5.9.3)))(react@19.2.4)(zod@3.25.76)
+      '@types/bun':
+        specifier: 1.4.4
+        version: 1.4.4
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
@@ -642,6 +645,9 @@ packages:
       circuit-json: '*'
       transformation-matrix: '*'
       zod: '*'
+
+  '@types/bun@1.4.4':
+    resolution: {integrity: sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ==}
 
   '@types/esrecurse@4.3.1':
     resolution: {integrity: sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw==}
@@ -2181,6 +2187,10 @@ snapshots:
       parsel-js: 1.2.3
       transformation-matrix: 3.1.0
       zod: 3.25.76
+
+  '@types/bun@1.4.4':
+    dependencies:
+      bun-types: 1.4.4
 
   '@types/esrecurse@4.3.1': {}
 

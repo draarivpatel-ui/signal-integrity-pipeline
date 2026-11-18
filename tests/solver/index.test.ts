@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { test } from 'bun:test'
 import assert from 'node:assert/strict'
 import { invoke, type SolverContext, type SolverResult, type SolverRequest } from '../../src/solver'
 import { rootScope } from '../../src/kernel'

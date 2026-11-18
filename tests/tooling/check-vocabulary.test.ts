@@ -1,4 +1,4 @@
-import test from 'node:test'
+import { afterEach, test } from 'bun:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
@@ -9,6 +9,11 @@ import {
   candidates, collectNames, formatReport, isKnown, parseArgs, parseVocabulary, scoreNames, scoreProject, splitWords,
   VocabularyError, type NameEntry, type Vocabulary,
 } from '../../scripts/check-vocabulary'
+
+const temporaryRoots: string[] = []
+afterEach(() => {
+  for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
 
 const SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), '../../scripts/check-vocabulary.ts')
 
@@ -33,9 +38,9 @@ avoid:
 const vocab = (threshold: number = 85): Vocabulary => ({ ...parseVocabulary(DICTIONARY), threshold })
 
 /** Writes files into a fresh temp repo, removed after the test. */
-function repo(t: { after(fn: () => void): void }, files: Record<string, string>): string {
+function repo(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'check-vocabulary-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  temporaryRoots.push(root)
   for (const [path, body] of Object.entries({ 'tools/vocabulary.yaml': DICTIONARY, ...files })) {
     mkdirSync(dirname(join(root, path)), { recursive: true })
     writeFileSync(join(root, path), body)
@@ -313,8 +318,8 @@ test('scoreNames: unknown words ranked by distinct names, then alphabetically, w
   assert.match(text, /^ {2}sensor +1 name {4}avoid: use "probe"$/m)
 })
 
-test('scoreProject: walks src/, assigns modules, skips generated files', t => {
-  const root = repo(t, {
+test('scoreProject: walks src/, assigns modules, skips generated files', () => {
+  const root = repo({
     'src/index.ts': 'export const readValue = 1\n',
     'src/board/index.ts': 'export function buildLane(laneIndex: number): number { return laneIndex }\n',
     'src/board/deep/grid.ts': 'export const meshGrid = 1\nconst laneIndex = 2\n',
@@ -330,27 +335,27 @@ test('scoreProject: walks src/, assigns modules, skips generated files', t => {
   assert.equal(Number(r.score.toFixed(2)), 55.56)
 })
 
-test('CLI: exit codes, --json and invalid dictionaries', t => {
+test('CLI: exit codes, --json and invalid dictionaries', () => {
   /** Runs the script against a temp repo and returns its exit code and output. */
   const run = (root: string, ...args: string[]): {
     status: number | null
     stdout: string
     stderr: string
   } =>
-    spawnSync(process.execPath, ['--import', 'tsx', SCRIPT, '--root', root, ...args], { encoding: 'utf8' })
-  const good = repo(t, { 'src/board/index.ts': 'export const laneCount = 1\nconst probeValue = 2\n' })
+    spawnSync(process.execPath, [SCRIPT, '--root', root, ...args], { encoding: 'utf8' })
+  const good = repo({ 'src/board/index.ts': 'export const laneCount = 1\nconst probeValue = 2\n' })
   const pass = run(good)
   assert.equal(pass.status, 0, pass.stderr)
   assert.match(pass.stdout, /^Vocabulary: 100\.0% of 2 names follow the dictionary \(target 85%\) ✓/)
 
-  const bad = repo(t, { 'src/board/index.ts': 'export const meshCount = 1\n' })
+  const bad = repo({ 'src/board/index.ts': 'export const meshCount = 1\n' })
   const fail = run(bad, '--json')
   assert.equal(fail.status, 1)
   const json = JSON.parse(fail.stdout)
   assert.equal(json.pass, false)
   assert.deepEqual(json.unknown, [{ word: 'mesh', names: 1, examples: ['meshCount'] }])
 
-  const broken = repo(t, { 'tools/vocabulary.yaml': 'general:\n  - Bad\n', 'src/a/index.ts': '' })
+  const broken = repo({ 'tools/vocabulary.yaml': 'general:\n  - Bad\n', 'src/a/index.ts': '' })
   const invalid = run(broken)
   assert.equal(invalid.status, 1)
   assert.match(invalid.stderr, /tools\/vocabulary\.yaml: line 2: "Bad" is not a valid word/)

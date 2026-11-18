@@ -1,4 +1,4 @@
-// Lint rules (see AGENTS.md "Lint"). Run with `pnpm lint`.
+// Lint rules (see AGENTS.md "Lint"). Run with `bun run lint`.
 import tseslint from 'typescript-eslint'
 import jsdoc from 'eslint-plugin-jsdoc'
 import local from './tools/eslint/rules.mjs'

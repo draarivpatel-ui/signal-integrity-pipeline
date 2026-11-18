@@ -1,5 +1,5 @@
 // Moved from tests/package-exports.test.mjs; imports repointed to the new modules. Assertions unchanged.
-import test from 'node:test'
+import { test } from 'bun:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 

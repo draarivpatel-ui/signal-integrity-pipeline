@@ -30,14 +30,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --import tsx --test 'tests/**/*.test.mjs' 'tests/**/*.test.ts'",
+    "test": "bun test",
     "typecheck": "tsc --noEmit && tsc -p tests/tsconfig.json",
     "build": "node scripts/clean-dist.mjs && tsc && node scripts/fix-dist-imports.mjs && node scripts/bundle.mjs",
     "prepack": "npm run build",
-    "pretest": "npm run build",
     "test:package": "node --import tsx scripts/test-package.mjs",
-    "check:modules": "tsx scripts/check-modules.ts",
-    "check:vocabulary": "tsx scripts/check-vocabulary.ts",
+    "check:modules": "bun scripts/check-modules.ts",
+    "check:vocabulary": "bun scripts/check-vocabulary.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
@@ -51,6 +50,7 @@
   "devDependencies": {
     "@tscircuit/core": "0.0.2409",
     "@tscircuit/props": "0.0.735",
+    "@types/bun": "1.4.4",
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "circuit-json": "0.0.552",
