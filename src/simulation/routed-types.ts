@@ -7,9 +7,6 @@ export interface RoutedCompileOptions {
   refinement: number
   durationSeconds: number
   stepSeconds: number
-  panels?: number
-  currentToleranceA?: number
-  cellsPerRise?: number
 }
 export interface RouteBindingsInput {
   circuitJson: CircuitJson
