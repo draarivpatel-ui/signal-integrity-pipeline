@@ -12,8 +12,17 @@ import {rootScope} from '../../src/kernel'
 import type {CircuitJson} from '../../src/board'
 
 type T={after:(fn:()=>Promise<void>|void)=>void}
-type Sandbox={root:string;tmp:string;tool:(body:string)=>string[];cwdFile:string;workdirGone:()=>Promise<void>}
-/** Points TMPDIR at a fresh private directory for one test and restores it afterwards, so leftover workdirs are easy to spot. */
+type Sandbox={
+  root:string
+  tmp:string
+  tool:(body:string)=>string[]
+  cwdFile:string
+  workdirGone:()=>Promise<void>
+}
+/**
+ * Points TMPDIR at a fresh private directory for one test and restores it afterwards, so leftover workdirs
+ * are easy to spot.
+ */
 const sandbox=async(t: T): Promise<Sandbox>=>{
   const root=await mkdtemp(join(tmpdir(),'pcb-adapters-test-'))
   const tmp=join(root,'tmp')
@@ -28,8 +37,11 @@ const sandbox=async(t: T): Promise<Sandbox>=>{
   })
   // The fake tool records its cwd outside the workdir, so we can assert that exact dir is gone.
   const cwdFile=join(root,'cwd.txt')
-  /** Node `-e` args that record the tool's cwd before running `body`, so the test can check that workdir is gone later. */
-  const tool=(body: string): string[]=>[ '-e',`require('node:fs').writeFileSync(${JSON.stringify(cwdFile)},process.cwd());${body}`]
+  /** Node `-e` args that record the working directory before running `body`, so the test can check for cleanup. */
+  const tool=(body: string): string[]=>[
+    '-e',
+    `require('node:fs').writeFileSync(${JSON.stringify(cwdFile)},process.cwd());${body}`,
+  ]
   /** Asserts the private tmp dir is empty again and the exact workdir the tool ran in no longer exists. */
   const workdirGone=async(): Promise<void>=>{
     assert.deepEqual(await readdir(tmp),[])
@@ -47,10 +59,30 @@ const code=(expected: string,message?: RegExp): (error: unknown)=>boolean=>(erro
 test('unsafe input or output path is rejected before any workdir exists',async t=>{
   const {tmp}=await sandbox(t)
   const solver=createNativeSolver({tools:{ngspice:process.execPath}})
-  for(const files of [{'../escape':'x'},{'/abs':'x'},{'a/./b':'x'},{'a\\b':'x'},{'c:x':'x'},{'':'x'}] as Record<string,string>[])
-    await assert.rejects(solver({solver:'ngspice',files,args:['-e',''],outputFiles:[]}),code('file_path',/Expected a safe project-relative file path/))
+  for(const files of [
+    {'../escape':'x'},
+    {'/abs':'x'},
+    {'a/./b':'x'},
+    {'a\\b':'x'},
+    {'c:x':'x'},
+    {'':'x'},
+  ] as Record<string,string>[])
+    await assert.rejects(
+      solver({
+        solver: 'ngspice',
+        files,
+        args: ['-e', ''],
+        outputFiles: [],
+      }),
+      code('file_path', /Expected a safe project-relative file path/),
+    )
   await assert.rejects(solver({solver:'ngspice',files:{},args:['-e',''],outputFiles:['../out']}),code('file_path'))
-  await assert.rejects(solver({solver:'spice' as 'ngspice',files:{},args:[],outputFiles:[]}),code('native_solver',/Unknown solver/))
+  await assert.rejects(solver({
+    solver:'spice' as 'ngspice',
+    files:{},
+    args:[],
+    outputFiles:[],
+  }),code('native_solver',/Unknown solver/))
   assert.deepEqual(await readdir(tmp),[])
 })
 
@@ -58,7 +90,15 @@ test('input write failure after mkdtemp still removes the workdir',async t=>{
   const {tmp}=await sandbox(t)
   const solver=createNativeSolver({tools:{ngspice:process.execPath}})
   // 'a' is written as a file, then 'a/b' needs it to be a directory.
-  await assert.rejects(solver({solver:'ngspice',files:{'a':'x','a/b':'y'},args:['-e',''],outputFiles:[]}),{code:'EEXIST'})
+  await assert.rejects(
+    solver({
+      solver: 'ngspice',
+      files: { a: 'x', 'a/b': 'y' },
+      args: ['-e', ''],
+      outputFiles: [],
+    }),
+    { code: 'EEXIST' },
+  )
   assert.deepEqual(await readdir(tmp),[])
 })
 
@@ -78,7 +118,12 @@ test('spawn failure (nonexistent tool) rejects native_solver and removes the wor
 test('nonzero exit rejects native_solver with logs and removes the workdir',async t=>{
   const {tool,workdirGone}=await sandbox(t)
   const solver=createNativeSolver({tools:{ngspice:process.execPath}})
-  await assert.rejects(solver({solver:'ngspice',files:{'deck.cir':'x'},args:tool(`process.stdout.write('out');process.stderr.write('err');process.exit(3)`),outputFiles:[]}),
+  await assert.rejects(solver({
+    solver:'ngspice',
+    files:{'deck.cir':'x'},
+    args:tool(`process.stdout.write('out');process.stderr.write('err');process.exit(3)`),
+    outputFiles:[],
+  }),
     code('native_solver',/ngspice: Command failed[\s\S]*\nout\nerr$/))
   await workdirGone()
 })
@@ -110,11 +155,19 @@ test('timeout kills the tool, rejects native_timeout and removes the workdir',as
 test('missing requested output is omitted (solver.invoke rejects native_output) and the workdir is removed',async t=>{
   const {tool,workdirGone}=await sandbox(t)
   const solver=createNativeSolver({tools:{ngspice:process.execPath}})
-  const request={solver:'ngspice' as const,files:{'deck.cir':'x'},args:tool(`require('node:fs').writeFileSync('extra.dat','e')`),outputFiles:['waveform.dat']}
+  const request={
+    solver:'ngspice' as const,
+    files:{'deck.cir':'x'},
+    args:tool(`require('node:fs').writeFileSync('extra.dat','e')`),
+    outputFiles:['waveform.dat'],
+  }
   const result=await solver(request)
   assert.deepEqual(Object.keys(result.files),[])  // only requested outputs are read; extra.dat is not
   await workdirGone()
-  await assert.rejects(invoke({runSolver:solver,progress:()=>{}},rootScope('simulation'),request),code('native_output',/ngspice: missing waveform.dat/))
+  await assert.rejects(invoke({
+    runSolver:solver,
+    progress:()=>{},
+  },rootScope('simulation'),request),code('native_output',/ngspice: missing waveform.dat/))
   await workdirGone()
 })
 
@@ -123,7 +176,12 @@ test('requested output that is a symlink out of the workdir rejects file_path an
   const secret=join(root,'secret.txt')
   await writeFile(secret,'secret')
   const solver=createNativeSolver({tools:{ngspice:process.execPath}})
-  await assert.rejects(solver({solver:'ngspice',files:{},args:tool(`require('node:fs').symlinkSync(${JSON.stringify(secret)},'out.dat')`),outputFiles:['out.dat']}),
+  await assert.rejects(solver({
+    solver:'ngspice',
+    files:{},
+    args:tool(`require('node:fs').symlinkSync(${JSON.stringify(secret)},'out.dat')`),
+    outputFiles:['out.dat'],
+  }),
     code('file_path',/File must remain inside/))
   await workdirGone()
 })
@@ -135,10 +193,18 @@ test('loadIbisSources rejects traversal and symlinks escaping baseDir, follows c
   await mkdir(join(baseDir,'models'),{recursive:true})
   await writeFile(outside,'[IBIS Ver] 5.0')
   /** Circuit JSON that declares a single IBIS model file at `path`. */
-  const declare=(path: string): CircuitJson=>[{type:'simulation_ibis_model',simulation_ibis_model_id:'m',ibis_model_asset:{project_relative_path:path}}] as never
-  await assert.rejects(loadIbisSources({circuitJson:declare('../outside.ibs'),baseDir}),code('file_path',/Expected a safe project-relative file path: \.\.\/outside\.ibs/))
+  const declare=(path: string): CircuitJson=>[
+    {type:'simulation_ibis_model',simulation_ibis_model_id:'m',ibis_model_asset:{project_relative_path:path}},
+  ] as never
+  await assert.rejects(loadIbisSources({
+    circuitJson:declare('../outside.ibs'),
+    baseDir,
+  }),code('file_path',/Expected a safe project-relative file path: \.\.\/outside\.ibs/))
   await symlink(outside,join(baseDir,'models/file.ibs'))
-  await assert.rejects(loadIbisSources({circuitJson:declare('models/file.ibs'),baseDir}),code('file_path',/File must remain inside/))
+  await assert.rejects(loadIbisSources({
+    circuitJson:declare('models/file.ibs'),
+    baseDir,
+  }),code('file_path',/File must remain inside/))
   await symlink(root,join(baseDir,'up'))  // directory symlink escaping baseDir
   await assert.rejects(loadIbisSources({circuitJson:declare('up/outside.ibs'),baseDir}),code('file_path'))
   await writeFile(join(baseDir,'real.ibs'),'inside')

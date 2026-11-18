@@ -8,7 +8,8 @@ export function resolveRouteVias(circuit: CircuitJson, trace: PcbTrace): RoutedP
     if(point.route_type==='through_pad') fail('route_type','Only wire/via routed primitives supported')
     if(point.route_type!=='via') return point
     const matches=circuit.filter(e=>e.type==='pcb_via').filter(via=>
-      (via.pcb_trace_id===trace.pcb_trace_id||(via.source_trace_id!==undefined&&via.source_trace_id===trace.source_trace_id))&&
+      (via.pcb_trace_id === trace.pcb_trace_id ||
+        (via.source_trace_id !== undefined && via.source_trace_id === trace.source_trace_id)) &&
       (via.pcb_trace_id===undefined||via.pcb_trace_id===trace.pcb_trace_id)&&
       (via.source_trace_id===undefined||via.source_trace_id===trace.source_trace_id)&&
       via.subcircuit_id===trace.subcircuit_id&&
@@ -18,12 +19,18 @@ export function resolveRouteVias(circuit: CircuitJson, trace: PcbTrace): RoutedP
       fail('via_geometry',`${trace.pcb_trace_id}: physical via layers disagree at ${point.x},${point.y}`)
     const holes=[point.hole_diameter,matches[0]?.hole_diameter].filter((v): v is number=>v!==undefined)
     if(!holes.length||holes.some(v=>!Number.isFinite(v)||v<=0||v!==holes[0]))
-      fail('via_geometry',`${trace.pcb_trace_id}: missing, invalid or conflicting via hole diameters at ${point.x},${point.y}`)
+      fail(
+        'via_geometry',
+        `${trace.pcb_trace_id}: missing, invalid or conflicting via hole diameters at ${point.x},${point.y}`,
+      )
     return {...point,hole_diameter:holes[0]}
   })
 }
 
-/** Finds exactly one source port by id or by component name plus pin, failing 'pin_mapping' when it is missing or ambiguous. */
+/**
+ * Finds exactly one source port by id or by component name plus pin, failing 'pin_mapping' when it is
+ * missing or ambiguous.
+ */
 export function selectPort(cj: CircuitJson,s: PortSelector | undefined): SourcePort {
   if(!s) fail('pin_mapping','Explicit physical source port selector required')
   if(s.sourcePortId) {
@@ -32,9 +39,15 @@ export function selectPort(cj: CircuitJson,s: PortSelector | undefined): SourceP
     return ports[0]
   }
   const components=cj.filter(e=>e.type==='source_component').filter(e=>e.name===s.component)
-  if(components.length!==1) fail('pin_mapping',`${s.component}: expected one source component, got ${components.length}; use sourcePortId in repeated scopes`)
+  if(components.length!==1) fail(
+    'pin_mapping',
+    `${s.component}: expected one source component, got ${components.length}; use sourcePortId in repeated scopes`,
+  )
   const component=components[0]
-  const ports=cj.filter(e=>e.type==='source_port').filter(e=>e.source_component_id===component.source_component_id && (e.port_hints?.includes(s.port??'')||e.name===s.port||`pin${e.pin_number}`===s.port))
+  const ports = cj.filter(record => record.type === 'source_port').filter(port => {
+    if (port.source_component_id !== component.source_component_id) return false
+    return port.port_hints?.includes(s.port ?? '') || port.name === s.port || `pin${port.pin_number}` === s.port
+  })
   if(ports.length!==1) fail('pin_mapping',`${s.component}.${s.port}: expected one source port, got ${ports.length}`)
   return ports[0]
 }

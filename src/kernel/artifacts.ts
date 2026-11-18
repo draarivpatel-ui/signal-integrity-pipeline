@@ -44,8 +44,13 @@ export function rootScope(owner: DomainName): ArtifactScope {
 /** Validate and brand a relative POSIX path. */
 export function artifactPath(raw: string): ArtifactPath {
   const segments = raw.split('/')
-  if (!raw || raw.startsWith('/') || raw.includes('\\') || raw.includes('\0') || segments.some(s => s === '' || s === '.' || s === '..'))
-    fail('artifact_path', `${JSON.stringify(raw)}: artifact paths must be relative POSIX paths without empty, '.' or '..' segments`)
+  const hasInvalidSegment = segments.some(segment => segment === '' || segment === '.' || segment === '..')
+  // NUL is forbidden in a filesystem path.
+  const nul = '\0'
+  if (!raw || raw.startsWith('/') || raw.includes('\\') || raw.includes(nul) || hasInvalidSegment) {
+    const requirements = "artifact paths must be relative POSIX paths without empty, '.' or '..' segments"
+    fail('artifact_path', `${JSON.stringify(raw)}: ${requirements}`)
+  }
   return raw as ArtifactPath
 }
 
@@ -57,7 +62,8 @@ function scope(owner: DomainName, prefix: string): ArtifactScope {
   /** Joins a file name onto this scope's prefix and validates the result. */
   const at = (name: string): ArtifactPath => artifactPath(prefix ? `${prefix}/${name}` : name)
   return {
-    owner, prefix,
+    owner,
+    prefix,
     child: (...segments) => scope(owner, [prefix, ...segments].filter(Boolean).join('/')),
     handTo: next => scope(next, prefix),
     json: (name, value) => ({ owner, path: at(name), body: jsonBody(value) }),
@@ -94,7 +100,8 @@ export class ArtifactLedger {
   /** Keys sorted by code point => byte-identical FileMap for identical inputs (determinism). */
   seal(): FileMap {
     const files: FileMap = Object.create(null)
-    for (const path of [...this.entries.keys()].sort((a, b) => a < b ? -1 : a > b ? 1 : 0)) files[path] = this.entries.get(path)!.body
+    const paths = [...this.entries.keys()].sort((a, b) => a < b ? -1 : a > b ? 1 : 0)
+    for (const path of paths) files[path] = this.entries.get(path)!.body
     return files
   }
 }

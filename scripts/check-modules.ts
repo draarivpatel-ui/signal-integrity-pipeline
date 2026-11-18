@@ -31,13 +31,27 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
-export interface ModuleInfo { dir: string; root: string; tests: string }
+export interface ModuleInfo {
+  dir: string
+  root: string
+  tests: string
+}
 export type Rule = `M${1|2|3}` | 'EX' | `S${1|2|3|4|5|6}`
-export interface Violation { rule: Rule; module?: string; message: string }
+export interface Violation {
+  rule: Rule
+  module?: string
+  message: string
+}
 
 export interface Exemptions {
-  legacy?: { expires: string; paths: string[] }
-  modules?: Record<string, { expires: string; waive: string[] }>
+  legacy?: {
+    expires: string
+    paths: string[]
+  }
+  modules?: Record<string, {
+    expires: string
+    waive: string[]
+  }>
 }
 export interface CheckOptions {
   /** Today's date as YYYY-MM-DD (UTC). Defaults to the current date. */
@@ -106,7 +120,12 @@ function walk(dir: string, keep: (name: string) => boolean): string[] {
   }).sort()
 }
 /** Reads a file and parses it into a TypeScript AST with parent links set. */
-const parse = (file: string): ts.SourceFile => ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
+const parse = (file: string): ts.SourceFile => ts.createSourceFile(
+  file,
+  readFileSync(file, 'utf8'),
+  ts.ScriptTarget.Latest,
+  true,
+)
 
 /** Calls the callback on a node and every descendant, depth first. */
 function visit(node: ts.Node, fn: (n: ts.Node) => void): void {
@@ -116,11 +135,23 @@ function visit(node: ts.Node, fn: (n: ts.Node) => void): void {
 
 /** `x as const`, `x satisfies T`, `(x)` → x */
 function unwrap(e: ts.Expression): ts.Expression {
-  while (ts.isAsExpression(e) || ts.isSatisfiesExpression(e) || ts.isParenthesizedExpression(e) || ts.isTypeAssertionExpression(e)) e = e.expression
+  while (
+    ts.isAsExpression(e) ||
+    ts.isSatisfiesExpression(e) ||
+    ts.isParenthesizedExpression(e) ||
+    ts.isTypeAssertionExpression(e)
+  ) {
+    e = e.expression
+  }
   return e
 }
 
-export interface DiagnosticsCall { file: string; domain?: string; codes?: string[]; problem?: string }
+export interface DiagnosticsCall {
+  file: string
+  domain?: string
+  codes?: string[]
+  problem?: string
+}
 
 /** Every `diagnostics(...)` call in a module's sources, with its literal tuple parsed from the AST. */
 export function findDiagnosticsCalls(root: string): DiagnosticsCall[] {
@@ -172,11 +203,19 @@ export function activeExemptions(ex: Exemptions, today: string = todayUtc()): Ac
   /** True when an entry's expiry is valid and not yet passed; otherwise records an EX violation. */
   const live = (expires: unknown, module: string, what: string): boolean => {
     if (!isoDate(expires)) {
-      violations.push({ rule: 'EX', module, message: `${what}: "expires" must be an ISO date (YYYY-MM-DD), got ${JSON.stringify(expires)}` })
+      violations.push({
+        rule: 'EX',
+        module,
+        message: `${what}: "expires" must be an ISO date (YYYY-MM-DD), got ${JSON.stringify(expires)}`,
+      })
       return false
     }
     if (today > expires) {
-      violations.push({ rule: 'EX', module, message: `${what} expired on ${expires}; finish the move and delete the entry from tools/exemptions.json` })
+      violations.push({
+        rule: 'EX',
+        module,
+        message: `${what} expired on ${expires}; finish the move and delete the entry from tools/exemptions.json`,
+      })
       return false
     }
     return true
@@ -186,7 +225,11 @@ export function activeExemptions(ex: Exemptions, today: string = todayUtc()): Ac
   for (const [dir, w] of Object.entries(ex.modules ?? {}))
     if (live(w?.expires, dir, `waiver of ${(w?.waive ?? []).join('/') || 'nothing'}`)) {
       const bad = (w.waive ?? []).filter(r => !['M1', 'M2', 'M3'].includes(r))
-      if (bad.length) violations.push({ rule: 'EX', module: dir, message: `only M1-M3 can be waived, not ${bad.join(', ')}` })
+      if (bad.length) violations.push({
+        rule: 'EX',
+        module: dir,
+        message: `only M1-M3 can be waived, not ${bad.join(', ')}`,
+      })
       waivers.set(dir, new Set(w.waive ?? []))
     }
   return { legacy, waivers, violations }
@@ -239,10 +282,18 @@ export function checkModule(m: ModuleInfo, options: CheckOptions = {}): Violatio
   }
 
   const calls = findDiagnosticsCalls(m.root)
-  if (calls.length !== 1) push('M1', `expected exactly one diagnostics('${m.dir}', [...] as const) call, found ${calls.length}${calls.length ? ` (${calls.map(c => toPosix(c.file)).join(', ')})` : ''}`)
+  if (calls.length !== 1) {
+    const files = calls.map(call => toPosix(call.file))
+    const locations = files.length ? ` (${files.join(', ')})` : ''
+    const expected = `expected exactly one diagnostics('${m.dir}', [...] as const) call`
+    push('M1', `${expected}, found ${calls.length}${locations}`)
+  }
   for (const c of calls) {
     if (c.problem) push('M1', `${toPosix(c.file)}: ${c.problem}`)
-    else if (c.domain !== m.dir) push('M1', `${toPosix(c.file)}: diagnostics domain '${c.domain}' must be the directory name '${m.dir}'`)
+    else if (c.domain !== m.dir) push(
+      'M1',
+      `${toPosix(c.file)}: diagnostics domain '${c.domain}' must be the directory name '${m.dir}'`,
+    )
   }
 
   const tests = walk(m.tests, isTestFile)
@@ -255,17 +306,25 @@ export function checkModule(m: ModuleInfo, options: CheckOptions = {}): Violatio
   if (codes.length) {
     const asserted = new Set<AssertionLiteral>()
     for (const t of tests) for (const s of assertedLiterals(t)) asserted.add(s)
-    for (const code of codes) if (!asserted.has(code)) push('M3', `declared code '${code}' is not asserted by any test in ${toPosix(m.tests)}/`)
+    for (const code of codes) if (!asserted.has(code)) push(
+      'M3',
+      `declared code '${code}' is not asserted by any test in ${toPosix(m.tests)}/`,
+    )
   }
   return out
 }
 
-interface ImportEdge { file: string; specifier: string; target?: string }
+interface ImportEdge {
+  file: string
+  specifier: string
+  target?: string
+}
 /** Lists a file's import specifiers, resolving relative ones to absolute targets. */
 function importsOf(file: string): ImportEdge[] {
   const info = ts.preProcessFile(readFileSync(file, 'utf8'), true, true)
   return info.importedFiles.map(({ fileName }) => ({
-    file, specifier: fileName,
+    file,
+    specifier: fileName,
     target: fileName.startsWith('.') ? resolveTarget(resolve(dirname(file), fileName)) : undefined,
   }))
 }
@@ -288,7 +347,10 @@ function stem(p: string): string {
 /** Converts the JS output path back to its TypeScript source extension. */
 const jsToTs = (p: string): string => p.endsWith('.js') ? `${p.slice(0, -3)}.ts` : p
 
-/** Checks src/ as a whole against S1-S6: ownership, import boundaries, cycles, Node built-ins, entry imports and generated unions. */
+/**
+ * Checks src/ as a whole against S1-S6: ownership, import boundaries, cycles, Node built-ins, entry imports
+ * and generated unions.
+ */
 export function checkSource(src: string, modules: ModuleInfo[], options: CheckOptions = {}): Violation[] {
   const out: Violation[] = []
   const repo = dirname(resolve(src))
@@ -306,9 +368,17 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
   for (const d of readdirSync(src, { withFileTypes: true })) {
     const path = rel(join(src, d.name))
     if (d.isDirectory()) {
-      if (!names.has(d.name) && !isLegacy(path + '/', legacy)) out.push({ rule: 'S1', module: 'src', message: `${path}/ has no index.ts (unowned code)` })
+      if (!names.has(d.name) && !isLegacy(path + '/', legacy)) out.push({
+        rule: 'S1',
+        module: 'src',
+        message: `${path}/ has no index.ts (unowned code)`,
+      })
     } else if (!['index.ts', 'modules.generated.ts'].includes(d.name) && !isLegacy(path, legacy))
-      out.push({ rule: 'S1', module: 'src', message: `${path}: only src/index.ts and src/modules.generated.ts may live directly in src/` })
+      out.push({
+        rule: 'S1',
+        module: 'src',
+        message: `${path}: only src/index.ts and src/modules.generated.ts may live directly in src/`,
+      })
   }
 
   // S2 + S4 + graph for S3
@@ -319,19 +389,32 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
     const legacyFile = !owner && isLegacy(path, legacy)
     for (const edge of importsOf(file)) {
       if (isNodeBuiltin(edge.specifier) && owner !== 'adapters' && !legacyFile)
-        out.push({ rule: 'S4', module: owner ?? 'src', message: `${path} imports '${edge.specifier}'; Node built-ins belong in src/adapters/` })
+        out.push({
+          rule: 'S4',
+          module: owner ?? 'src',
+          message: `${path} imports '${edge.specifier}'; Node built-ins belong in src/adapters/`,
+        })
       if (!owner || !edge.target) continue
       const targetModule = moduleOf(edge.target)
       if (targetModule === owner) continue
       if (stem(edge.target) === stem(resolve(src, 'modules.generated.ts'))) continue
       if (!targetModule) {
-        if (toPosix(relative(resolve(src), edge.target)).startsWith('..')) continue // outside src/ (e.g. generated client assets) is not a module boundary
-        out.push({ rule: 'S2', module: owner, message: `${path} imports '${edge.specifier}', which is not owned by any module` })
+        // Imports outside src/ (such as generated client assets) do not cross a module boundary.
+        if (toPosix(relative(resolve(src), edge.target)).startsWith('..')) continue
+        out.push({
+          rule: 'S2',
+          module: owner,
+          message: `${path} imports '${edge.specifier}', which is not owned by any module`,
+        })
         continue
       }
       graph.get(owner)!.add(targetModule)
       if (stem(edge.target) !== stem(resolve(src, targetModule, 'index.ts')))
-        out.push({ rule: 'S2', module: owner, message: `${path} imports '${edge.specifier}'; cross-module imports must target ../${targetModule}` })
+        out.push({
+          rule: 'S2',
+          module: owner,
+          message: `${path} imports '${edge.specifier}'; cross-module imports must target ../${targetModule}`,
+        })
     }
   }
 
@@ -379,7 +462,11 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
       isLegacy(jsToTs(toPosix(relative(repo, edge.target))), legacy) ||
       isLegacy(toPosix(relative(repo, edge.target)) + '.ts', legacy) ||
       isLegacy(toPosix(relative(repo, edge.target)), legacy))
-    if (!ok) out.push({ rule: 'S5', module: 'src', message: `${rel(entry)} imports '${edge.specifier}'; only ./<module> and ./modules.generated are allowed` })
+    if (!ok) out.push({
+      rule: 'S5',
+      module: 'src',
+      message: `${rel(entry)} imports '${edge.specifier}'; only ./<module> and ./modules.generated are allowed`,
+    })
   }
 
   // S6: generated unions are current.
@@ -393,8 +480,16 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
     /** Names added (+) and removed (-) between the current and expected generated file. */
     const diff = (k: 'domains' | 'codes'): string[] => [...after[k]].filter(x => !before[k].has(x)).map(x => `+${x}`)
       .concat([...before[k]].filter(x => !after[k].has(x)).map(x => `-${x}`))
-    const parts = [['DomainName', diff('domains')], ['DiagnosticCode', diff('codes')]].filter(([, d]) => d.length).map(([n, d]) => `${n} ${(d as string[]).join(' ')}`)
-    out.push({ rule: 'S6', module: 'src', message: `${rel(generated)} is stale (${parts.length ? parts.join('; ') : 'formatting only'}); run check:modules --write` })
+    const parts = [
+      ['DomainName', diff('domains')],
+      ['DiagnosticCode', diff('codes')],
+    ].filter(([, d]) => d.length).map(([n, d]) => `${n} ${(d as string[]).join(' ')}`)
+    const changes = parts.length ? parts.join('; ') : 'formatting only'
+    out.push({
+      rule: 'S6',
+      module: 'src',
+      message: `${rel(generated)} is stale (${changes}); run check:modules --write`,
+    })
   }
   return out
 }
@@ -410,7 +505,9 @@ export function parseModulesGenerated(text: string): GeneratedModuleLiterals {
   const sf = ts.createSourceFile('modules.generated.ts', text, ts.ScriptTarget.Latest, true)
   const result = { domains: new Set<string>(), codes: new Set<string>() }
   for (const s of sf.statements) if (ts.isTypeAliasDeclaration(s)) {
-    const into = s.name.text === 'DomainName' ? result.domains : s.name.text === 'DiagnosticCode' ? result.codes : undefined
+    let into: Set<string> | undefined
+    if (s.name.text === 'DomainName') into = result.domains
+    if (s.name.text === 'DiagnosticCode') into = result.codes
     if (into) visit(s.type, n => {
       if (ts.isLiteralTypeNode(n) && ts.isStringLiteral(n.literal)) into.add(n.literal.text)
     })
@@ -419,10 +516,24 @@ export function parseModulesGenerated(text: string): GeneratedModuleLiterals {
 }
 
 /** Renders string literals as a multi-line TypeScript union body, or `never` when empty. */
-const union = (items: string[], perLine: number = 6): string => {
+const union = (items: string[]): string => {
   if (!items.length) return '  never'
+  // Keep the generated unions in stable groups of six, splitting wide groups for lint.
+  const membersPerGroup = 6
+  const maxLineLength = 120
   const lines: string[] = []
-  for (let i = 0; i < items.length; i += perLine) lines.push('  | ' + items.slice(i, i + perLine).map(x => `'${x}'`).join(' | '))
+  for (let index = 0; index < items.length; index += membersPerGroup) {
+    let line = ''
+    for (const item of items.slice(index, index + membersPerGroup)) {
+      const member = `| '${item}'`
+      if (line && line.length + member.length + 1 > maxLineLength) {
+        lines.push(line)
+        line = ''
+      }
+      line = line ? `${line} ${member}` : `  ${member}`
+    }
+    lines.push(line)
+  }
   return lines.join('\n')
 }
 
@@ -430,7 +541,11 @@ const union = (items: string[], perLine: number = 6): string => {
  * DomainName = module dirs. DiagnosticCode = codes already in the existing file (seeded from today's
  * raised codes; never dropped) ∪ every literal in a module's diagnostics tuple. Sorted, deterministic.
  */
-export function renderModulesGenerated(modules: ModuleInfo[], codes: Map<string, string[]>, existing: string = ''): string {
+export function renderModulesGenerated(
+  modules: ModuleInfo[],
+  codes: Map<string, string[]>,
+  existing: string = '',
+): string {
   const domains = [...new Set(modules.map(m => m.dir))].sort()
   const all = [...new Set([...parseModulesGenerated(existing).codes, ...[...codes.values()].flat()])].sort()
   return `// GENERATED by scripts/check-modules.ts --write. Do not edit.
@@ -448,7 +563,10 @@ ${union(all)}
 }
 
 /** Runs every rule against a repo root (containing src/, tests/, tools/exemptions.json). */
-export function runChecks(root: string, { write = false, today = todayUtc() }: { write?: boolean; today?: string } = {}): Violation[] {
+export function runChecks(root: string, { write = false, today = todayUtc() }: {
+  write?: boolean
+  today?: string
+} = {}): Violation[] {
   root = resolve(root)
   const src = join(root, 'src')
   const loaded = loadExemptions(join(root, 'tools', 'exemptions.json'))

@@ -6,9 +6,15 @@ import type { CircuitNodes, ElectricalSources, SimulationModeling } from './type
 
 /** Formats a number with 17 significant digits so SPICE decks round-trip doubles exactly. */
 const num = (value: number): string => Number(value.toPrecision(17)).toString()
-/** Rejects any electrical input that is not a finite number (or not positive, when required) before it reaches the deck. */
+/**
+ * Rejects any electrical input that is not a finite number (or not positive, when required) before it
+ * reaches the deck.
+ */
 const finite = (input: unknown, label: string, positive: boolean = false): number => {
-  if (typeof input !== 'number' || !Number.isFinite(input) || (positive && input <= 0)) return fail('electrical_input', `${label}: explicit finite ${positive ? 'positive ' : ''}value required`)
+  if (typeof input !== 'number' || !Number.isFinite(input) || (positive && input <= 0)) return fail(
+    'electrical_input',
+    `${label}: explicit finite ${positive ? 'positive ' : ''}value required`,
+  )
   return input
 }
 /** Checks an electrical input and formats it for the deck in one step. */
@@ -164,7 +170,11 @@ function dcSpiceTerminals(line: string): SpiceTerminalPair | undefined {
  * Turns physical voltage sources, declared supplies and selected passives into SPICE lines.
  * Fails when a source is shorted, floating or unsupported, because this backend never invents rails.
  */
-export function electricalSources(circuit: CircuitJson, modeling: SimulationModeling, nodes: CircuitNodes): ElectricalSources {
+export function electricalSources(
+  circuit: CircuitJson,
+  modeling: SimulationModeling,
+  nodes: CircuitNodes,
+): ElectricalSources {
   const sources: string[] = []
   const passives: string[] = []
   const activeNodes = new Set(['0'])
@@ -179,28 +189,58 @@ export function electricalSources(circuit: CircuitJson, modeling: SimulationMode
     return `${positive} ${negative}`
   }
   for (const [i, source] of circuit.filter(e => e.type === 'simulation_voltage_source').entries()) {
-    const positive = source.is_dc_source ? source.positive_source_port_id ?? source.positive_source_net_id : source.terminal1_source_port_id
-    const negative = source.is_dc_source ? source.negative_source_port_id ?? source.negative_source_net_id : source.terminal2_source_port_id
-    if (!positive || !negative) return fail('supply_reference', 'Voltage sources require explicit positive and negative source port/net terminals')
+    const positive = source.is_dc_source
+      ? source.positive_source_port_id ?? source.positive_source_net_id
+      : source.terminal1_source_port_id
+    const negative = source.is_dc_source
+      ? source.negative_source_port_id ?? source.negative_source_net_id
+      : source.terminal2_source_port_id
+    if (!positive || !negative) return fail(
+      'supply_reference',
+      'Voltage sources require explicit positive and negative source port/net terminals',
+    )
     const pos = nodes.node(positive)
     const neg = nodes.node(negative)
     if (pos === neg) fail('supply_short', 'Voltage source terminals resolve to the same node')
     let expression: string
     if (source.is_dc_source || !source.wave_shape) expression = value(source.voltage, 'voltage source voltage')
     else if (source.wave_shape === 'square') {
-      const period = source.period === undefined ? 1 / finite(source.frequency, 'source frequency', true) : source.period / 1000
+      const period = source.period === undefined
+        ? 1 / finite(source.frequency, 'source frequency', true)
+        : source.period / 1000
       const amplitude = finite(source.peak_to_peak_voltage ?? source.voltage, 'source amplitude')
-      const low = source.peak_to_peak_voltage === undefined ? 0 : finite(source.voltage, 'source offset') - amplitude / 2
+      const low = source.peak_to_peak_voltage === undefined
+        ? 0
+        : finite(source.voltage, 'source offset') - amplitude / 2
       const high = low + amplitude
       const rise = (source.rise_time ?? 0) / 1000
       const fall = (source.fall_time ?? 0) / 1000
-      if (rise <= 0 || fall <= 0) fail('source_edge', 'Square voltage sources require explicit positive rise/fall times')
-      expression = `PULSE(${value(low, 'source low')} ${value(high, 'source high')} ${value((source.pulse_delay ?? 0) / 1000, 'source delay')} ${value(rise, 'source rise', true)} ${value(fall, 'source fall', true)} ${value(source.pulse_width === undefined ? period * (source.duty_cycle ?? .5) : source.pulse_width / 1000, 'source width', true)} ${value(period, 'source period', true)})`
+      if (rise <= 0 || fall <= 0) fail(
+        'source_edge',
+        'Square voltage sources require explicit positive rise/fall times',
+      )
+      const lowValue = value(low, 'source low')
+      const highValue = value(high, 'source high')
+      const delay = value((source.pulse_delay ?? 0) / 1000, 'source delay')
+      const riseValue = value(rise, 'source rise', true)
+      const fallValue = value(fall, 'source fall', true)
+      // Without a declared duty cycle, the pulse stays high for half the period.
+      const defaultDutyCycle = 0.5
+      const pulseWidth = source.pulse_width === undefined
+        ? period * (source.duty_cycle ?? defaultDutyCycle)
+        : source.pulse_width / 1000
+      const width = value(pulseWidth, 'source width', true)
+      const periodValue = value(period, 'source period', true)
+      expression = `PULSE(${lowValue} ${highValue} ${delay} ${riseValue} ${fallValue} ${width} ${periodValue})`
     } else return fail('source_capability', `Voltage waveform ${source.wave_shape} is unsupported by this PCB backend`)
     sources.push(`VPHYSICAL${i} ${terminals(pos, neg)} ${expression}`)
     const port = sourcePorts.find(e => e.source_port_id === positive)
     const component = sourceComponents.find(e => e.source_component_id === port?.source_component_id)
-    sourceBindings.push({ name: component?.name ?? source.simulation_voltage_source_id, positiveNode: pos, negativeNode: neg })
+    sourceBindings.push({
+      name: component?.name ?? source.simulation_voltage_source_id,
+      positiveNode: pos,
+      negativeNode: neg,
+    })
     dcConnections.push([pos, neg])
   }
   for (const [i, source] of (modeling.supplies ?? []).entries()) {
@@ -212,10 +252,15 @@ export function electricalSources(circuit: CircuitJson, modeling: SimulationMode
     dcConnections.push([pos, neg])
   }
   for (const [i, selection] of (modeling.passiveComponents ?? []).entries()) {
-    const components = sourceComponents.filter(e => selection.sourceComponentId ? e.source_component_id === selection.sourceComponentId : e.name === selection.component)
+    const components = sourceComponents.filter(component => {
+      if (selection.sourceComponentId) return component.source_component_id === selection.sourceComponentId
+      return component.name === selection.component
+    })
     if (components.length !== 1) fail('passive_reference', 'Selected passive component is missing or ambiguous')
     const component = components[0]
-    const ports = sourcePorts.filter(e => e.source_component_id === component.source_component_id).sort((a, b) => Number(a.pin_number) - Number(b.pin_number))
+    const ports = sourcePorts
+      .filter(port => port.source_component_id === component.source_component_id)
+      .sort((a, b) => Number(a.pin_number) - Number(b.pin_number))
     const spiceSubcircuits = circuit.filter(record => record.type === 'simulation_spice_subcircuit')
     const placed = spiceSubcircuits.filter(record => record.source_component_id === component.source_component_id)
     if (placed.length) {
@@ -260,21 +305,46 @@ export function electricalSources(circuit: CircuitJson, modeling: SimulationMode
       amount = component.inductance
       quantity = 'inductance'
       break
-      default: return fail('passive_capability', `${component.name}: only explicit resistor/capacitor/inductor models supported`)
+      default: return fail(
+        'passive_capability',
+        `${component.name}: only explicit resistor/capacitor/inductor models supported`,
+      )
     }
     passives.push(`${kind}PHYSICAL${i} ${terminals(pos, neg)} ${value(amount, `${component.name} ${quantity}`, true)}`)
     if (kind !== 'C') dcConnections.push([pos, neg])
   }
-  if (!sources.length) fail('supply_missing', 'Declare physical voltage sources or explicit source-port supplies; this backend never invents VDD')
+  if (!sources.length) fail(
+    'supply_missing',
+    'Declare physical voltage sources or explicit source-port supplies; this backend never invents VDD',
+  )
   const grounded = new Set(['0'])
   let changed = true
   while (changed) {
     changed = false
-    for (const [a, b] of dcConnections) if (grounded.has(a) || grounded.has(b)) for (const node of [a, b]) if (!grounded.has(node)) {
-      grounded.add(node)
-      changed = true
+    for (const [a, b] of dcConnections) {
+      if (!grounded.has(a) && !grounded.has(b)) continue
+      for (const node of [a, b]) {
+        if (grounded.has(node)) continue
+        grounded.add(node)
+        changed = true
+      }
     }
   }
-  for (const source of sourceBindings) if (!grounded.has(source.positiveNode) || !grounded.has(source.negativeNode)) fail('floating_source', `${source.name}: ideal voltage source has no explicit DC connection to channelReference; wire its physical terminals to the modeled supply/reference ports`)
-  return { lines: [...sources, ...passives], activeNodes, grounded, sourceBindings, scope: { voltageSources: sources.length, passiveComponents: passives.length, unselectedBoardComponents: 'Excluded from this explicitly selected channel experiment' } }
+  for (const source of sourceBindings) {
+    if (grounded.has(source.positiveNode) && grounded.has(source.negativeNode)) continue
+    const reason = 'ideal voltage source has no explicit DC connection to channelReference'
+    const instruction = 'wire its physical terminals to the modeled supply/reference ports'
+    fail('floating_source', `${source.name}: ${reason}; ${instruction}`)
+  }
+  return {
+    lines: [...sources, ...passives],
+    activeNodes,
+    grounded,
+    sourceBindings,
+    scope: {
+      voltageSources: sources.length,
+      passiveComponents: passives.length,
+      unselectedBoardComponents: 'Excluded from this explicitly selected channel experiment',
+    },
+  }
 }

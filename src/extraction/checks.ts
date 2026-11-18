@@ -2,7 +2,11 @@
 import { fail } from './diagnostics'
 import { sum, symmetrize, type Matrix } from './linalg'
 
-export interface MatrixCheck { matrix: Matrix; reciprocityResidual: number; cholesky: Matrix }
+export interface MatrixCheck {
+  matrix: Matrix
+  reciprocityResidual: number
+  cholesky: Matrix
+}
 
 /** Checks finite square shape and returns max absolute transpose mismatch divided by max absolute entry. */
 function reciprocityResidual(a: Matrix, name: string): number {
@@ -13,7 +17,10 @@ function reciprocityResidual(a: Matrix, name: string): number {
   return Math.max(...a.flatMap((r, i) => r.map((v, j) => Math.abs(v - a[j][i])))) / norm
 }
 
-/** Rejects a matrix that is not finite, square, reciprocal within tolerance and positive definite; returns its symmetric part and Cholesky factor as proof. */
+/**
+ * Rejects a matrix that is not finite, square, reciprocal within tolerance and positive definite; returns
+ * its symmetric part and Cholesky factor as proof.
+ */
 export function validateMatrix(a: Matrix, name: string, tolerance: number = 0.02): MatrixCheck {
   const n=a.length
   const residual=reciprocityResidual(a,name)

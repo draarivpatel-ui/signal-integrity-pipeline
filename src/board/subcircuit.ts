@@ -19,7 +19,8 @@ export type SubcircuitTree = {
  * belongs to their nearest common subcircuit. `undefined` is the unscoped root.
  */
 export function subcircuitTree(records: readonly ScopeRecord[]): SubcircuitTree {
-  const groups = new Map(records.filter(record => record.type === 'source_group').map(record => [record.source_group_id, record]))
+  const sourceGroups = records.filter(record => record.type === 'source_group')
+  const groups = new Map(sourceGroups.map(record => [record.source_group_id, record]))
   const parents = new Map<unknown, unknown>()
   for (const group of groups.values()) {
     if (!group.subcircuit_id || parents.has(group.subcircuit_id)) continue

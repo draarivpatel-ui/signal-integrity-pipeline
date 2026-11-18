@@ -16,7 +16,10 @@ import type {
 
 /** Converts a declared millisecond time to seconds, failing unless it is finite and nonnegative (or positive). */
 const milliseconds=(value: number | undefined,label: string,{positive=false}: {positive?: boolean}={}): number=>{
-  if(typeof value!=='number'||!Number.isFinite(value)||(positive?value<=0:value<0)) fail('simulation_timing',`${label}: finite ${positive?'positive':'nonnegative'} milliseconds required`)
+  if (typeof value !== 'number' || !Number.isFinite(value) || (positive ? value <= 0 : value < 0)) {
+    const range = positive ? 'positive' : 'nonnegative'
+    fail('simulation_timing', `${label}: finite ${range} milliseconds required`)
+  }
   return value/1000
 }
 /** Returns the single matching record, failing when a reference matches none or several. */
@@ -89,27 +92,43 @@ export function circuitNodes({ circuit, mappings, modeling }: CircuitNodesInput)
     const to=bindings(mapping.to)
     for(const group of from) if(to.has(group)) {
       const ids=new Set(nets.map(net=>net.source_net_id).filter(id=>groupOf(id)===group))
-      if(nets.some(net=>ids.has(net.source_net_id)&&net.is_ground)) fail('channel_short',`${mapping.port}: channel is bound to ground`)
+      if(nets.some(net=>ids.has(net.source_net_id)&&net.is_ground)) fail(
+        'channel_short',
+        `${mapping.port}: channel is bound to ground`,
+      )
       const attached=traces.filter(t=>t.connected_source_net_ids?.some(id=>ids.has(id)))
-      if(attached.some(t=>t.connected_source_net_ids!.some(id=>!ids.has(id))||(t.connected_source_port_ids.length&&t.connected_source_net_ids!.length!==1)))
+      const hasAdditionalBindings = attached.some(trace => {
+        const nets = trace.connected_source_net_ids!
+        return nets.some(id => !ids.has(id)) || (trace.connected_source_port_ids.length > 0 && nets.length !== 1)
+      })
+      if (hasAdditionalBindings)
         fail('channel_net',`${mapping.port}: shared channel net has additional net bindings; select explicit endpoints`)
       const members=attached.flatMap(t=>t.connected_source_port_ids)
       if(members.some(id=>id!==mapping.from&&id!==mapping.to))
-        fail('channel_fanout',`${mapping.port}: shared channel net has additional ports; bind loads to an explicit endpoint`)
+        fail(
+          'channel_fanout',
+          `${mapping.port}: shared channel net has additional ports; bind loads to an explicit endpoint`,
+        )
       for(const id of ids) splitNets.add(id)
     }
   }
   for(const trace of traces) {
     if(channelTraces.has(trace.source_trace_id)) continue
     // Keep all explicit port-to-port paths, including genuine ideal bypasses.
-    union([...(trace.connected_source_port_ids??[]),...(trace.connected_source_net_ids??[]).filter(id=>!splitNets.has(id))])
+    union([
+      ...(trace.connected_source_port_ids??[]),
+      ...(trace.connected_source_net_ids??[]).filter(id=>!splitNets.has(id))
+    ])
   }
   const ground=selectPort(circuit,modeling.channelReference).source_port_id
   const groundRoot=find(ground)
   const names=new Map([[groundRoot,'0']])
   /** Names the SPICE node for a port or net ('0' for the channel reference), refusing split channel nets. */
   const node=(id: string): string=>{
-    if(splitNets.has(id)) fail('channel_net',`${id}: extracted channel spans distinct endpoint nodes; select a physical port instead of the net`)
+    if(splitNets.has(id)) fail(
+      'channel_net',
+      `${id}: extracted channel spans distinct endpoint nodes; select a physical port instead of the net`,
+    )
     const root=find(id);
     const name=names.get(root)??`n${names.size}`
     names.set(root,name)
@@ -118,7 +137,10 @@ export function circuitNodes({ circuit, mappings, modeling }: CircuitNodesInput)
   const ids=[...parents.keys()].filter(id=>!splitNets.has(id))
   for(const id of ids) node(id)
   const endpoints=mappings.flatMap(mapping=>[node(mapping.from),node(mapping.to)])
-  if(endpoints.includes('0')||new Set(endpoints).size!==endpoints.length) fail('channel_short','Extracted endpoints are shorted by another ideal source trace or reference')
+  if(endpoints.includes('0')||new Set(endpoints).size!==endpoints.length) fail(
+    'channel_short',
+    'Extracted endpoints are shorted by another ideal source trace or reference',
+  )
   return {node,groundSourcePortId:ground,mapping:Object.fromEntries(ids.map(id=>[id,node(id)]))}
 }
 
@@ -146,9 +168,20 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
       seen.add(id)
     }
   }
-  const errors=circuit.filter(e=>e.type==='source_invalid_component_property_error').filter(e=>['ibisModel','ibisPinStates','probeRef','simulationRef','sourcePinRef','bitDuration','transmittedData'].includes(e.property_name))
+  const errors=circuit.filter(e=>e.type==='source_invalid_component_property_error').filter(e=>[
+    'ibisModel',
+    'ibisPinStates',
+    'probeRef',
+    'simulationRef',
+    'sourcePinRef',
+    'bitDuration',
+    'transmittedData',
+  ].includes(e.property_name))
   if(errors.length) fail('native_declaration',errors.map(e=>e.message).join('; '))
-  const models=circuit.filter(e=>e.type==='simulation_ibis_model').map((model,i)=>({...model,pipelineId:model.simulation_ibis_model_id??`model-${i}`}))
+  const models=circuit.filter(e=>e.type==='simulation_ibis_model').map((model,i)=>({
+    ...model,
+    pipelineId:model.simulation_ibis_model_id??`model-${i}`,
+  }))
   if(!models.length) fail('ibis_model','At least one serialized native IBIS model required')
   const nodes=circuitNodes({ circuit, mappings, modeling })
   const ports=new Map(circuit.filter(e=>e.type==='source_port').map(e=>[e.source_port_id,e]))
@@ -173,16 +206,31 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
     return null
   }
   for(const model of models) {
-    const sourceComponent=exactly(components.filter(e=>e.source_component_id===model.source_component_id),`${model.pipelineId} component`)
+    const sourceComponent=exactly(
+      components.filter(e=>e.source_component_id===model.source_component_id),
+      `${model.pipelineId} component`,
+    )
     for(const refs of Object.values(model.ibis_pin_name_to_reference_source_port_ids??{}))
-      for(const id of Object.values(refs)) if(id!==undefined&&(!ports.has(id)||ports.get(id)?.source_component_id!==sourceComponent.source_component_id)) fail('ibis_mapping',`${sourceComponent.name}: reference port points outside its chip`)
-    for(const id of Object.values(model.ibis_pin_name_to_source_port_id??{})) if(!ports.has(id)||ports.get(id)?.source_component_id!==sourceComponent.source_component_id) fail('ibis_mapping',`${sourceComponent.name}: physical pin mapping points outside its chip`)
+      for(const id of Object.values(refs)) if(id!==undefined&&(!ports.has(id)||ports.get(
+        id,
+      )?.source_component_id!==sourceComponent.source_component_id)) fail(
+        'ibis_mapping',
+        `${sourceComponent.name}: reference port points outside its chip`,
+      )
+    for(const id of Object.values(model.ibis_pin_name_to_source_port_id??{})) if(!ports.has(id)||ports.get(
+      id,
+    )?.source_component_id!==sourceComponent.source_component_id) fail(
+      'ibis_mapping',
+      `${sourceComponent.name}: physical pin mapping points outside its chip`,
+    )
   }
   const declaredExperiments=circuit.filter(e=>e.type==='simulation_experiment')
   const experiments=declaredExperiments.filter(experiment=>experiment.spice_engine==='pcb_spice')
   if(!experiments.length) fail('simulation_experiment','A transient experiment with spiceEngine=pcb_spice is required')
   const pcbExperimentIds=new Set(experiments.map(experiment=>experiment.simulation_experiment_id))
-  if(experiments.some(experiment=>experiment.experiment_type!=='spice_transient_analysis')||circuit.some(e=>e.type==='simulation_parameter_sweep'&&pcbExperimentIds.has(e.simulation_experiment_id))) fail('simulation_capability','This PCB backend supports unswept transient experiments only')
+  if(experiments.some(experiment=>experiment.experiment_type!=='spice_transient_analysis')||circuit.some(
+    e=>e.type==='simulation_parameter_sweep'&&pcbExperimentIds.has(e.simulation_experiment_id),
+  )) fail('simulation_capability','This PCB backend supports unswept transient experiments only')
   const ids=new Set<string>()
   const plans: SimulationPlan[]=experiments.map(experiment=>{
     const id=experiment.simulation_experiment_id
@@ -190,7 +238,10 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
     ids.add(id)
     const scopes=new Set(models.map(model=>componentScope(model.source_component_id)))
     const scope=experiment.subcircuit_id??(scopes.size===1?[...scopes][0]:undefined)
-    if(scope===undefined) fail('simulation_scope',`${experiment.name}: multiple modeled subcircuits require an explicit experiment scope`)
+    if(scope===undefined) fail(
+      'simulation_scope',
+      `${experiment.name}: multiple modeled subcircuits require an explicit experiment scope`,
+    )
     const scopedModels=models.filter(model=>subcircuits.within(componentScope(model.source_component_id),scope))
     if(!scopedModels.length) fail('simulation_scope',`${experiment.name}: no models in its explicit subcircuit scope`)
     for (const mapping of mappings) {
@@ -207,7 +258,10 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
     const durationSeconds=milliseconds(experiment.end_time_ms,`${id} end_time_ms`,{positive:true})
     const startTimeSeconds=milliseconds(experiment.start_time_ms??0,`${id} start_time_ms`)
     const maxStepSeconds=milliseconds(experiment.time_per_step,`${id} time_per_step`,{positive:true})
-    if(startTimeSeconds>=durationSeconds||maxStepSeconds>=durationSeconds-startTimeSeconds) fail('simulation_timing',`${experiment.name}: recording must have positive duration and a smaller maximum timestep`)
+    if(startTimeSeconds>=durationSeconds||maxStepSeconds>=durationSeconds-startTimeSeconds) fail(
+      'simulation_timing',
+      `${experiment.name}: recording must have positive duration and a smaller maximum timestep`,
+    )
     let runControls: RunControls = { states: [], stimuli: [] }
     if (Object.hasOwn(controls, id)) runControls = controls[id]
     const { states, stimuli: controlsForRun } = runControls
@@ -221,10 +275,21 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
     const stateIds=new Set<string>()
     const stimulusIds=new Set<string>()
     for(const state of states) {
-      if(stateIds.has(state.source_port_id)) fail('ibis_state',`${experiment.name}: duplicate run state for ${state.source_port_id}`)
+      if(stateIds.has(state.source_port_id)) fail(
+        'ibis_state',
+        `${experiment.name}: duplicate run state for ${state.source_port_id}`,
+      )
       stateIds.add(state.source_port_id)
-      if(typeof state.is_output!=='boolean'||(state.is_output&&typeof state.is_output_enabled!=='boolean')||(!state.is_output&&state.is_output_enabled!==undefined)) fail('ibis_state',`${experiment.name}: explicit compatible input/output enable state required`)
-      const attachments=scopedModels.filter(model=>Object.values(model.ibis_pin_name_to_source_port_id).includes(state.source_port_id))
+      const hasOutputFlag = typeof state.is_output === 'boolean'
+      const validEnableFlag = state.is_output
+        ? typeof state.is_output_enabled === 'boolean'
+        : state.is_output_enabled === undefined
+      if (!hasOutputFlag || !validEnableFlag) {
+        fail('ibis_state', `${experiment.name}: explicit compatible input/output enable state required`)
+      }
+      const attachments=scopedModels.filter(
+        model=>Object.values(model.ibis_pin_name_to_source_port_id).includes(state.source_port_id),
+      )
       if(attachments.length!==1) fail('ibis_state',`${experiment.name}: run state must select exactly one modeled pin`)
     }
     const passiveTypes = ['simple_resistor', 'simple_capacitor', 'simple_inductor']
@@ -244,26 +309,73 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
       }
     }
     for(const stimulus of stimuli) {
-      if(stimulusIds.has(stimulus.source_port_id)) fail('stimulus_duplicate',`${experiment.name}: multiple stimuli drive the same physical output`)
+      if(stimulusIds.has(stimulus.source_port_id)) fail(
+        'stimulus_duplicate',
+        `${experiment.name}: multiple stimuli drive the same physical output`,
+      )
       stimulusIds.add(stimulus.source_port_id)
       const state=states.find(s=>s.source_port_id===stimulus.source_port_id)
-      if(state?.is_output!==true||state.is_output_enabled!==true) fail('stimulus_state',`${stimulus.name}: stimulus requires an enabled IBIS output in this experiment`)
+      if(state?.is_output!==true||state.is_output_enabled!==true) fail(
+        'stimulus_state',
+        `${stimulus.name}: stimulus requires an enabled IBIS output in this experiment`,
+      )
       milliseconds(stimulus.bit_duration_ms,`${stimulus.name} bit_duration_ms`,{positive:true})
       milliseconds(stimulus.start_time_ms,`${stimulus.name} start_time_ms`)
-      if(![0,1].includes(stimulus.initial_state)||(stimulus.inverted!==undefined&&typeof stimulus.inverted!=='boolean')||stimulus.transmission_pattern?.transmission_type!=='bits'||typeof stimulus.transmission_pattern.repeat!=='boolean') fail('stimulus_pattern',`${stimulus.name}: explicit binary bits, inversion/repeat booleans and initial state required`)
-      if(stimulus.start_time_ms/1000>=durationSeconds) fail('stimulus_coverage',`${stimulus.name}: stimulus starts after the experiment ends`)
-      if(!stimulus.transmission_pattern.repeat&&(stimulus.start_time_ms+stimulus.transmission_pattern.bits.length*stimulus.bit_duration_ms)/1000<durationSeconds-1e-12*durationSeconds) fail('stimulus_coverage',`${stimulus.name}: nonrepeating bits do not cover the complete run`)
+      const hasBinaryInitialState = [0, 1].includes(stimulus.initial_state)
+      const hasValidInversion = stimulus.inverted === undefined || typeof stimulus.inverted === 'boolean'
+      const pattern = stimulus.transmission_pattern
+      const hasValidBitPattern = pattern?.transmission_type === 'bits' && typeof pattern.repeat === 'boolean'
+      if (!hasBinaryInitialState || !hasValidInversion || !hasValidBitPattern) {
+        const requirements = 'explicit binary bits, inversion/repeat booleans and initial state required'
+        fail('stimulus_pattern', `${stimulus.name}: ${requirements}`)
+      }
+      if(stimulus.start_time_ms/1000>=durationSeconds) fail(
+        'stimulus_coverage',
+        `${stimulus.name}: stimulus starts after the experiment ends`,
+      )
+      if (!pattern.repeat) {
+        const patternDurationMs = pattern.bits.length * stimulus.bit_duration_ms
+        const endSeconds = (stimulus.start_time_ms + patternDurationMs) / 1000
+        // Allow for floating-point rounding when comparing the declared durations.
+        const durationTolerance = 1e-12 * durationSeconds
+        if (endSeconds < durationSeconds - durationTolerance) {
+          fail('stimulus_coverage', `${stimulus.name}: nonrepeating bits do not cover the complete run`)
+        }
+      }
     }
-    for(const state of states) if(state.is_output&&state.is_output_enabled&&!stimulusIds.has(state.source_port_id)) fail('stimulus_missing',`${experiment.name}: enabled output requires one explicit digital stimulus`)
-    const probes=circuit.filter(e=>e.type==='simulation_voltage_probe').filter(e=>subcircuits.within(e.subcircuit_id,scope)).map((probe,i)=>{
+    for (const state of states) {
+      if (state.is_output && state.is_output_enabled && !stimulusIds.has(state.source_port_id)) {
+        fail('stimulus_missing', `${experiment.name}: enabled output requires one explicit digital stimulus`)
+      }
+    }
+    const probes=circuit.filter(e=>e.type==='simulation_voltage_probe').filter(
+      e=>subcircuits.within(e.subcircuit_id,scope),
+    ).map((probe,i)=>{
       const signal=probe.signal_input_source_port_id??probe.signal_input_source_net_id
       const reference=probe.reference_input_source_port_id??probe.reference_input_source_net_id
       if(!signal) fail('probe_reference',`${probe.name}: signal port/net required`)
-      for(const source of [signal,reference].filter(Boolean)) if(!circuit.some(e=>(e.type==='source_port'&&e.source_port_id===source)||(e.type==='source_net'&&e.source_net_id===source))) fail('probe_reference',`${probe.name}: unknown signal/reference source`)
+      for (const source of [signal, reference].filter(Boolean)) {
+        const exists = circuit.some(record =>
+          (record.type === 'source_port' && record.source_port_id === source) ||
+          (record.type === 'source_net' && record.source_net_id === source),
+        )
+        if (!exists) fail('probe_reference', `${probe.name}: unknown signal/reference source`)
+      }
       const signalNode=nodes.node(signal)
       const referenceNode=reference?nodes.node(reference):'0'
-      if(signalNode===referenceNode) fail('probe_reference',`${probe.name}: signal and reference resolve to the same circuit node`)
-      return {simulationVoltageProbeId:probe.simulation_voltage_probe_id,name:probe.name??probe.simulation_voltage_probe_id,column:i+1,signalSourceId:signal,referenceSourceId:reference??null,signalNode,referenceNode}
+      if(signalNode===referenceNode) fail(
+        'probe_reference',
+        `${probe.name}: signal and reference resolve to the same circuit node`,
+      )
+      return {
+        simulationVoltageProbeId:probe.simulation_voltage_probe_id,
+        name:probe.name??probe.simulation_voltage_probe_id,
+        column:i+1,
+        signalSourceId:signal,
+        referenceSourceId:reference??null,
+        signalNode,
+        referenceNode,
+      }
     })
     if(!probes.length) fail('simulation_probe',`${experiment.name}: at least one voltage probe required`)
 
@@ -300,11 +412,27 @@ export function modelRunDefinition(
   for(const state of plan.states) if(selected.has(state.source_port_id)) {
     if(!state.is_output) pinStates[state.source_port_id]={mode:'input'}
     else {
-      if(typeof state.is_output_enabled!=='boolean') fail('ibis_state',`${state.source_port_id}: explicit output enable state required`)
+      if(typeof state.is_output_enabled!=='boolean') fail(
+        'ibis_state',
+        `${state.source_port_id}: explicit output enable state required`,
+      )
       pinStates[state.source_port_id]={mode:'output',enabled:state.is_output_enabled}
     }
   }
-  for(const stimulus of plan.stimuli) if(selected.has(stimulus.source_port_id)) stimuli[stimulus.source_port_id]={unitInterval:stimulus.bit_duration_ms,startTime:stimulus.start_time_ms,initialState:stimulus.initial_state,inverted:stimulus.inverted??false,pattern:{type:'bits',bits:stimulus.transmission_pattern.bits,repeat:stimulus.transmission_pattern.repeat}}
+  for (const stimulus of plan.stimuli) {
+    if (!selected.has(stimulus.source_port_id)) continue
+    stimuli[stimulus.source_port_id] = {
+      unitInterval: stimulus.bit_duration_ms,
+      startTime: stimulus.start_time_ms,
+      initialState: stimulus.initial_state,
+      inverted: stimulus.inverted ?? false,
+      pattern: {
+        type: 'bits',
+        bits: stimulus.transmission_pattern.bits,
+        repeat: stimulus.transmission_pattern.repeat,
+      },
+    }
+  }
   const pinReferenceEntries = Object.entries(model.ibis_pin_name_to_reference_source_port_ids ?? {})
   const selectedReferences = pinReferenceEntries.filter(([pin]) => pin in pinMap)
   const references: Record<string, IbisReferencePorts> = Object.fromEntries(selectedReferences.map(([pin, refs]) => {

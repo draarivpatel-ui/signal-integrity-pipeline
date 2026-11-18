@@ -40,7 +40,10 @@ test('README keeps the required opening sections in order', () => {
 
 test('README general workflow has a workflow and a state machine diagram', () => {
   const md = readFileSync(join(root, 'README.md'), 'utf8')
-  const section = md.slice(md.indexOf('## General workflow'), md.indexOf('\n## ', md.indexOf('## General workflow') + 1))
+  const section = md.slice(
+    md.indexOf('## General workflow'),
+    md.indexOf('\n## ', md.indexOf('## General workflow') + 1),
+  )
   const kinds = mermaidBlocks(section).map(block => {
     let end = 0
     while (end < block.length && block[end].trim() !== '') end++
@@ -70,7 +73,11 @@ const images = (dir: string): string[] => {
 
 test('no diagram images in docs or markdown', () => {
   for (const file of markdownFiles())
-    assert.doesNotMatch(readFileSync(join(root, file), 'utf8'), /!\[[^\]]*\]\([^)]*\.(png|svg|jpe?g|gif|webp)(\?[^)]*)?\)/i, `${file}: use a mermaid block instead of an image`)
+    assert.doesNotMatch(
+      readFileSync(join(root, file), 'utf8'),
+      /!\[[^\]]*\]\([^)]*\.(png|svg|jpe?g|gif|webp)(\?[^)]*)?\)/i,
+      `${file}: use a mermaid block instead of an image`,
+    )
   assert.deepEqual(images('docs'), [])
 })
 

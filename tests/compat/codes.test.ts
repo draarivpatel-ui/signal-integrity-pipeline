@@ -26,7 +26,9 @@ const RAISED = [
 function diagnosticCodeUnion(): string[] {
   const text = readFileSync(join(src, 'modules.generated.ts'), 'utf8')
   const sf = ts.createSourceFile('modules.generated.ts', text, ts.ScriptTarget.Latest, true)
-  const alias = sf.statements.find((s): s is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(s) && s.name.text === 'DiagnosticCode')
+  const alias = sf.statements.find(
+    (s): s is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(s) && s.name.text === 'DiagnosticCode',
+  )
   assert.ok(alias, 'src/modules.generated.ts declares DiagnosticCode')
   const codes: string[] = []
   /** Collects every string literal type found under the union node. */
@@ -69,8 +71,12 @@ function literalRaises(): Map<string, string[]> {
     }
     /** Walks the file's AST looking for fail(...) and new Diagnostic(...) calls with literal codes. */
     const visit = (n: ts.Node): void => {
-      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'fail') add(literals(n.arguments[0]))
-      if (ts.isNewExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'Diagnostic' && (n.arguments?.length ?? 0) >= 3)
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'fail') add(
+        literals(n.arguments[0]),
+      )
+      if (ts.isNewExpression(
+        n,
+      ) && ts.isIdentifier(n.expression) && n.expression.text === 'Diagnostic' && (n.arguments?.length ?? 0) >= 3)
         add(literals(n.arguments![1]))
       ts.forEachChild(n, visit)
     }
@@ -88,7 +94,9 @@ test('DiagnosticCode in src/modules.generated.ts equals the pinned set of raisab
 test('every literal code raised in non-legacy src/ is in the pinned set', () => {
   const pinned = new Set(RAISED)
   const raised = literalRaises()
-  const unknown = [...raised].filter(([code]) => !pinned.has(code)).map(([code, files]) => `${code} (${[...new Set(files)].join(', ')})`)
+  const unknown = [...raised].filter(([code]) => !pinned.has(code)).map(([code, files]) => `${code} (${[
+    ...new Set(files)
+  ].join(', ')})`)
   assert.deepEqual(unknown, [])
   assert.ok(raised.size >= 40, `scanner found ${raised.size} codes in the surviving module surfaces`)
 })

@@ -44,7 +44,9 @@ function repo(t: { after(fn: () => void): void }, files: Record<string, string>)
 }
 
 /** The names a snippet declares, as `name` or `name*` when exported. */
-const names = (text: string, file: string = 'a.ts'): string[] => collectNames(file, text).map(n => n.exported ? `${n.name}*` : n.name)
+const names = (text: string, file: string = 'a.ts'): string[] => collectNames(file, text).map(
+  n => n.exported ? `${n.name}*` : n.name,
+)
 
 /** Asserts that parsing the text fails on the given line with a message matching the pattern. */
 function rejects(text: string, line: number, message: RegExp): void {
@@ -92,7 +94,18 @@ test('candidates: plural, verb, -er and -ly forms', () => {
 
 test('isKnown: any candidate in domain, general or abbreviations; avoid words never', () => {
   const v = vocab()
-  for (const w of ['probes', 'lanes', 'getter', 'counted', 'reading', 'writer', 'mm', 'indexes', 'values', 'x']) assert.ok(isKnown(w, v), w)
+  for (const w of [
+    'probes',
+    'lanes',
+    'getter',
+    'counted',
+    'reading',
+    'writer',
+    'mm',
+    'indexes',
+    'values',
+    'x',
+  ]) assert.ok(isKnown(w, v), w)
   for (const w of ['sensor', 'sensors', 'tmp', 'mesh', 'z']) assert.ok(!isKnown(w, v), w)
 })
 
@@ -123,7 +136,11 @@ test('parseVocabulary: invalid files name the line', () => {
   rejects('general:\n  - get Set\n', 2, /"Set" is not a valid word/)
   rejects('general:\n  - 9lives\n', 2, /not a valid word/)
   rejects('general:\n  - get\n  - put get\n', 3, /"get" is already listed in general \(line 2\)/)
-  rejects('domain:\n  lane: a path\ngeneral:\n  - lane\n', 4, /"lane" is already listed in domain; a word belongs to one section \(line 2\)/)
+  rejects(
+    'domain:\n  lane: a path\ngeneral:\n  - lane\n',
+    4,
+    /"lane" is already listed in domain; a word belongs to one section \(line 2\)/,
+  )
   rejects('general:\n  - tmp\navoid:\n  tmp: temporary\n', 4, /"tmp" is already listed in general/)
   rejects('general:\n  - a\ngeneral:\n  - b\n', 3, /"general" appears twice/)
   rejects('general:\n\t- a\n', 2, /tabs/)
@@ -136,15 +153,44 @@ function makeLane<TValue>(laneWidth: number, { probeName, inner: { depth } }: Op
   let [rowCount] = [2]
   try { void 0 } catch (caught) { void caught }
 }
-class Board { private readonly traceCount = 0; #hidden = 1; get area(): number { return 1 } method(arg: string): void {} constructor(public owner: string) {} }
+class Board {
+  private readonly traceCount = 0
+  #hidden = 1
+  get area(): number { return 1 }
+  method(arg: string): void {}
+  constructor(public owner: string) {}
+}
 interface Shape { width: number; resize(scale: number): void }
 type Pair = { left: number; right: number; [key: string]: number }
 enum Mode { FastMode }
 const named = function innerName() {}
 `
   assert.deepEqual(names(text).sort(), [
-    'Board', 'FastMode', 'Mode', 'Pair', 'Shape', 'TValue', 'area', 'arg', 'caught', 'depth', 'first', 'hidden', 'innerName',
-    'key', 'laneWidth', 'left', 'localValue', 'makeLane', 'method', 'named', 'owner', 'probeName', 'resize', 'right', 'rowCount',
+    'Board',
+    'FastMode',
+    'Mode',
+    'Pair',
+    'Shape',
+    'TValue',
+    'area',
+    'arg',
+    'caught',
+    'depth',
+    'first',
+    'hidden',
+    'innerName',
+    'key',
+    'laneWidth',
+    'left',
+    'localValue',
+    'makeLane',
+    'method',
+    'named',
+    'owner',
+    'probeName',
+    'resize',
+    'right',
+    'rowCount',
     'scale', 'second', 'traceCount', 'width',
   ])
 })
@@ -177,11 +223,25 @@ function local(): void { const publicThing = 1 }
 export { listed }
 export { reexported } from './other'
 `
-  assert.deepEqual(names(text), ['publicThing*', 'innerArg', 'firstPart*', 'secondPart*', 'PublicShape*', 'member', 'DefaultThing*', 'listed*', 'hidden', 'local'])
+  assert.deepEqual(names(text), [
+    'publicThing*',
+    'innerArg',
+    'firstPart*',
+    'secondPart*',
+    'PublicShape*',
+    'member',
+    'DefaultThing*',
+    'listed*',
+    'hidden',
+    'local',
+  ])
 })
 
 test('collectNames: .tsx files parse JSX', () => {
-  assert.deepEqual(names('export const LanePanel = ({ laneCount }: { laneCount: number }) => <div title="lanes">{laneCount}</div>\n', 'a.tsx'), ['LanePanel*', 'laneCount'])
+  assert.deepEqual(names(
+    'export const LanePanel = ({ laneCount }: { laneCount: number }) => <div title="lanes">{laneCount}</div>\n',
+    'a.tsx',
+  ), ['LanePanel*', 'laneCount'])
 })
 
 test('scoreNames: dedupe per module, exported names weigh 2, overall is weighted across modules', () => {
@@ -214,7 +274,15 @@ test('scoreNames: threshold decides pass/fail; modules below target are flagged 
   assert.equal(at.pass, true, 'a score equal to the threshold passes')
   assert.deepEqual(at.modules.map(m => m.belowTarget), [false, true])
   assert.equal(scoreNames(entries, vocab(90)).pass, false)
-  assert.deepEqual(scoreNames([], vocab()), { threshold: 85, score: 100, names: 0, pass: true, modules: [], unknownWords: 0, unknown: [] })
+  assert.deepEqual(scoreNames([], vocab()), {
+    threshold: 85,
+    score: 100,
+    names: 0,
+    pass: true,
+    modules: [],
+    unknownWords: 0,
+    unknown: [],
+  })
 })
 
 test('scoreNames: unknown words ranked by distinct names, then alphabetically, with examples and avoid hints', () => {
@@ -261,7 +329,11 @@ test('scoreProject: walks src/, assigns modules, skips generated files', t => {
 
 test('CLI: exit codes, --json and invalid dictionaries', t => {
   /** Runs the script against a temp repo and returns its exit code and output. */
-  const run = (root: string, ...args: string[]): { status: number | null; stdout: string; stderr: string } =>
+  const run = (root: string, ...args: string[]): {
+    status: number | null
+    stdout: string
+    stderr: string
+  } =>
     spawnSync(process.execPath, ['--import', 'tsx', SCRIPT, '--root', root, ...args], { encoding: 'utf8' })
   const good = repo(t, { 'src/board/index.ts': 'export const laneCount = 1\nconst probeValue = 2\n' })
   const pass = run(good)

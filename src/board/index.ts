@@ -6,7 +6,13 @@
  */
 export type { CircuitJson, SimulationExperiment, SimulationIbisModel } from './schema'
 export { recordSchema, validateCircuitRecords } from './schema'
-export { type BoardStackup, type CopperLayer, type DielectricLayer, stackupFromCircuitJson, defaultCopperConductivitySm } from './stackup'
+export {
+  type BoardStackup,
+  type CopperLayer,
+  type DielectricLayer,
+  stackupFromCircuitJson,
+  defaultCopperConductivitySm,
+} from './stackup'
 export { subcircuitTree, type SubcircuitTree } from './subcircuit'
 export { connectedSourceIds } from './connectivity'
 export type {

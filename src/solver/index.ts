@@ -15,7 +15,12 @@ export interface SolverRequest {
   args: string[]
   outputFiles: string[]
 }
-export interface SolverResult { stdout: string; stderr: string; files: Record<string, string>; exitCode?: number }
+export interface SolverResult {
+  stdout: string
+  stderr: string
+  files: Record<string, string>
+  exitCode?: number
+}
 /** Reject on an unsuccessful exit. The library also validates diagnostics and outputs. */
 export type RunSolver = (request: SolverRequest) => Promise<SolverResult>
 
@@ -50,21 +55,45 @@ export async function invoke<const O extends string>(
   request: SolverRequest & { outputFiles: readonly O[] },
 ): Promise<Produced<AcceptedRun<O>>> {
   const supplied = { ...request.files }
-  const result = await ctx.runSolver({ ...request, files: { ...supplied }, args: [...request.args], outputFiles: [...request.outputFiles] })
-  if (!result || typeof result.stdout !== 'string' || typeof result.stderr !== 'string' || !result.files || typeof result.files !== 'object')
+  const result = await ctx.runSolver({
+    ...request,
+    files: { ...supplied },
+    args: [...request.args],
+    outputFiles: [...request.outputFiles],
+  })
+  if (
+    !result ||
+    typeof result.stdout !== 'string' ||
+    typeof result.stderr !== 'string' ||
+    !result.files ||
+    typeof result.files !== 'object'
+  )
     fail('solver_result', `${request.solver}: expected stdout, stderr and files`)
   if (result.exitCode !== undefined && result.exitCode !== 0)
     fail('native_solver', `${request.solver}: exited ${result.exitCode}\n${result.stdout}\n${result.stderr}`)
-  for (const file of request.outputFiles) if (!Object.hasOwn(result.files, file) || typeof result.files[file] !== 'string')
-    fail('native_output', `${request.solver}: missing ${file}`)
+  for (const file of request.outputFiles) {
+    if (!Object.hasOwn(result.files, file) || typeof result.files[file] !== 'string') {
+      fail('native_output', `${request.solver}: missing ${file}`)
+    }
+  }
   const merged: Record<string, string> = { ...supplied, ...result.files }
   const artifacts = []
   for (const [path, body] of Object.entries(merged)) {
     if (typeof body !== 'string') fail('solver_result', `${request.solver}: ${path} must be a string`)
     artifacts.push(scope.text(path, body))
   }
-  const logs = [scope.text(`${request.solver}.stdout.log`, result.stdout), scope.text(`${request.solver}.stderr.log`, result.stderr)]
+  const logs = [
+    scope.text(`${request.solver}.stdout.log`, result.stdout),
+    scope.text(`${request.solver}.stderr.log`, result.stderr),
+  ]
   artifacts.push(...logs, scope.json(`${request.solver}.request.json`, request))
   const outputs = Object.fromEntries(request.outputFiles.map(file => [file, result.files[file]])) as Record<O, string>
-  return { value: { stdout: result.stdout, stderr: result.stderr, outputs, files: merged, logPaths: logs.map(a => a.path) }, artifacts }
+  const value: AcceptedRun<O> = {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    outputs,
+    files: merged,
+    logPaths: logs.map(artifact => artifact.path),
+  }
+  return { value, artifacts }
 }
