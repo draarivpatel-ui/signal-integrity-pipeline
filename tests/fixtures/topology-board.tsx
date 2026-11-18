@@ -140,3 +140,73 @@ export async function seriesResistor(stub: boolean): Promise<CircuitJson> {
     </>,
   )
 }
+
+/** Top and bottom traces meet at a plated terminal. */
+export async function platedHoleRoute(): Promise<CircuitJson> {
+  return topologyBoard(
+    <>
+      <SignalPin name="TX" x={-4} />
+      <chip
+        name="MID"
+        pcbX={0}
+        pcbY={0}
+        pinLabels={{ pin1: "SIG" }}
+        footprint={
+          <footprint>
+            <platedhole
+              portHints={["pin1"]}
+              pcbX={0}
+              pcbY={0}
+              shape="circle"
+              holeDiameter={0.2}
+              outerDiameter={0.4}
+            />
+          </footprint>
+        }
+      />
+      <SignalPin name="RX" x={4} layer="bottom" />
+      <trace
+        from=".TX > .SIG"
+        to=".MID > .SIG"
+        pcbPath={[".TX > .SIG", ".MID > .SIG"]}
+      />
+      <trace
+        from=".RX > .SIG"
+        to=".MID > .SIG"
+        pcbPath={[".RX > .SIG", ".MID > .SIG"]}
+      />
+    </>,
+  )
+}
+
+/** Top and bottom traces meet at a separately rendered via. */
+export async function standaloneViaRoute(): Promise<CircuitJson> {
+  return topologyBoard(
+    <>
+      <SignalPin name="TX" x={-4} />
+      <SignalPin name="RX" x={4} layer="bottom" />
+      <net name="SIGNAL" />
+      <via
+        name="V"
+        pcbX={0}
+        pcbY={0}
+        layers={["top", "bottom"]}
+        holeDiameter={0.2}
+        outerDiameter={0.45}
+        connectsTo="net.SIGNAL"
+      />
+      <trace
+        from=".TX > .SIG"
+        to=".V > .top"
+        connectsTo={[".TX > .SIG", ".V > .top", "net.SIGNAL"]}
+        pcbPath={[".TX > .SIG", ".V > .top"]}
+      />
+      <trace
+        from=".RX > .SIG"
+        to=".V > .bottom"
+        connectsTo={[".RX > .SIG", ".V > .bottom", "net.SIGNAL"]}
+        pcbPath={[".RX > .SIG", ".V > .bottom"]}
+      />
+    </>,
+  )
+}

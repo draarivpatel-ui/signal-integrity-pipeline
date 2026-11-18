@@ -9,7 +9,9 @@ import { driverReceiverChannel } from "../fixtures/driver-receiver-channel"
 import {
   daisyChain,
   missingReceiverTerminal,
+  platedHoleRoute,
   seriesResistor,
+  standaloneViaRoute,
   unroutedExtraPin,
 } from "../fixtures/topology-board"
 
@@ -60,4 +62,14 @@ test("two copper legs leaving a series resistor form a branch", async () => {
   assert.doesNotThrow(() => validate(straight))
   const branched = await seriesResistor(true)
   assert.throws(() => validate(branched), /branched routed graphs/)
+})
+
+test("a plated hole connects traces on different layers", async () => {
+  const circuit = await platedHoleRoute()
+  assert.doesNotThrow(() => validate(circuit))
+})
+
+test("a standalone via connects traces on different layers", async () => {
+  const circuit = await standaloneViaRoute()
+  assert.doesNotThrow(() => validate(circuit))
 })
