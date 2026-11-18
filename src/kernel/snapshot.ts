@@ -6,9 +6,9 @@ export function snapshot<T>(source: T): T {
     throw new Error("Stage snapshots cannot contain functions")
   if (!source || typeof source !== "object") return source
 
-  const unsupported =
-    source instanceof Map || source instanceof Set || ArrayBuffer.isView(source)
-  if (unsupported) throw new Error("Stage snapshots require plain values")
+  const prototype = Object.getPrototypeOf(source)
+  if (prototype !== Object.prototype && prototype !== null)
+    throw new Error("Stage snapshots require plain values")
   const entries = Object.entries(source).map(([key, entry]) => [
     key,
     snapshot(entry),
