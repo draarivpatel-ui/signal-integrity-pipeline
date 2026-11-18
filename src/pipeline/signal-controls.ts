@@ -220,7 +220,8 @@ export function appendBlockControls(
     for (const [index, endpoint] of probeEndpoints(signal).entries()) {
       const ports = endpointPorts(endpoint)
       let ref = ports[1]
-      if (!("p_source_port_id" in endpoint)) ref = pins.get(ports[0])!.ground
+      if (!("p_source_port_id" in endpoint))
+        ref = pins.get(ports[0])!.references.pulldown
       circuit.push({
         type: "simulation_voltage_probe",
         simulation_voltage_probe_id: `${signal.simulation_pcb_driver_receiver_channel_id}_${index}`,

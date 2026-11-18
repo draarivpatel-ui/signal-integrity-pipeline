@@ -9,6 +9,7 @@ import {
   compareNames,
   endpointPorts,
   type PreparedBlock,
+  prepareBlockById,
   signalBits,
   signalBlocks,
 } from "../../src/pipeline/signals"
@@ -282,6 +283,74 @@ test("an unlisted output on the same net is diagnosed before routed branch check
       }),
     /Signal "D81" has two drivers/,
   )
+})
+
+/** Give the second block its own source asset and a configurable distance from the first. */
+function TwoIndependentBlocks({
+  otherY,
+}: {
+  otherY: number
+}): React.JSX.Element {
+  const board = TwoTraceBoard()
+  return React.cloneElement(
+    board,
+    { height: 110 },
+    <>
+      {board.props.children}
+      <Inverter
+        name="OTHER_TX"
+        x={-4.6}
+        y={otherY}
+        driver
+        modelFile="distant.ibs"
+      />
+      <Inverter name="OTHER_RX" x={4.6} y={otherY} driver={false} />
+      <trace
+        from=".OTHER_TX > .Y"
+        to=".OTHER_RX > .A"
+        width={0.1}
+        pcbPath={[".OTHER_TX > .Y", ".OTHER_RX > .A"]}
+      />
+      <simulation.pcbtransientchannelsimulation name="OTHER" bitRate="50Mbps">
+        <simulation.pcbdriverreceiverchannel
+          name="OTHER"
+          driverRef=".OTHER_TX > .Y"
+          receiverRef=".OTHER_RX > .A"
+        />
+      </simulation.pcbtransientchannelsimulation>
+    </>,
+  )
+}
+
+/** Prepare only the first block without the other board model's asset. */
+async function prepareFirstBlock(otherY: number): Promise<PreparedBlock> {
+  const circuit = await renderSignals(
+    <TwoIndependentBlocks otherY={otherY} />,
+    ["pcb_port_not_connected_error"],
+  )
+  const first = signalBlocks(circuit).find((block) => block.name === "TWO")
+  assert.ok(first)
+  return prepareBlockById({
+    circuit,
+    sources: inverterSources,
+    blockId: first.simulation_pcb_transient_channel_simulation_id,
+    distanceMm: 1,
+  })
+}
+
+test("preparing one block does not load assets for distant unretained pins", async () => {
+  const prepared = await prepareFirstBlock(45)
+  assert.equal(prepared.pins.size, 4)
+  const paths = new Set(
+    [...prepared.pins.values()].map(
+      (pin) => pin.model.ibis_model_asset.project_relative_path,
+    ),
+  )
+  assert.deepEqual([...paths], [inverterIbisPath])
+})
+
+test("preparation still loads IBIS assets for retained quiet pins", async () => {
+  await assert.rejects(prepareFirstBlock(0.9), /distant[.]ibs/)
 })
 
 test("preparation keeps controls and probes independent across blocks", async () => {
