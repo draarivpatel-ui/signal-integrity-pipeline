@@ -343,12 +343,19 @@ function scopeApproximation(distanceMm: number, openPads: number): string {
  */
 export function channelCopperScope({
   circuit,
-  connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit),
+  connectivity: suppliedConnectivity,
   selected,
   reference,
   rails = new Set(),
   distanceMm = DEFAULT_SCOPE_DISTANCE_MM,
 }: CopperScopeOptions): CopperScope {
+  if (!Number.isFinite(distanceMm) || distanceMm < 0) {
+    throw new RangeError(
+      "Copper scope distance must be finite and non-negative",
+    )
+  }
+  const connectivity =
+    suppliedConnectivity ?? getSourcePortConnectivityMapFromCircuitJson(circuit)
   const count =
     circuit.find((record) => record.type === "pcb_board")?.num_layers ??
     OUTER_LAYER_COUNT

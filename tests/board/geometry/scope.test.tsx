@@ -508,3 +508,18 @@ test("a pour arc approaching the channel is retained even when its vertices are 
     )
   }
 })
+
+test("scope rejects invalid lateral distances", async () => {
+  const circuit = await renderCoreSignals(
+    <board width={18} height={18} routeRemaining={false} schematicDisabled>
+      <Wire name="SELECTED" y={0} extent={3} />
+    </board>,
+  )
+  for (const distanceMm of [NaN, Infinity, -Infinity, -1]) {
+    assert.throws(() => scopeFor(circuit, distanceMm), {
+      name: "RangeError",
+      message: "Copper scope distance must be finite and non-negative",
+    })
+  }
+  assert.equal(scopeFor(circuit, 0).lateralDistanceMm, 0)
+})
