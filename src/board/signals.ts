@@ -3,6 +3,7 @@ import type {
   SimulationPcbDriverReceiverChannel,
   SimulationPcbTransientChannelSimulation,
 } from "circuit-json"
+import type { SourcePortId } from "./ids"
 
 export type {
   SignalEndpoint,
@@ -24,4 +25,12 @@ export function isQuiet(channel: SimulationPcbDriverReceiverChannel): boolean {
   return (
     channel.driver_disabled === true || isConstantBitPattern(channel.pattern)
   )
+}
+
+/** The physical ports of a signal endpoint, excluding optional IBIS model names. */
+export function signalEndpointPortIds(
+  endpoint: SignalEndpoint,
+): SourcePortId[] {
+  if ("source_port_id" in endpoint) return [endpoint.source_port_id]
+  return [endpoint.p_source_port_id, endpoint.n_source_port_id]
 }
