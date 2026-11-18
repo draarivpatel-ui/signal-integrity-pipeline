@@ -180,3 +180,63 @@ test("allowed unrouted channels retain ideal source connectivity", async () => {
     node(signal.receivers[0].source_port_id),
   )
 })
+
+test("series resistor keeps both routed segments electrically distinct", async () => {
+  const circuitJson = await renderCoreSignals(
+    <AdmissionChannel route="series" />,
+  )
+  signalBlocks(circuitJson)[0].allow_unrouted_traces = false
+  const solver = new RoutedAdmissionSolver({
+    circuitJson,
+    ibisSources: { [inverterModelPath]: routedVisualIbis },
+  })
+  solver.solve()
+  const [{ bindings, sections }] = solver.getOutput().value
+  assert.equal(sections.requiredSourcePortIds.length, 4)
+  assert.equal(bindings.mappings.length, 1)
+  const [mapping] = bindings.mappings
+  const traces = circuitJson.filter((record) => record.type === "source_trace")
+  const driverTrace = traces.find((trace) =>
+    trace.connected_source_port_ids.includes(mapping.from),
+  )
+  const receiverTrace = traces.find((trace) =>
+    trace.connected_source_port_ids.includes(mapping.to),
+  )
+  assert.ok(driverTrace && receiverTrace)
+  const { node } = circuitNodes({
+    circuit: bindings.circuitJson,
+    modeling: bindings.modeling,
+    mappings: bindings.mappings,
+  })
+  for (const trace of [driverTrace, receiverTrace]) {
+    const [from, to] = trace.connected_source_port_ids
+    assert.notEqual(node(from), node(to), trace.source_trace_id)
+  }
+  assert.deepEqual(mapping.sourceTraceIds, [
+    driverTrace.source_trace_id,
+    receiverTrace.source_trace_id,
+  ])
+})
+
+test("a routed receiver segment survives an ideal driver segment", async () => {
+  const circuitJson = await renderSignals(
+    <AdmissionChannel route="receiver-only" />,
+    ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
+  )
+  const solver = new RoutedAdmissionSolver({
+    circuitJson,
+    ibisSources: { [inverterModelPath]: routedVisualIbis },
+  })
+  solver.solve()
+  const [{ bindings, sections }] = solver.getOutput().value
+  const [traceId] = sections.scope.selectedPcbTraceIds
+  const trace = circuitJson.find(
+    (record) => record.type === "pcb_trace" && record.pcb_trace_id === traceId,
+  )
+  assert.ok(trace?.type === "pcb_trace" && trace.source_trace_id)
+  assert.equal(sections.scope.selectedPcbTraceIds.length, 1)
+  assert.deepEqual(
+    bindings.mappings.map((mapping) => mapping.sourceTraceId),
+    [trace.source_trace_id],
+  )
+})

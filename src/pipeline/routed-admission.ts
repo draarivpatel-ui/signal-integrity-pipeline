@@ -1,9 +1,15 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import {
   type CircuitJson,
+  getSourcePortConnectivityMapFromCircuitJson,
   type LaneMapping,
+  passiveBridges,
   type RouteSectionsInput,
   type SimulationPcbDriverReceiverChannel,
+  type SourceNetId,
+  type SourcePortId,
+  sourceConnections,
+  sourceNetMembers,
   validateCircuitRecords,
 } from "../board"
 import { edgeSeconds, type IbisSources } from "../buffers"
@@ -44,28 +50,117 @@ export interface RoutedBlockPlan {
   bindings: Omit<RouteBindingsInput, "scope">
   warnings: string[]
 }
-/** Match each receiver leg with the corresponding driver leg and its trace. */
+type SourceId = SourcePortId | SourceNetId
+type SourceTraceId = LaneMapping["sourceTraceId"]
+
+interface RouteConnection {
+  to: SourceId
+  sourceTraceId?: SourceTraceId
+}
+type RouteConnections = Map<SourceId, RouteConnection[]>
+
+/** Connect two source nodes, marking edges that represent extracted copper. */
+function addRouteConnection(
+  connections: RouteConnections,
+  {
+    from,
+    to,
+    sourceTraceId,
+  }: RouteConnection & {
+    from: SourceId
+  },
+): void {
+  for (const [a, b] of [
+    [from, to],
+    [to, from],
+  ]) {
+    const neighbors = connections.get(a) ?? []
+    neighbors.push({ to: b, sourceTraceId })
+    connections.set(a, neighbors)
+  }
+}
+
+/** Build the validated source topology, excluding reference rails and labeling routed traces. */
+function blockRouteConnections({
+  circuit,
+  pins,
+  settings,
+}: PreparedBlock): RouteConnections {
+  const connections: RouteConnections = new Map()
+  if (!settings.lanes.length) return connections
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
+  const references = circuit.flatMap((record) => {
+    if (record.type === "source_net" && (record.is_ground || record.is_power))
+      return [record.source_net_id]
+    return []
+  })
+  for (const { ground, power } of pins.values()) references.push(ground, power)
+  const rails = new Set(
+    references.flatMap((port) => [...sourceNetMembers(connectivity, port)]),
+  )
+  // Visit routed parallels first when a source trace also declares the same connection.
+  for (const lane of settings.lanes) {
+    const { from, to, sourceTraceId } = lane
+    if (!from.sourcePortId || !to.sourcePortId || !sourceTraceId) continue
+    addRouteConnection(connections, {
+      from: from.sourcePortId,
+      to: to.sourcePortId,
+      sourceTraceId,
+    })
+  }
+  for (const [from, ...targets] of [
+    ...sourceConnections(circuit),
+    ...passiveBridges(circuit, rails),
+  ]) {
+    if (rails.has(from)) continue
+    for (const to of targets) addRouteConnection(connections, { from, to })
+  }
+  return connections
+}
+
+/** Find a receiver path by visiting source nodes in breadth-first order. */
+function pathTraceIds(
+  connections: RouteConnections,
+  {
+    from,
+    to,
+  }: {
+    from: SourcePortId
+    to: SourcePortId
+  },
+): SourceTraceId[] {
+  const paths = new Map<SourceId, SourceTraceId[]>([[from, []]])
+  for (const [node, traceIds] of paths) {
+    if (node === to) return traceIds
+    for (const neighbor of connections.get(node) ?? []) {
+      if (paths.has(neighbor.to)) continue
+      const trace = neighbor.sourceTraceId
+      paths.set(neighbor.to, trace ? [...traceIds, trace] : traceIds)
+    }
+  }
+  return []
+}
+
+/** Match each receiver leg with the extracted traces along the corresponding driver path. */
 function receiverMappings(
   signal: SimulationPcbDriverReceiverChannel,
-  lanes: PreparedBlock["settings"]["lanes"],
+  connections: RouteConnections,
 ): LaneMapping[] {
   const driverPorts = endpointPorts(signal.driver)
   return signal.receivers.flatMap((receiver) =>
     endpointPorts(receiver).flatMap((to, i) => {
       const from = driverPorts[i]
-      const lane = lanes.find(
-        (lane) =>
-          lane.from.sourcePortId === from || lane.to.sourcePortId === from,
-      )
-      if (!lane?.sourceTraceId) return []
-      return [
-        {
-          port: signal.name,
-          from,
-          to,
-          sourceTraceId: lane.sourceTraceId,
-        },
-      ]
+      const sourceTraceIds = pathTraceIds(connections, { from, to })
+      const [sourceTraceId] = sourceTraceIds
+      if (sourceTraceId === undefined) return []
+      const mapping: LaneMapping = {
+        port: signal.name,
+        from,
+        to,
+        sourceTraceId,
+      }
+      if (sourceTraceIds.length > 1) mapping.sourceTraceIds = sourceTraceIds
+      return [mapping]
     }),
   )
 }
@@ -89,8 +184,9 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
     blockId: id,
     distanceMm: input.scopeDistanceMm ?? MAX_SCOPE_DISTANCE_MM,
   })
+  const connections = blockRouteConnections(block)
   const mappings = block.signals.flatMap((signal) =>
-    receiverMappings(signal, block.settings.lanes),
+    receiverMappings(signal, connections),
   )
   const experiment = block.circuit.find(
     (record) => record.type === "simulation_experiment",
