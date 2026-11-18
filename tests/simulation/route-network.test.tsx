@@ -1,125 +1,40 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import React from "react"
-import { createNativeSolver } from "../../src/adapters"
-import { RouteSectionsSolver } from "../../src/board"
-import { RouteFieldsSolver } from "../../src/extraction"
-import { RoutedAdmissionSolver, type RoutedProblem } from "../../src/pipeline"
-import { RouteBindingsSolver, RouteNetworkSolver } from "../../src/simulation"
-import { routedRequest } from "../../src/simulation/route-transient"
-import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
-import Single from "../fixtures/unit-single-ended"
-import { renderCoreSignals } from "../support/core-render"
+import { RoutedPipelineSolver } from "../../src/pipeline"
+import { RouteNetworkSolver } from "../../src/simulation"
 import { routedProblem } from "../support/routed-fixture"
 import { vendorAvailable } from "../support/vendor-models"
 
-let testNetwork: RouteNetworkSolver | undefined
-
-/** Compile the complete routed deck from a core-rendered board and its IBIS sources. */
-function compileNetwork(input: RoutedProblem): RouteNetworkSolver {
-  const admission = new RoutedAdmissionSolver(input)
-  admission.solve()
-  const plan = admission.getOutput().value[0]
-  const sections = new RouteSectionsSolver(plan.sections)
-  sections.solve()
-  const { geometry, circuitJson, scope, maskThicknessMm } =
-    sections.getOutput().value
-  const fields = new RouteFieldsSolver({
-    geometry,
-    circuitJson,
-    scope,
-    maskThicknessMm,
-    materials: plan.bindings.options.materials,
-    artifactPrefix: plan.sections.artifactPrefix,
-  })
-  fields.solve()
-  const extracted = fields.getOutput().value
-  const bindings = new RouteBindingsSolver({ ...plan.bindings, scope })
-  bindings.solve()
-  const network = new RouteNetworkSolver({
-    blockId: plan.id,
-    name: plan.name,
-    geometry,
-    extracted,
-    bindings: bindings.getOutput().value,
-    materials: extracted.materials,
-    options: plan.bindings.options,
-    warnings: plan.warnings,
-    artifactPrefix: plan.sections.artifactPrefix,
-  })
-  network.solve()
-  return network
-}
-
-/** Cache the network from the rendered fixture and the local vendor model. */
-async function routedNetwork(): Promise<RouteNetworkSolver> {
-  if (testNetwork) return testNetwork
-  const input = await routedProblem()
-  testNetwork = compileNetwork(input)
-  return testNetwork
-}
-
-test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
-  "steps through ladder runs",
-  async () => {
-    const network = await routedNetwork()
-    assert.ok(network.iterations >= 3)
-  },
-)
-
-test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
-  "records ladder statistics",
-  async () => {
-    const network = await routedNetwork()
-    const output = network.getOutput().value
-    assert.ok(output.evidence.cells)
-    assert.ok(output.evidence.maximum_cell_delay_s)
-  },
-)
-
-test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
-  "anchors floating copper",
-  async () => {
-    const network = await routedNetwork()
-    assert.ok(network.getOutput().value.deck.includes("RBIAS"))
-  },
-)
-
-test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
-  "sets the KLU pivot tolerance",
-  async () => {
-    const network = await routedNetwork()
-    const output = network.getOutput().value
-    // klu_refactor reuses the first transient pivots; the zero-diagonal skin multiport rows need KLU tol 0.1.
-    assert.match(output.deck, /^\.options klu .* pivrel=0\.1$/m)
-  },
-)
-
-test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
-  "keeps all planned probes",
-  async () => {
-    const network = await routedNetwork()
-    const output = network.getOutput().value
-    assert.equal(
-      output.probes.length,
-      3,
-      "two receivers and the existing rail monitor",
-    )
-  },
-)
-
-test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
-  "records the scope of candidate evidence",
-  async () => {
-    const network = await routedNetwork()
-    const output = network.getOutput().value
-    assert.ok(
-      (output.evidence.warnings as string[]).some((warning) =>
-        warning.includes("candidate channel experiment"),
-      ),
-    )
-  },
-)
+test("network owns real ladder node samples, complete probe evidence and the executable deck", async (context) => {
+  const input = await routedProblem(context)
+  if (!input) return
+  const port = {
+    progress: (): void => undefined,
+    runSolver: async (): Promise<never> => {
+      throw new Error("network test must not run ngspice")
+    },
+  }
+  const root = new RoutedPipelineSolver(input, port)
+  root.solveUntilStage("RouteTransientSolver")
+  const network = root.getSolver(RouteNetworkSolver.name)!
+  const output = root.stageOutput("RouteNetworkSolver").value[0]
+  assert.ok(network.iterations >= 3)
+  assert.ok(output.evidence.cells)
+  assert.ok(output.evidence.maximum_cell_delay_s)
+  assert.ok(output.deck.includes("RBIAS"))
+  // klu_refactor reuses the first transient pivots; the zero-diagonal skin multiport rows need KLU tol 0.1.
+  assert.match(output.deck, /^\.options klu .* pivrel=0\.1$/m)
+  assert.equal(
+    output.probes.length,
+    3,
+    "two receivers and the existing rail monitor",
+  )
+  assert.ok(
+    (output.evidence.warnings as string[]).some((warning) =>
+      warning.includes("candidate channel experiment"),
+    ),
+  )
+})
 
 /** One unit interval is 2 ns at this rate. */
 const QUIET_BIT_RATE_BPS = 500e6
@@ -150,10 +65,18 @@ async function assertConstantHighCapture({
     />,
   )
   const ibisSources = { "models/sn74lvc1g04.ibs": quietDriverIbis }
-  const { value: compiled } = compileNetwork({
-    circuitJson,
-    ibisSources,
-  }).getOutput()
+  const solve = createNativeSolver({
+    tools: { ngspice: process.env.NGSPICE_BIN },
+  })
+  const root = new RoutedPipelineSolver(
+    { circuitJson, ibisSources },
+    {
+      progress: (): void => undefined,
+      runSolver: solve,
+    },
+  )
+  root.solveUntilStage("RouteTransientSolver")
+  const compiled = root.stageOutput("RouteNetworkSolver").value[0]
   const driver = circuitJson.find(
     (record) => record.type === "simulation_pcb_driver_receiver_channel",
   )?.driver
@@ -165,9 +88,6 @@ async function assertConstantHighCapture({
     driverProbe?.referenceNode === "0",
     "the driver probe is referenced to ground",
   )
-  const solve = createNativeSolver({
-    tools: { ngspice: process.env.NGSPICE_BIN },
-  })
   const request = routedRequest(compiled)
   const [rawFile] = request.outputFiles
   const output = await solve({
