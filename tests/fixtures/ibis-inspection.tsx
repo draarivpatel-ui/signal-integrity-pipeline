@@ -9,6 +9,7 @@ const powerPins = { 1: "DQ", 2: "VDD", 3: "VSS" }
 type BoardOptions = {
   extraPin?: boolean
   powerClamp?: string
+  extraChip?: boolean
 }
 
 type InspectionBoard = {
@@ -16,16 +17,22 @@ type InspectionBoard = {
   pinMap: SimulationIbisModel["ibis_pin_name_to_source_port_id"]
 }
 
-/** Render a chip bound to synthetic IBIS text, with an optional fourth mapped pin. */
-export async function ibisInspectionBoard(
-  options: BoardOptions = {},
-): Promise<InspectionBoard> {
-  const { extraPin, powerClamp } = options
-  const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
-  circuit.add(
-    <board width={10} height={10} schematicDisabled routeRemaining={false}>
+type ChipOptions = Omit<BoardOptions, "extraChip"> & {
+  name: string
+  asset: string
+}
+
+/** Make one chip and its Circuit JSON IBIS declaration. */
+function InspectionChip({
+  name,
+  asset,
+  extraPin,
+  powerClamp,
+}: ChipOptions): React.JSX.Element {
+  return (
+    <>
       <chip
-        name="U1"
+        name={name}
         pinLabels={pinLabels}
         footprint={
           <footprint>
@@ -45,10 +52,10 @@ export async function ibisInspectionBoard(
         }
       />
       <simulation.ibismodel
-        componentRef=".U1"
+        componentRef={`.${name}`}
         ibisModelAsset={{
-          project_relative_path: deviceAsset,
-          url: "https://example.com/device.ibs",
+          project_relative_path: asset,
+          url: `https://example.com/${asset}`,
           mimetype: "text/plain",
         }}
         ibisComponentName="Device"
@@ -59,6 +66,25 @@ export async function ibisInspectionBoard(
           powerClamp ? { 1: { powerClamp } } : undefined
         }
       />
+    </>
+  )
+}
+
+/** Render a selected chip and optional unrelated chip through core. */
+export async function ibisInspectionBoard(
+  options: BoardOptions = {},
+): Promise<InspectionBoard> {
+  const { extraPin, powerClamp, extraChip } = options
+  const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
+  circuit.add(
+    <board width={10} height={10} schematicDisabled routeRemaining={false}>
+      <InspectionChip
+        name="U1"
+        asset={deviceAsset}
+        extraPin={extraPin}
+        powerClamp={powerClamp}
+      />
+      {extraChip && <InspectionChip name="U2" asset="other.ibs" />}
     </board>,
   )
   await circuit.renderUntilSettled()

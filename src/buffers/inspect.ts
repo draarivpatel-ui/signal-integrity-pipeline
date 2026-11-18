@@ -192,15 +192,24 @@ function inspectedPin(
   }
 }
 
-/** Resolve physical pins and reference rails; ambiguous mappings always fail. */
+type PinInspectionOptions = {
+  sources: IbisSources
+  ports: ReadonlySet<SourcePortId>
+}
+
+/** Resolve selected signal ports and their reference rails, loading only their model declarations. */
 export function inspectPins(
   circuit: CircuitJson,
-  sources: IbisSources,
+  { sources, ports }: PinInspectionOptions,
 ): Map<SourcePortId, InspectedPin> {
   const pins = new Map<SourcePortId, InspectedPin>()
-  for (const model of circuit.filter(
-    (r) => r.type === "simulation_ibis_model",
-  )) {
+  for (const model of circuit) {
+    if (model.type !== "simulation_ibis_model") continue
+    const selected = Object.entries(
+      model.ibis_pin_name_to_source_port_id,
+    ).filter(([, port]) => ports.has(port))
+    if (!selected.length) continue
+
     const { text } = loadModelSource(
       { ...model, pipelineId: model.simulation_ibis_model_id },
       sources,
@@ -209,8 +218,7 @@ export function inspectPins(
     const component = document.components[model.ibis_component_name]
     if (!component)
       throw new Error(`IBIS component ${model.ibis_component_name} is missing`)
-    const mapping = model.ibis_pin_name_to_source_port_id
-    for (const [pin, port] of Object.entries(mapping)) {
+    for (const [pin, port] of selected) {
       const binding: PinBinding = {
         port,
         pin,
