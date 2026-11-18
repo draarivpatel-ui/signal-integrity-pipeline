@@ -31,7 +31,6 @@ export interface RoutedSections {
 /** Segment one real route per step, then admit selected endpoint contacts. */
 export class RouteSectionsSolver extends BaseSolver {
   private steps?: Generator<SectionGeometry, SectionGeometry>
-  private geometry?: SectionGeometry
   private output?: Produced<RoutedSections>
   private scope: CopperScope
   /** Capture source values and correct the owned AC rail scope. */
@@ -41,23 +40,26 @@ export class RouteSectionsSolver extends BaseSolver {
       input.circuitJson,
     )
     const ground = sourceNetMembers(connectivity, input.referenceSourcePortId)
-    const traces = input.circuitJson
-      .filter((record) => record.type === "source_trace")
-      .filter((trace) =>
-        [
-          ...trace.connected_source_port_ids,
-          ...(trace.connected_source_net_ids ?? []),
-        ].some((id) => ground.has(id)),
-      )
-      .map((trace) => trace.source_trace_id)
+    const sourceTraces = input.circuitJson.filter(
+      (record) => record.type === "source_trace",
+    )
+    const railTraces = sourceTraces.filter((trace) => {
+      const connected = [
+        ...trace.connected_source_port_ids,
+        ...(trace.connected_source_net_ids ?? []),
+      ]
+      return connected.some((id) => ground.has(id))
+    })
+    const railSourceIds = railTraces.map((trace) => trace.source_trace_id)
+    const railPcbIds = input.circuitJson
+      .filter((record) => record.type === "pcb_trace")
+      .filter((trace) => railSourceIds.includes(trace.source_trace_id!))
+      .map((trace) => trace.pcb_trace_id)
     this.scope = {
       ...input.scope,
       nonReferenceRailTraceIds: [
         ...input.scope.nonReferenceRailTraceIds,
-        ...input.circuitJson
-          .filter((record) => record.type === "pcb_trace")
-          .filter((trace) => traces.includes(trace.source_trace_id!))
-          .map((trace) => trace.pcb_trace_id),
+        ...railPcbIds,
       ],
     }
   }
@@ -65,47 +67,54 @@ export class RouteSectionsSolver extends BaseSolver {
   override _step(): void {
     this.steps ??= routeSectionSteps(this.input.circuitJson, this.scope)
     const result = this.steps.next()
-    this.geometry = result.value
+    const geometry = result.value
     this.stats = {
       routes: Math.min(this.iterations, this.scope.pcbTraceIds.length),
-      wires: this.geometry.wires.length,
-      slices: this.geometry.slices.length,
+      wires: geometry.wires.length,
+      slices: geometry.slices.length,
     }
     if (!result.done) return
-    const masks = this.input.circuitJson
-      .filter((record) => record.type === "pcb_stackup")[0]
-      .layers.filter((layer) => layer.layer_type === "soldermask")
-    if (new Set(masks.map((layer) => layer.thickness)).size > 1)
+
+    const { circuitJson, requiredSourcePortIds, artifactPrefix } = this.input
+    const [stackup] = circuitJson.filter(
+      (record) => record.type === "pcb_stackup",
+    )
+    const masks = stackup.layers.filter(
+      (layer) => layer.layer_type === "soldermask",
+    )
+    if (new Set(masks.map((layer) => layer.thickness)).size > 1) {
       throw new Error(
         "Asymmetric soldermask thickness requires separate outer-layer material profiles",
       )
-    for (const id of this.input.requiredSourcePortIds) {
-      const port = this.input.circuitJson.find(
+    }
+    for (const id of requiredSourcePortIds) {
+      const port = circuitJson.find(
         (record) => record.type === "pcb_port" && record.source_port_id === id,
       )
       if (
-        !port ||
-        port.type !== "pcb_port" ||
-        !port.layers.some((layer) =>
+        port?.type === "pcb_port" &&
+        port.layers.some((layer) =>
           routeContactFrame({
-            geometry: this.geometry!,
+            geometry,
             scope: this.scope,
             layer,
             point: [port.x, port.y],
           }),
         )
       )
-        throw new Error(
-          `selected endpoint ${id} has no physical wire or via contact`,
-        )
+        continue
+      throw new Error(
+        `selected endpoint ${id} has no physical wire or via contact`,
+      )
     }
+
     const value = snapshot({
-      circuitJson: this.input.circuitJson,
+      circuitJson,
       scope: this.scope,
-      geometry: this.geometry,
+      geometry,
       maskThicknessMm: masks[0]?.thickness ?? null,
     })
-    const scope = rootScope("board").child(this.input.artifactPrefix)
+    const scope = rootScope("board").child(artifactPrefix)
     this.output = {
       value,
       artifacts: [
