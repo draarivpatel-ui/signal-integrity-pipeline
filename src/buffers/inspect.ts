@@ -1,6 +1,7 @@
 import {
   type IbisBuffer,
   type IbisComponent,
+  type IbisConversionMetadata,
   type IbisDocument,
   parseIbis,
 } from "@tscircuit/ibis-to-spice"
@@ -20,10 +21,8 @@ export interface InspectedPin {
   buffer: IbisBuffer
   /** Raw IBIS file text. */
   text: string
-  /** Source port of the ground reference rail. */
-  ground: SourcePortId
-  /** Source port of the power reference rail. */
-  power: SourcePortId
+  /** Source ports of the separate IBIS reference rails. */
+  references: ReferencePorts
 }
 /** Typical IBIS reference voltages for the pullup, pulldown and clamp tables. */
 export type ReferenceVoltages = Record<
@@ -122,27 +121,32 @@ export function ibisNumber(token: string): number {
 /** A physical IBIS pin and the Circuit JSON port that uses it. */
 type PinBinding = Pick<InspectedPin, "port" | "pin" | "model" | "component">
 
-/** Resolve a vendor rail by [Pin Mapping], or a unique POWER/GND pin. */
+type ReferencePorts = IbisConversionMetadata["pins"][number]["references"]
+
+/** The Circuit JSON reference field corresponding to each converter role. */
+const REFERENCE_PORT_IDS = {
+  pullup: "pullup_reference_source_port_id",
+  pulldown: "pulldown_reference_source_port_id",
+  powerClamp: "power_clamp_reference_source_port_id",
+  groundClamp: "ground_clamp_reference_source_port_id",
+  external: "external_reference_source_port_id",
+} as const
+
+/** Matches the converter's rail inference for a single reference role. */
 function referenceRail(
   { model, component, pin, port }: PinBinding,
-  role: "ground" | "power",
+  role: keyof ReferencePorts,
 ): SourcePortId {
-  const refs = model.ibis_pin_name_to_reference_source_port_ids?.[pin]
-  const buses = component.pinMapping[pin]
-  let explicit =
-    refs?.pullup_reference_source_port_id ??
-    refs?.power_clamp_reference_source_port_id
-  let reference: "pullup" | "pulldown" = "pullup"
-  let railModel = "power"
-  if (role === "ground") {
-    explicit =
-      refs?.pulldown_reference_source_port_id ??
-      refs?.ground_clamp_reference_source_port_id
-    reference = "pulldown"
-    railModel = "gnd"
-  }
+  const explicit =
+    model.ibis_pin_name_to_reference_source_port_ids?.[pin]?.[
+      REFERENCE_PORT_IDS[role]
+    ]
   if (explicit) return explicit
-  const bus = buses?.[reference]
+
+  const bus = component.pinMapping[pin]?.[role]
+  const busRole = role === "external" ? "pullup" : role
+  const railModel =
+    role === "pulldown" || role === "groundClamp" ? "gnd" : "power"
   const candidates = new Set<SourcePortId>()
   for (const [id, sourcePortId] of Object.entries(
     model.ibis_pin_name_to_source_port_id,
@@ -151,7 +155,7 @@ function referenceRail(
     if (candidate?.model.toLowerCase() !== railModel) continue
     if (
       bus &&
-      component.pinMapping[id]?.[reference] !== bus &&
+      component.pinMapping[id]?.[busRole] !== bus &&
       candidate.signal !== bus &&
       id !== bus
     )
@@ -164,6 +168,27 @@ function referenceRail(
     )
   }
   return [...candidates][0]
+}
+
+/** Clamp roles share the drive rails when the model names no separate clamp port or bus. */
+function referenceRails(binding: PinBinding): ReferencePorts {
+  const { model, component, pin } = binding
+  const explicit = model.ibis_pin_name_to_reference_source_port_ids?.[pin]
+  const buses = component.pinMapping[pin]
+  const pullup = referenceRail(binding, "pullup")
+  const pulldown = referenceRail(binding, "pulldown")
+  const powerClamp =
+    explicit?.power_clamp_reference_source_port_id || buses?.powerClamp
+      ? referenceRail(binding, "powerClamp")
+      : pullup
+  const groundClamp =
+    explicit?.ground_clamp_reference_source_port_id || buses?.groundClamp
+      ? referenceRail(binding, "groundClamp")
+      : pulldown
+  const references = { pullup, pulldown, powerClamp, groundClamp }
+  if (!explicit?.external_reference_source_port_id && !buses?.external)
+    return references
+  return { ...references, external: referenceRail(binding, "external") }
 }
 
 /** IBIS pin assignments that do not select a signal buffer. */
@@ -186,7 +211,7 @@ function selectedModelName(
   return name
 }
 
-/** Resolves the selected buffer and its two reference ports. */
+/** Resolves the selected buffer and its reference ports. */
 function inspectedPin(
   binding: PinBinding,
   {
@@ -200,15 +225,12 @@ function inspectedPin(
   },
 ): InspectedPin {
   const buffer = document.getBuffer(name)
-  const ground = referenceRail(binding, "ground")
-  const power = referenceRail(binding, "power")
   return {
     ...binding,
     document,
     buffer,
     text,
-    ground,
-    power,
+    references: referenceRails(binding),
   }
 }
 
