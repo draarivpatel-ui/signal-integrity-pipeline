@@ -7,6 +7,7 @@ import {
 } from "../../src/pipeline/topology"
 import { driverReceiverChannel } from "../fixtures/driver-receiver-channel"
 import {
+  crossingRoute,
   daisyChain,
   missingReceiverTerminal,
   platedHoleRoute,
@@ -72,4 +73,9 @@ test("a plated hole connects traces on different layers", async () => {
 test("a standalone via connects traces on different layers", async () => {
   const circuit = await standaloneViaRoute()
   assert.doesNotThrow(() => validate(circuit))
+})
+
+test("a same-layer crossing between route vertices forms a junction", async () => {
+  const circuit = await crossingRoute()
+  assert.throws(() => validate(circuit), /branched routed graphs/)
 })

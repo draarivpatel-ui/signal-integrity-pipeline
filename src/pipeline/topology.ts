@@ -1,3 +1,4 @@
+import { Point as PlanarPoint, Segment } from "@flatten-js/core"
 import type {
   LayerRef,
   PcbTraceRoutePointVia,
@@ -25,8 +26,7 @@ type CopperGraph = Map<CopperPointKey, Set<CopperPointKey>>
 
 /** A routed copper segment on one board layer. */
 interface CopperSegment {
-  start: Point
-  end: Point
+  segment: Segment
   layer: LayerRef
 }
 
@@ -70,6 +70,22 @@ function recordCopperPoint(
   const key = `${x},${y},${point.layer}`
   points.set(key, point)
   return key
+}
+
+/** Record intersections between routes on the same layer. */
+function recordCrossings(
+  points: Map<CopperPointKey, CopperPoint>,
+  edges: CopperSegment[],
+): void {
+  for (const [index, { layer, segment }] of edges.entries()) {
+    for (let other = index + 1; other < edges.length; other++) {
+      const edge = edges[other]
+      if (layer !== edge.layer) continue
+      for (const { x, y } of segment.intersect(edge.segment)) {
+        recordCopperPoint(points, { x, y, layer })
+      }
+    }
+  }
 }
 
 /** Add an undirected physical edge. */
@@ -195,9 +211,15 @@ export function validateSignalGraph({
       if (layer !== routeLayer(end, "from_layer")) continue
       const first = recordCopperPoint(points, { x: start.x, y: start.y, layer })
       const last = recordCopperPoint(points, { x: end.x, y: end.y, layer })
-      if (first !== last) edges.push({ start, end, layer })
+      if (first === last) continue
+      const segment = new Segment(
+        new PlanarPoint(start.x, start.y),
+        new PlanarPoint(end.x, end.y),
+      )
+      edges.push({ layer, segment })
     }
   }
+  recordCrossings(points, edges)
   // A barrel is one junction across its layers, including any coincident inline via.
   const junctions = new ConnectivityMap(findConnectedNetworks(connections))
   const terminals = new Map<SourcePortId, CopperPointKey[]>()
@@ -210,7 +232,10 @@ export function validateSignalGraph({
   }
   const graph: CopperGraph = new Map()
   // Split at every physical junction, including a branch terminating inside another segment.
-  for (const { start, end, layer } of edges) {
+  for (const {
+    segment: { start, end },
+    layer,
+  } of edges) {
     const dx = end.x - start.x
     const dy = end.y - start.y
     const lengthSquared = dx * dx + dy * dy

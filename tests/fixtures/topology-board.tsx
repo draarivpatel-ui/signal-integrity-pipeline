@@ -210,3 +210,24 @@ export async function standaloneViaRoute(): Promise<CircuitJson> {
     </>,
   )
 }
+
+/** Two connected same-layer traces cross again between their route vertices. */
+export async function crossingRoute(): Promise<CircuitJson> {
+  return topologyBoard(
+    <>
+      <SignalPin name="TX" x={-4} />
+      <SignalPin name="RX" x={4} />
+      <SignalPin name="END" x={0} y={4} />
+      <trace
+        from=".TX > .SIG"
+        to=".RX > .SIG"
+        pcbPath={[".TX > .SIG", ".RX > .SIG"]}
+      />
+      <trace
+        from=".RX > .SIG"
+        to=".END > .SIG"
+        pcbPath={[".RX > .SIG", { x: -4, y: -4 }, ".END > .SIG"]}
+      />
+    </>,
+  )
+}
