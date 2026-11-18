@@ -6,6 +6,7 @@ import type {
   PcbTraceRoutePoint,
   PcbVia,
   Point,
+  PointWithBulge,
   SourceTrace,
 } from "circuit-json"
 import {
@@ -235,6 +236,34 @@ function platedPadRadius(
   return Math.hypot(pad.outer_width, pad.outer_height) / 2
 }
 
+/** Return the axis extrema that the signed circular arc actually crosses. */
+function arcExtrema(start: PointWithBulge, end: Point): Point[] {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const bulge = start.bulge
+  if (!bulge || (dx === 0 && dy === 0)) return []
+
+  // A bulge is the tangent of one quarter of the signed arc sweep.
+  const sweep = 4 * Math.atan(bulge)
+  const offset = (1 / bulge - bulge) / 4
+  const cx = (start.x + end.x) / 2 - dy * offset
+  const cy = (start.y + end.y) / 2 + dx * offset
+  const startAngle = Math.atan2(start.y - cy, start.x - cx)
+  const radius = Math.hypot(start.x - cx, start.y - cy)
+  const turn = 2 * Math.PI
+  const directions = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+  ]
+  return directions.flatMap(({ x, y }) => {
+    const angle = (Math.atan2(y, x) - startAngle) * Math.sign(sweep)
+    if ((angle + turn) % turn > Math.abs(sweep)) return []
+    return [{ x: cx + radius * x, y: cy + radius * y }]
+  })
+}
+
 /** The physical copper record ID for either supported pad type. */
 function padId(pad: Pad): CopperPadId {
   if (pad.type === "pcb_smtpad") return pad.pcb_smtpad_id
@@ -418,10 +447,12 @@ export function channelCopperScope({
   const nearbyPours = new Set(
     pours.filter((pour) => {
       if (pour.shape !== "brep") return false
-      const box = copperBox(
-        { points: pour.brep_shape.outer_ring.vertices, names: [pour.layer] },
-        layers,
-      )
+      const { vertices } = pour.brep_shape.outer_ring
+      const points = vertices.flatMap((start, i) => [
+        start,
+        ...arcExtrema(start, vertices[(i + 1) % vertices.length]),
+      ])
+      const box = copperBox({ points, names: [pour.layer] }, layers)
       return isNearby(box, proximity)
     }),
   )

@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import type { TraceProps } from "@tscircuit/props"
-import { type LayerRef, pcb_via } from "circuit-json"
+import { type LayerRef, pcb_copper_pour, pcb_via } from "circuit-json"
 import type React from "react"
 import {
   type CircuitJson,
@@ -467,4 +467,44 @@ test("the wire approaching a via stays on its entry layer", async () => {
   const implicit = scopeFor(await viaApproach(false))
   assert.deepEqual(explicit.pcbTraceIds, explicit.selectedPcbTraceIds)
   assert.deepEqual(implicit.pcbTraceIds, implicit.selectedPcbTraceIds)
+})
+
+test("a pour arc approaching the channel is retained even when its vertices are distant", async () => {
+  const outline = [
+    { x: -2, y: 1.5 },
+    { x: -2, y: 3 },
+    { x: 2, y: 3 },
+    { x: 2, y: 1.5 },
+  ]
+  const circuit = await renderCoreSignals(
+    <board width={18} height={18} routeRemaining={false} schematicDisabled>
+      <Wire name="SELECTED" y={0} extent={3} />
+      <copperpour
+        name="CURVED"
+        layer="top"
+        connectsTo="net.ARC"
+        unbroken
+        outline={outline}
+      />
+    </board>,
+  )
+  const pour = circuit.find((record) => record.type === "pcb_copper_pour")
+  assert(pour?.shape === "brep")
+  assert.deepEqual(scopeFor(circuit).pcbCopperPourIds, [])
+
+  // Add curved-edge metadata that the TSX pour outline does not accept yet.
+  for (const bulge of [0.375, -0.375]) {
+    const vertices = [...outline.slice(0, -1), { ...outline[3], bulge }]
+    const curved = pcb_copper_pour.parse({
+      ...pour,
+      brep_shape: { outer_ring: { vertices }, inner_rings: [] },
+    })
+    const result = scopeFor(
+      circuit.map((record) => (record === pour ? curved : record)),
+    )
+    assert.deepEqual(
+      result.pcbCopperPourIds,
+      bulge < 0 ? [pour.pcb_copper_pour_id] : [],
+    )
+  }
 })
