@@ -161,3 +161,38 @@ test("a ramp remains usable with separate voltage references and no voltage rang
   })
   assert.equal(Math.round(edgeSeconds(inspectedPin(board, text)) * 1e12), 800)
 })
+
+test("a model header accepts a comment immediately after its name", async () => {
+  const board = await ibisInspectionBoard()
+  const text = inspectionIbis({ modelData: ramp }).replace(
+    "[Model] Fast",
+    "[Model] Fast| inline comment",
+  )
+  assert.equal(Math.round(edgeSeconds(inspectedPin(board, text)) * 1e12), 800)
+})
+
+test("case-distinct model names keep their own ramp durations", async () => {
+  const board = await ibisInspectionBoard()
+  const modelData = `${ramp.replaceAll("600p", "300p")}
+[Model] FAST
+Model_type Output
+C_comp 1p 1p 1p
+[Voltage Range] 1.2 1.2 1.2
+${ramp}`
+  const text = inspectionIbis({ modelType: "Output", modelData })
+  const first = edgeSeconds(inspectedPin(board, text))
+  const second = edgeSeconds(
+    inspectedPin(board, text.replace("1 DQ Fast", "1 DQ FAST")),
+  )
+  assert.equal(second / first, 2)
+})
+
+test("only ramp rows in the selected model Ramp section are used", async () => {
+  const board = await ibisInspectionBoard()
+  const otherSection = "[Model Spec]\ndV/dt_r 0.36/100p 0.36/100p 0.36/100p"
+  const text = inspectionIbis({
+    modelType: "Output",
+    modelData: [ramp, otherSection].join("\n"),
+  })
+  assert.equal(Math.round(edgeSeconds(inspectedPin(board, text)) * 1e12), 800)
+})

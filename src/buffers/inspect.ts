@@ -269,59 +269,44 @@ export function inspectPins(
   }
   return pins
 }
-/** Index after the whitespace starting at the given offset. */
-function skipIbisWhitespace(text: string, start: number): number {
-  while (text[start]?.trim() === "") start++
-  return start
-}
-
-/** Index after the non-whitespace token starting at the given offset. */
-function ibisTokenEnd(text: string, start: number): number {
-  while (start < text.length && text[start].trim() !== "") start++
-  return start
-}
-
-/** Line feed separates ramp rows. */
-const LINE_FEED = "\n"
-/** A Windows line ending is a carriage return followed by a line feed. */
-const WINDOWS_LINE_ENDING = `\r${LINE_FEED}`
-/** Model headers may also follow the Unicode line and paragraph separators. */
-const LINE_ENDINGS = `${WINDOWS_LINE_ENDING}\u2028\u2029`
-
-/** Yield model bodies between line-start [Model] headers and their separating whitespace. */
-function* ibisModelSections(text: string): Generator<string> {
-  const keyword = "[model]"
-  let sectionStart: number | undefined
-  for (let start = 0; start < text.length; start++) {
-    if (start > 0 && !LINE_ENDINGS.includes(text[start - 1])) continue
-    const header = skipIbisWhitespace(text, start)
-    const keywordEnd = header + keyword.length
-    if (
-      text.slice(header, keywordEnd).toLowerCase() !== keyword ||
-      text[keywordEnd]?.trim() !== ""
-    ) {
-      // Whitespace before this token cannot contain another header.
-      start = header
+/**
+ * The pinned parser does not expose Ramp data. Read only the typical rows in the exact selected model's Ramp section.
+ */
+function* rampRatioTokens(pin: InspectedPin): Generator<string> {
+  let selected = false
+  let inRamp = false
+  for (const raw of pin.text.split("\n")) {
+    const line = raw.split("|", 1)[0].trim()
+    if (line.startsWith("[")) {
+      const end = line.indexOf("]")
+      const keyword = line
+        .slice(1, end)
+        .trim()
+        .toLowerCase()
+        .replaceAll("_", " ")
+      if (keyword === "model") {
+        if (selected) return
+        selected = line.slice(end + 1).trim() === pin.buffer.name
+      }
+      if (
+        selected &&
+        ["component", "model selector", "define package model", "end"].includes(
+          keyword,
+        )
+      )
+        return
+      inRamp = selected && keyword === "ramp"
       continue
     }
-    if (sectionStart !== undefined) yield text.slice(sectionStart, start)
-    sectionStart = skipIbisWhitespace(text, keywordEnd)
-    // The loop increment resumes at the first character of this model body.
-    start = sectionStart - 1
+    if (!inRamp) continue
+    const [key, value] = line
+      .replaceAll("\t", " ")
+      .replaceAll("=", " ")
+      .split(" ")
+      .filter(Boolean)
+    const tag = key?.toLowerCase()
+    if (value && (tag === "dv/dt_r" || tag === "dv/dt_f")) yield value
   }
-  if (sectionStart !== undefined) yield text.slice(sectionStart)
-}
-
-/** Exact [Model] body, retaining vendor waveform and ramp subsections. */
-export function modelText(pin: InspectedPin): string {
-  const modelName = pin.buffer.name.toLowerCase()
-  for (const section of ibisModelSections(pin.text)) {
-    const name = section.slice(0, ibisTokenEnd(section, 0)).toLowerCase()
-    if (name !== modelName) continue
-    if (section) return section
-    break
-  }
-  throw new Error(`IBIS model body ${pin.buffer.name} missing`)
 }
 /** First interpolated crossing of a measured edge voltage. */
 function edgeCrossing(
@@ -339,16 +324,6 @@ function edgeCrossing(
     return startTime + ((target - startVoltage) * timeChange) / voltageChange
   }
   return undefined
-}
-
-/** Read the first dV/dt value from a rising or falling IBIS ramp row. */
-function rampRatioToken(line: string): string | undefined {
-  const start = skipIbisWhitespace(line, 0)
-  const tag = line.slice(start, start + "dv/dt_r".length).toLowerCase()
-  if (tag !== "dv/dt_r" && tag !== "dv/dt_f") return undefined
-  const valueStart = skipIbisWhitespace(line, ibisTokenEnd(line, start))
-  if (valueStart === line.length) return undefined
-  return line.slice(valueStart, ibisTokenEnd(line, valueStart))
 }
 
 /** Measure an edge from 10% to 90% of its voltage swing. */
@@ -378,10 +353,8 @@ export function edgeSeconds(pin: InspectedPin): number {
       edges.push(end - start)
   }
   if (!edges.length) {
-    const ramp = modelText(pin).replaceAll(WINDOWS_LINE_ENDING, LINE_FEED)
-    for (const line of ramp.split(LINE_FEED)) {
-      const token = rampRatioToken(line)
-      if (!token || token === "NA") continue
+    for (const token of rampRatioTokens(pin)) {
+      if (token === "NA") continue
       const [dv, dt] = token.split("/")
       if (ibisNumber(dv) <= 0) continue
       const edge = ibisNumber(dt) * RAMP_TO_EDGE_DURATION
