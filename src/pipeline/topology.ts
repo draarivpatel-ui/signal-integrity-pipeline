@@ -1,6 +1,14 @@
-import { Point as PlanarPoint, Segment } from "@flatten-js/core"
+import { Point as PlanarPoint, type Polygon, Segment } from "@flatten-js/core"
+import {
+  circlePolygon,
+  copperPolygonsTouch,
+  getPlatedHolePolygon,
+  getSmtPadPolygon,
+  getTraceSegmentPolygon,
+} from "@tscircuit/circuit-json-util"
 import type {
   LayerRef,
+  PcbPort,
   PcbTraceRoutePointVia,
   PcbTraceRoutePointWire,
   Point,
@@ -28,6 +36,16 @@ type CopperGraph = Map<CopperPointKey, Set<CopperPointKey>>
 interface CopperSegment {
   segment: Segment
   layer: LayerRef
+  startWidth: number
+  endWidth: number
+}
+
+type CopperPad = CopperPoint & { polygon: Polygon }
+
+/** A point and its fractional position along a routed segment. */
+interface SegmentVertex {
+  key: CopperPointKey
+  position: number
 }
 
 /** Round to the geometry admission grid at 0.00001 mm per grid step. */
@@ -86,6 +104,114 @@ function recordCrossings(
       }
     }
   }
+}
+
+/** Read the pad outlines explicitly bound to the selected PCB ports. */
+function terminalPads(circuit: CircuitJson, ports: PcbPort[]): CopperPad[] {
+  const portById = new Map(ports.map((port) => [port.pcb_port_id, port]))
+  const rotations = new Map(
+    circuit
+      .filter((record) => record.type === "pcb_component")
+      .map((component) => [component.pcb_component_id, component.rotation]),
+  )
+  return circuit.flatMap((pad) => {
+    if (pad.type !== "pcb_smtpad" && pad.type !== "pcb_plated_hole") return []
+    const port = portById.get(pad.pcb_port_id ?? "")
+    if (!port) return []
+    const { x, y } = port
+    if (pad.type === "pcb_smtpad")
+      return [{ x, y, layer: pad.layer, polygon: getSmtPadPolygon(pad) }]
+    const polygon = getPlatedHolePolygon(
+      pad,
+      rotations.get(pad.pcb_component_id ?? ""),
+    )
+    return pad.layers.map((layer) => ({ x, y, layer, polygon }))
+  })
+}
+
+/** Project a point onto the segment, expressed as a fraction of its length. */
+function segmentPosition({ start, end }: Segment, point: Point): number {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  return (
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy)
+  )
+}
+
+/** Find the registered points along a segment, including intersections and terminal centers. */
+function segmentVertices(
+  points: Map<CopperPointKey, CopperPoint>,
+  { segment, layer }: CopperSegment,
+): SegmentVertex[] {
+  const { start, end } = segment
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const lengthSquared = dx * dx + dy * dy
+  const maxCrossProduct = COPPER_JOIN_TOLERANCE_MM * Math.sqrt(lengthSquared)
+  const vertices: SegmentVertex[] = []
+  for (const [key, point] of points) {
+    if (point.layer !== layer) continue
+    const offsetX = point.x - start.x
+    const offsetY = point.y - start.y
+    const position = (offsetX * dx + offsetY * dy) / lengthSquared
+    if (
+      position < -SEGMENT_POSITION_TOLERANCE ||
+      position > 1 + SEGMENT_POSITION_TOLERANCE
+    )
+      continue
+    if (Math.abs(offsetX * dy - offsetY * dx) >= maxCrossProduct) continue
+    vertices.push({ key, position })
+  }
+  return vertices
+}
+
+/** Record each pad as one junction with every piece of the segment that touches its copper. */
+function padContactGroups(
+  points: Map<CopperPointKey, CopperPoint>,
+  {
+    edge,
+    pads,
+    vertices,
+  }: {
+    edge: CopperSegment
+    pads: CopperPad[]
+    vertices: SegmentVertex[]
+  },
+): CopperPointKey[][] {
+  const { layer, segment, startWidth, endWidth } = edge
+  const footprint =
+    startWidth > 0
+      ? getTraceSegmentPolygon(segment.start, segment.end, startWidth, endWidth)
+      : null
+  const bounds = footprint?.box ?? segment.box
+  const groups: CopperPointKey[][] = []
+  for (const pad of pads) {
+    if (pad.layer !== layer || bounds.not_intersect(pad.polygon.box)) continue
+    if (footprint && !copperPolygonsTouch(footprint, pad.polygon)) continue
+    const overlaps = segment.intersect(pad.polygon)
+    const contacts = vertices
+      .filter(({ key, position }) => {
+        const { x, y } = points.get(key)!
+        const center = new PlanarPoint(x, y)
+        if (pad.polygon.contains(center)) return true
+        const radius = (startWidth + (endWidth - startWidth) * position) / 2
+        return radius > 0 && center.distanceTo(pad.polygon)[0] <= radius
+      })
+      .map(({ key }) => key)
+    if (!contacts.length && !overlaps.length) {
+      if (!footprint) continue
+      // The trace edge touches the pad but the centerline misses it.
+      const [, distance] = segment.distanceTo(pad.polygon)
+      overlaps.push(distance.start)
+    }
+    for (const { x, y } of overlaps) {
+      const key = recordCopperPoint(points, { x, y, layer })
+      contacts.push(key)
+      vertices.push({ key, position: segmentPosition(segment, { x, y }) })
+    }
+    groups.push([recordCopperPoint(points, pad), ...contacts])
+  }
+  return groups
 }
 
 /** Add an undirected physical edge. */
@@ -216,48 +342,45 @@ export function validateSignalGraph({
         new PlanarPoint(start.x, start.y),
         new PlanarPoint(end.x, end.y),
       )
-      edges.push({ layer, segment })
+      const wire =
+        start.route_type === "wire"
+          ? start
+          : end.route_type === "wire"
+            ? end
+            : undefined
+      const startWidth = wire?.start_width ?? wire?.width ?? 0
+      const endWidth = wire?.end_width ?? startWidth
+      edges.push({ layer, segment, startWidth, endWidth })
     }
   }
   recordCrossings(points, edges)
-  // A barrel is one junction across its layers, including any coincident inline via.
+  const terminalPoints = ports.map(({ source_port_id, layers, x, y }) => ({
+    port: source_port_id,
+    keys: layers.map((layer) => recordCopperPoint(points, { x, y, layer })),
+  }))
+  const pads = terminalPads(circuit, ports)
+  const routeVertices = edges.map((edge) => {
+    const vertices = segmentVertices(points, edge)
+    connections.push(...padContactGroups(points, { edge, pads, vertices }))
+    return vertices.sort((a, b) => a.position - b.position)
+  })
+  // Each continuous pad or barrel forms one junction, regardless of its number of contact points.
   const junctions = new ConnectivityMap(findConnectedNetworks(connections))
   const terminals = new Map<SourcePortId, CopperPointKey[]>()
-  for (const { source_port_id, layers, x, y } of ports) {
-    const keys = layers.map((layer) => {
-      const point = recordCopperPoint(points, { x, y, layer })
-      return junctions.getNetConnectedToId(point) ?? point
-    })
-    terminals.set(source_port_id, keys)
+  for (const { port, keys } of terminalPoints) {
+    const vertices = keys.map(
+      (key) => junctions.getNetConnectedToId(key) ?? key,
+    )
+    terminals.set(port, [...(terminals.get(port) ?? []), ...vertices])
   }
   const graph: CopperGraph = new Map()
-  // Split at every physical junction, including a branch terminating inside another segment.
-  for (const {
-    segment: { start, end },
-    layer,
-  } of edges) {
-    const dx = end.x - start.x
-    const dy = end.y - start.y
-    const lengthSquared = dx * dx + dy * dy
-    const maxCrossProduct = COPPER_JOIN_TOLERANCE_MM * Math.sqrt(lengthSquared)
-    const vertices = [...points].flatMap(([key, point]) => {
-      if (point.layer !== layer) return []
-      const offsetX = point.x - start.x
-      const offsetY = point.y - start.y
-      const position = (offsetX * dx + offsetY * dy) / lengthSquared
-      const withinSegment =
-        position >= -SEGMENT_POSITION_TOLERANCE &&
-        position <= 1 + SEGMENT_POSITION_TOLERANCE
-      if (!withinSegment) return []
-      const onTrace = Math.abs(offsetX * dy - offsetY * dx) < maxCrossProduct
-      if (!onTrace) return []
-      return [{ key: junctions.getNetConnectedToId(key) ?? key, position }]
-    })
-    vertices.sort((a, b) => a.position - b.position)
+  for (const vertices of routeVertices) {
     for (let index = 1; index < vertices.length; index++) {
+      const first = vertices[index - 1].key
+      const last = vertices[index].key
       joinCopperPoints(graph, {
-        a: vertices[index - 1].key,
-        b: vertices[index].key,
+        a: junctions.getNetConnectedToId(first) ?? first,
+        b: junctions.getNetConnectedToId(last) ?? last,
       })
     }
   }

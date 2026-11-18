@@ -231,3 +231,27 @@ export async function crossingRoute(): Promise<CircuitJson> {
     </>,
   )
 }
+
+/** A named-net trace passes the receiver at a specified offset from its pad center. */
+export async function padContactRoute({
+  offset,
+  layer = "top",
+}: {
+  offset: number
+  layer?: "top" | "bottom"
+}): Promise<CircuitJson> {
+  return topologyBoard(
+    <>
+      <SignalPin name="TX" x={-4} />
+      <SignalPin name="RX" x={4} layer={layer} />
+      <net name="SIGNAL" />
+      <trace
+        width={0.1}
+        from=".TX > .SIG"
+        to="net.SIGNAL"
+        pcbPath={[".TX > .SIG", { x: 2, y: offset }, { x: 7.86, y: offset }]}
+      />
+      <trace from=".RX > .SIG" to="net.SIGNAL" />
+    </>,
+  )
+}
