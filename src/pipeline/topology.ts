@@ -233,27 +233,6 @@ export function validateSignalGraph({
   }
   for (const [index, signal] of signals.entries()) {
     for (const [leg, port] of drivers[index].entries()) {
-      const topology = sourceNetMembers(signalConnectivity, port)
-      const traces = signalTraces(sourceTraces, { selected: topology, rails })
-      if (!allowUnroutedTraces) {
-        const traceIds = new Set(traces.map((trace) => trace.source_trace_id))
-        const signalPorts = ports.filter(
-          (pin) =>
-            topology.has(pin.source_port_id) && !rails.has(pin.source_port_id),
-        )
-        const pcbPortIds = new Set(signalPorts.map((pin) => pin.pcb_port_id))
-        const error = circuit.find((record) => {
-          if (record.type === "pcb_trace_missing_error")
-            return traceIds.has(record.source_trace_id)
-          if (record.type !== "pcb_port_not_connected_error") return false
-          return record.pcb_port_ids.some((id) => pcbPortIds.has(id))
-        })
-        if (error) {
-          throw new Error(
-            `Signal "${signal.name}" is not routed between ${port} and its receivers (${error.type}).`,
-          )
-        }
-      }
       const starts = terminals.get(port) ?? []
       const connected = reachable(starts, graph)
       const copper = reachable(starts, copperGraph)
@@ -278,10 +257,7 @@ export function validateSignalGraph({
         if (leg === 0) return receiver.p_source_port_id
         return receiver.n_source_port_id
       })
-      const required = traces.flatMap(
-        (trace) => trace.connected_source_port_ids,
-      )
-      for (const target of new Set([...receivers, ...required])) {
+      for (const target of receivers) {
         const targetPoints = terminals.get(target) ?? []
         if (targetPoints.some((key) => connected.has(key))) continue
         throw new Error(

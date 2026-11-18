@@ -6,7 +6,10 @@ import {
   validateSignalGraph,
 } from "../../src/pipeline/topology"
 import { driverReceiverChannel } from "../fixtures/driver-receiver-channel"
-import { missingReceiverTerminal } from "../fixtures/topology-board"
+import {
+  missingReceiverTerminal,
+  unroutedExtraPin,
+} from "../fixtures/topology-board"
 
 /** Validate a channel between the named test pins on a rendered board. */
 function validate(circuit: CircuitJson, receivers: string[] = ["RX"]): void {
@@ -32,5 +35,14 @@ test("a receiver without a PCB terminal cannot inherit the driver terminal", asy
   assert.throws(
     () => validate(circuit),
     /is not routed between source_port_0 and source_port_1/,
+  )
+})
+
+test("an unrouted same-net pin outside the channel does not block its routed receiver", async () => {
+  const circuit = await unroutedExtraPin()
+  assert.doesNotThrow(() => validate(circuit))
+  assert.throws(
+    () => validate(circuit, ["STUB"]),
+    /is not routed between source_port_0 and source_port_2/,
   )
 })
