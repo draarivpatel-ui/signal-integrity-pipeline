@@ -12,11 +12,20 @@ import {
 import type { RoutedProblem } from "../../src/pipeline"
 import { renderCoreSignals } from "./core-render"
 
-/** Real TSX geometry without vendor assets, for pure geometry and field checks. */
-export async function routedCopper(): Promise<{
+/** A rendered fixture board and the copper selected for field checks. */
+interface RoutedCopper {
   circuitJson: CircuitJson
   scope: CopperScope
-}> {
+}
+
+/** Real TSX geometry without vendor assets, for pure geometry and field checks. */
+export async function routedCopper(): Promise<RoutedCopper> {
+  const chips = [
+    ["A", -4, 0],
+    ["B", 4, 0],
+    ["C", -4, 0.35],
+    ["D", 4, 0.35],
+  ] as const
   const circuitJson = await renderCoreSignals(
     <board
       width={12}
@@ -27,17 +36,12 @@ export async function routedCopper(): Promise<{
       routeRemaining={false}
       schematicDisabled
     >
-      {[
-        ["A", -4, 0],
-        ["B", 4, 0],
-        ["C", -4, 0.35],
-        ["D", 4, 0.35],
-      ].map(([name, x, y]) => (
+      {chips.map(([name, x, y]) => (
         <chip
           key={name}
-          name={String(name)}
-          pcbX={Number(x)}
-          pcbY={Number(y)}
+          name={name}
+          pcbX={x}
+          pcbY={y}
           pinLabels={{ pin1: "P" }}
           footprint={
             <footprint>
@@ -74,19 +78,17 @@ export async function routedCopper(): Promise<{
   const ground = circuitJson.find((record) => record.type === "source_net")!
   if (ground.type !== "source_net") throw new Error("Missing TSX ground")
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuitJson)
-  return {
-    circuitJson,
-    scope: channelCopperScope({
-      circuit: circuitJson,
+  const scope = channelCopperScope({
+    circuit: circuitJson,
+    connectivity,
+    selected: sourceNetMembers(
       connectivity,
-      selected: sourceNetMembers(
-        connectivity,
-        trace.connected_source_port_ids[0],
-      ),
-      reference: sourceNetMembers(connectivity, ground.source_net_id),
-      distanceMm: 1,
-    }),
-  }
+      trace.connected_source_port_ids[0],
+    ),
+    reference: sourceNetMembers(connectivity, ground.source_net_id),
+    distanceMm: 1,
+  })
+  return { circuitJson, scope }
 }
 
 /** Explicitly skip unavailable vendor assets; they are never replaced with synthetic native models. */
