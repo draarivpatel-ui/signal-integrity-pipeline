@@ -157,11 +157,13 @@ function segmentBox({ a, b }: TraceSegment, layers: CopperLayers): Box {
       return 0
     }),
   )
-  if (b.route_type === "via")
+  if (b.route_type === "via") {
+    const entry = a.route_type === "through_pad" ? a.end : a
     return copperBox(
-      { points, names: [b.from_layer, b.to_layer], radius },
+      { points: [entry, b], names: [b.from_layer], radius },
       layers,
     )
+  }
   return copperBox(
     { points, names: [routeEndLayer(a), routeEndLayer(b)], radius },
     layers,
@@ -349,6 +351,20 @@ export function channelCopperScope({
       const segments = trace.route
         .slice(1)
         .map((b, i) => segmentBox({ a: trace.route[i], b }, layers))
+      for (const point of trace.route) {
+        if (point.route_type !== "via") continue
+        const radius = (point.outer_diameter ?? 0) / 2
+        segments.push(
+          copperBox(
+            {
+              points: [point],
+              names: [point.from_layer, point.to_layer],
+              radius,
+            },
+            layers,
+          ),
+        )
+      }
       return [trace.pcb_trace_id, segments]
     }),
   )

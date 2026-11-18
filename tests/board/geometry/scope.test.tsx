@@ -404,3 +404,67 @@ test("a nearby via barrel with explicit drill limits retains its otherwise dista
   assert.deepEqual(deep.pcbViaIds, [via.pcb_via_id])
   assert.equal(deep.pcbTraceIds.length, 2)
 })
+
+/** Render the same via approach with or without a redundant top-layer route point. */
+async function viaApproach(explicitWire: boolean): Promise<CircuitJson> {
+  const from = ".FAN > .A"
+  const to = ".FAN > .B"
+  const entry = { x: 7, y: 0.6 }
+  const via = {
+    ...entry,
+    via: true,
+    fromLayer: "top",
+    toLayer: "bottom",
+  } as const
+  return renderCoreSignals(
+    <board
+      width={22}
+      height={18}
+      layers={4}
+      routeRemaining={false}
+      schematicDisabled
+    >
+      <Wire name="SELECTED" y={0} extent={3} layer="bottom" />
+      <chip
+        name="FAN"
+        pcbY={0.6}
+        pinLabels={{ pin1: "A", pin2: "B" }}
+        footprint={
+          <footprint>
+            <smtpad
+              portHints={["pin1"]}
+              pcbX={-8}
+              pcbY={0}
+              width={0.3}
+              height={0.3}
+              shape="rect"
+            />
+            <smtpad
+              portHints={["pin2"]}
+              pcbX={8}
+              pcbY={0}
+              width={0.3}
+              height={0.3}
+              shape="rect"
+              layer="bottom"
+            />
+          </footprint>
+        }
+      />
+      <trace
+        name="FAN_route"
+        from={from}
+        to={to}
+        width={0.1}
+        pcbPath={explicitWire ? [from, entry, via, to] : [from, via, to]}
+      />
+    </board>,
+  )
+}
+
+test("the wire approaching a via stays on its entry layer", async () => {
+  const explicit = scopeFor(await viaApproach(true))
+  const implicit = scopeFor(await viaApproach(false))
+  assert.deepEqual(explicit.pcbTraceIds, explicit.selectedPcbTraceIds)
+  assert.deepEqual(implicit.pcbTraceIds, implicit.selectedPcbTraceIds)
+})
