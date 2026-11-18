@@ -37,6 +37,8 @@ domain:
   startup: the time a switching channel needs to settle after its stimulus starts
   constant: a bit pattern that repeats one level, so its driver never switches
   vector: one named sequence of engine samples, such as time or a node voltage
+  separator: a character that marks the boundary between raw fields or lines
+  word: a contiguous non-whitespace field in an ASCII raw file or diagnostic
   admission: validation and derivation of one declared signal-integrity block
   network: the connected electrical cells and correction elements of routed copper
   execution: a completed invocation through the solver port

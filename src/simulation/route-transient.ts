@@ -1,4 +1,5 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
+import type { Matrix } from "../extraction"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
 import { spiceProbeRows } from "../observation"
 import { invoke, type SolverContext, type SolverRequest } from "../solver"
@@ -48,50 +49,23 @@ export class RouteTransientSolver extends BaseSolver {
       routedRequest(compiled),
     )
     const run = execution.value
-    const diagnostic = (run.stdout + "\n" + run.stderr)
-      .split("\n")
-      .find(hasSolverDiagnostic)
+    const logs = `${run.stdout}\n${run.stderr}`
+    const diagnostic = logs.split("\n").find(hasSolverDiagnostic)
     if (diagnostic)
       fail("native_solver", `${compiled.name}: ${diagnostic.trim()}`, {
         artifacts: run.logPaths,
       })
-    const rows = spiceProbeRows(run.outputs["waveform.raw"], compiled.probes)
-    if (
-      rows[0][0] < 0 ||
-      rows[0][0] >
-        Math.max(compiled.stepSeconds, compiled.durationSeconds * 1e-8)
-    )
-      fail(
-        "simulation_start",
-        `${compiled.name}: solver output omits the beginning of the transient`,
-      )
-    if (
-      Math.abs(rows.at(-1)![0] - compiled.durationSeconds) >
-      compiled.durationSeconds * 1e-8
-    )
-      fail(
-        "simulation_duration",
-        `${compiled.name}: solver did not complete the declared duration`,
-      )
-    const capture = snapshot({
-      kind: "completed" as const,
-      qualification: "candidate-unqualified" as const,
-      timestampsSeconds: rows.map((row) => row[0]),
-      probes: compiled.probes.map((probe, i) => ({
-        name: probe.name,
-        sourcePortId: probe.signalSourceId,
-        voltageLevels: rows.map((row) => row[i + 1]),
-      })),
+    const raw = run.outputs["waveform.raw"]
+    const rows = spiceProbeRows(raw, compiled.probes)
+    validateCoverage(compiled, rows)
+    const capture = completedCapture(compiled, rows)
+    const artifact = scope.json("capture.json", {
+      ...capture,
+      waveformSha256: sha256(raw),
     })
     this.output = {
       value: capture,
-      artifacts: [
-        ...execution.artifacts,
-        scope.json("capture.json", {
-          ...capture,
-          waveformSha256: sha256(run.outputs["waveform.raw"]),
-        }),
-      ],
+      artifacts: [...execution.artifacts, artifact],
     }
     this.stats = {
       invocations: 1,
@@ -112,6 +86,45 @@ export class RouteTransientSolver extends BaseSolver {
   > {
     return [this.input]
   }
+}
+
+/** Allow a relative tolerance for rounded ngspice timestamps at the deck boundaries. */
+const TRANSIENT_TIME_TOLERANCE = 1e-8
+
+/** Require samples covering the declared transient either side of timestamp rounding. */
+function validateCoverage(compiled: RoutedDeck, rows: Matrix): void {
+  const toleranceSeconds = compiled.durationSeconds * TRANSIENT_TIME_TOLERANCE
+  const firstTime = rows[0][0]
+  if (
+    firstTime < 0 ||
+    firstTime > Math.max(compiled.stepSeconds, toleranceSeconds)
+  ) {
+    fail(
+      "simulation_start",
+      `${compiled.name}: solver output omits the beginning of the transient`,
+    )
+  }
+  const lastTime = rows[rows.length - 1][0]
+  if (Math.abs(lastTime - compiled.durationSeconds) > toleranceSeconds) {
+    fail(
+      "simulation_duration",
+      `${compiled.name}: solver did not complete the declared duration`,
+    )
+  }
+}
+
+/** Capture the adaptive timestamps and voltage column corresponding to each declared probe. */
+function completedCapture(compiled: RoutedDeck, rows: Matrix): RoutedCapture {
+  return snapshot<RoutedCapture>({
+    kind: "completed",
+    qualification: "candidate-unqualified",
+    timestampsSeconds: rows.map((row) => row[0]),
+    probes: compiled.probes.map((probe, i) => ({
+      name: probe.name,
+      sourcePortId: probe.signalSourceId,
+      voltageLevels: rows.map((row) => row[i + 1]),
+    })),
+  })
 }
 
 const solverDiagnostics = ["error", "fatal", "aborted", "timestep too small"]

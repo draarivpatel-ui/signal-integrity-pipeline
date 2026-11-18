@@ -19,6 +19,18 @@ export interface NativeSolverOptions {
   timeoutMs?: number
 }
 const exec = promisify(execFile)
+/** Cap each captured process stream at 64 MiB. */
+const MAX_OUTPUT_BYTES = 64 * 1024 * 1024
+
+/** Process details used to distinguish the timeout from other execution failures. */
+interface NativeProcessError extends Error {
+  code?: string | number | null
+  killed?: boolean
+  signal?: string
+  stdout?: string
+  stderr?: string
+}
+
 let nativeTail: Promise<void> = Promise.resolve()
 
 /** Give native solvers up to fifteen minutes to complete the requested run. */
@@ -69,32 +81,32 @@ async function runNativeRequest(
       await mkdir(dirname(target), { recursive: true })
       await writeFile(target, body)
     }
-    let run: { stdout: string; stderr: string }
+    let run: Pick<SolverResult, "stdout" | "stderr">
     try {
       run = await exec(tools.ngspice ?? "ngspice", request.args, {
         cwd: directory,
         timeout: timeoutMs,
-        maxBuffer: 64 * 1024 * 1024,
-        env: { ...process.env, OMP_NUM_THREADS: "1", SPICE_ASCIIRAWFILE: "1" },
+        maxBuffer: MAX_OUTPUT_BYTES,
+        env: {
+          ...process.env,
+          OMP_NUM_THREADS: "1",
+          SPICE_ASCIIRAWFILE: "1",
+        },
       })
     } catch (error) {
-      const detail = error as Error & {
-        code?: string | number | null
-        killed?: boolean
-        signal?: string
-        stdout?: string
-        stderr?: string
-      }
+      const detail = error as NativeProcessError
       // execFile's timeout kills with SIGTERM and no exit code. External
       // signals are not marked killed; maxBuffer errors have a string code.
       const timedOut =
         detail.killed && detail.signal === "SIGTERM" && detail.code === null
       const logs = `\n${detail.stdout ?? ""}\n${detail.stderr ?? ""}`
-      if (timedOut)
+      if (timedOut) {
+        const timeout = `exceeded ${timeoutMs} ms process timeout`
         fail(
           "native_timeout",
-          `${request.solver}: exceeded ${timeoutMs} ms process timeout; ${detail.message}${logs}`,
+          `${request.solver}: ${timeout}; ${detail.message}${logs}`,
         )
+      }
       fail("native_solver", `${request.solver}: ${detail.message}${logs}`)
     }
     const files: Record<string, string> = Object.create(null)

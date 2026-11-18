@@ -86,5 +86,9 @@ export interface RoutedCapture {
   kind: "completed"
   qualification: "candidate-unqualified"
   timestampsSeconds: number[]
-  probes: { name: string; sourcePortId: string; voltageLevels: number[] }[]
+  probes: {
+    name: string
+    sourcePortId: string
+    voltageLevels: number[]
+  }[]
 }
