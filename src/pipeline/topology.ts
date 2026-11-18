@@ -160,41 +160,55 @@ export function validateSignalGraph({
     .filter((port) => selected.has(port.source_port_id))
   const edges: CopperSegment[] = []
   const points = new Map<CopperPointKey, CopperPoint>()
-  const graph: CopperGraph = new Map()
+  const connections = circuit.flatMap((record) => {
+    if (record.type !== "pcb_via" && record.type !== "pcb_plated_hole")
+      return []
+    return [
+      record.layers.map((layer) =>
+        recordCopperPoint(points, { x: record.x, y: record.y, layer }),
+      ),
+    ]
+  })
   for (const { route } of routes) {
-    for (let index = 1; index < route.length; index++) {
+    for (const [index, end] of route.entries()) {
+      if (end.route_type === "via") {
+        const from = recordCopperPoint(points, {
+          x: end.x,
+          y: end.y,
+          layer: end.from_layer,
+        })
+        const to = recordCopperPoint(points, {
+          x: end.x,
+          y: end.y,
+          layer: end.to_layer,
+        })
+        connections.push([from, to])
+      }
       const start = route[index - 1]
-      const end = route[index]
       if (
+        !start ||
         start.route_type === "through_pad" ||
         end.route_type === "through_pad"
       )
         continue
       const layer = routeLayer(start, "to_layer")
+      if (layer !== routeLayer(end, "from_layer")) continue
       const first = recordCopperPoint(points, { x: start.x, y: start.y, layer })
-      const last = recordCopperPoint(points, {
-        x: end.x,
-        y: end.y,
-        layer: routeLayer(end, "from_layer"),
-      })
-      if (end.route_type === "via") {
-        const otherSide = recordCopperPoint(points, {
-          x: end.x,
-          y: end.y,
-          layer: end.to_layer,
-        })
-        joinCopperPoints(graph, { a: last, b: otherSide })
-      }
+      const last = recordCopperPoint(points, { x: end.x, y: end.y, layer })
       if (first !== last) edges.push({ start, end, layer })
     }
   }
+  // A barrel is one junction across its layers, including any coincident inline via.
+  const junctions = new ConnectivityMap(findConnectedNetworks(connections))
   const terminals = new Map<SourcePortId, CopperPointKey[]>()
   for (const { source_port_id, layers, x, y } of ports) {
-    const keys = layers.map((layer) =>
-      recordCopperPoint(points, { x, y, layer }),
-    )
+    const keys = layers.map((layer) => {
+      const point = recordCopperPoint(points, { x, y, layer })
+      return junctions.getNetConnectedToId(point) ?? point
+    })
     terminals.set(source_port_id, keys)
   }
+  const graph: CopperGraph = new Map()
   // Split at every physical junction, including a branch terminating inside another segment.
   for (const { start, end, layer } of edges) {
     const dx = end.x - start.x
@@ -212,7 +226,7 @@ export function validateSignalGraph({
       if (!withinSegment) return []
       const onTrace = Math.abs(offsetX * dy - offsetY * dx) < maxCrossProduct
       if (!onTrace) return []
-      return [{ key, position }]
+      return [{ key: junctions.getNetConnectedToId(key) ?? key, position }]
     })
     vertices.sort((a, b) => a.position - b.position)
     for (let index = 1; index < vertices.length; index++) {
