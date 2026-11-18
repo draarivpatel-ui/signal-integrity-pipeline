@@ -90,6 +90,16 @@ test("two-trace TSX route-fields-solver visual SVG snapshot", async () => {
   )
 })
 
+/** Check the whole-ohm label used for mapped copper. */
+function isImpedanceLabel(label: string): boolean {
+  const suffix = " Ω"
+  if (!label.endsWith(suffix)) return false
+  const value = label.slice(0, -suffix.length)
+  return (
+    value.length > 0 && [...value].every((char) => char >= "0" && char <= "9")
+  )
+}
+
 test("field drawing cuts the board at the slice and shows its stack in a pane, writing only Z0", async () => {
   const { root } = await routedVisualFixture()
   const drawing = root
@@ -106,7 +116,7 @@ test("field drawing cuts the board at the slice and shows its stack in a pane, w
     "the pane is opaque over the board",
   )
   const mapped = drawing.lines!.filter((line) =>
-    /^\d+ Ω$/.test(line.label ?? ""),
+    isImpedanceLabel(line.label ?? ""),
   )
   assert.ok(
     mapped.length >= 2 &&
