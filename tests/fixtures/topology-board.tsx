@@ -88,3 +88,24 @@ export async function unroutedExtraPin(): Promise<CircuitJson> {
     </>,
   )
 }
+
+/** A straight route through an intermediate sampling pin. */
+export async function daisyChain(): Promise<CircuitJson> {
+  return topologyBoard(
+    <>
+      <SignalPin name="TX" x={-4} />
+      <SignalPin name="MID" x={0} />
+      <SignalPin name="RX" x={4} />
+      <trace
+        from=".TX > .SIG"
+        to=".MID > .SIG"
+        pcbPath={[".TX > .SIG", ".MID > .SIG"]}
+      />
+      <trace
+        from=".MID > .SIG"
+        to=".RX > .SIG"
+        pcbPath={[".MID > .SIG", ".RX > .SIG"]}
+      />
+    </>,
+  )
+}
