@@ -1,11 +1,22 @@
+import type {
+  LayerRef,
+  PcbPlatedHole,
+  PcbSmtPad,
+  PcbTrace,
+  PcbTraceRoutePoint,
+  PcbVia,
+  Point,
+  SourceTrace,
+} from "circuit-json"
 import {
   type ConnectivityMap,
   getSourcePortConnectivityMapFromCircuitJson,
-  passiveConnections,
+  passiveBridges,
+  type SourceConnectionGroup,
   sourceNetMembers,
 } from "../connectivity"
+import type { SourceNetId, SourcePortId, SourceTraceId } from "../ids"
 import type { CircuitJson } from "../schema"
-import type { PcbTrace, RoutePoint } from "./types"
 
 export interface CopperScope {
   lateralDistanceMm: number
@@ -13,9 +24,9 @@ export interface CopperScope {
   pcbTraceIds: string[]
   pcbViaIds: string[]
   pcbCopperPourIds: string[]
-  nearbyPadIds: string[]
-  openPadIds: string[]
-  padOnlySourcePortIds: string[]
+  nearbyPadIds: CopperPadId[]
+  openPadIds: CopperPadId[]
+  padOnlySourcePortIds: SourcePortId[]
   nonReferenceRailTraceIds: string[]
   nearbyNonReferencePourIds: string[]
   unassociatedCopper: string[]
@@ -31,20 +42,19 @@ interface Box {
   lo: number
   hi: number
 }
-type SourceTrace = Extract<CircuitJson[number], { type: "source_trace" }>
-type SourceTraceId = SourceTrace["source_trace_id"]
-type Via = Extract<CircuitJson[number], { type: "pcb_via" }>
-type Pad = Extract<
-  CircuitJson[number],
-  { type: "pcb_smtpad" | "pcb_plated_hole" }
->
+type Pad = PcbSmtPad | PcbPlatedHole
+
+/** Record ID of a surface-mount pad or plated hole. */
+type CopperPadId =
+  | PcbSmtPad["pcb_smtpad_id"]
+  | PcbPlatedHole["pcb_plated_hole_id"]
 interface CopperLayers {
   names: string[]
   count: number
 }
 interface RetainedCopper {
   connectivity: ConnectivityMap
-  retained: Set<string>
+  retained: Set<SourcePortId | SourceNetId>
   unassociatedCopper: string[]
 }
 
@@ -52,7 +62,7 @@ interface RetainedCopper {
 function traceMembers(
   id: SourceTraceId | undefined,
   sources: Map<SourceTraceId, SourceTrace>,
-): string[] {
+): SourceConnectionGroup {
   if (!id) return []
   const trace = sources.get(id)
   if (!trace) return []
@@ -68,7 +78,7 @@ function copperBox(
     points,
     names,
     radius = 0,
-  }: { points: { x: number; y: number }[]; names: string[]; radius?: number },
+  }: { points: Point[]; names: LayerRef[]; radius?: number },
   layers: CopperLayers,
 ): Box {
   const indices = names.map((name) => layers.names.indexOf(name))
@@ -83,7 +93,7 @@ function copperBox(
 }
 
 /** The layer where a route point leaves copper. */
-function routeEndLayer(point: RoutePoint): string {
+function routeEndLayer(point: PcbTraceRoutePoint): LayerRef {
   if (point.route_type === "via") return point.to_layer
   if (point.route_type === "wire") return point.layer
   return point.end_layer
@@ -91,7 +101,7 @@ function routeEndLayer(point: RoutePoint): string {
 
 /** Bound the copper covered by one wire, pad or via segment. */
 function segmentBox(
-  { a, b }: { a: RoutePoint; b: RoutePoint },
+  { a, b }: { a: PcbTraceRoutePoint; b: PcbTraceRoutePoint },
   layers: CopperLayers,
 ): Box {
   const points = [a, b].flatMap((point) => {
@@ -117,12 +127,12 @@ function segmentBox(
 
 /** Native route vias can inherit their electrical association from the PCB trace. */
 function viaMembers(
-  via: Via,
+  via: PcbVia,
   {
     sources,
     traces,
   }: { sources: Map<SourceTraceId, SourceTrace>; traces: PcbTrace[] },
-): string[] {
+): SourceConnectionGroup {
   const sourceTraceId =
     via.source_trace_id ??
     traces.find((trace) => trace.pcb_trace_id === via.pcb_trace_id)
@@ -133,7 +143,7 @@ function viaMembers(
 }
 
 /** The physical barrel span includes any inactive stubs. */
-function viaBox(via: Via, layers: CopperLayers): Box {
+function viaBox(via: PcbVia, layers: CopperLayers): Box {
   return copperBox(
     { points: [via], names: via.layers, radius: via.outer_diameter / 2 },
     layers,
@@ -168,7 +178,7 @@ function padRadius(pad: Pad): number {
 }
 
 /** The physical copper record ID for either supported pad type. */
-function padId(pad: Pad): string {
+function padId(pad: Pad): CopperPadId {
   if (pad.type === "pcb_smtpad") return pad.pcb_smtpad_id
   return pad.pcb_plated_hole_id
 }
@@ -191,7 +201,7 @@ function isNearby(
 
 /** Retain the entire electrical net, with all branches and endpoint terminations. */
 function retain(
-  { ids, label }: { ids: string[]; label: string },
+  { ids, label }: { ids: SourceConnectionGroup; label: string },
   { connectivity, retained, unassociatedCopper }: RetainedCopper,
 ): void {
   if (!ids.length) unassociatedCopper.push(label)
@@ -219,9 +229,9 @@ export function channelCopperScope({
 }: {
   circuit: CircuitJson
   connectivity?: ConnectivityMap
-  selected: Set<string>
-  reference: Set<string>
-  rails?: Set<string>
+  selected: Set<SourcePortId | SourceNetId>
+  reference: Set<SourcePortId | SourceNetId>
+  rails?: Set<SourcePortId | SourceNetId>
   distanceMm?: number
 }): CopperScope {
   const count =
@@ -303,7 +313,7 @@ export function channelCopperScope({
         { ids: [ports.get(pad.pcb_port_id)!], label: pad.pcb_port_id },
         retainedCopper,
       )
-  const passivePorts = passiveConnections(
+  const passivePorts = passiveBridges(
     circuit,
     new Set([...rails, ...reference]),
   )
@@ -338,8 +348,8 @@ export function channelCopperScope({
       proximity,
     )
   })
-  const padOnlySourcePortIds = new Set<string>()
-  const openPadIds: string[] = []
+  const padOnlySourcePortIds = new Set<SourcePortId>()
+  const openPadIds: CopperPadId[] = []
   for (const pad of nearbyPads) {
     const port = pad.pcb_port_id && ports.get(pad.pcb_port_id)
     if (!port) {
