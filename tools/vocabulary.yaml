@@ -26,6 +26,7 @@ domain:
   transient: a circuit simulation that follows voltage and current through time
   startup: the time a switching channel needs to settle after its stimulus starts
   constant: a bit pattern that repeats one level, so its driver never switches
+  header: the opening line of a SPICE declaration or an IBIS section marker
   vector: one named sequence of engine samples, such as time or a node voltage
   admission: validation and derivation of one declared signal-integrity block
   network: the connected electrical cells and correction elements of routed copper

@@ -19,6 +19,7 @@ export {
   referenceVoltages,
 } from "./inspect"
 export { loadModelSource, relativeFile } from "./source"
+export type { TextRange } from "./text"
 export type {
   AdmittedBuffers,
   AssemblyEntry,
