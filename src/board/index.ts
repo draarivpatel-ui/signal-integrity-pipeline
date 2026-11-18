@@ -14,7 +14,7 @@ export {
   defaultCopperConductivitySm,
 } from './stackup'
 export { subcircuitTree, type SubcircuitTree } from './subcircuit'
-export { connectedSourceIds } from './connectivity'
+export { getSourcePortConnectivityMapFromCircuitJson, passiveConnections, sourceConnections, sourceNetMembers, type ConnectivityMap } from './connectivity'
 export type {
   PortSelector,
   LaneModeling,
