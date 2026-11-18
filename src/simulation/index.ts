@@ -14,7 +14,7 @@ export {
   modelRunDefinition,
 } from "./declarations"
 export { electricalSources, namespaceSpice } from "./netlist"
-export { transmittedBits } from "./stimulus"
+export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
 export type {
   CircuitNodes,
   Declarations,
