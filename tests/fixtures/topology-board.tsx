@@ -109,3 +109,34 @@ export async function daisyChain(): Promise<CircuitJson> {
     </>,
   )
 }
+
+/** One series resistor, optionally followed by a second copper leg to a test pin. */
+export async function seriesResistor(stub: boolean): Promise<CircuitJson> {
+  return topologyBoard(
+    <>
+      <SignalPin name="TX" x={-4} />
+      <SignalPin name="RX" x={4} />
+      <resistor name="R" resistance="33" footprint="0402" pcbX={0} pcbY={0} />
+      <trace
+        from=".TX > .SIG"
+        to=".R > .pin1"
+        pcbPath={[".TX > .SIG", ".R > .pin1"]}
+      />
+      <trace
+        from=".R > .pin2"
+        to=".RX > .SIG"
+        pcbPath={[".R > .pin2", ".RX > .SIG"]}
+      />
+      {stub && (
+        <>
+          <SignalPin name="TEST" x={1} y={4} />
+          <trace
+            from=".R > .pin2"
+            to=".TEST > .SIG"
+            pcbPath={[".R > .pin2", ".TEST > .SIG"]}
+          />
+        </>
+      )}
+    </>,
+  )
+}
