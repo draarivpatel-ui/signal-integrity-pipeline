@@ -71,3 +71,20 @@ export async function missingReceiverTerminal(): Promise<CircuitJson> {
     </>,
   )
 }
+
+/** TX and RX are routed, while a same-net pin outside the channel has no trace. */
+export async function unroutedExtraPin(): Promise<CircuitJson> {
+  return topologyBoard(
+    <>
+      <SignalPin name="TX" x={-4} />
+      <SignalPin name="RX" x={4} />
+      <SignalPin name="STUB" x={0} y={4} />
+      <trace
+        from=".TX > .SIG"
+        to=".RX > .SIG"
+        pcbPath={[".TX > .SIG", ".RX > .SIG"]}
+      />
+      <trace from=".TX > .SIG" to=".STUB > .SIG" />
+    </>,
+  )
+}
