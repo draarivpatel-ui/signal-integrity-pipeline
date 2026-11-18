@@ -7,7 +7,14 @@ import {
   validateCircuitRecords,
 } from "../board"
 import { edgeSeconds, type IbisSources } from "../buffers"
-import { type Produced, rootScope, sha256, snapshot } from "../kernel"
+import {
+  type Produced,
+  rootScope,
+  type SafeId,
+  safeId,
+  sha256,
+  snapshot,
+} from "../kernel"
 import type { RouteBindingsInput, RoutedCompileOptions } from "../simulation"
 import {
   endpointPorts,
@@ -130,7 +137,7 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
 /** Root admission performs exactly one SI block's lowering per step. */
 export class RoutedAdmissionSolver extends BaseSolver {
   private readonly input: RoutedProblem
-  private ids?: string[]
+  private ids?: SafeId[]
   private readonly plans: RoutedBlockPlan[] = []
   private output?: Produced<RoutedBlockPlan[]>
   /** Capture a single board and model version for the whole admission run. */
@@ -145,8 +152,11 @@ export class RoutedAdmissionSolver extends BaseSolver {
   override _step(): void {
     if (!this.ids) {
       validateCircuitRecords(this.input.circuitJson)
-      this.ids = signalBlocks(this.input.circuitJson).map(
-        (block) => block.simulation_pcb_transient_channel_simulation_id,
+      this.ids = signalBlocks(this.input.circuitJson).map((block) =>
+        safeId(
+          block.simulation_pcb_transient_channel_simulation_id,
+          "simulationPcbTransientChannelSimulationId",
+        ),
       )
       const distance = this.input.scopeDistanceMm ?? MAX_SCOPE_DISTANCE_MM
       if (
@@ -160,7 +170,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
       }
     }
     const id = this.ids[this.plans.length]
-    if (id) this.plans.push(planRoutedBlock(this.input, id))
+    if (id !== undefined) this.plans.push(planRoutedBlock(this.input, id))
     const selectedConductors = this.plans.reduce((count, plan) => {
       return count + plan.sections.scope.selectedPcbTraceIds.length
     }, 0)

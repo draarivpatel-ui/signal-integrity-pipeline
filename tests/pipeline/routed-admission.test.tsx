@@ -118,3 +118,15 @@ test("all blocks and the manifest use the same captured inputs", async () => {
     sha256(routedVisualIbis),
   )
 })
+
+test("an empty serialized block ID fails immediately", async () => {
+  // Simulate imported records where the block has no channel references to its ID.
+  const rendered = await renderCoreSignals(<TwoTraceBoard />)
+  const circuitJson = rendered.filter(
+    (record) => record.type !== "simulation_pcb_driver_receiver_channel",
+  )
+  const [block] = signalBlocks(circuitJson)
+  block.simulation_pcb_transient_channel_simulation_id = ""
+  const solver = new RoutedAdmissionSolver({ circuitJson, ibisSources: {} })
+  assert.throws(() => solver.step(), { code: "simulation_id" })
+})
