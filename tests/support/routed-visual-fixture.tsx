@@ -31,8 +31,7 @@ ${(["rising", "falling"] as const)
   .flatMap((kind) =>
     [0, 3.3].map(
       (voltage) =>
-        `[${kind === "rising" ? "Rising" : "Falling"} Waveform]\nR_fixture = 50\nV_fixture = ${voltage}\n` +
-        [
+        `[${kind === "rising" ? "Rising" : "Falling"} Waveform]\nR_fixture = 50\nV_fixture = ${voltage}\n${[
           [0, 0],
           [0.2, 0],
           [0.4, 0.5],
@@ -47,7 +46,7 @@ ${(["rising", "falling"] as const)
               voltage / 2 + 1.65 * (kind === "rising" ? fraction : 1 - fraction)
             return `${time}n ${value} ${value} ${value}`
           })
-          .join("\n"),
+          .join("\n")}`,
     ),
   )
   .join("\n")}

@@ -1,29 +1,50 @@
 import { simulation } from "@tscircuit/core"
+import type { SimulationIbisModelProps } from "@tscircuit/props"
 import type React from "react"
 
-/** Local vendor asset descriptor; vendor bytes are never redistributed. */
-const asset = (
-  file: string,
-): { project_relative_path: string; url: string; mimetype: string } => ({
-  project_relative_path: `models/${file}`,
-  url: `./models/${file}`,
-  mimetype: "text/plain",
-})
+/** Common physical ground pad offset and matching through-board via. */
+const GROUND_PAD_Y_MM = -3.5
 
-/** Small explicit-pad source for topology unit tests only; never used as RFC native evidence. */
+interface InverterProps {
+  name: string
+  x: number
+  y: number
+  driver: boolean
+  powerY?: number
+}
+
+type IbisAsset = SimulationIbisModelProps["ibisModelAsset"]
+type ReferenceLabels = NonNullable<
+  SimulationIbisModelProps["ibisPinNameToReferencePortLabels"]
+>[string]
+
+/** Describe the local vendor asset used to render the IBIS record. */
+function asset(file: string): IbisAsset {
+  return {
+    project_relative_path: `models/${file}`,
+    url: `./models/${file}`,
+    mimetype: "text/plain",
+  }
+}
+
+/** Map each of the four IBIS reference roles to its fixture rail. */
+function referenceLabels(): ReferenceLabels {
+  return {
+    pullup: "VCC",
+    pulldown: "GND",
+    powerClamp: "VCC",
+    groundClamp: "GND",
+  }
+}
+
+/** Small explicit-pad source for topology unit tests. */
 export function Inverter({
   name,
   x,
   y,
   driver,
   powerY = 2,
-}: {
-  name: string
-  x: number
-  y: number
-  driver: boolean
-  powerY?: number
-}): React.JSX.Element {
+}: InverterProps): React.JSX.Element {
   const pin = driver ? "4" : "2"
   const label = driver ? "Y" : "A"
   return (
@@ -32,7 +53,12 @@ export function Inverter({
         name={name}
         pcbX={x}
         pcbY={y}
-        pinLabels={{ pin2: "A", pin3: "GND", pin4: "Y", pin5: "VCC" }}
+        pinLabels={{
+          pin2: "A",
+          pin3: "GND",
+          pin4: "Y",
+          pin5: "VCC",
+        }}
         connections={{ VCC: "net.VCC", GND: "net.GND" }}
         footprint={
           <footprint>
@@ -47,7 +73,7 @@ export function Inverter({
             <smtpad
               portHints={["pin3"]}
               pcbX={0}
-              pcbY={-3.5}
+              pcbY={GROUND_PAD_Y_MM}
               width={0.5}
               height={0.5}
               shape="rect"
@@ -66,7 +92,7 @@ export function Inverter({
       <via
         name={`G_${name}`}
         pcbX={x}
-        pcbY={y - 3.5}
+        pcbY={y + GROUND_PAD_Y_MM}
         fromLayer="top"
         toLayer="bottom"
         holeDiameter={0.15}
@@ -81,18 +107,12 @@ export function Inverter({
         ibisPinNameToModelName={{
           [pin]: driver ? "LVC1G04_OUT_33" : "LVC1G04_IN_33",
         }}
-        ibisPinNameToReferencePortLabels={{
-          [pin]: {
-            pullup: "VCC",
-            pulldown: "GND",
-            powerClamp: "VCC",
-            groundClamp: "GND",
-          },
-        }}
+        ibisPinNameToReferencePortLabels={{ [pin]: referenceLabels() }}
       />
     </>
   )
 }
+
 /** Real SN65HVD72 bus buffers in a designed two-pad channel fixture. */
 export function Transceiver({
   name,
@@ -106,7 +126,12 @@ export function Transceiver({
       <chip
         name={name}
         pcbX={x}
-        pinLabels={{ pin5: "GND", pin6: "A", pin7: "B", pin8: "VCC" }}
+        pinLabels={{
+          pin5: "GND",
+          pin6: "A",
+          pin7: "B",
+          pin8: "VCC",
+        }}
         connections={{ VCC: "net.VCC", GND: "net.GND" }}
         footprint={
           <footprint>
@@ -129,7 +154,7 @@ export function Transceiver({
             <smtpad
               portHints={["pin5"]}
               pcbX={0}
-              pcbY={-3.5}
+              pcbY={GROUND_PAD_Y_MM}
               width={0.5}
               height={0.5}
               shape="rect"
@@ -148,7 +173,7 @@ export function Transceiver({
       <via
         name={`G_${name}`}
         pcbX={x}
-        pcbY={-3.5}
+        pcbY={GROUND_PAD_Y_MM}
         fromLayer="top"
         toLayer="bottom"
         holeDiameter={0.15}
@@ -159,26 +184,22 @@ export function Transceiver({
         componentRef={`.${name}`}
         ibisModelAsset={asset("sn65hvd72.ibs")}
         ibisComponentName="SN65HVD72D"
-        ibisPinNameToPortLabel={{ "5": "GND", "6": "A", "7": "B", "8": "VCC" }}
+        ibisPinNameToPortLabel={{
+          "5": "GND",
+          "6": "A",
+          "7": "B",
+          "8": "VCC",
+        }}
         ibisPinNameToModelName={{ "6": "a_b_p", "7": "a_b_n" }}
         ibisPinNameToReferencePortLabels={{
-          "6": {
-            pullup: "VCC",
-            pulldown: "GND",
-            powerClamp: "VCC",
-            groundClamp: "GND",
-          },
-          "7": {
-            pullup: "VCC",
-            pulldown: "GND",
-            powerClamp: "VCC",
-            groundClamp: "GND",
-          },
+          "6": referenceLabels(),
+          "7": referenceLabels(),
         }}
       />
     </>
   )
 }
+
 /** Full opposite-layer plane for topology tests, reached by explicit pad vias. */
 export function Reference({
   powerStartMm = 1.8,

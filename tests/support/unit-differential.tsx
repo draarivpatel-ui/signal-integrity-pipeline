@@ -1,76 +1,87 @@
+// Topology/transient unit-test source only.
 import { simulation } from "@tscircuit/core"
-// Topology/transient unit-test source only; not an RFC native board.
-import React from "react"
+import type React from "react"
 import { Reference, Transceiver } from "./signal-parts"
 
-export default ({ reversed = false }: { reversed?: boolean }) => (
-  <board
-    width={20}
-    height={12}
-    layers={4}
-    thickness={1.6}
-    fabricatorPreset="jlcpcb_standard"
-    routeRemaining={false}
-    schematicDisabled
-    isViaInPadAllowed
-  >
-    <Transceiver name="TX" x={-5} />
-    <Transceiver name="RX" x={5} />
-    <Reference />
-    <trace
-      from=".TX > .A"
-      to=".RX > .A"
-      width={0.2}
-      pcbPath={[".TX > .A", ".RX > .A"]}
-    />
-    <trace
-      from=".TX > .B"
-      to=".RX > .B"
-      width={0.2}
-      pcbPath={[".TX > .B", ".RX > .B"]}
-    />
-    <resistor
-      name="RTERM"
-      resistance="120"
-      pcbX={5}
-      connections={{ pin1: ".RX > .A", pin2: ".RX > .B" }}
-      footprint={
-        <footprint>
-          <smtpad
-            portHints={["pin1"]}
-            pcbX={0}
-            pcbY={0.3}
-            width={0.25}
-            height={0.25}
-            shape="rect"
-          />
-          <smtpad
-            portHints={["pin2"]}
-            pcbX={0}
-            pcbY={-0.3}
-            width={0.25}
-            height={0.25}
-            shape="rect"
-          />
-        </footprint>
-      }
-    />
-    <simulation.pcbtransientchannelsimulation
-      name="RS485"
-      bitRate={250e3}
-      duration={48 / 250e3}
+/** Differential test rate in bits per second. */
+const BIT_RATE_BPS = 250e3
+
+/** Capture this many bits from the differential channel. */
+const CAPTURE_BITS = 48
+
+/** Build an RS-485 channel, optionally swapping the differential pin order. */
+export default function ({
+  reversed = false,
+}: {
+  reversed?: boolean
+}): React.JSX.Element {
+  const positive = reversed ? "B" : "A"
+  const negative = reversed ? "A" : "B"
+  const driverRef = { p: `.TX > .${positive}`, n: `.TX > .${negative}` }
+  const receiverRef = { p: `.RX > .${positive}`, n: `.RX > .${negative}` }
+  return (
+    <board
+      width={20}
+      height={12}
+      layers={4}
+      thickness={1.6}
+      fabricatorPreset="jlcpcb_standard"
+      routeRemaining={false}
+      schematicDisabled
+      isViaInPadAllowed
     >
-      <simulation.pcbdriverreceiverchannel
-        name="BUS"
-        driverRef={{
-          p: reversed ? ".TX > .B" : ".TX > .A",
-          n: reversed ? ".TX > .A" : ".TX > .B",
-        }}
-        receiverRef={{
-          p: reversed ? ".RX > .B" : ".RX > .A",
-          n: reversed ? ".RX > .A" : ".RX > .B",
-        }}
+      <Transceiver name="TX" x={-5} />
+      <Transceiver name="RX" x={5} />
+      <Reference />
+      <trace
+        from=".TX > .A"
+        to=".RX > .A"
+        width={0.2}
+        pcbPath={[".TX > .A", ".RX > .A"]}
       />
-    </simulation.pcbtransientchannelsimulation>
-  </board>
-)
+      <trace
+        from=".TX > .B"
+        to=".RX > .B"
+        width={0.2}
+        pcbPath={[".TX > .B", ".RX > .B"]}
+      />
+      <resistor
+        name="RTERM"
+        resistance="120"
+        pcbX={5}
+        connections={{ pin1: ".RX > .A", pin2: ".RX > .B" }}
+        footprint={
+          <footprint>
+            <smtpad
+              portHints={["pin1"]}
+              pcbX={0}
+              pcbY={0.3}
+              width={0.25}
+              height={0.25}
+              shape="rect"
+            />
+            <smtpad
+              portHints={["pin2"]}
+              pcbX={0}
+              pcbY={-0.3}
+              width={0.25}
+              height={0.25}
+              shape="rect"
+            />
+          </footprint>
+        }
+      />
+      <simulation.pcbtransientchannelsimulation
+        name="RS485"
+        bitRate={BIT_RATE_BPS}
+        duration={CAPTURE_BITS / BIT_RATE_BPS}
+      >
+        <simulation.pcbdriverreceiverchannel
+          name="BUS"
+          driverRef={driverRef}
+          receiverRef={receiverRef}
+        />
+      </simulation.pcbtransientchannelsimulation>
+    </board>
+  )
+}

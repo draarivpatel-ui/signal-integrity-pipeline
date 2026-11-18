@@ -1,9 +1,9 @@
 import {
   type CircuitJson,
+  type ConnectivityMap,
   type CopperScope,
   channelCopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
-  isQuiet,
   type SignalEndpoint,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
@@ -23,10 +23,54 @@ import {
 import { safeId } from "../kernel"
 import type { RunControls } from "../simulation"
 import type { NumericalSettings } from "./modeling"
-import { defaultDurationSeconds } from "./timing"
+import {
+  appendBlockControls,
+  blockDurationSeconds,
+  endpointPorts,
+} from "./signal-controls"
 import { signalTopology, validateSignalGraph } from "./topology"
 
+export { endpointPorts, probeEndpoints, signalBits } from "./signal-controls"
+
+/** Maximum and default lateral search distance for routed admission, in millimetres. */
+const MAX_COPPER_SCOPE_DISTANCE_MM = 32
+
+/** Set the maximum transient step relative to the shortest bit. */
+const STEPS_PER_BIT = 100
+
+/** Set the maximum transient step relative to the fastest edge. */
+const STEPS_PER_EDGE = 20
+
+/** Allowed difference between typical IBIS voltages on one reference net. */
+const REFERENCE_VOLTAGE_TOLERANCE_V = 1e-8
+
+/** Simulation records needed while lowering one selected block. */
+const BLOCK_MODEL_RECORDS = [
+  "simulation_ibis_model",
+  "simulation_voltage_source",
+  "simulation_spice_subcircuit",
+]
+
 type SourceNetKey = string
+type SourceComponent = Extract<
+  CircuitJson[number],
+  { type: "source_component" }
+>
+
+/** Named source ports and nets electrically connected to block reference or power rails. */
+type RailIds = Set<SourcePortId | SourceNetId>
+
+interface SignalIndex {
+  driven: Map<SourcePortId, SimulationPcbDriverReceiverChannel>
+  topology: Map<SourcePortId | SourceNetId, string>
+  edges: number[]
+}
+
+interface SignalIndexOptions {
+  signals: SimulationPcbDriverReceiverChannel[]
+  pins: Map<SourcePortId, InspectedPin>
+  signalConnectivity: ConnectivityMap
+}
 
 export interface PreparedBlock {
   duration: number
@@ -38,69 +82,11 @@ export interface PreparedBlock {
   settings: NumericalSettings
   warnings: string[]
 }
-/** Ordered physical ports: the sign of a differential signal is P minus N. */
-export function endpointPorts(endpoint: SignalEndpoint): SourcePortId[] {
-  if ("source_port_id" in endpoint) return [endpoint.source_port_id]
-  return [endpoint.p_source_port_id, endpoint.n_source_port_id]
-}
-
-const prbsPatterns = new Map([
-  ["prbs7", { width: 7, tap: 6 }],
-  ["prbs15", { width: 15, tap: 14 }],
-  ["prbs31", { width: 31, tap: 28 }],
-])
-
-/** Check for a nonempty string of literal binary digits. */
-function isBitPattern(pattern: string): boolean {
-  if (pattern.length === 0) return false
-  for (const bit of pattern) {
-    if (bit !== "0" && bit !== "1") return false
-  }
-  return true
-}
-
-/** Seeded PRBS generation bounded by the actual requested recording; never allocate a full PRBS31 period. */
-export function signalBits(
-  signal: SimulationPcbDriverReceiverChannel,
-  duration: number,
-): string {
-  const prbs = prbsPatterns.get(signal.pattern)
-  const mask = prbs ? 2 ** prbs.width - 1 : 0
-  if (
-    prbs &&
-    (!Number.isInteger(signal.seed) || signal.seed! < 1 || signal.seed! > mask)
-  )
-    throw new Error(
-      `Signal "${signal.name}": ${signal.pattern} seed must be an integer in 1..${mask}.`,
-    )
-  if (signal.driver_disabled) return "0"
-  if (signal.pattern === "clock") return "01"
-  if (!prbs) {
-    if (!isBitPattern(signal.pattern))
-      throw new Error(
-        `${signal.name}: pattern must be PRBS, clock, or a literal bit string`,
-      )
-    return signal.pattern
-  }
-  let state = signal.seed!
-  const count = Math.min(
-    mask,
-    Math.ceil(
-      Math.max(0, duration - signal.offset_ms / 1000) * signal.bit_rate_bps,
-    ) + 1,
-  )
-  const { width, tap } = prbs
-  let bits = ""
-  for (let i = 0; i < count; i++) {
-    bits += String((state >>> (width - 1)) & 1)
-    state =
-      ((state << 1) | (((state >>> (width - 1)) ^ (state >>> (tap - 1))) & 1)) &
-      mask
-  }
-  return bits
-}
 /** Supported lanes and rejection messages from auditing the scoped copper. */
-type RoutedLanes = { lanes: NumericalSettings["lanes"]; rejections: string[] }
+type RoutedLanes = {
+  lanes: NumericalSettings["lanes"]
+  rejections: string[]
+}
 
 /** Audit only selected/nearby routed nets; unsupported neighbours remain visible. */
 export function routedLanes({
@@ -118,32 +104,37 @@ export function routedLanes({
 }): RoutedLanes {
   const lanes: NumericalSettings["lanes"] = []
   const rejections: string[] = []
-  for (const trace of circuit
-    .filter((r) => r.type === "source_trace")
-    .sort((a, b) => a.source_trace_id.localeCompare(b.source_trace_id))) {
+  const traces = circuit.filter((record) => record.type === "source_trace")
+  const pcbTraces = circuit.filter((record) => record.type === "pcb_trace")
+  traces.sort((a, b) => a.source_trace_id.localeCompare(b.source_trace_id))
+  for (const trace of traces) {
     const ports = trace.connected_source_port_ids
-    const pcb = circuit
-      .filter((r) => r.type === "pcb_trace")
-      .filter((r) => r.source_trace_id === trace.source_trace_id)
-    if (
-      !pcb.some((route) => scope.pcbTraceIds.includes(route.pcb_trace_id)) ||
-      [...ports, ...(trace.connected_source_net_ids ?? [])].some((port) =>
-        rails.has(port),
-      )
+    const pcb = pcbTraces.filter(
+      (route) => route.source_trace_id === trace.source_trace_id,
     )
+    if (!pcb.some((route) => scope.pcbTraceIds.includes(route.pcb_trace_id)))
       continue
+    const members = [...ports, ...(trace.connected_source_net_ids ?? [])]
+    if (members.some((port) => rails.has(port))) continue
     if (ports.length !== 2 || pcb.length !== 1) {
+      const name =
+        topology.get(ports[0]) ??
+        trace.name ??
+        trace.display_name ??
+        trace.source_trace_id
       rejections.push(
-        `Signal "${topology.get(ports[0]) ?? trace.name ?? trace.display_name ?? trace.source_trace_id}": branched routed graphs are not implemented yet.`,
+        `Signal "${name}": branched routed graphs are not implemented yet.`,
       )
       continue
     }
     const ordered = [...ports].sort()
     if (driven.has(ordered[1]) && !driven.has(ordered[0])) ordered.reverse()
+    const [from, to] = ordered
+    const name = topology.get(from) || "passive"
     lanes.push({
-      port: `${topology.get(ordered[0]) || "passive"}_${trace.source_trace_id}`,
-      from: { sourcePortId: ordered[0] },
-      to: { sourcePortId: ordered[1] },
+      port: `${name}_${trace.source_trace_id}`,
+      from: { sourcePortId: from },
+      to: { sourcePortId: to },
       sourceTraceId: trace.source_trace_id,
     })
   }
@@ -156,22 +147,25 @@ export function signalBlocks(
   const blocks = circuitJson.filter(
     (r) => r.type === "simulation_pcb_transient_channel_simulation",
   )
-  if (blocks.length > 1 && blocks.some((block) => !block.name))
+  if (blocks.length > 1 && blocks.some((block) => !block.name)) {
+    const element = "<simulation.pcbtransientchannelsimulation>"
     throw new Error(
-      `This board has ${blocks.length} <simulation.pcbtransientchannelsimulation> blocks; give each a name.`,
+      `This board has ${blocks.length} ${element} blocks; give each a name.`,
     )
+  }
   const ids = new Set(
-    blocks.map((b) => b.simulation_pcb_transient_channel_simulation_id),
+    blocks.map((block) => block.simulation_pcb_transient_channel_simulation_id),
   )
   if (ids.size !== blocks.length)
     throw new Error(
       "Duplicate simulation_pcb_transient_channel_simulation identifier",
     )
   for (const signal of circuitJson.filter(
-    (r) => r.type === "simulation_pcb_driver_receiver_channel",
-  ))
-    if (!ids.has(signal.simulation_pcb_transient_channel_simulation_id))
-      throw new Error(`${signal.name}: unknown signal-integrity block`)
+    (record) => record.type === "simulation_pcb_driver_receiver_channel",
+  )) {
+    if (ids.has(signal.simulation_pcb_transient_channel_simulation_id)) continue
+    throw new Error(`${signal.name}: unknown signal-integrity block`)
+  }
   return blocks
 }
 /** Validate one block and lower its test intent to the private routed declarations. */
@@ -179,16 +173,24 @@ export function prepareBlockById({
   circuit,
   sources,
   blockId,
-  distanceMm = 32,
+  distanceMm = MAX_COPPER_SCOPE_DISTANCE_MM,
 }: {
   circuit: CircuitJson
   sources: IbisSources
   blockId: string
   distanceMm?: number
 }): PreparedBlock {
-  if (!Number.isFinite(distanceMm) || distanceMm <= 0 || distanceMm > 32)
-    throw new Error("Copper scope distance must be in (0,32] mm")
-  const matches = signalBlocks(circuit).filter(
+  if (
+    !Number.isFinite(distanceMm) ||
+    distanceMm <= 0 ||
+    distanceMm > MAX_COPPER_SCOPE_DISTANCE_MM
+  ) {
+    throw new Error(
+      `Copper scope distance must be in (0,${MAX_COPPER_SCOPE_DISTANCE_MM}] mm`,
+    )
+  }
+  const blocks = signalBlocks(circuit)
+  const matches = blocks.filter(
     (block) => block.simulation_pcb_transient_channel_simulation_id === blockId,
   )
   if (matches.length !== 1)
@@ -216,30 +218,234 @@ function selectedIbisModel(
   return endpoint.n_ibis_model_name
 }
 
-/** Include a quiet driver as the last probe after the receivers. */
-export function probeEndpoints(
-  signal: SimulationPcbDriverReceiverChannel,
-): SignalEndpoint[] {
-  if (isQuiet(signal)) return [...signal.receivers, signal.driver]
-  return signal.receivers
-}
-
-/** Use the explicit block duration when present, in seconds. */
-function blockDurationSeconds(
-  block: SimulationPcbTransientChannelSimulation,
-  signals: SimulationPcbDriverReceiverChannel[],
-): number {
-  if (block.duration_ms !== undefined) return block.duration_ms / 1000
-  return defaultDurationSeconds(signals)
-}
-
 /** Unicode code point order, independent of locale and UTF-16 surrogate ordering. */
 export function compareNames(a: string, b: string): number {
-  const left = Array.from(a, (c) => c.codePointAt(0)!)
-  const right = Array.from(b, (c) => c.codePointAt(0)!)
-  for (let i = 0; i < Math.min(left.length, right.length); i++)
+  const left = Array.from(a, (character) => character.codePointAt(0)!)
+  const right = Array.from(b, (character) => character.codePointAt(0)!)
+  const sharedLength = Math.min(left.length, right.length)
+  for (let i = 0; i < sharedLength; i++) {
     if (left[i] !== right[i]) return left[i] - right[i]
+  }
   return left.length - right.length
+}
+
+/** Apply endpoint-specific IBIS model choices to the copied block records. */
+function applyIbisModelOverrides(
+  circuit: CircuitJson,
+  signals: SimulationPcbDriverReceiverChannel[],
+): void {
+  for (const model of circuit.filter(
+    (r) => r.type === "simulation_ibis_model",
+  )) {
+    for (const signal of signals) {
+      for (const endpoint of [signal.driver, ...signal.receivers]) {
+        for (const [index, port] of endpointPorts(endpoint).entries()) {
+          const selected = selectedIbisModel(endpoint, index)
+          if (!selected) continue
+          for (const [pin, target] of Object.entries(
+            model.ibis_pin_name_to_source_port_id,
+          )) {
+            if (target !== port) continue
+            model.ibis_pin_name_to_model_name = {
+              ...model.ibis_pin_name_to_model_name,
+              [pin]: selected,
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/** Collect all ports and nets tied to declared rails or to IBIS reference pins. */
+function collectRailIds(
+  {
+    circuit,
+    connectivity,
+  }: {
+    circuit: CircuitJson
+    connectivity: ConnectivityMap
+  },
+  pins: Map<SourcePortId, InspectedPin>,
+): RailIds {
+  const railIds: RailIds = new Set()
+  const sourceNets = circuit.filter((record) => record.type === "source_net")
+  const supplyNetIds = sourceNets
+    .filter((net) => net.is_ground || net.is_power)
+    .map((net) => net.source_net_id)
+  const pinReferences = [...pins.values()].flatMap((pin) => [
+    pin.ground,
+    pin.power,
+  ])
+  for (const port of [...pinReferences, ...supplyNetIds]) {
+    if (railIds.has(port)) continue
+    for (const connected of sourceNetMembers(connectivity, port))
+      railIds.add(connected)
+  }
+  return railIds
+}
+
+/** Fill in the default source ports for each IBIS reference role. */
+function addPinReferences(pins: Map<SourcePortId, InspectedPin>): void {
+  for (const pin of pins.values()) {
+    const model = pin.model
+    model.ibis_pin_name_to_reference_source_port_ids ??= {}
+    model.ibis_pin_name_to_reference_source_port_ids[pin.pin] ??= {
+      pullup_reference_source_port_id: pin.power,
+      power_clamp_reference_source_port_id: pin.power,
+      pulldown_reference_source_port_id: pin.ground,
+      ground_clamp_reference_source_port_id: pin.ground,
+    }
+  }
+}
+
+/** A routed signal component can use a built-in passive or an explicit SPICE subcircuit. */
+function hasSupportedComponentModel(
+  component: SourceComponent | undefined,
+  circuit: CircuitJson,
+): boolean {
+  if (!component) return false
+  if (
+    ["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
+      component.ftype,
+    )
+  )
+    return true
+  return circuit.some((record) => {
+    return (
+      record.type === "simulation_spice_subcircuit" &&
+      record.source_component_id === component.source_component_id
+    )
+  })
+}
+
+/** Check driver and receiver IBIS roles and index the selected copper nets. */
+function indexBlockSignals({
+  signals,
+  pins,
+  signalConnectivity,
+}: SignalIndexOptions): SignalIndex {
+  const driven = new Map<SourcePortId, SimulationPcbDriverReceiverChannel>()
+  const topology = new Map<SourcePortId | SourceNetId, string>()
+  const edges: number[] = []
+  for (const signal of signals) {
+    safeId(
+      signal.simulation_pcb_driver_receiver_channel_id,
+      "simulationPcbDriverReceiverChannelId",
+    )
+    const drivers = endpointPorts(signal.driver)
+    const label = `Signal "${signal.name}"`
+    for (const port of drivers) {
+      const pin = pins.get(port)
+      if (!pin)
+        throw new Error(
+          `${label} driver ${port} has no <simulation.ibismodel>.`,
+        )
+      const capabilities = pinCapabilities(pin)
+      if (!capabilities.drive) {
+        throw new Error(
+          `${label}: selected IBIS model "${pin.buffer.name}" does not support driving on ${port}.`,
+        )
+      }
+      if (signal.driver_disabled && !capabilities.disable) {
+        throw new Error(
+          `${label}: ${port} model ${pin.buffer.name} has no disabled state; use pattern="0" or "1".`,
+        )
+      }
+      driven.set(port, signal)
+      edges.push(edgeSeconds(pin))
+      for (const net of sourceNetMembers(signalConnectivity, port)) {
+        const owner = topology.get(net)
+        if (owner && owner !== signal.name) {
+          throw new Error(
+            `Signals "${owner}" and "${signal.name}" are on the same net; one signal per net.`,
+          )
+        }
+        topology.set(net, signal.name)
+      }
+    }
+    for (const receiver of signal.receivers) {
+      if ("source_port_id" in receiver !== "source_port_id" in signal.driver) {
+        throw new Error(
+          `${signal.name}: driver and receiver must use the same endpoint shape`,
+        )
+      }
+      for (const [index, port] of endpointPorts(receiver).entries()) {
+        const pin = pins.get(port)
+        if (!pin)
+          throw new Error(
+            `${label} receiver ${port} has no <simulation.ibismodel>.`,
+          )
+        if (!pinCapabilities(pin).receive) {
+          throw new Error(
+            `${label}: selected IBIS model "${pin.buffer.name}" does not support receiving on ${port}.`,
+          )
+        }
+        if (!sourceNetMembers(signalConnectivity, drivers[index]).has(port)) {
+          throw new Error(
+            `Receiver ${port} is not connected to the copper of signal "${signal.name}".`,
+          )
+        }
+      }
+    }
+    if ("p_source_port_id" in signal.driver)
+      checkDifferentialPairs(signal, pins)
+  }
+  for (const [port, name] of topology) {
+    const pin = pins.get(port)
+    if (!pin || driven.has(port) || pin.buffer.type !== "output") continue
+    const drivers = `Signal "${name}" has two drivers: the listed driver and ${port} (IBIS model "${pin.buffer.name}").`
+    throw new Error(`${drivers} Exactly one pin drives a signal.`)
+  }
+  return { driven, topology, edges }
+}
+
+/** Check that each differential pair belongs to one chip and follows the model's pin order. */
+function checkDifferentialPairs(
+  signal: SimulationPcbDriverReceiverChannel,
+  pins: Map<SourcePortId, InspectedPin>,
+): void {
+  const label = `Signal "${signal.name}"`
+  for (const endpoint of [signal.driver, ...signal.receivers]) {
+    const [p, n] = endpointPorts(endpoint).map((port) => pins.get(port)!)
+    const pair = p.component.differentialPins.find(
+      (pair) => pair.pin === p.pin && pair.invertedPin === n.pin,
+    )
+    if (p.model.source_component_id !== n.model.source_component_id) {
+      throw new Error(
+        `${label}: both differential legs must belong to the same chip.`,
+      )
+    }
+    if (!pair) {
+      const mismatch = `${label}: differential pin order disagrees with IBIS [Diff_pin];`
+      throw new Error(`${mismatch} swap p and n or repair the model mapping.`)
+    }
+    // The vendor's model Polarity is already applied by the converter.
+  }
+}
+
+/** Keep only IBIS models and mapped ports needed by the retained pins. */
+function pruneIbisModels(
+  circuit: CircuitJson,
+  pins: Map<SourcePortId, InspectedPin>,
+): void {
+  for (const model of circuit.filter(
+    (record) => record.type === "simulation_ibis_model",
+  )) {
+    const used = [...pins.values()].filter((pin) => pin.model === model)
+    const ports = new Set(
+      used.flatMap((pin) => {
+        const references =
+          model.ibis_pin_name_to_reference_source_port_ids?.[pin.pin] ?? {}
+        return [pin.port, pin.power, pin.ground, ...Object.values(references)]
+      }),
+    )
+    const mappings = Object.entries(model.ibis_pin_name_to_source_port_id)
+    model.ibis_pin_name_to_source_port_id = Object.fromEntries(
+      mappings.filter(([, port]) => ports.has(port)),
+    )
+    if (!used.length) circuit.splice(circuit.indexOf(model), 1)
+  }
 }
 
 /** Independent block: model overrides, copper, pin states, references and stimuli. */
@@ -260,158 +466,44 @@ function prepareBlock({
     block.simulation_pcb_transient_channel_simulation_id,
     "simulationPcbTransientChannelSimulationId",
   )
-  const signals = input
-    .filter((r) => r.type === "simulation_pcb_driver_receiver_channel")
-    .filter((r) => r.simulation_pcb_transient_channel_simulation_id === id)
-    .sort((a, b) => compareNames(a.name, b.name))
+  const channels = input.filter(
+    (record) => record.type === "simulation_pcb_driver_receiver_channel",
+  )
+  const signals = channels.filter(
+    (channel) => channel.simulation_pcb_transient_channel_simulation_id === id,
+  )
+  signals.sort((a, b) => compareNames(a.name, b.name))
+  const names = new Set(signals.map((signal) => signal.name))
+  const ids = new Set(
+    signals.map((signal) => signal.simulation_pcb_driver_receiver_channel_id),
+  )
   if (
     !signals.length ||
-    new Set(signals.map((s) => s.name)).size !== signals.length ||
-    new Set(signals.map((s) => s.simulation_pcb_driver_receiver_channel_id))
-      .size !== signals.length
-  )
+    names.size !== signals.length ||
+    ids.size !== signals.length
+  ) {
     throw new Error(`${block.name ?? id}: require distinct named signals`)
-  const duration = blockDurationSeconds(block, signals)
-  const circuit = structuredClone([
-    ...input.filter(
-      (r) =>
-        !r.type.startsWith("simulation_") ||
-        [
-          "simulation_ibis_model",
-          "simulation_voltage_source",
-          "simulation_spice_subcircuit",
-        ].includes(r.type),
-    ),
-    block,
-    ...signals,
-  ])
-  for (const model of circuit.filter(
-    (r) => r.type === "simulation_ibis_model",
-  )) {
-    for (const signal of signals)
-      for (const endpoint of [signal.driver, ...signal.receivers]) {
-        for (const [index, port] of endpointPorts(endpoint).entries()) {
-          const selected = selectedIbisModel(endpoint, index)
-          if (!selected) continue
-          for (const [pin, target] of Object.entries(
-            model.ibis_pin_name_to_source_port_id,
-          )) {
-            if (target !== port) continue
-            model.ibis_pin_name_to_model_name = {
-              ...model.ibis_pin_name_to_model_name,
-              [pin]: selected,
-            }
-          }
-        }
-      }
   }
+  const duration = blockDurationSeconds(block, signals)
+  const records = input.filter((record) => {
+    return (
+      !record.type.startsWith("simulation_") ||
+      BLOCK_MODEL_RECORDS.includes(record.type)
+    )
+  })
+  const circuit = structuredClone([...records, block, ...signals])
+  applyIbisModelOverrides(circuit, signals)
   const pins = inspectPins(circuit, sources)
 
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const rails = new Set<SourcePortId | SourceNetId>()
-  for (const port of [...pins.values()]
-    .flatMap((pin) => [pin.ground, pin.power])
-    .concat(
-      circuit
-        .filter((record) => record.type === "source_net")
-        .filter((net) => net.is_ground || net.is_power)
-        .map((net) => net.source_net_id),
-    )) {
-    if (rails.has(port)) continue
-    for (const connected of sourceNetMembers(connectivity, port))
-      rails.add(connected)
-  }
-  for (const pin of pins.values()) {
-    const model = pin.model
-    model.ibis_pin_name_to_reference_source_port_ids ??= {}
-    model.ibis_pin_name_to_reference_source_port_ids[pin.pin] ??= {
-      pullup_reference_source_port_id: pin.power,
-      power_clamp_reference_source_port_id: pin.power,
-      pulldown_reference_source_port_id: pin.ground,
-      ground_clamp_reference_source_port_id: pin.ground,
-    }
-  }
+  const rails = collectRailIds({ circuit, connectivity }, pins)
+  addPinReferences(pins)
   const signalConnectivity = signalTopology({ circuit, rails })
-  const driven = new Map<SourcePortId, SimulationPcbDriverReceiverChannel>()
-  const topology = new Map<SourcePortId | SourceNetId, string>()
-  const edges: number[] = []
-  for (const signal of signals) {
-    safeId(
-      signal.simulation_pcb_driver_receiver_channel_id,
-      "simulationPcbDriverReceiverChannelId",
-    )
-    const drivers = endpointPorts(signal.driver)
-    for (const port of drivers) {
-      const pin = pins.get(port)
-      if (!pin)
-        throw new Error(
-          `Signal "${signal.name}" driver ${port} has no <simulation.ibismodel>.`,
-        )
-      const capabilities = pinCapabilities(pin)
-      if (!capabilities.drive)
-        throw new Error(
-          `Signal "${signal.name}": selected IBIS model "${pin.buffer.name}" does not support driving on ${port}.`,
-        )
-      if (signal.driver_disabled && !capabilities.disable)
-        throw new Error(
-          `Signal "${signal.name}": ${port} model ${pin.buffer.name} has no disabled state; use pattern="0" or "1".`,
-        )
-      driven.set(port, signal)
-      edges.push(edgeSeconds(pin))
-      for (const net of sourceNetMembers(signalConnectivity, port)) {
-        const owner = topology.get(net)
-        if (owner && owner !== signal.name)
-          throw new Error(
-            `Signals "${owner}" and "${signal.name}" are on the same net; one signal per net.`,
-          )
-        topology.set(net, signal.name)
-      }
-    }
-    for (const receiver of signal.receivers) {
-      if ("source_port_id" in receiver !== "source_port_id" in signal.driver)
-        throw new Error(
-          `${signal.name}: driver and receiver must use the same endpoint shape`,
-        )
-      for (const [index, port] of endpointPorts(receiver).entries()) {
-        const pin = pins.get(port)
-        if (!pin)
-          throw new Error(
-            `Signal "${signal.name}" receiver ${port} has no <simulation.ibismodel>.`,
-          )
-        if (!pinCapabilities(pin).receive)
-          throw new Error(
-            `Signal "${signal.name}": selected IBIS model "${pin.buffer.name}" does not support receiving on ${port}.`,
-          )
-        if (!sourceNetMembers(signalConnectivity, drivers[index]).has(port))
-          throw new Error(
-            `Receiver ${port} is not connected to the copper of signal "${signal.name}".`,
-          )
-      }
-    }
-    if (!("p_source_port_id" in signal.driver)) continue
-    for (const endpoint of [signal.driver, ...signal.receivers]) {
-      const [p, n] = endpointPorts(endpoint).map((port) => pins.get(port)!)
-      const pair = p.component.differentialPins.find(
-        (pair) => pair.pin === p.pin && pair.invertedPin === n.pin,
-      )
-      if (p.model.source_component_id !== n.model.source_component_id)
-        throw new Error(
-          `Signal "${signal.name}": both differential legs must belong to the same chip.`,
-        )
-      if (!pair)
-        throw new Error(
-          `Signal "${signal.name}": differential pin order disagrees with IBIS [Diff_pin]; swap p and n or repair the model mapping.`,
-        )
-      // The vendor's model Polarity is already applied by the converter.
-    }
-  }
-  for (const [port, name] of topology) {
-    const pin = pins.get(port)
-    if (pin && !driven.has(port) && pin.buffer.type === "output")
-      throw new Error(
-        `Signal "${name}" has two drivers: the listed driver and ${port} (IBIS model "${pin.buffer.name}"). Exactly one pin drives a signal.`,
-      )
-  }
+  const { driven, topology, edges } = indexBlockSignals({
+    signals,
+    pins,
+    signalConnectivity,
+  })
   validateSignalGraph({
     circuit,
     connectivity,
@@ -421,8 +513,8 @@ function prepareBlock({
     allowUnroutedTraces: block.allow_unrouted_traces,
   })
   const edge = Math.min(...edges)
-  const rate = Math.max(...signals.map((s) => s.bit_rate_bps))
-  const step = Math.min(1 / rate / 100, edge / 20)
+  const rate = Math.max(...signals.map((signal) => signal.bit_rate_bps))
+  const step = Math.min(1 / rate / STEPS_PER_BIT, edge / STEPS_PER_EDGE)
   const reference = pins.get([...driven.keys()].sort()[0])!.ground
   const copperScope = channelCopperScope({
     circuit,
@@ -432,32 +524,21 @@ function prepareBlock({
     rails,
     distanceMm,
   })
-  for (const port of circuit
-    .filter((r) => r.type === "source_port")
-    .filter(
-      (port) =>
-        topology.has(port.source_port_id) && !pins.has(port.source_port_id),
-    )) {
-    const component = circuit
-      .filter((r) => r.type === "source_component")
-      .find(
-        (component) =>
-          component.source_component_id === port.source_component_id,
-      )
-    if (
-      !component ||
-      (!["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
-        component.ftype,
-      ) &&
-        !circuit.some(
-          (r) =>
-            r.type === "simulation_spice_subcircuit" &&
-            r.source_component_id === component.source_component_id,
-        ))
+  const circuitPorts = circuit.filter((record) => record.type === "source_port")
+  const components = circuit.filter(
+    (record) => record.type === "source_component",
+  )
+  for (const port of circuitPorts) {
+    if (!topology.has(port.source_port_id) || pins.has(port.source_port_id))
+      continue
+    const component = components.find(
+      (component) => component.source_component_id === port.source_component_id,
     )
-      throw new Error(
-        `${component?.name ?? port.source_port_id} is on the signal and has no supported SPICE or IBIS model.`,
-      )
+    if (hasSupportedComponentModel(component, circuit)) continue
+    const label = component?.name ?? port.source_port_id
+    throw new Error(
+      `${label} is on the signal and has no supported SPICE or IBIS model.`,
+    )
   }
   const scopeForLanes = {
     ...copperScope,
@@ -473,7 +554,7 @@ function prepareBlock({
   if (rejections.length)
     throw Object.assign(new Error(rejections[0]), { rejections, copperScope })
   if (!block.allow_unrouted_traces) {
-    for (const signal of signals)
+    for (const signal of signals) {
       for (const port of endpointPorts(signal.driver)) {
         if (
           lanes.some(
@@ -484,6 +565,7 @@ function prepareBlock({
           continue
         throw new Error(`Signal "${signal.name}" is not routed from ${port}.`)
       }
+    }
     if (!lanes.length)
       throw new Error(
         "At least one routed conductor is required for routed extraction",
@@ -492,20 +574,20 @@ function prepareBlock({
   // Stable physical endpoint identities order the matrix; route coordinates set coupling.
   lanes.sort((a, b) => a.from.sourcePortId!.localeCompare(b.from.sourcePortId!))
   const retained = new Set(topology.keys())
+  const pcbTraces = circuit.filter((record) => record.type === "pcb_trace")
   for (const trace of circuit.filter(
     (record) => record.type === "source_trace",
   )) {
-    if (
-      !circuit.some(
-        (record) =>
-          record.type === "pcb_trace" &&
-          record.source_trace_id === trace.source_trace_id &&
-          copperScope.pcbTraceIds.includes(record.pcb_trace_id),
+    const scoped = pcbTraces.some((route) => {
+      return (
+        route.source_trace_id === trace.source_trace_id &&
+        copperScope.pcbTraceIds.includes(route.pcb_trace_id)
       )
-    )
-      continue
-    for (const port of trace.connected_source_port_ids)
+    })
+    if (!scoped) continue
+    for (const port of trace.connected_source_port_ids) {
       for (const id of sourceNetMembers(connectivity, port)) retained.add(id)
+    }
   }
   const laneMembers = new Set(
     lanes.flatMap((lane) =>
@@ -515,63 +597,39 @@ function prepareBlock({
     ),
   )
   for (const id of laneMembers) retained.add(id)
-  for (const [port] of pins) if (!retained.has(port)) pins.delete(port)
-  for (const model of circuit.filter(
-    (r) => r.type === "simulation_ibis_model",
-  )) {
-    const used = [...pins.values()].filter((pin) => pin.model === model)
-    const ports = new Set(
-      used.flatMap((pin) => [
-        pin.port,
-        pin.power,
-        pin.ground,
-        ...Object.values(
-          model.ibis_pin_name_to_reference_source_port_ids?.[pin.pin] ?? {},
-        ),
-      ]),
-    )
-    model.ibis_pin_name_to_source_port_id = Object.fromEntries(
-      Object.entries(model.ibis_pin_name_to_source_port_id).filter(([, port]) =>
-        ports.has(port),
-      ),
-    )
-    if (!used.length) circuit.splice(circuit.indexOf(model), 1)
+  for (const [port] of pins) {
+    if (!retained.has(port)) pins.delete(port)
   }
+  pruneIbisModels(circuit, pins)
   const stack = stackupFromCircuitJson(circuit)
-  if (!stack.relativePermittivity)
+  if (!stack.relativePermittivity) {
     throw new Error(
       "<simulation.pcbtransientchannelsimulation> needs explicit stackup dielectric constants.",
     )
+  }
+  const passiveComponents = components.filter((component) => {
+    if (!hasSupportedComponentModel(component, circuit)) return false
+    return circuitPorts.some((port) => {
+      return (
+        port.source_component_id === component.source_component_id &&
+        !rails.has(port.source_port_id) &&
+        laneMembers.has(port.source_port_id)
+      )
+    })
+  })
   const settings: NumericalSettings = {
     lanes,
     copperScope,
     channelReference: { sourcePortId: reference },
-    passiveComponents: circuit
-      .filter((r) => r.type === "source_component")
-      .filter(
-        (r) =>
-          (["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
-            r.ftype,
-          ) ||
-            circuit.some(
-              (model) =>
-                model.type === "simulation_spice_subcircuit" &&
-                model.source_component_id === r.source_component_id,
-            )) &&
-          circuit.some(
-            (port) =>
-              port.type === "source_port" &&
-              port.source_component_id === r.source_component_id &&
-              !rails.has(port.source_port_id) &&
-              laneMembers.has(port.source_port_id),
-          ),
-      )
-      .map((r) => ({ sourceComponentId: r.source_component_id })),
+    passiveComponents: passiveComponents.map((component) => ({
+      sourceComponentId: component.source_component_id,
+    })),
   }
-  if (copperScope.pcbViaIds.length && !stack.viaPlatingMm)
+  if (copperScope.pcbViaIds.length && !stack.viaPlatingMm) {
     throw new Error(
       "pcb_stackup must specify plated_hole_copper_thickness for routed vias",
     )
+  }
   const netVoltages = new Map<SourceNetKey, number>()
   for (const pin of pins.values()) {
     const voltages = referenceVoltages(pin.buffer)
@@ -590,13 +648,15 @@ function prepareBlock({
       ]
         .sort()
         .join(",")
+      const previous = netVoltages.get(key)
       if (
-        netVoltages.has(key) &&
-        Math.abs(netVoltages.get(key)! - voltage) > 1e-8
-      )
+        previous !== undefined &&
+        Math.abs(previous - voltage) > REFERENCE_VOLTAGE_TOLERANCE_V
+      ) {
         throw new Error(
           `${pin.port}: shared reference has incompatible IBIS typical voltages.`,
         )
+      }
       netVoltages.set(key, voltage)
     }
     if (supplied) continue
@@ -607,83 +667,19 @@ function prepareBlock({
       voltageV: voltages.pullup,
     })
   }
-  for (let i = circuit.length - 1; i >= 0; i--)
+  for (let i = circuit.length - 1; i >= 0; i--) {
     if (circuit[i].type === "simulation_voltage_source") circuit.splice(i, 1)
-  const controls: RunControls = { states: [], stimuli: [] }
-  const scope = circuit.find((r) => r.type === "pcb_board")?.subcircuit_id
-  circuit.push({
-    type: "simulation_experiment",
-    simulation_experiment_id: id,
-    name: block.name ?? id,
-    experiment_type: "spice_transient_analysis",
-    spice_engine: "pcb_spice",
-    spice_options: { reltol: 1e-5, abstol: 1e-12, vntol: 1e-8 },
-    end_time_ms: duration * 1000,
-    start_time_ms: 0,
-    time_per_step: step * 1000,
-    subcircuit_id: scope,
+  }
+  const controls = appendBlockControls(circuit, {
+    id,
+    block,
+    signals,
+    pins,
+    driven,
+    duration,
+    rate,
+    step,
   })
-  for (const pin of pins.values()) {
-    const signal = driven.get(pin.port)
-    const capabilities = pinCapabilities(pin)
-    const output = signal !== undefined || !capabilities.receive
-    let enabled =
-      capabilities.drive && !capabilities.disable && !capabilities.receive
-    if (signal) enabled = !signal.driver_disabled
-    const state: RunControls["states"][number] = {
-      source_port_id: pin.port,
-      is_output: output,
-    }
-    if (output) state.is_output_enabled = enabled
-    controls.states.push(state)
-    if (!signal && enabled)
-      controls.stimuli.push({
-        name: pin.port,
-        source_port_id: pin.port,
-        bit_duration_ms: 1000 / rate,
-        start_time_ms: 0,
-        initial_state: 0,
-        inverted: pin.buffer.polarity === "inverting",
-        transmission_pattern: {
-          transmission_type: "bits",
-          bits: "0",
-          repeat: true,
-        },
-      })
-  }
-  for (const signal of signals) {
-    const bits = signalBits(signal, duration)
-    if (signal.driver_disabled) continue
-    let initialState: 0 | 1 = 0
-    if (bits[0] === "1") initialState = 1
-    for (const [index, port] of endpointPorts(signal.driver).entries()) {
-      const pin = pins.get(port)!
-      const inversion = Boolean(index) !== (pin.buffer.polarity === "inverting")
-      controls.stimuli.push({
-        name: signal.name,
-        source_port_id: port,
-        bit_duration_ms: 1000 / signal.bit_rate_bps,
-        start_time_ms: signal.offset_ms,
-        initial_state: initialState,
-        inverted: inversion,
-        transmission_pattern: { transmission_type: "bits", bits, repeat: true },
-      })
-    }
-  }
-  for (const signal of signals)
-    for (const [index, endpoint] of probeEndpoints(signal).entries()) {
-      const ports = endpointPorts(endpoint)
-      let ref = ports[1]
-      if (!("p_source_port_id" in endpoint)) ref = pins.get(ports[0])!.ground
-      circuit.push({
-        type: "simulation_voltage_probe",
-        simulation_voltage_probe_id: `${signal.simulation_pcb_driver_receiver_channel_id}_${index}`,
-        name: `${signal.name}_${index}`,
-        signal_input_source_port_id: ports[0],
-        reference_input_source_port_id: ref,
-        subcircuit_id: scope,
-      })
-    }
   return {
     block,
     signals,

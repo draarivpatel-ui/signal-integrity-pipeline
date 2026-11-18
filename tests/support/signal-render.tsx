@@ -17,13 +17,15 @@ export async function renderSignals(
     return await renderCoreSignals(tree)
   } catch (error) {
     const records = (error as { circuitJson?: CircuitJson }).circuitJson
-    const errors =
-      records?.filter((record) => record.type.endsWith("_error")) ?? []
     if (
-      records?.some(
+      !records?.some(
         (record) => record.type === "simulation_pcb_driver_receiver_channel",
-      ) &&
-      errors.length &&
+      )
+    )
+      throw error
+    const errors = records.filter((record) => record.type.endsWith("_error"))
+    if (
+      errors.length > 0 &&
       errors.every((record) => expectedErrors.includes(record.type))
     )
       return records
