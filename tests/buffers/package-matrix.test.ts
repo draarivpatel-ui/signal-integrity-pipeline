@@ -194,7 +194,11 @@ test("accepts semidefinite resistance", () => {
 import { parsePackageModel } from "../../src/buffers/package-model"
 import { energyFacts, maxwellFacts, vendorText } from "../support/golden-checks"
 
-test("golden invariants: AM335x vendor package L, C are SPD with |k| < 1 and C is Maxwell after sign correction", async (context) => {
+/** Accept tiny negative Maxwell row sums from floating-point reduction. */
+const MAXWELL_ROW_SUM_TOLERANCE = 1e-9
+
+const am335xPackage = `golden invariants: AM335x vendor package L, C are SPD with |k| < 1 and C is ${"Maxwell after sign correction"}`
+test(am335xPackage, async (context) => {
   // A passive reciprocal lumped package (IBIS 7.x [Define Package Model]; Paul, Inductance: Loop and Partial, ch. 5):
   // L and C symmetric positive definite, every |k| = |M_ij|/sqrt(L_ii L_jj) < 1; R PSD; the Maxwell C has positive
   // diagonal, non-positive off-diagonal entries and non-negative row sums. Tolerances are floating point only.
@@ -239,10 +243,9 @@ test("golden invariants: AM335x vendor package L, C are SPD with |k| < 1 and C i
     R.minimumEigenvalue >= -1e-12 * R.maximumEigenvalue,
     `R: ${JSON.stringify(R)}`,
   )
-  assert.ok(
+  const validMaxwell =
     maxwell.minimumDiagonal > 0 &&
-      maxwell.maximumOffDiagonal <= 0 &&
-      maxwell.minimumRowSum >= -1e-9,
-    `Maxwell: ${JSON.stringify(maxwell)}`,
-  )
+    maxwell.maximumOffDiagonal <= 0 &&
+    maxwell.minimumRowSum >= -MAXWELL_ROW_SUM_TOLERANCE
+  assert.ok(validMaxwell, `Maxwell: ${JSON.stringify(maxwell)}`)
 })

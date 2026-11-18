@@ -16,6 +16,7 @@ import {
 } from "../../src/simulation/route-ladder"
 import { routedCopper } from "../fixtures/routed-copper"
 import {
+  conductorLossTolerance,
   crossingTime,
   filamentImpedance,
   ngspiceAvailable,
@@ -144,10 +145,22 @@ function straightLine(
   }))
   const extracted: ExtractedRoutes = {
     slices: [
-      { wires, start: 0, end: lengthMm, references: [], key: "golden", line },
+      {
+        wires,
+        start: 0,
+        end: lengthMm,
+        references: [],
+        key: "golden",
+        line,
+      },
     ],
     sections: [{ key: "golden", line }],
-    materials: { maskMm: 0, maskEr: 1, maskLoss: 0, substrateLoss: 0 },
+    materials: {
+      maskMm: 0,
+      maskEr: 1,
+      maskLoss: 0,
+      substrateLoss: 0,
+    },
     warnings: [],
     coupling: [],
   }
@@ -167,13 +180,29 @@ function straightLine(
   }
 }
 
-/** Homogeneous er = 4 stripline (b = 1 mm): every mode travels at exactly c/sqrt(er), whatever the field-solver error. */
+/**
+ * Homogeneous er = 4 stripline (b = 1 mm): every mode travels at exactly c/sqrt(er), whatever the field-solver
+ * error.
+ */
 const stripline: CrossSection = {
   conductors: [
-    { id: "s", xMm: 0, zMm: 0.4825, widthMm: 0.35, thicknessMm: 0.035 },
+    {
+      id: "s",
+      xMm: 0,
+      zMm: 0.4825,
+      widthMm: 0.35,
+      thicknessMm: 0.035,
+    },
   ],
   planes: [{ zMm: 0 }, { zMm: 1 }],
-  dielectrics: [{ zMm: 0, thicknessMm: 1, er: 4, lossTangent: 0 }],
+  dielectrics: [
+    {
+      zMm: 0,
+      thicknessMm: 1,
+      er: 4,
+      lossTangent: 0,
+    },
+  ],
 }
 /** Inhomogeneous microstrip pair (h = 0.5 mm, er = 4 below, air above): distinct even and odd velocities. */
 const microstripPair: CrossSection = {
@@ -185,7 +214,14 @@ const microstripPair: CrossSection = {
     thicknessMm: 0.035,
   })),
   planes: [{ zMm: 0 }],
-  dielectrics: [{ zMm: 0, thicknessMm: 0.5, er: 4, lossTangent: 0 }],
+  dielectrics: [
+    {
+      zMm: 0,
+      thicknessMm: 0.5,
+      er: 4,
+      lossTangent: 0,
+    },
+  ],
 }
 
 /** Match an emitted element name made of the prefix and a decimal index. */
@@ -201,9 +237,8 @@ function hasNumberedElement(line: string, prefix: string): boolean {
 
 /** Sum the values of the numbered elements with the requested prefix. */
 function total(lines: string[], prefix: string): number {
-  return lines
-    .filter((line) => hasNumberedElement(line, prefix))
-    .reduce((sum, line) => sum + Number(line.split(" ")[3]), 0)
+  const elements = lines.filter((line) => hasNumberedElement(line, prefix))
+  return elements.reduce((sum, line) => sum + Number(line.split(" ")[3]), 0)
 }
 
 test("golden stage 5: ladder elements integrate to L l, C l, R l and K = L12/sqrt(L11 L22)", () => {
@@ -222,10 +257,11 @@ test("golden stage 5: ladder elements integrate to L l, C l, R l and K = L12/sqr
       { length: size },
       (_, i) => line.L[i][i] * metres,
     ).reduce((a, b) => a + b, 0)
-    const resistance = Array.from(
+    const seriesResistances = Array.from(
       { length: size },
       (_, i) => line.dcResistance[i][i] * metres,
-    ).reduce((a, b) => a + b, 0)
+    )
+    const resistance = seriesResistances.reduce((a, b) => a + b, 0)
     const ground = line.C.flat().reduce((a, b) => a + b, 0) * metres
     const pair = size > 1 ? Math.abs(line.C[0][1]) * metres : 0
     const shunts = ladder.lines
@@ -239,77 +275,105 @@ test("golden stage 5: ladder elements integrate to L l, C l, R l and K = L12/sqr
       `${label}: series L`,
     )
     assert.ok(near(total(ladder.lines, "RARCD"), resistance), `${label}: DC R`)
-    assert.ok(
-      near(
-        shunts
-          .filter((entry) => entry[2] === "0")
-          .reduce((sum, entry) => sum + Number(entry[3]), 0),
-        ground,
-      ),
-      `${label}: C to ground`,
+    const groundShunts = shunts.filter((entry) => entry[2] === "0")
+    const groundCapacitance = groundShunts.reduce(
+      (sum, entry) => sum + Number(entry[3]),
+      0,
     )
+    assert.ok(near(groundCapacitance, ground), `${label}: C to ground`)
     if (size > 1) {
-      assert.ok(
-        near(
-          shunts
-            .filter((entry) => entry[2] !== "0")
-            .reduce((sum, entry) => sum + Number(entry[3]), 0),
-          pair,
-        ),
-        `${label}: pair C`,
+      const pairShunts = shunts.filter((entry) => entry[2] !== "0")
+      const pairCapacitance = pairShunts.reduce(
+        (sum, entry) => sum + Number(entry[3]),
+        0,
       )
+      assert.ok(near(pairCapacitance, pair), `${label}: pair C`)
       const expected = line.L[0][1] / Math.sqrt(line.L[0][0] * line.L[1][1])
-      const couplings = ladder.lines
-        .filter((entry) => entry.startsWith("KARCL"))
-        .map((entry) => Number(entry.split(" ")[3]))
+      const couplingElements = ladder.lines.filter((entry) =>
+        entry.startsWith("KARCL"),
+      )
+      const couplings = couplingElements.map((entry) =>
+        Number(entry.split(" ")[3]),
+      )
+      const validCoupling = couplings.every(
+        (k) => Math.abs(k / expected - 1) <= 1e-9 && Math.abs(k) < 1,
+      )
       assert.ok(
-        couplings.length === ladder.cells / 2 &&
-          couplings.every(
-            (k) => Math.abs(k / expected - 1) <= 1e-9 && Math.abs(k) < 1,
-          ),
+        couplings.length === ladder.cells / 2 && validCoupling,
         `${label}: K`,
       )
     }
+    const cellDelayPs = (ladder.maximumDelaySeconds * 1e12).toFixed(3)
     console.log(
-      `${label}: ${ladder.cells} cells, maximum cell delay ${(ladder.maximumDelaySeconds * 1e12).toFixed(3)} ps`,
+      `${label}: ${ladder.cells} cells, maximum cell delay ${cellDelayPs} ps`,
     )
   }
 })
+
+/** The source edge is settled 200 ps after launch. */
+const SOURCE_SETTLED_SECONDS = 2e-10
+/** Allow 300 ps after the modal round trip before the transient ends. */
+const MODAL_SETTLED_SECONDS = 3e-10
+/** Absolute voltage tolerance for the linear DC solution. */
+const DC_VOLTAGE_TOLERANCE = 1e-5
+/** Number of reflections summed for the infinite lattice approximation. */
+const LATTICE_BOUNCES = 64
 
 const native =
   process.env.SI_NATIVE_TESTS !== "1" &&
   "Set SI_NATIVE_TESTS=1 for bounded sequential native checks"
 
-/** One small transient deck: ramp sources, the ladder, resistive loads and wrdata of the named nodes. */
+/** Resistive termination or source connection in a golden transient deck. */
+interface DeckConnection {
+  node: string
+  resistance: number
+}
+
+/** Ramp source voltage and series resistance. */
+interface DeckSource extends DeckConnection {
+  sign: number
+}
+
+/** Stimulus, loads and saved vectors for one golden transient. */
+interface TransientDeckOptions {
+  title: string
+  sources: DeckSource[]
+  loads: DeckConnection[]
+  stopSeconds: number
+  probes: string[]
+}
+
+/** One small transient deck with ramp sources, the ladder and resistive loads. */
 function transientDeck(
-  title: string,
   ladder: RouteLadder,
-  sources: { node: string; resistance: number; sign: number }[],
-  loads: { node: string; resistance: number }[],
-  stopSeconds: number,
-  probes: string[],
+  options: TransientDeckOptions,
 ): string {
-  return (
-    [
-      `* ${title}`,
-      ".options klu reltol=1e-4 abstol=1e-12 vntol=1e-7 pivrel=0.1",
-      ...sources.flatMap((source, i) => [
-        `VS${i} src${i} 0 PWL(0 0 50p 0 150p ${source.sign})`,
-        `RS${i} src${i} ${source.node} ${source.resistance}`,
-      ]),
-      ...ladder.lines,
-      ...loads.map((load, i) => `RL${i} ${load.node} 0 ${load.resistance}`),
-      ".control",
-      "set wr_singlescale",
-      "set wr_vecnames",
-      "set numdgt=12",
-      `tran 1p ${stopSeconds} 0 1p`,
-      `wrdata golden.dat ${probes.map((node) => `v(${node})`).join(" ")}`,
-      "quit",
-      ".endc",
-      ".end",
-    ].join("\n") + "\n"
+  const { title, sources, loads, stopSeconds, probes } = options
+  const sourceLines = sources.flatMap((source, i) => [
+    `VS${i} src${i} 0 PWL(0 0 50p 0 150p ${source.sign})`,
+    `RS${i} src${i} ${source.node} ${source.resistance}`,
+  ])
+  const loadLines = loads.map(
+    (load, i) => `RL${i} ${load.node} 0 ${load.resistance}`,
   )
+  const vectors = probes.map((node) => `v(${node})`).join(" ")
+  const lines = [
+    `* ${title}`,
+    ".options klu reltol=1e-4 abstol=1e-12 vntol=1e-7 pivrel=0.1",
+    ...sourceLines,
+    ...ladder.lines,
+    ...loadLines,
+    ".control",
+    "set wr_singlescale",
+    "set wr_vecnames",
+    "set numdgt=12",
+    `tran 1p ${stopSeconds} 0 1p`,
+    `wrdata golden.dat ${vectors}`,
+    "quit",
+    ".endc",
+    ".end",
+  ]
+  return `${lines.join("\n")}\n`
 }
 
 // Homogeneous stripline: T = l sqrt(er)/c exactly. Source and load equal the extracted Z0 = sqrt(L/C), so the
@@ -317,7 +381,12 @@ function transientDeck(
 // near 50% of the 0.5 V incident step) within 1% of T, since ladder dispersion at 10 cells per rise is ~0.2%; both
 // ends within 2% of the 0.5 V incident level from the end of the edge to 3T. One shared ngspice run.
 let matched:
-  | Promise<{ rows: number[][]; delay: number; z: number; cells: number }>
+  | Promise<{
+      rows: number[][]
+      delay: number
+      z: number
+      cells: number
+    }>
   | undefined
 /** Run the matched-line deck once for both matched-line checks. */
 function matchedRun(): Promise<{
@@ -331,77 +400,82 @@ function matchedRun(): Promise<{
     const z = Math.sqrt(line.L[0][0] / line.C[0][0])
     const delay = ((lengthMm / 1000) * 2) / lightSpeed
     const rows = await runGoldenDeck(
-      transientDeck(
-        "matched",
-        ladder,
-        [{ node: "near0", resistance: z, sign: 1 }],
-        [{ node: "far0", resistance: z }],
-        3 * delay + 2e-10,
-        ["near0", "far0"],
-      ),
+      transientDeck(ladder, {
+        title: "matched",
+        sources: [{ node: "near0", resistance: z, sign: 1 }],
+        loads: [{ node: "far0", resistance: z }],
+        stopSeconds: 3 * delay + SOURCE_SETTLED_SECONDS,
+        probes: ["near0", "far0"],
+      }),
     )
-    return { rows, delay, z, cells: ladder.cells }
+    return {
+      rows,
+      delay,
+      z,
+      cells: ladder.cells,
+    }
   })()
   return matched
 }
 
-test(
-  "golden stage 6: matched line delay is l sqrt(er)/c and the near end sees no reflection",
-  { skip: native },
-  async (context) => {
-    if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
-    const { rows, delay, z, cells } = await matchedRun()
-    const measured = crossingTime(rows, 2, 0.25) - crossingTime(rows, 1, 0.25)
-    const nearRipple = Math.max(
-      ...rows
-        .filter((row) => row[0] >= 2e-10 && row[0] <= 3 * delay)
-        .map((row) => Math.abs(row[1] - 0.5)),
-    )
-    context.diagnostic(
-      JSON.stringify({
-        z0: z,
-        cells,
-        expectedDelayPs: delay * 1e12,
-        measuredDelayPs: measured * 1e12,
-        delayError: measured / delay - 1,
-        nearRippleV: nearRipple,
-      }),
-    )
-    assert.ok(
-      Math.abs(measured / delay - 1) <= 0.01,
-      `delay ${measured} vs ${delay}`,
-    )
-    assert.ok(nearRipple <= 0.01, `near-end reflection ripple ${nearRipple} V`)
-  },
-)
+const matchedNear =
+  "golden stage 6: matched line delay is l sqrt(er)/c and the near end sees no reflection"
+test(matchedNear, { skip: native }, async (context) => {
+  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+  const { rows, delay, z, cells } = await matchedRun()
+  const measured = crossingTime(rows, 2, 0.25) - crossingTime(rows, 1, 0.25)
+  const nearSettled = rows.filter(
+    (row) => row[0] >= SOURCE_SETTLED_SECONDS && row[0] <= 3 * delay,
+  )
+  const nearRipple = Math.max(
+    ...nearSettled.map((row) => Math.abs(row[1] - 0.5)),
+  )
+  context.diagnostic(
+    JSON.stringify({
+      z0: z,
+      cells,
+      expectedDelayPs: delay * 1e12,
+      measuredDelayPs: measured * 1e12,
+      delayError: measured / delay - 1,
+      nearRippleV: nearRipple,
+    }),
+  )
+  assert.ok(
+    Math.abs(measured / delay - 1) <= 0.01,
+    `delay ${measured} vs ${delay}`,
+  )
+  assert.ok(nearRipple <= 0.01, `near-end reflection ripple ${nearRipple} V`)
+})
 
-test(
-  "golden stage 6: matched line far end stays at the incident level after the edge",
-  { skip: native },
-  async (context) => {
-    if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
-    const { rows, delay } = await matchedRun()
-    const farRipple = Math.max(
-      ...rows
-        .filter((row) => row[0] >= delay + 2e-10 && row[0] <= 3 * delay)
-        .map((row) => Math.abs(row[2] - 0.5)),
-    )
-    context.diagnostic(JSON.stringify({ farRippleV: farRipple }))
-    assert.ok(farRipple <= 0.01, `far-end ripple ${farRipple} V`)
-  },
-)
+const matchedFar =
+  "golden stage 6: matched line far end stays at the incident level after the edge"
+test(matchedFar, { skip: native }, async (context) => {
+  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+  const { rows, delay } = await matchedRun()
+  const farSettled = rows.filter(
+    (row) => row[0] >= delay + SOURCE_SETTLED_SECONDS && row[0] <= 3 * delay,
+  )
+  const farRipple = Math.max(...farSettled.map((row) => Math.abs(row[2] - 0.5)))
+  context.diagnostic(JSON.stringify({ farRippleV: farRipple }))
+  assert.ok(farRipple <= 0.01, `far-end ripple ${farRipple} V`)
+})
+
+/** Propagation and reflection data for the requested end of the line. */
+interface LatticeOptions {
+  delay: number
+  incident: number
+  source: number
+  load: number
+  end: "near" | "far"
+}
 
 /** Bounce-diagram (lattice) voltage at one end, t seconds after launch, for an ideal unit-time-delay step. */
 function lattice(
   time: number,
-  delay: number,
-  incident: number,
-  source: number,
-  load: number,
-  end: "near" | "far",
+  { delay, incident, source, load, end }: LatticeOptions,
 ): number {
   let value = end === "near" ? incident : 0
-  for (let k = 0; k < 64; k++) {
+  for (let k = 0; k < LATTICE_BOUNCES; k++) {
     const wave = incident * (source * load) ** k
     if (end === "far" && (2 * k + 1) * delay < time) value += wave * (1 + load)
     if (end === "near" && (2 * k + 2) * delay < time)
@@ -410,174 +484,184 @@ function lattice(
   return value
 }
 
-test(
-  "golden stage 6: open end doubles the wave and bounces follow the lattice diagram",
-  { skip: native },
-  async (context) => {
-    if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
-    // Rs = Z0/3 gives Gamma_S = -1/2; the open end gives Gamma_L = +1 (1 Gohm). Lattice diagram (Bergeron; Johnson &
-    // Graham, High-Speed Digital Design, section 4.3): far-end steps at (2k+1)T, near-end steps at 2kT, plateaus from the
-    // summed reflections, first far plateau = 2 x incident. Tolerances: every plateau (k = 0..3, sampled mid-plateau)
-    // within 2% of the 1 V source swing; every step's mid-level crossing within 1% of its ideal time after launch.
-    const { line, ladder } = straightLine(stripline, 1e-3)
-    const z = Math.sqrt(line.L[0][0] / line.C[0][0])
-    const delay = ((lengthMm / 1000) * 2) / lightSpeed
-    const incident = z / (z / 3 + z)
-    const source = (z / 3 - z) / (z / 3 + z)
-    const load = (1e9 - z) / (1e9 + z)
-    const rows = await runGoldenDeck(
-      transientDeck(
-        "open",
-        ladder,
-        [{ node: "near0", resistance: z / 3, sign: 1 }],
-        [{ node: "far0", resistance: 1e9 }],
-        8.5 * delay,
-        ["near0", "far0"],
-      ),
-    )
-    const launch = crossingTime(rows, 1, incident / 2)
-    const failures: string[] = []
-    const records: Record<string, number | string>[] = []
-    for (const [end, column, first] of [
-      ["far", 2, 1],
-      ["near", 1, 0],
-    ] as const)
-      for (let k = 0; k < 4; k++) {
-        const middle = (first + 2 * k + 1) * delay
-        const expected = lattice(middle, delay, incident, source, load, end)
-        const value = valueAt(rows, column, launch + middle)
-        if (!(Math.abs(value - expected) <= 0.02))
-          failures.push(`${end} plateau ${k}: ${value} vs ${expected}`)
-        const step = (first + 2 * k) * delay
-        if (step > 0) {
-          const level =
-            (lattice(step - delay / 2, delay, incident, source, load, end) +
-              expected) /
-            2
-          const crossing =
-            crossingTime(rows, column, level, launch + step - delay / 2) -
-            launch
-          if (!(Math.abs(crossing / step - 1) <= 0.01))
-            failures.push(`${end} step ${k} at ${crossing} vs ${step}`)
-          records.push({
-            end,
-            k,
-            plateauV: value,
-            expectedV: expected,
-            stepPs: crossing * 1e12,
-            expectedStepPs: step * 1e12,
-          })
-        }
+const openEndBounces =
+  "golden stage 6: open end doubles the wave and bounces follow the lattice diagram"
+test(openEndBounces, { skip: native }, async (context) => {
+  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+  // Rs = Z0/3 gives Gamma_S = -1/2; the open end gives Gamma_L = +1 (1 Gohm). Lattice diagram (Bergeron; Johnson &
+  // Graham, High-Speed Digital Design, section 4.3): far-end steps at (2k+1)T, near-end steps at 2kT, plateaus from the
+  // summed reflections, first far plateau = 2 x incident. Tolerances: every plateau (k = 0..3, sampled mid-plateau)
+  // within 2% of the 1 V source swing; every step's mid-level crossing within 1% of its ideal time after launch.
+  const { line, ladder } = straightLine(stripline, 1e-3)
+  const z = Math.sqrt(line.L[0][0] / line.C[0][0])
+  const delay = ((lengthMm / 1000) * 2) / lightSpeed
+  const incident = z / (z / 3 + z)
+  const source = (z / 3 - z) / (z / 3 + z)
+  const load = (1e9 - z) / (1e9 + z)
+  const rows = await runGoldenDeck(
+    transientDeck(ladder, {
+      title: "open",
+      sources: [{ node: "near0", resistance: z / 3, sign: 1 }],
+      loads: [{ node: "far0", resistance: 1e9 }],
+      stopSeconds: 8.5 * delay,
+      probes: ["near0", "far0"],
+    }),
+  )
+  const launch = crossingTime(rows, 1, incident / 2)
+  const failures: string[] = []
+  const records: Record<string, number | string>[] = []
+  for (const [end, column, first] of [
+    ["far", 2, 1],
+    ["near", 1, 0],
+  ] as const) {
+    for (let k = 0; k < 4; k++) {
+      const middle = (first + 2 * k + 1) * delay
+      const reflections = {
+        delay,
+        incident,
+        source,
+        load,
+        end,
       }
-    context.diagnostic(JSON.stringify(records))
-    assert.deepEqual(failures, [])
-  },
-)
-
-test(
-  "golden stage 6: symmetric coupled pair carries even and odd modes at their own L/C velocities",
-  { skip: native },
-  async (context) => {
-    if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
-    // Symmetric pair: even mode L_e = L11 + L12, C_e = C11 + C12; odd mode with the minus sign; T_m = l sqrt(L_m C_m),
-    // Z_m = sqrt(L_m/C_m) (Paul, MTL 2nd ed., section 5.2). Pure modal drive with modal terminations launches only that
-    // mode. Tolerance: each modal delay (far minus near 50% crossings) within 1% of its prediction.
-    const { line, ladder } = straightLine(microstripPair, 1e-3)
-    const failures: string[] = []
-    const records: Record<string, number>[] = []
-    for (const sign of [1, -1]) {
-      const L = line.L[0][0] + sign * line.L[0][1]
-      const C = line.C[0][0] + sign * line.C[0][1]
-      const z = Math.sqrt(L / C)
-      const delay = (lengthMm / 1000) * Math.sqrt(L * C)
-      const rows = await runGoldenDeck(
-        transientDeck(
-          sign > 0 ? "even" : "odd",
-          ladder,
-          [
-            { node: "near0", resistance: z, sign: 1 },
-            { node: "near1", resistance: z, sign },
-          ],
-          [
-            { node: "far0", resistance: z },
-            { node: "far1", resistance: z },
-          ],
-          2 * delay + 3e-10,
-          ["near0", "far0"],
-        ),
-      )
-      const measured = crossingTime(rows, 2, 0.25) - crossingTime(rows, 1, 0.25)
-      records.push({
-        mode: sign,
-        z,
-        expectedDelayPs: delay * 1e12,
-        measuredDelayPs: measured * 1e12,
-        error: measured / delay - 1,
-      })
-      if (!(Math.abs(measured / delay - 1) <= 0.01))
-        failures.push(`${sign > 0 ? "even" : "odd"}: ${measured} vs ${delay}`)
+      const expected = lattice(middle, reflections)
+      const value = valueAt(rows, column, launch + middle)
+      if (!(Math.abs(value - expected) <= 0.02))
+        failures.push(`${end} plateau ${k}: ${value} vs ${expected}`)
+      const step = (first + 2 * k) * delay
+      if (step > 0) {
+        const level = (lattice(step - delay / 2, reflections) + expected) / 2
+        const crossing =
+          crossingTime(rows, column, level, launch + step - delay / 2) - launch
+        if (!(Math.abs(crossing / step - 1) <= 0.01))
+          failures.push(`${end} step ${k} at ${crossing} vs ${step}`)
+        records.push({
+          end,
+          k,
+          plateauV: value,
+          expectedV: expected,
+          stepPs: crossing * 1e12,
+          expectedStepPs: step * 1e12,
+        })
+      }
     }
-    context.diagnostic(JSON.stringify(records))
-    assert.deepEqual(failures, [])
-  },
-)
+  }
+  context.diagnostic(JSON.stringify(records))
+  assert.deepEqual(failures, [])
+})
 
-test(
-  "golden stage 6: settled voltage equals the DC divider including the line resistance",
-  { skip: native },
-  async (context) => {
-    if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
-    // At DC every Foster inductor shorts its resistor and every dielectric branch is open, so the line is R_dc l in
-    // series: V_far = Vs RL/(Rs + R l + RL), V_near = Vs (R l + RL)/(Rs + R l + RL), with R = 1/(sigma w t) from the
-    // geometry, not from the solver. Evaluated with ngspice .op, the t -> infinity state: the slowest Foster pole
-    // (10 kHz) needs ~16 us of transient. Tolerance 1e-5 V: a linear DC solve is exact to gmin (1e-12 S) effects.
-    const section: CrossSection = {
-      conductors: [
-        { id: "s", xMm: 0, zMm: 0.491, widthMm: 0.1, thicknessMm: 0.018 },
-      ],
-      planes: [{ zMm: 0 }, { zMm: 1 }],
-      dielectrics: [{ zMm: 0, thicknessMm: 1, er: 4, lossTangent: 0.02 }],
-    }
-    const { ladder } = straightLine(section, 1)
-    const resistance = lengthMm / 1000 / (5.8e7 * 0.1e-3 * 0.018e-3)
-    const deck =
-      [
-        "* dc divider",
-        "VS0 src0 0 DC 1",
-        "RS0 src0 near0 25",
-        ...ladder.lines,
-        "RL0 far0 0 25",
-        ".control",
-        "set wr_singlescale",
-        "set wr_vecnames",
-        "set numdgt=12",
-        "op",
-        "wrdata golden.dat v(near0) v(far0)",
-        "quit",
-        ".endc",
-        ".end",
-      ].join("\n") + "\n"
-    const [row] = await runGoldenDeck(deck)
-    const near = row.at(-2)!
-    const far = row.at(-1)!
-    const expectedNear = (resistance + 25) / (50 + resistance)
-    const expectedFar = 25 / (50 + resistance)
-    context.diagnostic(
-      JSON.stringify({
-        lineResistance: resistance,
-        near,
-        expectedNear,
-        far,
-        expectedFar,
+const evenAndOddModes =
+  "golden stage 6: symmetric coupled pair carries even and odd modes at their own L/C velocities"
+test(evenAndOddModes, { skip: native }, async (context) => {
+  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+  // Symmetric pair: even mode L_e = L11 + L12, C_e = C11 + C12; odd mode with the minus sign; T_m = l sqrt(L_m C_m),
+  // Z_m = sqrt(L_m/C_m) (Paul, MTL 2nd ed., section 5.2). Pure modal drive with modal terminations launches only that
+  // mode. Tolerance: each modal delay (far minus near 50% crossings) within 1% of its prediction.
+  const { line, ladder } = straightLine(microstripPair, 1e-3)
+  const failures: string[] = []
+  const records: Record<string, number>[] = []
+  for (const sign of [1, -1]) {
+    const L = line.L[0][0] + sign * line.L[0][1]
+    const C = line.C[0][0] + sign * line.C[0][1]
+    const z = Math.sqrt(L / C)
+    const delay = (lengthMm / 1000) * Math.sqrt(L * C)
+    const rows = await runGoldenDeck(
+      transientDeck(ladder, {
+        title: sign > 0 ? "even" : "odd",
+        sources: [
+          { node: "near0", resistance: z, sign: 1 },
+          { node: "near1", resistance: z, sign },
+        ],
+        loads: [
+          { node: "far0", resistance: z },
+          { node: "far1", resistance: z },
+        ],
+        stopSeconds: 2 * delay + MODAL_SETTLED_SECONDS,
+        probes: ["near0", "far0"],
       }),
     )
-    assert.ok(
-      Math.abs(near - expectedNear) <= 1e-5 &&
-        Math.abs(far - expectedFar) <= 1e-5,
-      `near ${near} vs ${expectedNear}, far ${far} vs ${expectedFar}`,
-    )
-  },
-)
+    const measured = crossingTime(rows, 2, 0.25) - crossingTime(rows, 1, 0.25)
+    records.push({
+      mode: sign,
+      z,
+      expectedDelayPs: delay * 1e12,
+      measuredDelayPs: measured * 1e12,
+      error: measured / delay - 1,
+    })
+    if (!(Math.abs(measured / delay - 1) <= 0.01))
+      failures.push(`${sign > 0 ? "even" : "odd"}: ${measured} vs ${delay}`)
+  }
+  context.diagnostic(JSON.stringify(records))
+  assert.deepEqual(failures, [])
+})
+
+const settledDivider =
+  "golden stage 6: settled voltage equals the DC divider including the line resistance"
+test(settledDivider, { skip: native }, async (context) => {
+  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+  // At DC every Foster inductor shorts its resistor and every dielectric branch is open, so the line is R_dc l in
+  // series: V_far = Vs RL/(Rs + R l + RL), V_near = Vs (R l + RL)/(Rs + R l + RL), with R = 1/(sigma w t) from the
+  // geometry, not from the solver. Evaluated with ngspice .op, the t -> infinity state: the slowest Foster pole
+  // (10 kHz) needs ~16 us of transient. Tolerance 1e-5 V: a linear DC solve is exact to gmin (1e-12 S) effects.
+  const section: CrossSection = {
+    conductors: [
+      {
+        id: "s",
+        xMm: 0,
+        zMm: 0.491,
+        widthMm: 0.1,
+        thicknessMm: 0.018,
+      },
+    ],
+    planes: [{ zMm: 0 }, { zMm: 1 }],
+    dielectrics: [
+      {
+        zMm: 0,
+        thicknessMm: 1,
+        er: 4,
+        lossTangent: 0.02,
+      },
+    ],
+  }
+  const { ladder } = straightLine(section, 1)
+  const resistance = lengthMm / 1000 / (5.8e7 * 0.1e-3 * 0.018e-3)
+  const lines = [
+    "* dc divider",
+    "VS0 src0 0 DC 1",
+    "RS0 src0 near0 25",
+    ...ladder.lines,
+    "RL0 far0 0 25",
+    ".control",
+    "set wr_singlescale",
+    "set wr_vecnames",
+    "set numdgt=12",
+    "op",
+    "wrdata golden.dat v(near0) v(far0)",
+    "quit",
+    ".endc",
+    ".end",
+  ]
+  const deck = `${lines.join("\n")}\n`
+  const [row] = await runGoldenDeck(deck)
+  const near = row.at(-2)!
+  const far = row.at(-1)!
+  const expectedNear = (resistance + 25) / (50 + resistance)
+  const expectedFar = 25 / (50 + resistance)
+  context.diagnostic(
+    JSON.stringify({
+      lineResistance: resistance,
+      near,
+      expectedNear,
+      far,
+      expectedFar,
+    }),
+  )
+  const nearError = Math.abs(near - expectedNear)
+  const farError = Math.abs(far - expectedFar)
+  assert.ok(
+    nearError <= DC_VOLTAGE_TOLERANCE && farError <= DC_VOLTAGE_TOLERANCE,
+    `near ${near} vs ${expectedNear}, far ${far} vs ${expectedFar}`,
+  )
+})
 
 // ---- Conductor-loss checks 28–29 (docs/golden-checks.md): the emitted ladder against an independent filament solve.
 type Complex = [number, number]
@@ -622,26 +706,42 @@ function inverse(m: Complex[][]): Complex[][] {
   const scale = determinant[0] ** 2 + determinant[1] ** 2
   const reciprocal: Complex = [determinant[0] / scale, -determinant[1] / scale]
   if (m.length === 1) return [[reciprocal]]
-  /** Negated complex number. */
-  const minus = (a: Complex): Complex => [-a[0], -a[1]]
   return [
     [times(m[1][1], reciprocal), times(minus(m[0][1]), reciprocal)],
     [times(minus(m[1][0]), reciprocal), times(m[0][0], reciprocal)],
   ]
 }
+/** Negated complex number. */
+const minus = (a: Complex): Complex => [-a[0], -a[1]]
+
 /** Complex matrix product. */
-const product = (a: Complex[][], b: Complex[][]): Complex[][] =>
-  a.map((row) =>
+function product(a: Complex[][], b: Complex[][]): Complex[][] {
+  return a.map((row) =>
     b[0].map((_, j) =>
-      row.reduce(
+      row.reduce<Complex>(
         (sum, value, k) => {
           const term = times(value, b[k][j])
-          return [sum[0] + term[0], sum[1] + term[1]] as Complex
+          return [sum[0] + term[0], sum[1] + term[1]]
         },
-        [0, 0] as Complex,
+        [0, 0],
       ),
     ),
   )
+}
+
+/** Coarser filament mesh for attenuation sweeps. */
+const ATTENUATION_MESH = {
+  x: 32,
+  z: 16,
+  xRatio: 1.25,
+  zRatio: 1.35,
+}
+
+/** Port voltage stored in a wrdata row as consecutive real and imaginary values. */
+function portVoltage(row: number[], index: number): Complex {
+  const real = 1 + 2 * index
+  return [row[real], row[real + 1]]
+}
 
 /**
  * Modal attenuation of 100 mm of `section` from ngspice AC on the emitted ladder, against the filament reference.
@@ -654,35 +754,39 @@ async function modalAttenuation(
   section: CrossSection,
   planeThicknessM: number,
 ): Promise<
-  { frequency: number; mode: number; ladder: number; reference: number }[]
+  {
+    frequency: number
+    mode: number
+    ladder: number
+    reference: number
+  }[]
 > {
   const { line, ladder } = straightLine(section, 1)
   const ports = section.conductors.map((_, i) => i)
   const runs: number[][][] = []
   for (const port of ports) {
-    runs.push(
-      await runGoldenDeck(
-        [
-          "* conductor loss",
-          ".options klu reltol=1e-4 abstol=1e-12 vntol=1e-7 pivrel=0.1",
-          `I0 0 near${port} DC 0 AC 1`,
-          ...ports.flatMap((i) => [
-            `RN${i} near${i} 0 1e12`,
-            `RF${i} far${i} 0 1e12`,
-          ]),
-          ...ladder.lines,
-          ".control",
-          "set wr_singlescale",
-          "set wr_vecnames",
-          "set numdgt=12",
-          "ac dec 3 1e7 5e9",
-          `wrdata golden.dat ${ports.map((i) => `v(near${i})`).join(" ")} ${ports.map((i) => `v(far${i})`).join(" ")}`,
-          "quit",
-          ".endc",
-          ".end",
-        ].join("\n") + "\n",
-      ),
-    )
+    const nearProbes = ports.map((i) => `v(near${i})`).join(" ")
+    const farProbes = ports.map((i) => `v(far${i})`).join(" ")
+    const lines = [
+      "* conductor loss",
+      ".options klu reltol=1e-4 abstol=1e-12 vntol=1e-7 pivrel=0.1",
+      `I0 0 near${port} DC 0 AC 1`,
+      ...ports.flatMap((i) => [
+        `RN${i} near${i} 0 1e12`,
+        `RF${i} far${i} 0 1e12`,
+      ]),
+      ...ladder.lines,
+      ".control",
+      "set wr_singlescale",
+      "set wr_vecnames",
+      "set numdgt=12",
+      "ac dec 3 1e7 5e9",
+      `wrdata golden.dat ${nearProbes} ${farProbes}`,
+      "quit",
+      ".endc",
+      ".end",
+    ]
+    runs.push(await runGoldenDeck(`${lines.join("\n")}\n`))
   }
   const frequencies = runs[0].map((row) => row[0])
   const reference = filamentImpedance(
@@ -697,33 +801,25 @@ async function modalAttenuation(
       planeThicknessM,
       conductivity: 5.8e7,
     },
-    frequencies,
-    { x: 32, z: 16, xRatio: 1.25, zRatio: 1.35 },
+    { frequencies, cells: ATTENUATION_MESH },
   )
   const metres = lengthMm / 1000
   return frequencies.flatMap((frequency, k) => {
-    /** Port voltage `index` of the run that drove `port`, as [re, im]. */
-    const voltage = (port: number, index: number): Complex => [
-      runs[port][k][1 + 2 * index],
-      runs[port][k][2 + 2 * index],
-    ]
-    const near = ports.map((i) => ports.map((port) => voltage(port, i)))
+    const responses = runs.map((rows) => rows[k])
+    const near = ports.map((i) =>
+      ports.map((port) => portVoltage(responses[port], i)),
+    )
     const far = ports.map((i) =>
-      ports.map((port) => voltage(port, ports.length + i)),
+      ports.map((port) => portVoltage(responses[port], ports.length + i)),
     )
     const ladderAlpha = eigenvalues(product(near, inverse(far)))
       .map((value) => {
         // acosh(w) = ln(w + sqrt(w^2 - 1)), taking the root with |.| >= 1.
         const square = times(value, value)
         const s = root([square[0] - 1, square[1]])
-        return (
-          Math.log(
-            Math.max(
-              Math.hypot(value[0] + s[0], value[1] + s[1]),
-              Math.hypot(value[0] - s[0], value[1] - s[1]),
-            ),
-          ) / metres
-        )
+        const plus = Math.hypot(value[0] + s[0], value[1] + s[1])
+        const minus = Math.hypot(value[0] - s[0], value[1] - s[1])
+        return Math.log(Math.max(plus, minus)) / metres
       })
       .sort((a, b) => a - b)
     const omega = 2 * Math.PI * frequency
@@ -733,7 +829,8 @@ async function modalAttenuation(
     const admittance = line.C.map((row) =>
       row.map((c) => [0, omega * c] as Complex),
     )
-    const referenceAlpha = eigenvalues(product(impedance, admittance))
+    const referenceModes = eigenvalues(product(impedance, admittance))
+    const referenceAlpha = referenceModes
       .map((value) => root(value)[0])
       .sort((a, b) => a - b)
     return ladderAlpha.map((alpha, mode) => ({
@@ -757,7 +854,10 @@ function banded(
     ladder: number
     reference: number
   }[],
-): { records: Record<string, number | string>[]; failures: string[] } {
+): {
+  records: Record<string, number | string>[]
+  failures: string[]
+} {
   const records = results.map(({ frequency, mode, ladder, reference }) => ({
     line: label,
     mode,
@@ -766,46 +866,59 @@ function banded(
     ladderDbPerM: +(8.685889638 * ladder).toFixed(4),
     errorPercent: +(100 * (ladder / reference - 1)).toFixed(2),
   }))
-  const failures = results
-    .filter(
-      ({ frequency, ladder, reference }) =>
-        !(Math.abs(ladder / reference - 1) <= (frequency <= 5e7 ? 0.1 : 0.05)),
-    )
-    .map(
-      ({ frequency, mode, ladder, reference }) =>
-        `${label} mode ${mode} at ${frequency} Hz: ${ladder} vs ${reference} Np/m`,
-    )
+  const outOfBand = results.filter(
+    ({ frequency, ladder, reference }) =>
+      !(Math.abs(ladder / reference - 1) <= conductorLossTolerance(frequency)),
+  )
+  const failures = outOfBand.map(
+    ({ frequency, mode, ladder, reference }) =>
+      `${label} mode ${mode} at ${frequency} Hz: ${ladder} vs ${reference} Np/m`,
+  )
   return { records, failures }
 }
 
-test(
-  "golden stage 6: ladder attenuation follows a filament conductor-loss reference from 10 MHz to 5 GHz",
-  { skip: native },
-  async (context) => {
-    if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
-    // One uncoupled trace: the DDR3 board's inner trace, 0.1 x 0.0152 mm centred in b = 0.2152 mm, er 4.1, planes 15.2 um.
-    const section: CrossSection = {
-      conductors: [
-        { id: "s", xMm: 0, zMm: 0.1, widthMm: 0.1, thicknessMm: 0.0152 },
-      ],
-      planes: [{ zMm: 0 }, { zMm: 0.2152 }],
-      dielectrics: [{ zMm: 0, thicknessMm: 0.2152, er: 4.1, lossTangent: 0 }],
-    }
-    const { records, failures } = banded(
-      "0.1 x 0.0152 mm",
-      await modalAttenuation(section, 0.0152e-3),
-    )
-    context.diagnostic(JSON.stringify(records))
-    console.table(records)
-    assert.deepEqual(failures, [])
-  },
-)
+const ladderAttenuation = `golden stage 6: ladder attenuation follows a filament conductor-loss reference from 10 ${"MHz to 5 GHz"}`
+test(ladderAttenuation, { skip: native }, async (context) => {
+  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+  // One uncoupled trace: the DDR3 board's inner trace, 0.1 x 0.0152 mm centred in b = 0.2152 mm, er 4.1, planes
+  // 15.2 um.
+  const section: CrossSection = {
+    conductors: [
+      {
+        id: "s",
+        xMm: 0,
+        zMm: 0.1,
+        widthMm: 0.1,
+        thicknessMm: 0.0152,
+      },
+    ],
+    planes: [{ zMm: 0 }, { zMm: 0.2152 }],
+    dielectrics: [
+      {
+        zMm: 0,
+        thicknessMm: 0.2152,
+        er: 4.1,
+        lossTangent: 0,
+      },
+    ],
+  }
+  const { records, failures } = banded(
+    "0.1 x 0.0152 mm",
+    await modalAttenuation(section, 0.0152e-3),
+  )
+  context.diagnostic(JSON.stringify(records))
+  console.table(records)
+  assert.deepEqual(failures, [])
+})
 
 /** Modal comparison of one coupled pair centred in b = 0.2152 mm, er 4.1, planes 15.2 um. */
 async function pairAttenuation(
   label: string,
   conductors: [number, number, number][],
-): Promise<{ records: Record<string, number | string>[]; failures: string[] }> {
+): Promise<{
+  records: Record<string, number | string>[]
+  failures: string[]
+}> {
   const section: CrossSection = {
     conductors: conductors.map(([x, w, t], i) => ({
       id: `c${i}`,
@@ -815,28 +928,32 @@ async function pairAttenuation(
       thicknessMm: t,
     })),
     planes: [{ zMm: 0 }, { zMm: 0.2152 }],
-    dielectrics: [{ zMm: 0, thicknessMm: 0.2152, er: 4.1, lossTangent: 0 }],
+    dielectrics: [
+      {
+        zMm: 0,
+        thicknessMm: 0.2152,
+        er: 4.1,
+        lossTangent: 0,
+      },
+    ],
   }
   return banded(label, await modalAttenuation(section, 0.0152e-3))
 }
 
 // Check 29 exercises the coupled skin multiport (55% of the DDR3 addr/cmd cells): even and odd modes of a symmetric
 // pair, then the two modes of a mixed pair whose rows have different DC-to-skin crossovers.
-test(
-  "golden stage 6: coupled-pair modal attenuation follows a 2 x 2 filament reference from 10 MHz to 5 GHz",
-  { skip: native },
-  async (context) => {
-    if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
-    // Two 0.1 x 0.0152 mm traces with a 0.1 mm gap.
-    const { records, failures } = await pairAttenuation("symmetric 0.1/0.1", [
-      [-0.1, 0.1, 0.0152],
-      [0.1, 0.1, 0.0152],
-    ])
-    context.diagnostic(JSON.stringify(records))
-    console.table(records)
-    assert.deepEqual(failures, [])
-  },
-)
+const coupledAttenuation = `golden stage 6: coupled-pair modal attenuation follows a 2 x 2 filament reference from 10 ${"MHz to 5 GHz"}`
+test(coupledAttenuation, { skip: native }, async (context) => {
+  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+  // Two 0.1 x 0.0152 mm traces with a 0.1 mm gap.
+  const { records, failures } = await pairAttenuation("symmetric 0.1/0.1", [
+    [-0.1, 0.1, 0.0152],
+    [0.1, 0.1, 0.0152],
+  ])
+  context.diagnostic(JSON.stringify(records))
+  console.table(records)
+  assert.deepEqual(failures, [])
+})
 
 test(
   "golden stage 6: mixed-thickness pair modal attenuation follows a 2 x 2 filament reference",

@@ -609,168 +609,170 @@ const replays = [
   },
 ] as const
 
-test(
-  "golden stage 4: vendor DDR3 buffers replayed into their own IBIS fixtures reproduce the vendor waveforms",
-  {
-    skip:
-      process.env.SI_NATIVE_TESTS !== "1" &&
-      "Set SI_NATIVE_TESTS=1 and IBIS_MODEL_DIR for bounded sequential native checks",
-  },
-  async (context) => {
-    if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
-    const texts = new Map<string, string>()
-    for (const file of new Set(replays.map((replay) => replay.file))) {
-      const text = await vendorText(context, file)
-      if (!text) return
-      texts.set(file, text)
+const replayRequired =
+  "Set SI_NATIVE_TESTS=1 and IBIS_MODEL_DIR for bounded sequential native checks"
+const fixtureReplayOptions = {
+  skip: process.env.SI_NATIVE_TESTS !== "1" && replayRequired,
+}
+/** Allow 2% of the swing error and a 10 ps shift in the half-height crossing. */
+const REPLAY_SWING_ERROR = 0.02
+const REPLAY_CROSSING_ERROR_SECONDS = 10e-12
+
+const fixtureReplay = `golden stage 4: vendor DDR3 buffers replayed into their own IBIS fixtures ${"reproduce the vendor waveforms"}`
+test(fixtureReplay, fixtureReplayOptions, async (context) => {
+  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+  const texts = new Map<string, string>()
+  for (const file of new Set(replays.map((replay) => replay.file))) {
+    const text = await vendorText(context, file)
+    if (!text) return
+    texts.set(file, text)
+  }
+  const documents = new Map<string, IbisDocument>(
+    [...texts].map(([file, text]) => [file, parseIbis(text)]),
+  )
+  const records: Record<string, number | string>[] = []
+  const failures: string[] = []
+  for (const replay of replays) {
+    const text = texts.get(replay.file)!
+    const document = documents.get(replay.file)!
+    const buffer = document.getBuffer(replay.model)
+    const rails = referenceVoltages(buffer)
+    const oneSupply = rails.pullup === rails.powerClamp
+    const commonGround = rails.pulldown === 0 && rails.groundClamp === 0
+    if (buffer.polarity === "inverting" || !oneSupply || !commonGround) {
+      throw new Error(
+        `${replay.model}: replay assumes a non-inverting buffer with one supply and ground`,
+      )
     }
-    const documents = new Map<string, IbisDocument>(
-      [...texts].map(([file, text]) => [file, parseIbis(text)]),
+    const duration = Math.max(
+      ...buffer.waveforms.map((wave) => wave.data.at(-1)![0]),
     )
-    const records: Record<string, number | string>[] = []
-    const failures: string[] = []
-    for (const replay of replays) {
-      const text = texts.get(replay.file)!
-      const document = documents.get(replay.file)!
-      const buffer = document.getBuffer(replay.model)
-      const rails = referenceVoltages(buffer)
-      if (
-        buffer.polarity === "inverting" ||
-        rails.pulldown !== 0 ||
-        rails.groundClamp !== 0 ||
-        rails.pullup !== rails.powerClamp
-      )
-        throw new Error(
-          `${replay.model}: replay assumes a non-inverting buffer with one supply and ground`,
-        )
-      const duration = Math.max(
-        ...buffer.waveforms.map((wave) => wave.data.at(-1)![0]),
-      )
-      const lines = [
-        `* ${replay.role} ${replay.model} fixture replay`,
-        `VDD vdd 0 ${rails.pullup}`,
-      ]
-      const instances: {
-        edge: string
-        resistance: number
-        voltage: number
-        table: [number, number][]
-      }[] = []
-      for (const edge of ["rising", "falling"] as const) {
-        const initialState = edge === "rising" ? 0 : 1
-        const converted = convertSwitching({
-          bytes: new TextEncoder().encode(text),
-          input: {
-            definition: {
-              source: { content: text },
-              component: replay.component,
-              pinMap: {
-                [replay.pin]: "sig",
-                [replay.power]: "vdd",
-                [replay.ground]: "gnd",
-              },
-              modelSelections: { [replay.pin]: replay.model },
-              references: {
-                [replay.pin]: {
-                  pullup: "vdd",
-                  pulldown: "gnd",
-                  powerClamp: "vdd",
-                  groundClamp: "gnd",
-                },
-              },
-              corner: "typical",
-              packagePolicy: "vendor",
+    const lines = [
+      `* ${replay.role} ${replay.model} fixture replay`,
+      `VDD vdd 0 ${rails.pullup}`,
+    ]
+    const instances: {
+      edge: string
+      resistance: number
+      voltage: number
+      table: [number, number][]
+    }[] = []
+    for (const edge of ["rising", "falling"] as const) {
+      const initialState = edge === "rising" ? 0 : 1
+      const converted = convertSwitching({
+        bytes: new TextEncoder().encode(text),
+        input: {
+          definition: {
+            source: { content: text },
+            component: replay.component,
+            pinMap: {
+              [replay.pin]: "sig",
+              [replay.power]: "vdd",
+              [replay.ground]: "gnd",
             },
-            run: {
-              duration: duration * 1e3,
-              pinStates: { sig: { mode: "output", enabled: true } },
-              stimuli: {
-                sig: {
-                  unitInterval: duration * 1e3,
-                  startTime: 0,
-                  initialState,
-                  pattern: {
-                    type: "bits",
-                    bits: String(1 - initialState),
-                    repeat: false,
-                  },
+            modelSelections: { [replay.pin]: replay.model },
+            references: {
+              [replay.pin]: {
+                pullup: "vdd",
+                pulldown: "gnd",
+                powerClamp: "vdd",
+                groundClamp: "gnd",
+              },
+            },
+            corner: "typical",
+            packagePolicy: "vendor",
+          },
+          run: {
+            duration: duration * 1e3,
+            pinStates: { sig: { mode: "output", enabled: true } },
+            stimuli: {
+              sig: {
+                unitInterval: duration * 1e3,
+                startTime: 0,
+                initialState,
+                pattern: {
+                  type: "bits",
+                  bits: String(1 - initialState),
+                  repeat: false,
                 },
               },
             },
           },
-          document,
+        },
+        document,
+      })
+      const name = firstSubcircuitName(converted.source)
+      assert.ok(name, "converted SPICE must declare a subcircuit")
+      lines.push(converted.source)
+      for (const wave of buffer.waveforms.filter(
+        (entry) => entry.kind === edge,
+      )) {
+        const k = instances.length
+        const nodes = Object.values(converted.spicePinMapping).map((port) => {
+          if (port === "sig") return `pad${k}`
+          if (port === "vdd") return "vdd"
+          return "0"
         })
-        const name = firstSubcircuitName(converted.source)
-        assert.ok(name, "converted SPICE must declare a subcircuit")
-        lines.push(converted.source)
-        for (const wave of buffer.waveforms.filter(
-          (entry) => entry.kind === edge,
-        )) {
-          const k = instances.length
-          const nodes = Object.values(converted.spicePinMapping).map((port) =>
-            port === "sig" ? `pad${k}` : port === "vdd" ? "vdd" : "0",
-          )
-          const voltage = cornerValue(
-            wave.fixtureVoltage,
-            "typical",
-            "V_fixture",
-          )
-          lines.push(
-            `X${k} ${nodes.join(" ")} ${name}`,
-            `RFIX${k} pad${k} fix${k} ${wave.resistance}`,
-            `VFIX${k} fix${k} 0 ${voltage}`,
-          )
-          instances.push({
-            edge,
-            resistance: wave.resistance,
-            voltage,
-            table: wave.data.map(
-              (row) => [row[0], row[1]!] as [number, number],
-            ),
-          })
-        }
-      }
-      lines.push(
-        ".control",
-        "set wr_singlescale",
-        "set wr_vecnames",
-        "set numdgt=12",
-        `tran 1p ${duration} 0 1p`,
-        `wrdata golden.dat ${instances.map((_, k) => `v(pad${k})`).join(" ")}`,
-        "quit",
-        ".endc",
-        ".end",
-      )
-      const rows = await runGoldenDeck(lines.join("\n") + "\n")
-      for (const [k, instance] of instances.entries()) {
-        const first = instance.table[0][1]
-        const last = instance.table.at(-1)![1]
-        const swing = Math.abs(last - first)
-        const error =
-          Math.max(
-            ...instance.table.map(([time, value]) =>
-              Math.abs(valueAt(rows, k + 1, time) - value),
-            ),
-          ) / swing
-        const tableRows = instance.table.map(([time, value]) => [time, value])
-        const shift =
-          crossingTime(rows, k + 1, (first + last) / 2) -
-          crossingTime(tableRows, 1, (first + last) / 2)
-        records.push({
-          model: replay.model,
-          edge: instance.edge,
-          fixture: `${instance.resistance} ohm to ${instance.voltage} V`,
-          swingV: +swing.toFixed(4),
-          maxErrorPercentOfSwing: +(100 * error).toFixed(3),
-          t50ShiftPs: +(shift * 1e12).toFixed(2),
+        const voltage = cornerValue(wave.fixtureVoltage, "typical", "V_fixture")
+        lines.push(
+          `X${k} ${nodes.join(" ")} ${name}`,
+          `RFIX${k} pad${k} fix${k} ${wave.resistance}`,
+          `VFIX${k} fix${k} 0 ${voltage}`,
+        )
+        instances.push({
+          edge,
+          resistance: wave.resistance,
+          voltage,
+          table: wave.data.map((row) => [row[0], row[1]!] as [number, number]),
         })
-        if (!(error <= 0.02 && Math.abs(shift) <= 10e-12))
-          failures.push(
-            `${replay.model} ${instance.edge} into ${instance.resistance} ohm to ${instance.voltage} V: error ${error} of swing, t50 shift ${shift} s`,
-          )
       }
     }
-    console.table(records)
-    assert.deepEqual(failures, [])
-  },
-)
+    const probes = instances.map((_, k) => `v(pad${k})`).join(" ")
+    lines.push(
+      ".control",
+      "set wr_singlescale",
+      "set wr_vecnames",
+      "set numdgt=12",
+      `tran 1p ${duration} 0 1p`,
+      `wrdata golden.dat ${probes}`,
+      "quit",
+      ".endc",
+      ".end",
+    )
+    const rows = await runGoldenDeck(`${lines.join("\n")}\n`)
+    for (const [k, instance] of instances.entries()) {
+      const first = instance.table[0][1]
+      const last = instance.table.at(-1)![1]
+      const swing = Math.abs(last - first)
+      const differences = instance.table.map(([time, value]) =>
+        Math.abs(valueAt(rows, k + 1, time) - value),
+      )
+      const error = Math.max(...differences) / swing
+      const tableRows = instance.table.map(([time, value]) => [time, value])
+      const shift =
+        crossingTime(rows, k + 1, (first + last) / 2) -
+        crossingTime(tableRows, 1, (first + last) / 2)
+      records.push({
+        model: replay.model,
+        edge: instance.edge,
+        fixture: `${instance.resistance} ohm to ${instance.voltage} V`,
+        swingV: +swing.toFixed(4),
+        maxErrorPercentOfSwing: +(100 * error).toFixed(3),
+        t50ShiftPs: +(shift * 1e12).toFixed(2),
+      })
+      if (
+        !(
+          error <= REPLAY_SWING_ERROR &&
+          Math.abs(shift) <= REPLAY_CROSSING_ERROR_SECONDS
+        )
+      ) {
+        const fixture = `${instance.resistance} ohm to ${instance.voltage} V`
+        failures.push(
+          `${replay.model} ${instance.edge} into ${fixture}: error ${error} of swing, t50 shift ${shift} s`,
+        )
+      }
+    }
+  }
+  console.table(records)
+  assert.deepEqual(failures, [])
+})

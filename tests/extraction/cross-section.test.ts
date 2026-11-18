@@ -15,7 +15,13 @@ import {
   singleMicrostrip,
   stripline,
 } from "../fixtures/cross-section-reference"
-import { energyFacts, maxwellFacts } from "../support/golden-checks"
+import {
+  energyFacts,
+  hasNonnegativeLoss,
+  isGroundedMaxwell,
+  isPositiveDefinite,
+  maxwellFacts,
+} from "../support/golden-checks"
 
 setDefaultTimeout(30_000)
 
@@ -317,14 +323,33 @@ const epsilon0 = 8.8541878128e-12
 const mu0 = 1.25663706212e-6
 const copper = 5.8e7
 
-/** One strip of width w and thickness t centred between planes at z = 0 and b (mm), filled with one lossless dielectric. */
+/**
+ * One strip of width w and thickness t centred between planes at z = 0 and b (mm), filled with one lossless
+ * dielectric.
+ */
 function centred(w: number, b: number, t: number, er = 1): CrossSection {
   return {
     conductors: [
-      { id: "s", xMm: 0, zMm: (b - t) / 2, widthMm: w, thicknessMm: t },
+      {
+        id: "s",
+        xMm: 0,
+        zMm: (b - t) / 2,
+        widthMm: w,
+        thicknessMm: t,
+      },
     ],
     planes: [{ zMm: 0 }, { zMm: b }],
-    dielectrics: er > 1 ? [{ zMm: 0, thicknessMm: b, er, lossTangent: 0 }] : [],
+    dielectrics:
+      er > 1
+        ? [
+            {
+              zMm: 0,
+              thicknessMm: b,
+              er,
+              lossTangent: 0,
+            },
+          ]
+        : [],
   }
 }
 
@@ -365,16 +390,12 @@ const surface = (conductivity: number): number =>
 function cohnErrors(ratio: number, panels: number[]): Map<number, number> {
   const exact = stripline(ratio, 1, 4)
   return new Map(
-    panels.map((count) => [
-      count,
-      Math.abs(
-        solveSectionCapacitance(centred(ratio, 1, 5e-4, 4), {
-          panelsPerEdge: count,
-        })[0][0] /
-          exact.capacitance -
-          1,
-      ),
-    ]),
+    panels.map((count) => {
+      const achieved = solveSectionCapacitance(centred(ratio, 1, 5e-4, 4), {
+        panelsPerEdge: count,
+      })
+      return [count, Math.abs(achieved[0][0] / exact.capacitance - 1)]
+    }),
   )
 }
 
@@ -423,15 +444,12 @@ test("golden stage 3: Cohn stripline error shrinks from 6 to 24 panels per edge"
   // the 6-panel error unless both are under a 0.02% floor.
   const failures = [0.25, 0.5, 1, 2, 4].flatMap((ratio) => {
     const exact = stripline(ratio, 1, 4).capacitance
-    const [coarse, fine] = [6, 24].map((count) =>
-      Math.abs(
-        solveSectionCapacitance(centred(ratio, 1, 1e-5, 4), {
-          panelsPerEdge: count,
-        })[0][0] /
-          exact -
-          1,
-      ),
-    )
+    const [coarse, fine] = [6, 24].map((count) => {
+      const capacitance = solveSectionCapacitance(centred(ratio, 1, 1e-5, 4), {
+        panelsPerEdge: count,
+      })[0][0]
+      return Math.abs(capacitance / exact - 1)
+    })
     console.log(
       `w/b ${ratio}: |C/C_cohn - 1| = ${(100 * coarse).toFixed(4)}% (6) -> ${(100 * fine).toFixed(4)}% (24)`,
     )
@@ -443,7 +461,10 @@ test("golden stage 3: Cohn stripline error shrinks from 6 to 24 panels per edge"
 })
 
 /** Solver C / parallel-plate C and Cohn's exact ratio for a strip of width ratio*b (b = 1 mm, t = 5e-4 mm, er 4). */
-function parallelPlate(ratio: number): { solved: number; exact: number } {
+function parallelPlate(ratio: number): {
+  solved: number
+  exact: number
+} {
   return {
     solved:
       solveSectionCapacitance(centred(ratio, 1, 5e-4, 4))[0][0] /
@@ -492,7 +513,11 @@ test("golden stage 3: homogeneous dielectric gives L C = mu0 eps0 er I for coupl
   // Quasi-TEM in one homogeneous medium: L C = mu eps I exactly, for any geometry (Paul, Analysis of Multiconductor
   // Transmission Lines, 2nd ed., section 3.2). Here L comes from the vacuum solve, so the identity also guards the
   // dielectric/vacuum plumbing; tolerance 1e-9 relative (floating point only).
-  const cases: { label: string; er: number; section: CrossSection }[] = [
+  const cases: {
+    label: string
+    er: number
+    section: CrossSection
+  }[] = [
     {
       label: "stripline, 3 coupled lines, er 4",
       er: 4,
@@ -505,7 +530,14 @@ test("golden stage 3: homogeneous dielectric gives L C = mu0 eps0 er I for coupl
           thicknessMm: 0.035,
         })),
         planes: [{ zMm: 0 }, { zMm: 1 }],
-        dielectrics: [{ zMm: 0, thicknessMm: 1, er: 4, lossTangent: 0 }],
+        dielectrics: [
+          {
+            zMm: 0,
+            thicknessMm: 1,
+            er: 4,
+            lossTangent: 0,
+          },
+        ],
       },
     },
     {
@@ -533,15 +565,19 @@ test("golden stage 3: homogeneous dielectric gives L C = mu0 eps0 er I for coupl
         row.reduce((sum, value, k) => sum + value * line.C[k][j], 0),
       ),
     )
-    const worst = Math.max(
-      ...product.flatMap((row, i) =>
-        row.map(
-          (value, j) => Math.abs(value - (i === j ? target : 0)) / target,
-        ),
-      ),
+    const relativeErrors = product.flatMap((row, i) =>
+      row.map((value, j) => Math.abs(value - (i === j ? target : 0)) / target),
     )
+    const worst = Math.max(...relativeErrors)
+    const speedRatio = (
+      1 /
+      Math.sqrt(product[0][0]) /
+      (1 / Math.sqrt(target))
+    ).toFixed(12)
+    const relativeError = worst.toExponential(3)
+    const energy = `max |LC - mu eps er I| / (mu eps er) = ${relativeError}`
     console.log(
-      `${label}: max |LC - mu eps er I| / (mu eps er) = ${worst.toExponential(3)}; modal velocity / (c/sqrt(er)) = ${(1 / Math.sqrt(product[0][0]) / (1 / Math.sqrt(target))).toFixed(12)}`,
+      `${label}: ${energy}; modal velocity / (c/sqrt(er)) = ${speedRatio}`,
     )
     if (!(worst <= 1e-9)) failures.push(`${label}: ${worst}`)
   }
@@ -553,7 +589,13 @@ test("golden stage 3: DC resistance R = rho l / A", () => {
   // deck's own DC path is check 25 (ngspice .op divider).
   const section: CrossSection = {
     conductors: [
-      { id: "cu", xMm: -0.3, zMm: 0.4825, widthMm: 0.2, thicknessMm: 0.035 },
+      {
+        id: "cu",
+        xMm: -0.3,
+        zMm: 0.4825,
+        widthMm: 0.2,
+        thicknessMm: 0.035,
+      },
       {
         id: "alloy",
         xMm: 0.3,
@@ -564,21 +606,29 @@ test("golden stage 3: DC resistance R = rho l / A", () => {
       },
     ],
     planes: [{ zMm: 0 }, { zMm: 1 }],
-    dielectrics: [{ zMm: 0, thicknessMm: 1, er: 4, lossTangent: 0.01 }],
+    dielectrics: [
+      {
+        zMm: 0,
+        thicknessMm: 1,
+        er: 4,
+        lossTangent: 0.01,
+      },
+    ],
   }
   const line = solveCrossSection(section)
-  const expected = section.conductors.map(
-    (c) =>
-      1 /
-      ((c.conductivitySm ?? copper) * c.widthMm * 1e-3 * c.thicknessMm * 1e-3),
-  )
+  const expected = section.conductors.map((c) => {
+    const conductivity = c.conductivitySm ?? copper
+    return 1 / (conductivity * c.widthMm * 1e-3 * c.thicknessMm * 1e-3)
+  })
   const failures: string[] = []
   for (const [i, value] of expected.entries()) {
-    if (!(Math.abs(line.dcResistance[i][i] / value - 1) <= 1e-12))
-      failures.push(`R_dc ${i}: ${line.dcResistance[i][i]} vs ${value}`)
+    const resistance = line.dcResistance[i][i]
+    if (!(Math.abs(resistance / value - 1) <= 1e-12))
+      failures.push(`R_dc ${i}: ${resistance} vs ${value}`)
   }
-  if (line.dcResistance[0][1] !== 0 || line.dcResistance[1][0] !== 0)
+  if (line.dcResistance[0][1] !== 0 || line.dcResistance[1][0] !== 0) {
     failures.push("ideal planes must not couple DC resistance")
+  }
   assert.deepEqual(failures, [])
 })
 
@@ -598,7 +648,14 @@ test("golden stage 3: skin resistance equals Wheeler's rule recomputed independe
       thicknessMm: 0.035,
     })),
     planes: [{ zMm: 0 }],
-    dielectrics: [{ zMm: 0, thicknessMm: 0.5, er: 4, lossTangent: 0 }],
+    dielectrics: [
+      {
+        zMm: 0,
+        thicknessMm: 0.5,
+        er: 4,
+        lossTangent: 0,
+      },
+    ],
   }
   const failures: string[] = []
   for (const [label, section] of [
@@ -625,18 +682,15 @@ test("golden stage 3: skin resistance equals Wheeler's rule recomputed independe
     const plus = receded(step)
     const minus = receded(-step)
     const solved = solveCrossSection(section).skinResistance
-    const worst = Math.max(
-      ...solved.flatMap((row, i) =>
-        row.map((value, j) =>
-          Math.abs(
-            ((surface(copper) / mu0) * (plus[i][j] - minus[i][j])) /
-              (2 * step * 1e-3) /
-              value -
-              1,
-          ),
-        ),
-      ),
+    const deviations = solved.flatMap((row, i) =>
+      row.map((value, j) => {
+        const derivative =
+          ((surface(copper) / mu0) * (plus[i][j] - minus[i][j])) /
+          (2 * step * 1e-3)
+        return Math.abs(derivative / value - 1)
+      }),
     )
+    const worst = Math.max(...deviations)
     console.log(
       `${label}: worst |R_wheeler / R_solver - 1| = ${worst.toExponential(3)}`,
     )
@@ -647,17 +701,16 @@ test("golden stage 3: skin resistance equals Wheeler's rule recomputed independe
 
 test("golden stage 3: wide stripline skin resistance approaches Rs/w", () => {
   // (c) Wide stripline limit R -> Rs/w (strip faces and both planes each carry half the current; Ramo, Whinnery &
-  // Van Duzer, Fields and Waves, section 8.3). r = R w/Rs; Richardson 2 r(40) - r(20) within 2% of 1, r(20) > r(40) > 1,
+  // Van Duzer, Fields and Waves, section 8.3). r = R w/Rs; Richardson 2 r(40) - r(20) within 2% of 1, r(20) >
+  // r(40) > 1,
   // at the default and at 24 panels/edge.
   for (const panels of [12, 24]) {
-    const [r20, r40] = [20, 40].map(
-      (w) =>
-        (solveCrossSection(centred(w, 1, 0.035), { panelsPerEdge: panels })
-          .skinResistance[0][0] *
-          w *
-          1e-3) /
-        surface(copper),
-    )
+    const [r20, r40] = [20, 40].map((w) => {
+      const line = solveCrossSection(centred(w, 1, 0.035), {
+        panelsPerEdge: panels,
+      })
+      return (line.skinResistance[0][0] * w * 1e-3) / surface(copper)
+    })
     assert.ok(
       Math.abs(2 * r40 - r20 - 1) <= 0.02 && r20 > r40 && r40 > 1,
       `${panels} panels: r20 ${r20}, r40 ${r40}`,
@@ -694,7 +747,10 @@ test("golden invariants: extracted L, C0, C are SPD with |k| < 1, C is Maxwell, 
   // definite, every pairwise |k| < 1; grounded Maxwell C has positive diagonal, negative off-diagonal entries and
   // non-negative row sums (capacitance to the references). Loss matrices R(f), G(f) are PSD. Tolerances are
   // floating point only: asymmetry 1e-12, row sums >= -1e-9 C_ii, PSD eigenvalues >= -1e-12 of the largest.
-  const sections: { label: string; section: CrossSection }[] = [
+  const sections: {
+    label: string
+    section: CrossSection
+  }[] = [
     ...(["microstrip", "stripline", "mask"] as const).flatMap((kind) =>
       [1, 2, 12].map((count) => ({
         label: `${kind} ${count}`,
@@ -720,27 +776,18 @@ test("golden invariants: extracted L, C0, C are SPD with |k| < 1, C is Maxwell, 
         facts.minimumEigenvalue / facts.maximumEigenvalue,
       )
       coupling = Math.max(coupling, facts.coupling)
-      if (
-        !(
-          facts.asymmetry <= 1e-12 &&
-          facts.minimumEigenvalue > 0 &&
-          facts.coupling < 1
-        )
-      )
+      if (!isPositiveDefinite(facts))
         failures.push(`${label} ${name}: ${JSON.stringify(facts)}`)
     }
     for (const name of ["C", "C0"] as const) {
       const facts = maxwellFacts(line[name])
-      if (
-        !(
-          facts.minimumDiagonal > 0 &&
-          facts.maximumOffDiagonal < (section.conductors.length > 1 ? 0 : 1) &&
-          facts.minimumRowSum >= -1e-9
-        )
-      )
+      const offDiagonalLimit = section.conductors.length > 1 ? 0 : 1
+      if (!isGroundedMaxwell(facts, offDiagonalLimit)) {
         failures.push(`${label} ${name} Maxwell: ${JSON.stringify(facts)}`)
+      }
     }
-    // The ladder scales each loss matrix by a nonnegative network response (check 12), so PSD matrices give PSD R(f), G(f).
+    // The ladder scales each loss matrix by a nonnegative network response (check 12), so PSD matrices give PSD
+    // R(f), G(f).
     for (const name of [
       "dcResistance",
       "skinResistance",
@@ -748,12 +795,7 @@ test("golden invariants: extracted L, C0, C are SPD with |k| < 1, C is Maxwell, 
       "dielectricLoss",
     ] as const) {
       const facts = energyFacts(line[name])
-      if (
-        !(
-          line[name].every((row, i) => row[i] >= 0) &&
-          facts.minimumEigenvalue >= -1e-12 * Math.abs(facts.maximumEigenvalue)
-        )
-      )
+      if (!hasNonnegativeLoss(line[name], facts))
         failures.push(`${label} ${name}: ${JSON.stringify(facts)}`)
     }
     rows.push({

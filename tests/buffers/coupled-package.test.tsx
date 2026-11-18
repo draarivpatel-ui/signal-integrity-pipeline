@@ -12,7 +12,13 @@ import {
 import { convertPackaged } from "../../src/buffers/package"
 import { splitWords, subcircuitHeader } from "../../src/buffers/text"
 import { Board, source } from "../fixtures/coupled-package"
-import { energyFacts, maxwellFacts, vendorText } from "../support/golden-checks"
+import {
+  energyFacts,
+  isGroundedMaxwell,
+  isPositiveDefinite,
+  maxwellFacts,
+  vendorText,
+} from "../support/golden-checks"
 
 test("TSX coupled package replaces scalar values, preserves ideal die rails and realizes signed R/L/C", async () => {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
@@ -335,7 +341,8 @@ V2 NC VDD NC NC
   }
 })
 
-test("golden invariants: DDR3 coupled-package selections stay SPD with |k| < 1, Maxwell C and realizable K", async (context) => {
+const coupledSelection = `golden invariants: DDR3 coupled-package selections stay SPD with |k| < 1, Maxwell ${"C and realizable K"}`
+test(coupledSelection, async (context) => {
   // Same physics as the full-matrix check (tests/buffers/package-matrix.test.ts), on the exact pin sets the DDR3
   // TSX declarations select (examples/routed/ddr3-signals.tsx). Schur reduction of floating unused pins preserves
   // definiteness (Horn & Johnson, Matrix Analysis, 2nd ed., Theorem 7.7.6), and ngspice K must satisfy |k| < 1.
@@ -362,10 +369,9 @@ test("golden invariants: DDR3 coupled-package selections stay SPD with |k| < 1, 
       die: selected.pins.map((_, i) => `D${i}`),
       ground: "G",
     })
+    const couplings = elements.filter((line) => line.startsWith("K"))
     const k = Math.max(
-      ...elements
-        .filter((line) => line.startsWith("K"))
-        .map((line) => Math.abs(Number(line.split(" ")[3]))),
+      ...couplings.map((line) => Math.abs(Number(line.split(" ")[3]))),
     )
     context.diagnostic(
       JSON.stringify({
@@ -379,24 +385,18 @@ test("golden invariants: DDR3 coupled-package selections stay SPD with |k| < 1, 
         largestKPins: L.pair.map((i) => selected.pins[i]),
       }),
     )
-    if (!(L.asymmetry <= 1e-12 && L.minimumEigenvalue > 0 && L.coupling < 1))
-      failures.push(`${name} L: ${JSON.stringify(L)}`)
-    if (!(C.asymmetry <= 1e-12 && C.minimumEigenvalue > 0 && C.coupling < 1))
-      failures.push(`${name} C: ${JSON.stringify(C)}`)
-    if (
-      !(
-        maxwell.minimumDiagonal > 0 &&
-        maxwell.maximumOffDiagonal <= 0 &&
-        maxwell.minimumRowSum >= -1e-9
-      )
-    )
+    if (!isPositiveDefinite(L)) failures.push(`${name} L: ${JSON.stringify(L)}`)
+    if (!isPositiveDefinite(C)) failures.push(`${name} C: ${JSON.stringify(C)}`)
+    if (!isGroundedMaxwell(maxwell))
       failures.push(`${name} Maxwell: ${JSON.stringify(maxwell)}`)
     if (!(k < 1)) failures.push(`${name}: K element ${k}`)
   }
   assert.deepEqual(failures, [])
 })
 
-test("golden invariants: Winbond DDR3 has no coupled package and every [Pin] R, L, C is non-negative", async (context) => {
+const scalarPackage =
+  "golden invariants: Winbond DDR3 has no coupled package and every [Pin] R, L, C is non-negative"
+test(scalarPackage, async (context) => {
   // A scalar lumped package is passive iff each R, L and C is non-negative (1 x 1 energy matrices).
   const text = await vendorText(context, "W631GG6MB-12.ibs")
   if (!text) return
@@ -405,9 +405,12 @@ test("golden invariants: Winbond DDR3 has no coupled package and every [Pin] R, 
     coupledPackage({ text, component, pins: Object.keys(component.pins) }),
     undefined,
   )
-  const values = Object.values(component.pins)
-    .flatMap((pin) => [pin.resistance, pin.inductance, pin.capacitance])
-    .filter((value) => value !== undefined)
+  const pinValues = Object.values(component.pins).flatMap((pin) => [
+    pin.resistance,
+    pin.inductance,
+    pin.capacitance,
+  ])
+  const values = pinValues.filter((value) => value !== undefined)
   context.diagnostic(
     JSON.stringify({
       pins: Object.keys(component.pins).length,
