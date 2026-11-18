@@ -107,30 +107,33 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
     durationSeconds: block.duration,
   }
   const artifactPrefix = `blocks/${id}`
-  const requiredSourcePortIds = block.settings.lanes.flatMap((lane) => [
+  const circuitJson = snapshot(block.circuit)
+  const modeling = snapshot(block.settings)
+  const requiredSourcePortIds = modeling.lanes.flatMap((lane) => [
     lane.from.sourcePortId!,
     lane.to.sourcePortId!,
   ])
-  return snapshot({
+  Object.freeze(requiredSourcePortIds)
+  return Object.freeze({
     id,
     name: block.block.name ?? id,
-    warnings: block.warnings,
-    sections: {
-      circuitJson: block.circuit,
-      scope: block.settings.copperScope,
+    warnings: snapshot(block.warnings),
+    sections: Object.freeze({
+      circuitJson,
+      scope: modeling.copperScope,
       requiredSourcePortIds,
-      referenceSourcePortId: block.settings.channelReference!.sourcePortId!,
+      referenceSourcePortId: modeling.channelReference!.sourcePortId!,
       artifactPrefix,
-    },
-    bindings: {
-      circuitJson: block.circuit,
-      mappings,
-      modeling: block.settings,
-      controls: block.controls,
+    }),
+    bindings: Object.freeze({
+      circuitJson,
+      mappings: snapshot(mappings),
+      modeling,
+      controls: snapshot(block.controls),
       ibisSources: input.ibisSources,
-      options,
+      options: Object.freeze(options),
       artifactPrefix,
-    },
+    }),
   })
 }
 
@@ -176,7 +179,8 @@ export class RoutedAdmissionSolver extends BaseSolver {
     }, 0)
     this.stats = { blocks: this.plans.length, selectedConductors }
     if (this.plans.length !== this.ids.length) return
-    const value = snapshot(this.plans)
+    const value = this.plans.slice()
+    Object.freeze(value)
     const blocks = value.map(({ id, name, warnings }) => ({
       id,
       name,

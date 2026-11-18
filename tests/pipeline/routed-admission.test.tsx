@@ -130,3 +130,18 @@ test("an empty serialized block ID fails immediately", async () => {
   const solver = new RoutedAdmissionSolver({ circuitJson, ibisSources: {} })
   assert.throws(() => solver.step(), { code: "simulation_id" })
 })
+
+test("sectioning and binding share one frozen board", async () => {
+  const circuitJson = await renderCoreSignals(<TwoTraceBoard />)
+  const solver = new RoutedAdmissionSolver({
+    circuitJson,
+    ibisSources: { [inverterModelPath]: routedVisualIbis },
+  })
+  solver.solve()
+  const { value } = solver.getOutput()
+  const [plan] = value
+  assert.ok(plan.sections.circuitJson === plan.bindings.circuitJson)
+  assert.ok(Object.isFrozen(plan.sections.circuitJson))
+  assert.ok(Object.isFrozen(plan.sections.circuitJson[0]))
+  assert.ok(Object.isFrozen(value))
+})
