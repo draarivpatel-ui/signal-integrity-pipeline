@@ -51,18 +51,21 @@ function receiverMappings(
 ): LaneMapping[] {
   const driverPorts = endpointPorts(signal.driver)
   return signal.receivers.flatMap((receiver) =>
-    endpointPorts(receiver).map((to, i) => {
+    endpointPorts(receiver).flatMap((to, i) => {
       const from = driverPorts[i]
       const lane = lanes.find(
         (lane) =>
           lane.from.sourcePortId === from || lane.to.sourcePortId === from,
-      )!
-      return {
-        port: signal.name,
-        from,
-        to,
-        sourceTraceId: lane.sourceTraceId!,
-      }
+      )
+      if (!lane?.sourceTraceId) return []
+      return [
+        {
+          port: signal.name,
+          from,
+          to,
+          sourceTraceId: lane.sourceTraceId,
+        },
+      ]
     }),
   )
 }
