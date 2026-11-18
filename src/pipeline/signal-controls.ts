@@ -112,9 +112,9 @@ export function signalBits(
   }
 
   if (!prbs && pattern !== "clock" && !isBitPattern(pattern)) {
-    throw new Error(
-      `${signal.name}: pattern must be PRBS, clock, or a literal bit string`,
-    )
+    const validPatterns =
+      "a pseudo-random binary sequence (PRBS), clock, or a literal bit string"
+    throw new Error(`${signal.name}: pattern must be ${validPatterns}`)
   }
   if (signal.driver_disabled) return "0"
   if (pattern === "clock") return "01"

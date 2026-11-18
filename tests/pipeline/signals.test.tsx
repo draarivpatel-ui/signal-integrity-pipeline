@@ -260,7 +260,7 @@ test("a disabled three-state driver still rejects a malformed literal pattern", 
   )
   assert.throws(
     () => prepareBlocks({ circuit, sources: { [inverterIbisPath]: tristate } }),
-    /pattern/,
+    /pseudo-random binary sequence \(PRBS\)/,
   )
 })
 
