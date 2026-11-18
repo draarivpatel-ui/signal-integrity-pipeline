@@ -1,25 +1,26 @@
+import type {
+  LayerRef,
+  PcbTraceRoutePointVia,
+  PcbTraceRoutePointWire,
+  Point,
+} from "circuit-json"
 import {
   ConnectivityMap,
   findConnectedNetworks,
 } from "circuit-json-to-connectivity-map"
 import {
   type CircuitJson,
-  passiveConnections,
+  passiveBridges,
   type SimulationPcbDriverReceiverChannel,
+  type SourceNetId,
+  type SourcePortId,
   sourceConnections,
   sourceNetMembers,
 } from "../board"
 
-export type ConnectedSourceId = string
-
 type CopperPointKey = string
-type CopperPoint = { x: number; y: number; layer: string }
+type CopperPoint = Point & { layer: LayerRef }
 type CopperGraph = Map<CopperPointKey, Set<CopperPointKey>>
-type PcbTrace = Extract<CircuitJson[number], { type: "pcb_trace" }>
-type RoutePoint = Exclude<
-  PcbTrace["route"][number],
-  { route_type: "through_pad" }
->
 
 /** Extend the source nets through series passives for this block's rail set. */
 export function signalTopology({
@@ -27,19 +28,19 @@ export function signalTopology({
   rails,
 }: {
   circuit: CircuitJson
-  rails: ReadonlySet<ConnectedSourceId>
+  rails: ReadonlySet<SourcePortId | SourceNetId>
 }): ConnectivityMap {
-  const passiveBridges = passiveConnections(circuit, rails)
+  const bridges = passiveBridges(circuit, rails)
   return new ConnectivityMap(
-    findConnectedNetworks([...sourceConnections(circuit), ...passiveBridges]),
+    findConnectedNetworks([...sourceConnections(circuit), ...bridges]),
   )
 }
 
 /** Select the approached layer when the routed point is a via. */
 function routeLayer(
-  point: RoutePoint,
+  point: PcbTraceRoutePointWire | PcbTraceRoutePointVia,
   viaSide: "from_layer" | "to_layer",
-): string {
+): LayerRef {
   if (point.route_type === "via") return point[viaSide]
   return point.layer
 }
@@ -90,7 +91,7 @@ export function validateSignalGraph({
   connectivity: ConnectivityMap
   signalConnectivity: ConnectivityMap
   signals: SimulationPcbDriverReceiverChannel[]
-  rails: ReadonlySet<ConnectedSourceId>
+  rails: ReadonlySet<SourcePortId | SourceNetId>
   allowUnroutedTraces: boolean
 }): void {
   const drivers = signals.map(({ driver }) => {
@@ -119,7 +120,7 @@ export function validateSignalGraph({
     .filter((r) => r.type === "pcb_port")
     .filter((r) => selected.has(r.source_port_id))
   const edges: {
-    layer: string
+    layer: LayerRef
     ax: number
     ay: number
     bx: number
@@ -151,7 +152,7 @@ export function validateSignalGraph({
       if (first !== last)
         edges.push({ layer, ax: a.x, ay: a.y, bx: b.x, by: b.y })
     }
-  const terminals = new Map<ConnectedSourceId, CopperPointKey[]>()
+  const terminals = new Map<SourcePortId, CopperPointKey[]>()
   for (const port of ports)
     terminals.set(
       port.source_port_id,
@@ -196,7 +197,7 @@ export function validateSignalGraph({
   const copperGraph = new Map(
     [...graph].map(([key, values]) => [key, new Set(values)]),
   )
-  for (const [pinA, pinB] of passiveConnections(circuit, rails)) {
+  for (const [pinA, pinB] of passiveBridges(circuit, rails)) {
     for (const a of terminals.get(pinA) ?? [])
       for (const b of terminals.get(pinB) ?? [])
         joinCopperPoints(graph, { a, b })
