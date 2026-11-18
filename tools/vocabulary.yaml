@@ -172,7 +172,7 @@ domain:
   return: the path current takes back to its source, usually through ground copper
   ring: one closed loop of points that outlines a polygon or a hole in it
   route: the path a trace follows across the board, as points and vias
-  scope: a named folder of artifacts that one module is allowed to write
+  scope: a module's named artifact folder, or the board copper selected for a channel's extraction
   seal: sort and freeze a ledger's files into the published file map
   signal: a voltage that carries data along a lane
   simulation: running the SPICE circuit over time with ngspice
