@@ -3,6 +3,7 @@ import type {
   PcbTraceRoutePointVia,
   PcbTraceRoutePointWire,
   Point,
+  SourceTrace,
 } from "circuit-json"
 import {
   ConnectivityMap,
@@ -21,6 +22,20 @@ import {
 type CopperPointKey = string
 type CopperPoint = Point & { layer: LayerRef }
 type CopperGraph = Map<CopperPointKey, Set<CopperPointKey>>
+
+/** A routed copper segment on one board layer. */
+interface CopperSegment {
+  start: Point
+  end: Point
+  layer: LayerRef
+}
+
+/** Round to the geometry admission grid at 0.00001 mm per grid step. */
+const COPPER_POINTS_PER_MM = 1e5
+/** Maximum perpendicular distance from a copper segment for a physical junction, in millimeters. */
+const COPPER_JOIN_TOLERANCE_MM = 1e-5
+/** Fractional tolerance for a junction near either end of a segment. */
+const SEGMENT_POSITION_TOLERANCE = 1e-8
 
 /** Extend the source nets through series passives for this block's rail set. */
 export function signalTopology({
@@ -50,7 +65,9 @@ function recordCopperPoint(
   points: Map<CopperPointKey, CopperPoint>,
   point: CopperPoint,
 ): CopperPointKey {
-  const key = `${Math.round(point.x * 1e5)},${Math.round(point.y * 1e5)},${point.layer}`
+  const x = Math.round(point.x * COPPER_POINTS_PER_MM)
+  const y = Math.round(point.y * COPPER_POINTS_PER_MM)
+  const key = `${x},${y},${point.layer}`
   points.set(key, point)
   return key
 }
@@ -58,7 +75,13 @@ function recordCopperPoint(
 /** Add an undirected physical edge. */
 function joinCopperPoints(
   graph: CopperGraph,
-  { a, b }: { a: CopperPointKey; b: CopperPointKey },
+  {
+    a,
+    b,
+  }: {
+    a: CopperPointKey
+    b: CopperPointKey
+  },
 ): void {
   if (a === b) return
   if (!graph.has(a)) graph.set(a, new Set())
@@ -73,9 +96,30 @@ function reachable(
   graph: CopperGraph,
 ): Set<CopperPointKey> {
   const found = new Set(starts)
-  for (const key of found)
+  for (const key of found) {
     for (const next of graph.get(key) ?? []) found.add(next)
+  }
   return found
+}
+
+/** Selects source traces that touch the signal without touching a reference rail. */
+function signalTraces(
+  traces: readonly SourceTrace[],
+  {
+    selected,
+    rails,
+  }: {
+    selected: ReadonlySet<SourcePortId | SourceNetId>
+    rails: ReadonlySet<SourcePortId | SourceNetId>
+  },
+): SourceTrace[] {
+  return traces.filter((trace) => {
+    const ports = trace.connected_source_port_ids
+    return (
+      ports.some((port) => selected.has(port)) &&
+      !ports.some((port) => rails.has(port))
+    )
+  })
 }
 
 /** Verify physical connectivity through passives and reject branched routed graphs independently of source grouping. */
@@ -98,179 +142,167 @@ export function validateSignalGraph({
     if ("source_port_id" in driver) return [driver.source_port_id]
     return [driver.p_source_port_id, driver.n_source_port_id]
   })
-  const selected = new Set(
-    drivers.flatMap((ports) =>
-      ports.flatMap((port) => [...sourceNetMembers(signalConnectivity, port)]),
+  const driverNets = drivers
+    .flat()
+    .flatMap((port) => [...sourceNetMembers(signalConnectivity, port)])
+  const selected = new Set(driverNets)
+  const sourceTraces = circuit.filter(
+    (record) => record.type === "source_trace",
+  )
+  const traceIds = new Set(
+    signalTraces(sourceTraces, { selected, rails }).map(
+      (trace) => trace.source_trace_id,
     ),
   )
-  const sourceTraces = new Set(
-    circuit
-      .filter((r) => r.type === "source_trace")
-      .filter(
-        (trace) =>
-          trace.connected_source_port_ids.some((port) => selected.has(port)) &&
-          !trace.connected_source_port_ids.some((port) => rails.has(port)),
-      )
-      .map((trace) => trace.source_trace_id),
-  )
   const routes = circuit
-    .filter((r) => r.type === "pcb_trace")
-    .filter((r) => sourceTraces.has(r.source_trace_id ?? ""))
+    .filter((record) => record.type === "pcb_trace")
+    .filter((trace) => traceIds.has(trace.source_trace_id ?? ""))
   const ports = circuit
-    .filter((r) => r.type === "pcb_port")
-    .filter((r) => selected.has(r.source_port_id))
-  const edges: {
-    layer: LayerRef
-    ax: number
-    ay: number
-    bx: number
-    by: number
-  }[] = []
+    .filter((record) => record.type === "pcb_port")
+    .filter((port) => selected.has(port.source_port_id))
+  const edges: CopperSegment[] = []
   const points = new Map<CopperPointKey, CopperPoint>()
   const graph: CopperGraph = new Map()
-  for (const route of routes)
-    for (let i = 1; i < route.route.length; i++) {
-      const a = route.route[i - 1]
-      const b = route.route[i]
-      if (a.route_type === "through_pad" || b.route_type === "through_pad")
+  for (const { route } of routes) {
+    for (let index = 1; index < route.length; index++) {
+      const start = route[index - 1]
+      const end = route[index]
+      if (
+        start.route_type === "through_pad" ||
+        end.route_type === "through_pad"
+      )
         continue
-      const layer = routeLayer(a, "to_layer")
-      const first = recordCopperPoint(points, { x: a.x, y: a.y, layer })
+      const layer = routeLayer(start, "to_layer")
+      const first = recordCopperPoint(points, { x: start.x, y: start.y, layer })
       const last = recordCopperPoint(points, {
-        x: b.x,
-        y: b.y,
-        layer: routeLayer(b, "from_layer"),
+        x: end.x,
+        y: end.y,
+        layer: routeLayer(end, "from_layer"),
       })
-      if (b.route_type === "via") {
+      if (end.route_type === "via") {
         const otherSide = recordCopperPoint(points, {
-          x: b.x,
-          y: b.y,
-          layer: b.to_layer,
+          x: end.x,
+          y: end.y,
+          layer: end.to_layer,
         })
         joinCopperPoints(graph, { a: last, b: otherSide })
       }
-      if (first !== last)
-        edges.push({ layer, ax: a.x, ay: a.y, bx: b.x, by: b.y })
+      if (first !== last) edges.push({ start, end, layer })
     }
+  }
   const terminals = new Map<SourcePortId, CopperPointKey[]>()
-  for (const port of ports)
-    terminals.set(
-      port.source_port_id,
-      port.layers.map((layer) =>
-        recordCopperPoint(points, { x: port.x, y: port.y, layer }),
-      ),
+  for (const { source_port_id, layers, x, y } of ports) {
+    const keys = layers.map((layer) =>
+      recordCopperPoint(points, { x, y, layer }),
     )
+    terminals.set(source_port_id, keys)
+  }
   // Split at every physical junction, including a branch terminating inside another segment.
-  for (const edge of edges) {
-    const dx = edge.bx - edge.ax
-    const dy = edge.by - edge.ay
-    const length = dx * dx + dy * dy
-    const vertices = [...points]
-      .flatMap(([key, p]) => {
-        const t = ((p.x - edge.ax) * dx + (p.y - edge.ay) * dy) / length
-        if (
-          p.layer === edge.layer &&
-          t >= -1e-8 &&
-          t <= 1 + 1e-8 &&
-          Math.abs((p.x - edge.ax) * dy - (p.y - edge.ay) * dx) <
-            1e-5 * Math.sqrt(length)
-        )
-          return [{ key, t }]
-        return []
+  for (const { start, end, layer } of edges) {
+    const dx = end.x - start.x
+    const dy = end.y - start.y
+    const lengthSquared = dx * dx + dy * dy
+    const maxCrossProduct = COPPER_JOIN_TOLERANCE_MM * Math.sqrt(lengthSquared)
+    const vertices = [...points].flatMap(([key, point]) => {
+      if (point.layer !== layer) return []
+      const offsetX = point.x - start.x
+      const offsetY = point.y - start.y
+      const position = (offsetX * dx + offsetY * dy) / lengthSquared
+      const withinSegment =
+        position >= -SEGMENT_POSITION_TOLERANCE &&
+        position <= 1 + SEGMENT_POSITION_TOLERANCE
+      if (!withinSegment) return []
+      const onTrace = Math.abs(offsetX * dy - offsetY * dx) < maxCrossProduct
+      if (!onTrace) return []
+      return [{ key, position }]
+    })
+    vertices.sort((a, b) => a.position - b.position)
+    for (let index = 1; index < vertices.length; index++) {
+      joinCopperPoints(graph, {
+        a: vertices[index - 1].key,
+        b: vertices[index].key,
       })
-      .sort((a, b) => a.t - b.t)
-    for (let i = 1; i < vertices.length; i++)
-      joinCopperPoints(graph, { a: vertices[i - 1].key, b: vertices[i].key })
+    }
   }
   for (const source of circuit
     .filter((r) => r.type === "source_port")
     .filter((r) => selected.has(r.source_port_id))) {
     if (terminals.has(source.source_port_id)) continue
     const copper = sourceNetMembers(connectivity, source.source_port_id)
-    terminals.set(
-      source.source_port_id,
-      ports
-        .filter((p) => copper.has(p.source_port_id))
-        .flatMap((p) => terminals.get(p.source_port_id) ?? []),
+    const connectedPorts = ports.filter((port) =>
+      copper.has(port.source_port_id),
     )
+    const connectedTerminals = connectedPorts.flatMap(
+      (port) => terminals.get(port.source_port_id) ?? [],
+    )
+    terminals.set(source.source_port_id, connectedTerminals)
   }
   const copperGraph = new Map(
     [...graph].map(([key, values]) => [key, new Set(values)]),
   )
   for (const [pinA, pinB] of passiveBridges(circuit, rails)) {
-    for (const a of terminals.get(pinA) ?? [])
+    for (const a of terminals.get(pinA) ?? []) {
       for (const b of terminals.get(pinB) ?? [])
         joinCopperPoints(graph, { a, b })
+    }
   }
   for (const [index, signal] of signals.entries()) {
     for (const [leg, port] of drivers[index].entries()) {
       const topology = sourceNetMembers(signalConnectivity, port)
+      const traces = signalTraces(sourceTraces, { selected: topology, rails })
       if (!allowUnroutedTraces) {
-        const traces = new Set(
-          circuit
-            .filter((record) => record.type === "source_trace")
-            .filter(
-              (trace) =>
-                trace.connected_source_port_ids.some((id) =>
-                  topology.has(id),
-                ) &&
-                !trace.connected_source_port_ids.some((id) => rails.has(id)),
-            )
-            .map((trace) => trace.source_trace_id),
+        const traceIds = new Set(traces.map((trace) => trace.source_trace_id))
+        const signalPorts = ports.filter(
+          (pin) =>
+            topology.has(pin.source_port_id) && !rails.has(pin.source_port_id),
         )
-        const selected = new Set(
-          ports
-            .filter(
-              (pin) =>
-                topology.has(pin.source_port_id) &&
-                !rails.has(pin.source_port_id),
-            )
-            .map((pin) => pin.pcb_port_id),
-        )
-        const error = circuit.find(
-          (record) =>
-            (record.type === "pcb_trace_missing_error" &&
-              traces.has(record.source_trace_id)) ||
-            (record.type === "pcb_port_not_connected_error" &&
-              record.pcb_port_ids.some((id) => selected.has(id))),
-        )
-        if (error)
+        const pcbPortIds = new Set(signalPorts.map((pin) => pin.pcb_port_id))
+        const error = circuit.find((record) => {
+          if (record.type === "pcb_trace_missing_error")
+            return traceIds.has(record.source_trace_id)
+          if (record.type !== "pcb_port_not_connected_error") return false
+          return record.pcb_port_ids.some((id) => pcbPortIds.has(id))
+        })
+        if (error) {
           throw new Error(
             `Signal "${signal.name}" is not routed between ${port} and its receivers (${error.type}).`,
           )
+        }
       }
       const starts = terminals.get(port) ?? []
       const connected = reachable(starts, graph)
       const copper = reachable(starts, copperGraph)
       const routed = [...copper].some((key) => copperGraph.has(key))
-      if (
-        routed &&
-        (signal.receivers.length > 1 ||
-          starts.some((key) => (copperGraph.get(key)?.size ?? 0) > 1) ||
-          [...connected].some((key) => (copperGraph.get(key)?.size ?? 0) > 2))
-      )
-        throw new Error(
-          `Signal "${signal.name}": branched routed graphs are not implemented yet.`,
+      if (routed) {
+        const multipleReceivers = signal.receivers.length > 1
+        const branchAtDriver = starts.some(
+          (key) => (copperGraph.get(key)?.size ?? 0) > 1,
         )
+        const branchInCopper = [...connected].some(
+          (key) => (copperGraph.get(key)?.size ?? 0) > 2,
+        )
+        if (multipleReceivers || branchAtDriver || branchInCopper) {
+          throw new Error(
+            `Signal "${signal.name}": branched routed graphs are not implemented yet.`,
+          )
+        }
+      }
       if (allowUnroutedTraces) continue
       const receivers = signal.receivers.map((receiver) => {
         if ("source_port_id" in receiver) return receiver.source_port_id
         if (leg === 0) return receiver.p_source_port_id
         return receiver.n_source_port_id
       })
-      const required = circuit
-        .filter((r) => r.type === "source_trace")
-        .filter(
-          (r) =>
-            r.connected_source_port_ids.some((id) => topology.has(id)) &&
-            !r.connected_source_port_ids.some((id) => rails.has(id)),
+      const required = traces.flatMap(
+        (trace) => trace.connected_source_port_ids,
+      )
+      for (const target of new Set([...receivers, ...required])) {
+        const targetPoints = terminals.get(target) ?? []
+        if (targetPoints.some((key) => connected.has(key))) continue
+        throw new Error(
+          `Signal "${signal.name}" is not routed between ${port} and ${target}.`,
         )
-        .flatMap((r) => r.connected_source_port_ids)
-      for (const target of new Set([...receivers, ...required]))
-        if (!(terminals.get(target) ?? []).some((key) => connected.has(key)))
-          throw new Error(
-            `Signal "${signal.name}" is not routed between ${port} and ${target}.`,
-          )
+      }
     }
   }
 }
