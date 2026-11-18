@@ -12,19 +12,28 @@ import Board from "../fixtures/return-agreement"
 import { renderCoreSignals } from "../support/core-render"
 
 test("TSX parallel coupling uses solved electric AND magnetic coupling instead of a millimetre horizon", async () => {
-  for (const [spacing, thickness] of [
-    [0.3, 0.4],
-    [16, 0.4],
-    [4, 1.6],
-  ]) {
+  const materials = {
+    maskMm: 0,
+    maskEr: 1,
+    maskLoss: 0,
+    substrateLoss: 0,
+  }
+  // Each case records trace spacing, board thickness and the largest expected retained group.
+  const cases = [
+    [0.3, 0.4, 3],
+    [16, 0.4, 1],
+    [4, 1.6, 3],
+  ]
+  for (const [spacing, thickness, groupSize] of cases) {
     const circuit = await renderCoreSignals(
       <Board spacing={spacing} thickness={thickness} />,
     )
+    const traces = circuit.filter((record) => record.type === "source_trace")
+    const twoPortTraces = traces.filter(
+      (trace) => trace.connected_source_port_ids.length === 2,
+    )
     const selected = new Set(
-      circuit
-        .filter((record) => record.type === "source_trace")
-        .filter((record) => record.connected_source_port_ids.length === 2)
-        .flatMap((trace) => trace.connected_source_port_ids),
+      twoPortTraces.flatMap((trace) => trace.connected_source_port_ids),
     )
     const ground = circuit
       .filter((record) => record.type === "source_net")
@@ -38,19 +47,17 @@ test("TSX parallel coupling uses solved electric AND magnetic coupling instead o
       rails: new Set(),
       distanceMm: 32,
     })
-    const result = ((solver: RouteFieldsSolver) => {
-      solver.solve()
-      return solver.getOutput().value
-    })(
-      new RouteFieldsSolver({
-        geometry: segmentRoutes(circuit, scope),
-        materials: { maskMm: 0, maskEr: 1, maskLoss: 0, substrateLoss: 0 },
-        artifactPrefix: "test",
-      }),
-    )
+    const geometry = segmentRoutes(circuit, scope)
+    const solver = new RouteFieldsSolver({
+      geometry,
+      materials,
+      artifactPrefix: "test",
+    })
+    solver.solve()
+    const { slices } = solver.getOutput().value
     assert.equal(
-      Math.max(...result.slices.map((slice) => slice.wires.length)),
-      spacing < 8 ? 3 : 1,
+      Math.max(...slices.map((slice) => slice.wires.length)),
+      groupSize,
       "Nearby wires stay coupled; distant wires split only after both normalized mutuals fall below 0.5%",
     )
   }

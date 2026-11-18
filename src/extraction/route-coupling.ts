@@ -1,6 +1,9 @@
 import type { RouteSlice } from "../board"
 import type { RouteCoefficients } from "./route-lines"
 
+/** Retain a pair if either normalized mutual coefficient reaches 0.5%. */
+const COUPLING_THRESHOLD = 0.005
+
 export interface RouteCoupling {
   wires: number[]
   capacitive: number
@@ -22,16 +25,18 @@ export function routeCoupling({
   records: RouteCoupling[]
 }): RouteSlice[] {
   const groups = slice.wires.map((_, i) => i)
-  for (let i = 0; i < slice.wires.length; i++)
+  for (let i = 0; i < slice.wires.length; i++) {
     for (let j = i + 1; j < slice.wires.length; j++) {
-      const line = solve({ ...slice, wires: [slice.wires[i], slice.wires[j]] })
+      const first = slice.wires[i]
+      const second = slice.wires[j]
+      const line = solve({ ...slice, wires: [first, second] })
       const capacitive =
         Math.abs(line.C[0][1]) / Math.sqrt(line.C[0][0] * line.C[1][1])
       const inductive =
         Math.abs(line.L[0][1]) / Math.sqrt(line.L[0][0] * line.L[1][1])
-      const retained = Math.max(capacitive, inductive) >= 0.005
+      const retained = Math.max(capacitive, inductive) >= COUPLING_THRESHOLD
       records.push({
-        wires: [slice.wires[i].id, slice.wires[j].id],
+        wires: [first.id, second.id],
         capacitive,
         inductive,
         retained,
@@ -39,9 +44,11 @@ export function routeCoupling({
       if (!retained) continue
       const from = groups[j]
       const to = groups[i]
-      for (let k = 0; k < groups.length; k++)
+      for (let k = 0; k < groups.length; k++) {
         if (groups[k] === from) groups[k] = to
+      }
     }
+  }
   return [...new Set(groups)].map((group) => ({
     ...slice,
     wires: slice.wires.filter((_, i) => groups[i] === group),

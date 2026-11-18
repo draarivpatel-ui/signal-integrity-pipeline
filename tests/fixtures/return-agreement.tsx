@@ -1,5 +1,12 @@
 import React from "react"
 
+interface ReturnAgreementProps {
+  spacing?: number
+  count?: number
+  thickness?: number
+  length?: number
+}
+
 /** Straight TSX microstrips with broad end contacts on a close, solid bottom reference.
  * Direct opposite-layer contacts remove ground leads and vias from the return.
  * The physical 0.4 mm dielectric comes from the JLC two-layer stackup, without rescaling.
@@ -9,12 +16,7 @@ export default function ReturnAgreement({
   count = 3,
   thickness = 0.4,
   length = 10,
-}: {
-  spacing?: number
-  count?: number
-  thickness?: number
-  length?: number
-}): React.JSX.Element {
+}: ReturnAgreementProps): React.JSX.Element {
   const half = ((count - 1) * spacing) / 2 + 1
   return (
     <board
@@ -31,22 +33,30 @@ export default function ReturnAgreement({
           key={name}
           name={name}
           pcbX={i ? length / 2 : -length / 2}
-          pinLabels={{ pin1: "S0", pin2: "S1", pin3: "S2", pin4: "GND" }}
+          pinLabels={{
+            pin1: "S0",
+            pin2: "S1",
+            pin3: "S2",
+            pin4: "GND",
+          }}
           connections={{ GND: "net.GND" }}
           footprint={
             <footprint>
-              {Array.from({ length: count }, (_, j) => (
-                <React.Fragment key={j}>
-                  <smtpad
-                    portHints={[`pin${j + 1}`]}
-                    pcbX={0}
-                    pcbY={(j - (count - 1) / 2) * spacing}
-                    width={0.15}
-                    height={0.15}
-                    shape="rect"
-                  />
-                </React.Fragment>
-              ))}
+              {Array.from({ length: count }, (_, j) => {
+                const pin = `pin${j + 1}`
+                return (
+                  <React.Fragment key={pin}>
+                    <smtpad
+                      portHints={[pin]}
+                      pcbX={0}
+                      pcbY={(j - (count - 1) / 2) * spacing}
+                      width={0.15}
+                      height={0.15}
+                      shape="rect"
+                    />
+                  </React.Fragment>
+                )
+              })}
               <smtpad
                 portHints={["pin4"]}
                 pcbX={0}
@@ -60,16 +70,15 @@ export default function ReturnAgreement({
           }
         />
       ))}
-      {Array.from({ length: count }, (_, j) => (
-        <React.Fragment key={j}>
-          <trace
-            from={`.TX > .S${j}`}
-            to={`.RX > .S${j}`}
-            width={0.15}
-            pcbPath={[`.TX > .S${j}`, `.RX > .S${j}`]}
-          />
-        </React.Fragment>
-      ))}
+      {Array.from({ length: count }, (_, j) => {
+        const from = `.TX > .S${j}`
+        const to = `.RX > .S${j}`
+        return (
+          <React.Fragment key={from}>
+            <trace from={from} to={to} width={0.15} pcbPath={[from, to]} />
+          </React.Fragment>
+        )
+      })}
       <net name="GND" />
       <copperpour connectsTo="net.GND" layer="bottom" unbroken />
     </board>

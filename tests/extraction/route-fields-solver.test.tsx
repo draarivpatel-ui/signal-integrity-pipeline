@@ -29,13 +29,13 @@ test("field steps reuse canonical pair geometry, preserve coefficients and publi
   const result = solver.getOutput()
   assert.equal(result.value.sections.length, 1)
   assert.equal(solver.stats.cacheHits, 1)
-  assert.deepEqual(
-    result.value.slices[0].line.C,
-    solveCrossSection(
-      routeCrossSection({ geometry, slice: geometry.slices[0], materials }),
-      { panelsPerEdge: 12 },
-    ).C,
-  )
+  const section = routeCrossSection({
+    geometry,
+    slice: geometry.slices[0],
+    materials,
+  })
+  const direct = solveCrossSection(section, { panelsPerEdge: 12 })
+  assert.deepEqual(result.value.slices[0].line.C, direct.C)
   assert.ok(Object.isFrozen(result.value.slices[0].line.C))
   const repeat = new RouteFieldsSolver(
     JSON.parse(JSON.stringify(solver.getConstructorParams()[0])),

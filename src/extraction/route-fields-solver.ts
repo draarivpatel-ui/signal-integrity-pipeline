@@ -17,6 +17,21 @@ import {
   type SolvedRouteSection,
 } from "./route-lines"
 
+/** Standard edge resolution and lower bound accepted by the routed field stage. */
+const DEFAULT_FIELD_PANELS = 12
+const MIN_FIELD_PANELS = 2
+
+/** Keep the pair screen and local matrix solves within modest memory. */
+const MAX_SCREEN_CONDUCTORS = 40
+
+const PARALLEL_COUPLING_WARNING = [
+  "Parallel coupling retains connected pairs until both abs(Cij)/sqrt(Cii*Cjj) and abs(Lij)/sqrt(Lii*Ljj)",
+  "are below 0.005 (0.5%). Pair screening is not an aggregate waveform error bound.",
+  "Geometry admission follows the recorded copper scope;",
+  "fields beyond its cap and nonadjacent layers are unbounded omissions.",
+  `Local solves are capped at ${MAX_SCREEN_CONDUCTORS} conductors and fail explicitly.`,
+].join(" ")
+
 export interface RouteFieldsInput {
   geometry: SectionGeometry
   circuitJson?: CircuitJson
@@ -43,6 +58,23 @@ function maskThicknessSource(
   return "assumed"
 }
 
+/** Queue each conductor pair in slice order so cache population precedes coupling decisions. */
+function addCouplingPairs(slices: RouteSlice[], pairs: RouteSlice[]): void {
+  for (const slice of slices) {
+    const count = slice.wires.length
+    if (count > MAX_SCREEN_CONDUCTORS) {
+      throw new Error(
+        `Coupling screen has ${count} conductors; exceeds modest-memory limit of ${MAX_SCREEN_CONDUCTORS}`,
+      )
+    }
+    for (let i = 0; i < count; i++) {
+      for (let j = i + 1; j < count; j++) {
+        pairs.push({ ...slice, wires: [slice.wires[i], slice.wires[j]] })
+      }
+    }
+  }
+}
+
 /** One pair screen or one unique multiconductor BEM solve per synchronous step. */
 export class RouteFieldsSolver extends BaseSolver {
   private readonly cache = new Map<
@@ -65,8 +97,12 @@ export class RouteFieldsSolver extends BaseSolver {
       ...assumedRouteMaterials,
       maskMm: input.maskThicknessMm ?? assumedRouteMaterials.maskMm,
     }
-    if (!Number.isInteger(input.panels ?? 12) || (input.panels ?? 12) < 2)
-      throw new Error("Field panels must be an integer at least 2")
+    const panels = input.panels ?? DEFAULT_FIELD_PANELS
+    if (!Number.isInteger(panels) || panels < MIN_FIELD_PANELS) {
+      throw new Error(
+        `Field panels must be an integer at least ${MIN_FIELD_PANELS}`,
+      )
+    }
   }
   /** Canonical relative geometry owns the cache identity, independent of source IDs and stimulus. */
   private solveSlice(slice: RouteSlice): SolvedRouteSection {
@@ -85,7 +121,9 @@ export class RouteFieldsSolver extends BaseSolver {
     let line: RouteCoefficients
     try {
       line = snapshot(
-        solveCrossSection(section, { panelsPerEdge: this.input.panels ?? 12 }),
+        solveCrossSection(section, {
+          panelsPerEdge: this.input.panels ?? DEFAULT_FIELD_PANELS,
+        }),
       )
     } catch (error) {
       throw Object.assign(error as Error, {
@@ -117,18 +155,7 @@ export class RouteFieldsSolver extends BaseSolver {
   private solveNext(): void {
     if (!this.pairs) {
       this.pairs = []
-      for (const slice of this.input.geometry.slices) {
-        if (slice.wires.length > 40)
-          throw new Error(
-            `Coupling screen has ${slice.wires.length} conductors; exceeds modest-memory limit of 40`,
-          )
-        for (let i = 0; i < slice.wires.length; i++)
-          for (let j = i + 1; j < slice.wires.length; j++)
-            this.pairs.push({
-              ...slice,
-              wires: [slice.wires[i], slice.wires[j]],
-            })
-      }
+      addCouplingPairs(this.input.geometry.slices, this.pairs)
     }
     if (this.pairIndex < this.pairs.length) {
       this.solveSlice(this.pairs[this.pairIndex++])
@@ -137,16 +164,7 @@ export class RouteFieldsSolver extends BaseSolver {
     this.groups ??= this.input.geometry.slices.flatMap((slice) =>
       routeCoupling({
         slice,
-        solve: (pair) => {
-          const section = routeCrossSection({
-            geometry: this.input.geometry,
-            slice: pair,
-            materials: this.materials,
-          })
-          const line = this.cache.get(JSON.stringify(section))
-          if (!line) throw new Error("Pair screen was not solved")
-          return line
-        },
+        solve: (pair) => this.cachedPair(pair),
         records: this.coupling,
       }),
     )
@@ -155,12 +173,29 @@ export class RouteFieldsSolver extends BaseSolver {
       this.slices.push({ ...slice, ...this.solveSlice(slice) })
     }
     if (this.groupIndex !== this.groups.length) return
+    this.finish()
+  }
+
+  /** Retrieve the screen coefficient matrix prepared before grouping the routes. */
+  private cachedPair(pair: RouteSlice): RouteCoefficients {
+    const section = routeCrossSection({
+      geometry: this.input.geometry,
+      slice: pair,
+      materials: this.materials,
+    })
+    const line = this.cache.get(JSON.stringify(section))
+    if (!line) throw new Error("Pair screen was not solved")
+    return line
+  }
+
+  /** Freeze the solved fields and write the geometry-to-coefficient map. */
+  private finish(): void {
     const warnings = [
       ...this.input.geometry.warnings,
-      "Parallel coupling retains connected pairs until both abs(Cij)/sqrt(Cii*Cjj) and abs(Lij)/sqrt(Lii*Ljj) are below 0.005 (0.5%). Pair screening is not an aggregate waveform error bound. Geometry admission follows the recorded copper scope; fields beyond its cap and nonadjacent layers are unbounded omissions. Local solves are capped at 40 conductors and fail explicitly.",
+      PARALLEL_COUPLING_WARNING,
     ]
     const sections = [...this.cache].map(([key, line]) => ({ key, line }))
-    const extracted = snapshot({
+    const value = snapshot({
       slices: this.slices,
       sections,
       coupling: this.coupling,
@@ -168,26 +203,22 @@ export class RouteFieldsSolver extends BaseSolver {
       materials: this.materials,
     })
     const scope = rootScope("extraction").child(this.input.artifactPrefix)
-    this.output = {
-      value: extracted,
-      artifacts: [
-        scope.json("fields.json", {
-          sections,
-          slices: this.slices.map((slice) => ({
-            start: slice.start,
-            end: slice.end,
-            wires: slice.wires.map((wire) => wire.id),
-            references: slice.references,
-            key: slice.key,
-          })),
-          coupling: this.coupling,
-          warnings,
-          materials: this.materials,
-          maskThicknessSource: maskThicknessSource(this.input),
-          panelsPerEdge: this.input.panels ?? 12,
-        }),
-      ],
-    }
+    const artifact = scope.json("fields.json", {
+      sections,
+      slices: this.slices.map((slice) => ({
+        start: slice.start,
+        end: slice.end,
+        wires: slice.wires.map((wire) => wire.id),
+        references: slice.references,
+        key: slice.key,
+      })),
+      coupling: this.coupling,
+      warnings,
+      materials: this.materials,
+      maskThicknessSource: maskThicknessSource(this.input),
+      panelsPerEdge: this.input.panels ?? DEFAULT_FIELD_PANELS,
+    })
+    this.output = { value, artifacts: [artifact] }
     this.solved = true
   }
   /** Only a completed extraction can be consumed by the network. */

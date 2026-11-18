@@ -90,18 +90,21 @@ test("TSX touching same-net rail strips form one physical conductor before extra
       (wire) => Math.abs(wire.width - 0.6) < 1e-7 && wire.joins?.length,
     ),
   )
-  assert.doesNotThrow(() =>
-    ((solver: RouteFieldsSolver) => {
-      solver.solve()
-      return solver.getOutput().value
-    })(
-      new RouteFieldsSolver({
-        geometry: geometry,
-        materials: { maskMm: 0, maskEr: 1, maskLoss: 0, substrateLoss: 0 },
-        artifactPrefix: "test",
-      }),
-    ),
-  )
+  const materials = {
+    maskMm: 0,
+    maskEr: 1,
+    maskLoss: 0,
+    substrateLoss: 0,
+  }
+  assert.doesNotThrow(() => {
+    const solver = new RouteFieldsSolver({
+      geometry,
+      materials,
+      artifactPrefix: "test",
+    })
+    solver.solve()
+    return solver.getOutput().value
+  })
   const board = <TouchingRail same-net={false} />
   const separate = await renderCoreSignals(board).catch(
     (error: Error & { circuitJson: CircuitJson }) => {
@@ -123,17 +126,15 @@ test("TSX touching same-net rail strips form one physical conductor before extra
 
   const touching = segmentRoutes(separate, scope)
   assert.throws(
-    () =>
-      ((solver: RouteFieldsSolver) => {
-        solver.solve()
-        return solver.getOutput().value
-      })(
-        new RouteFieldsSolver({
-          geometry: touching,
-          materials: { maskMm: 0, maskEr: 1, maskLoss: 0, substrateLoss: 0 },
-          artifactPrefix: "test",
-        }),
-      ),
+    () => {
+      const solver = new RouteFieldsSolver({
+        geometry: touching,
+        materials,
+        artifactPrefix: "test",
+      })
+      solver.solve()
+      return solver.getOutput().value
+    },
     /Signal rectangles overlap or touch/,
     "touching different nets remain an explicit failure",
   )
