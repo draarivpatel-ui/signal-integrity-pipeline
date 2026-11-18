@@ -146,7 +146,9 @@ export class RoutedAdmissionSolver extends BaseSolver {
     return this.output
   }
   /** Original input only. */
-  override getConstructorParams(): [RoutedProblem] {
+  override getConstructorParams(): ConstructorParameters<
+    typeof RoutedAdmissionSolver
+  > {
     return [this.input]
   }
 }
