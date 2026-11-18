@@ -1,4 +1,8 @@
-import { connectedSourceIds } from "./connectivity"
+import {
+  type ConnectivityMap,
+  getSourcePortConnectivityMapFromCircuitJson,
+  sourceNetMembers,
+} from "./connectivity"
 import { type RouteWire, routePosition } from "./route-sections"
 import type { CircuitJson } from "./schema"
 
@@ -25,12 +29,12 @@ function wireDirection(wire: RouteWire): number {
 /** The electrical seed shared by all traces on the net. */
 function wireNet(
   source: Extract<CircuitJson[number], { type: "source_trace" }>,
-  circuit: CircuitJson,
+  connectivity: ConnectivityMap,
 ): string {
   const port =
     source.connected_source_port_ids[0] ?? source.connected_source_net_ids?.[0]
   if (!port) return source.source_trace_id
-  return [...connectedSourceIds(circuit, port)].sort()[0]
+  return [...sourceNetMembers(connectivity, port)].sort()[0]
 }
 
 /** Partition parallel wires into connected sets based on their physical overlap. */
@@ -137,6 +141,7 @@ export function unionRouteWires(
   wires: RouteWire[],
   circuit: CircuitJson,
 ): RouteWire[] {
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const nets = new Map<SourceTraceId, string>()
   const sources = circuit.filter((record) => record.type === "source_trace")
   const groups = new Map<CopperGroupKey, RouteWire[]>()
@@ -146,7 +151,7 @@ export function unionRouteWires(
       const source = sources.find(
         (source) => source.source_trace_id === wire.source,
       )!
-      net = wireNet(source, circuit)
+      net = wireNet(source, connectivity)
       nets.set(wire.source, net)
     }
     const key = [
