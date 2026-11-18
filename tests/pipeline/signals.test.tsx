@@ -2,6 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { simulation } from "@tscircuit/core"
+import type { TraceProps } from "@tscircuit/props"
 import React from "react"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import type { SimulationPcbDriverReceiverChannel } from "../../src/board"
@@ -16,11 +17,26 @@ import { Inverter, Reference } from "../support/signal-parts"
 import { prepareBlocks, renderSignals } from "../support/signal-render"
 
 const modelDir = process.env.IBIS_MODEL_DIR
-/** Real vendor bytes, never an invented model. */
-const sources = async (): Promise<Record<string, Uint8Array>> => ({
-  "models/sn74lvc1g04.ibs": await readFile(`${modelDir}/sn74lvc1g04.ibs`),
-})
-/** Regression boards stay ordinary TSX, including the deliberately incomplete route after RS. */
+const inverterIbisPath = "models/sn74lvc1g04.ibs"
+
+/** Load the local vendor model for the tests that exercise its exact pin declarations. */
+async function sources(): Promise<Record<string, Uint8Array>> {
+  return { [inverterIbisPath]: await readFile(`${modelDir}/sn74lvc1g04.ibs`) }
+}
+
+interface BoardProps {
+  missing?: boolean
+  via?: boolean
+  branch?: boolean
+  unlisted?: boolean
+  extraDriver?: boolean
+  driverDisabled?: boolean
+  offset?: number
+  duration?: number
+  allowUnroutedTraces?: boolean
+}
+
+/** Render the regression board, including the deliberately incomplete route after RS when requested. */
 function Board({
   missing = false,
   via = false,
@@ -31,17 +47,38 @@ function Board({
   offset = 0,
   duration,
   allowUnroutedTraces = false,
-}: {
-  missing?: boolean
-  via?: boolean
-  branch?: boolean
-  unlisted?: boolean
-  extraDriver?: boolean
-  driverDisabled?: boolean
-  offset?: number
-  duration?: number
-  allowUnroutedTraces?: boolean
-}): React.JSX.Element {
+}: BoardProps): React.JSX.Element {
+  const driverRef = ".TX > .Y"
+  const receiverRef = ".RX > .A"
+  const pcbPath: NonNullable<TraceProps["pcbPath"]> = [driverRef]
+  if (via) {
+    pcbPath.push(
+      { x: 1, y: 0 },
+      { x: 1, y: 0 },
+      {
+        x: 1,
+        y: 0,
+        via: true,
+        fromLayer: "top",
+        toLayer: "inner2",
+      },
+      { x: 9, y: 0 },
+      {
+        x: 9,
+        y: 0,
+        via: true,
+        fromLayer: "inner2",
+        toLayer: "top",
+      },
+    )
+  }
+  pcbPath.push(receiverRef)
+  const neighbourDriverRef = branch ? driverRef : ".TX1 > .Y"
+  const neighbourReceiverRef = ".RX1 > .A"
+  const neighbourPath: NonNullable<TraceProps["pcbPath"]> = [neighbourDriverRef]
+  if (branch) neighbourPath.push({ x: 5, y: 1 })
+  neighbourPath.push(neighbourReceiverRef)
+  const receivers = branch ? [receiverRef, neighbourReceiverRef] : receiverRef
   return (
     <board
       width={18}
@@ -94,34 +131,10 @@ function Board({
         </>
       ) : (
         <trace
-          from=".TX > .Y"
-          to=".RX > .A"
+          from={driverRef}
+          to={receiverRef}
           width={0.2}
-          pcbPath={[
-            ".TX > .Y",
-            ...(via
-              ? [
-                  { x: 1, y: 0 },
-                  { x: 1, y: 0 },
-                  {
-                    x: 1,
-                    y: 0,
-                    via: true as const,
-                    fromLayer: "top" as const,
-                    toLayer: "inner2" as const,
-                  },
-                  { x: 9, y: 0 },
-                  {
-                    x: 9,
-                    y: 0,
-                    via: true as const,
-                    fromLayer: "inner2" as const,
-                    toLayer: "top" as const,
-                  },
-                ]
-              : []),
-            ".RX > .A",
-          ]}
+          pcbPath={pcbPath}
         />
       )}
       {(branch || unlisted) && (
@@ -129,14 +142,10 @@ function Board({
           <Inverter name="TX1" x={-5} y={1} driver />
           <Inverter name="RX1" x={5} y={1} driver={false} />
           <trace
-            from={branch ? ".TX > .Y" : ".TX1 > .Y"}
-            to=".RX1 > .A"
+            from={neighbourDriverRef}
+            to={neighbourReceiverRef}
             width={0.2}
-            pcbPath={
-              branch
-                ? [".TX > .Y", { x: 5, y: 1 }, ".RX1 > .A"]
-                : [".TX1 > .Y", ".RX1 > .A"]
-            }
+            pcbPath={neighbourPath}
           />
         </>
       )}
@@ -160,8 +169,8 @@ function Board({
           offset={offset}
           name="D81"
           driverDisabled={driverDisabled}
-          driverRef=".TX > .Y"
-          receiverRef={branch ? [".RX > .A", ".RX1 > .A"] : ".RX > .A"}
+          driverRef={driverRef}
+          receiverRef={receivers}
         />
       </simulation.pcbtransientchannelsimulation>
     </board>
@@ -176,7 +185,7 @@ test(
       renderSignals(<Board missing />),
       /is not routed between/,
     )
-    // Render the same physical gap under the explicit ideal policy, then test admission of saved Circuit JSON under error.
+    // Render the gap with ideal routing allowed, then test the strict policy on the saved records.
     const circuit = await renderSignals(<Board missing allowUnroutedTraces />, [
       "pcb_trace_missing_error",
       "pcb_port_not_connected_error",
@@ -225,38 +234,29 @@ test(
 test("pipeline checks selected IBIS roles and disabled states after TSX rendering", async () => {
   const circuit = await renderSignals(<Board />)
   const disabled = await renderSignals(<Board driverDisabled />)
-  const file = "models/sn74lvc1g04.ibs"
+  const inputOnly = routedVisualIbis.replace(
+    "Model_type Output",
+    "Model_type Input",
+  )
+  const outputOnly = routedVisualIbis.replace(
+    "Model_type Input",
+    "Model_type Output",
+  )
   assert.throws(
     () =>
-      prepareBlocks({
-        circuit,
-        sources: {
-          [file]: routedVisualIbis.replace(
-            "Model_type Output",
-            "Model_type Input",
-          ),
-        },
-      }),
+      prepareBlocks({ circuit, sources: { [inverterIbisPath]: inputOnly } }),
     /Signal "D81".*LVC1G04_OUT_33.*does not support driving/,
   )
   assert.throws(
     () =>
-      prepareBlocks({
-        circuit,
-        sources: {
-          [file]: routedVisualIbis.replace(
-            "Model_type Input",
-            "Model_type Output",
-          ),
-        },
-      }),
+      prepareBlocks({ circuit, sources: { [inverterIbisPath]: outputOnly } }),
     /Signal "D81".*LVC1G04_IN_33.*does not support receiving/,
   )
   assert.throws(
     () =>
       prepareBlocks({
         circuit: disabled,
-        sources: { [file]: routedVisualIbis },
+        sources: { [inverterIbisPath]: routedVisualIbis },
       }),
     /Signal "D81".*LVC1G04_OUT_33.*has no disabled state/,
   )
@@ -268,13 +268,13 @@ test("an unlisted output on the same net is diagnosed before routed branch check
     () =>
       prepareBlocks({
         circuit,
-        sources: { "models/sn74lvc1g04.ibs": routedVisualIbis },
+        sources: { [inverterIbisPath]: routedVisualIbis },
       }),
     /Signal "D81" has two drivers/,
   )
 })
 
-test("core plans PRBS seeds across blocks, preserves an explicit seed and emits an eye window in milliseconds", async () => {
+test("core seeds PRBS across blocks, preserves explicit seeds and emits eye times in ms", async () => {
   const board = TwoTraceBoard({ "data-pattern": "prbs7" })
   const circuit = await renderSignals(
     React.cloneElement(
@@ -311,28 +311,23 @@ test("core plans PRBS seeds across blocks, preserves an explicit seed and emits 
     undefined,
   )
   const eye = circuit.find((record) => record.type === "simulation_eye_diagram")
-  assert.equal(
-    eye?.simulation_pcb_transient_channel_simulation_id,
-    data?.simulation_pcb_transient_channel_simulation_id,
-  )
+  const blockId = data?.simulation_pcb_transient_channel_simulation_id
+  assert.equal(eye?.simulation_pcb_transient_channel_simulation_id, blockId)
   assert.equal(eye?.start_time_ms, 0)
   assert.equal(eye?.end_time_ms, 40e-6)
 })
 
 test(
-  "unlisted output-only models drive a steady physical low; D81 receives a legal planned seed",
+  "unlisted outputs drive low and the listed driver receives a legal seed",
   { skip: !modelDir },
   async () => {
     const circuit = await renderSignals(<Board unlisted />)
     const prepared = prepareBlocks({ circuit, sources: await sources() })[0]
     assert.equal(prepared.signals[0].seed, 127)
+    const { driver } = prepared.signals[0]
+    const listedPort = "source_port_id" in driver ? driver.source_port_id : ""
     const extra = [...prepared.pins.values()].find(
-      (pin) =>
-        pin.buffer.type === "output" &&
-        pin.port !==
-          ("source_port_id" in prepared.signals[0].driver
-            ? prepared.signals[0].driver.source_port_id
-            : ""),
+      (pin) => pin.buffer.type === "output" && pin.port !== listedPort,
     )!
     const { states, stimuli } =
       prepared.controls[
@@ -352,7 +347,7 @@ test(
 )
 
 test(
-  "TSX vias use core preset plating, and routed vias require an explicit stackup thickness",
+  "via plating comes from the preset and must be in the stackup",
   { skip: !modelDir },
   async () => {
     const circuit = await renderSignals(<Board via />)
@@ -393,8 +388,9 @@ test("PRBS7 has a complete stable 127-bit period with decorrelated seeds", () =>
   assert.equal(a.split("1").length - 1, 64)
   assert.equal(a, signalBits(signal, 1000))
   assert.notEqual(a, signalBits({ ...signal, seed: 41 }, 127))
-  for (const pattern of ["prbs15", "prbs31"])
+  for (const pattern of ["prbs15", "prbs31"]) {
     assert.equal(signalBits({ ...signal, pattern }, 20).length, 21)
+  }
   assert.equal(
     signalBits({ ...signal, pattern: "prbs31", offset_ms: 1e6 }, 1002).length,
     3,
@@ -431,18 +427,15 @@ test("the removed modeling API cannot supply a test or synthesize a block", () =
 })
 
 test(
-  "explicit duration survives the milliseconds conversion and automatic duration stays absent in source",
+  "explicit duration converts to ms and automatic duration stays absent",
   { skip: !modelDir },
   async () => {
     const automatic = await renderSignals(<Board />)
     const ibis = await sources()
-    assert.equal(
-      automatic.find(
-        (record) =>
-          record.type === "simulation_pcb_transient_channel_simulation",
-      )?.duration_ms,
-      undefined,
+    const automaticBlock = automatic.find(
+      (record) => record.type === "simulation_pcb_transient_channel_simulation",
     )
+    assert.equal(automaticBlock?.duration_ms, undefined)
     assert.equal(
       prepareBlocks({ circuit: automatic, sources: ibis })[0].duration,
       144 / 20e6,

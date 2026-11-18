@@ -1,16 +1,24 @@
 import { simulation } from "@tscircuit/core"
 import React from "react"
 
-/** Two physical 8 mm traces; 40 ns includes the vendor waveform lead-in and settling. */
-export function TwoTraceBoard({
-  "bit-rate": bitRate = "50Mbps",
-  "duration-seconds": durationSeconds = 40e-9,
-  "data-pattern": dataPattern = "01",
-}: {
+/** Recording includes the vendor waveform lead-in and settling. */
+const RECORDING_SECONDS = 40e-9
+
+/** Centre-to-centre spacing of the two parallel traces. */
+const TRACE_SPACING_MM = 0.35
+
+interface TwoTraceBoardProps {
   "bit-rate"?: string
   "duration-seconds"?: number
   "data-pattern"?: string
-} = {}): React.JSX.Element {
+}
+
+/** Two physical 8 mm traces with a switching driver and a quiet victim. */
+export function TwoTraceBoard({
+  "bit-rate": bitRate = "50Mbps",
+  "duration-seconds": durationSeconds = RECORDING_SECONDS,
+  "data-pattern": dataPattern = "01",
+}: TwoTraceBoardProps = {}): React.JSX.Element {
   return (
     <board
       width={16}
@@ -22,22 +30,28 @@ export function TwoTraceBoard({
       schematicDisabled
       isViaInPadAllowed
     >
-      {[0, 1].map((i) => (
-        <React.Fragment key={i}>
+      {[0, 1].map((index) => (
+        <React.Fragment key={index}>
           {[-4, 4].map((x) => {
-            const name = `${x < 0 ? "TX" : "RX"}${i}`
-            const pin = x < 0 ? "4" : "2"
-            const label = x < 0 ? "Y" : "A"
-            const y = i * 0.35
-            const ground = -2.5 - i
-            const power = 2.5 + i
+            const driver = x < 0
+            const name = `${driver ? "TX" : "RX"}${index}`
+            const pin = driver ? "4" : "2"
+            const label = driver ? "Y" : "A"
+            const y = index * TRACE_SPACING_MM
+            const ground = -2.5 - index
+            const power = 2.5 + index
             return (
               <React.Fragment key={name}>
                 <chip
                   name={name}
                   pcbX={x}
                   pcbY={y}
-                  pinLabels={{ pin2: "A", pin3: "GND", pin4: "Y", pin5: "VCC" }}
+                  pinLabels={{
+                    pin2: "A",
+                    pin3: "GND",
+                    pin4: "Y",
+                    pin5: "VCC",
+                  }}
                   connections={{ GND: "net.GND", VCC: "net.VCC" }}
                   footprint={
                     <footprint>
@@ -92,7 +106,7 @@ export function TwoTraceBoard({
                     "5": "VCC",
                   }}
                   ibisPinNameToModelName={{
-                    [pin]: x < 0 ? "LVC1G04_OUT_33" : "LVC1G04_IN_33",
+                    [pin]: driver ? "LVC1G04_OUT_33" : "LVC1G04_IN_33",
                   }}
                   ibisPinNameToReferencePortLabels={{
                     [pin]: {
@@ -107,10 +121,10 @@ export function TwoTraceBoard({
             )
           })}
           <trace
-            from={`.TX${i} > .Y`}
-            to={`.RX${i} > .A`}
+            from={`.TX${index} > .Y`}
+            to={`.RX${index} > .A`}
             width={0.1}
-            pcbPath={[`.TX${i} > .Y`, `.RX${i} > .A`]}
+            pcbPath={[`.TX${index} > .Y`, `.RX${index} > .A`]}
           />
         </React.Fragment>
       ))}
