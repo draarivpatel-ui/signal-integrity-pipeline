@@ -5,7 +5,11 @@ import {
   type IbisConversionMetadata,
   type IbisModelDefinition,
 } from "@tscircuit/ibis-to-spice"
-import { type InspectedPin, inspectPins } from "../../src/buffers/inspect"
+import {
+  edgeSeconds,
+  type InspectedPin,
+  inspectPins,
+} from "../../src/buffers/inspect"
 import {
   deviceAsset,
   ibisInspectionBoard,
@@ -121,4 +125,39 @@ test("a separate clamp bus resolves even without a channel override", async () =
   const expected = convertedReferences(text, board)
   assert.equal(expected.powerClamp, board.pinMap[4])
   assert.deepEqual(inspectedPin(board, text).references, expected)
+})
+
+const ramp = `[Ramp]
+dV/dt_r 0.36/600p 0.36/600p 0.36/600p
+dV/dt_f 0.36/750p 0.36/750p 0.36/750p`
+
+const waveform = `[Rising Waveform]
+R_fixture = 50
+V_fixture = 0
+0 0 NA NA
+1n 0.6 NA NA`
+
+test("the loaded ramp and its linear waveform give the same 10–90% duration", async () => {
+  const board = await ibisInspectionBoard()
+  const modelType = "Output"
+  const measured = inspectedPin(
+    board,
+    inspectionIbis({ modelType, modelData: [ramp, waveform].join("\n") }),
+  )
+  const fallback = inspectedPin(
+    board,
+    inspectionIbis({ modelType, modelData: ramp }),
+  )
+  assert.equal(Math.round(edgeSeconds(measured) * 1e12), 800)
+  assert.equal(Math.round(edgeSeconds(fallback) * 1e12), 800)
+})
+
+test("a ramp remains usable with separate voltage references and no voltage range", async () => {
+  const board = await ibisInspectionBoard()
+  const text = inspectionIbis({
+    modelType: "Output",
+    referenceOnly: true,
+    modelData: ramp,
+  })
+  assert.equal(Math.round(edgeSeconds(inspectedPin(board, text)) * 1e12), 800)
 })

@@ -72,13 +72,25 @@ export async function ibisInspectionBoard(
 type IbisOptions = {
   mapping?: string
   extraPin?: string
+  modelType?: string
+  referenceOnly?: boolean
+  modelData?: string
 }
 
 /** Synthetic IBIS fixture without vendor data. */
 export function inspectionIbis({
   mapping = "",
   extraPin = "",
+  modelType = "Input",
+  referenceOnly = false,
+  modelData = "",
 }: IbisOptions = {}): string {
+  const references = referenceOnly
+    ? `[Pullup Reference] 1.2 1.2 1.2
+[Pulldown Reference] 0 0 0
+[POWER Clamp Reference] 1.2 1.2 1.2
+[GND Clamp Reference] 0 0 0`
+    : "[Voltage Range] 1.2 1.2 1.2"
   return `[IBIS Ver] 5.0
 [File Name] device.ibs
 [File Rev] 1.0
@@ -95,9 +107,10 @@ C_pkg 0 0 0
 ${extraPin}
 ${mapping}
 [Model] Fast
-Model_type Input
+Model_type ${modelType}
 C_comp 1p 1p 1p
-[Voltage Range] 1.2 1.2 1.2
+${references}
+${modelData}
 [End]
 `
 }
