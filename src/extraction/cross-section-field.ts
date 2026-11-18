@@ -5,8 +5,11 @@ import { type SectionMeshInput, sectionEpsilon0 } from "./cross-section-types"
 import { fail } from "./diagnostics"
 import { type Matrix, symmetrize } from "./linalg"
 
+/** Largest raw reciprocity residual allowed before requesting a finer mesh or wider domain. */
+const MAX_RECIPROCITY_RESIDUAL = 0.015
+
 /** Capacitance and dielectric loss matrices with mesh size and reciprocity error. */
-type SectionFieldResult = {
+interface SectionFieldResult {
   C: Matrix
   loss: Matrix
   panels: number
@@ -40,13 +43,13 @@ export function sectionField(mesh: SectionMeshInput): SectionFieldResult {
     !vacuum && region.dielectrics.some((layer) => layer.lossTangent > 0)
   let lossCharge = panels.map((panel, i) => {
     if (!hasLoss || panel.group >= 0) return Array<number>(size).fill(0)
-    return Array.from(
-      { length: size },
-      (_, j) =>
-        panel.derivative *
-        panel.length *
-        charge.reduce((sum, row, k) => sum + fields[i][k] * row[j], 0),
-    )
+    return Array.from({ length: size }, (_, j) => {
+      const fieldCharge = charge.reduce(
+        (sum, row, k) => sum + fields[i][k] * row[j],
+        0,
+      )
+      return panel.derivative * panel.length * fieldCharge
+    })
   })
   if (hasLoss) lossCharge = solve(lossCharge)
   const C: Matrix = Array.from({ length: size }, () => Array(size).fill(0))
@@ -62,11 +65,12 @@ export function sectionField(mesh: SectionMeshInput): SectionFieldResult {
     }
   }
   const residual = Math.max(sectionReciprocity(C), sectionReciprocity(loss))
-  if (!Number.isFinite(residual) || residual > 0.015)
+  if (!Number.isFinite(residual) || residual > MAX_RECIPROCITY_RESIDUAL) {
     fail(
       "reciprocity",
       `Cross-section raw reciprocity ${residual}; refine panels or interface extent`,
     )
+  }
   return {
     C: symmetrize(C),
     loss: symmetrize(loss),

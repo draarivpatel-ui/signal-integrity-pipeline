@@ -1,12 +1,37 @@
 import {
   type CrossSection,
   copperConductivity,
+  type SectionConductor,
   type SectionDielectric,
   type SectionMeshInput,
   type SectionPanel,
   type SectionRegion,
 } from "./cross-section-types"
 import { fail } from "./diagnostics"
+
+/** Ignore sub-femtometer differences between slab boundaries after projection or clipping, in millimeters. */
+const SLAB_TOLERANCE_MM = 1e-12
+
+/** Sample just inside each material relative to the smallest feature in the cross-section. */
+const MATERIAL_PROBE_FRACTION = 1e-7
+
+/** Merge mesh coordinates at a tighter tolerance than the material probe offset. */
+const COORDINATE_TOLERANCE_DIVISOR = 100
+
+/** Grade panels toward the ends of each edge with a quartic distribution. */
+const PANEL_GRADING_POWER = 4
+
+/** Start increasing panel count at six plane distances of horizontal conductor face. */
+const FACE_LENGTH_IN_PLANE_DISTANCES = 6
+
+/** Mesh a short vertical face at roughly one third of the horizontal panel count. */
+const VERTICAL_PANEL_DIVISOR = 3
+
+/** Keep at least four panels on a vertical edge to resolve its corners. */
+const MIN_VERTICAL_PANELS = 4
+
+/** Negative group marks a dielectric interface row instead of a conductor excitation. */
+const DIELECTRIC_GROUP = -1
 
 /** Relative permittivity and loss tangent of the material at a boundary. */
 type SectionMaterial = Pick<SectionDielectric, "er" | "lossTangent">
@@ -28,7 +53,10 @@ function coordinates(values: number[], tolerance: number): number[] {
 }
 
 /** A shielded region and its conductor indices in the original cross-section. */
-type IndexedSectionRegion = { region: SectionRegion; indices: number[] }
+interface IndexedSectionRegion {
+  region: SectionRegion
+  indices: number[]
+}
 
 /** Reflect an upper-only reference, and split signals into regions shielded by solid planes. */
 export function sectionRegions(section: CrossSection): IndexedSectionRegion[] {
@@ -63,7 +91,7 @@ export function sectionRegions(section: CrossSection): IndexedSectionRegion[] {
         }
         return { ...layer, zMm: lo, thicknessMm: hi - lo }
       })
-      .filter((layer) => layer.thicknessMm > 1e-12)
+      .filter((layer) => layer.thicknessMm > SLAB_TOLERANCE_MM)
     return {
       indices,
       region: {
@@ -90,9 +118,17 @@ interface SectionEdge {
   reach?: number
 }
 
+/** Panels accumulated at the requested edge resolution. */
+interface PanelMesh {
+  count: number
+  result: SectionPanel[]
+}
+
 /** Quartic grading resolves the integrable corner charge singularity. */
 function panelFraction(i: number, steps: number): number {
-  return i ** 4 / (i ** 4 + (steps - i) ** 4)
+  const start = i ** PANEL_GRADING_POWER
+  const end = (steps - i) ** PANEL_GRADING_POWER
+  return start / (start + end)
 }
 
 /** Append panels along a straight segment, with its outward metal normal. */
@@ -109,13 +145,20 @@ function addSectionEdge(
     derivative = 0,
     reach = Infinity,
   }: SectionEdge,
-  { count, result }: { count: number; result: SectionPanel[] },
+  { count, result }: PanelMesh,
 ): void {
   const dx = x2 - x1
   const dz = z2 - z1
   const length = Math.hypot(dx, dz)
-  let steps = Math.max(count, Math.ceil((count * length) / (6 * reach)))
-  if (dz) steps = Math.max(4, Math.ceil(count / 3))
+  let steps = Math.max(
+    count,
+    Math.ceil((count * length) / (FACE_LENGTH_IN_PLANE_DISTANCES * reach)),
+  )
+  if (dz)
+    steps = Math.max(
+      MIN_VERTICAL_PANELS,
+      Math.ceil(count / VERTICAL_PANEL_DIVISOR),
+    )
   for (let i = 0; i < steps; i++) {
     const lo = panelFraction(i, steps)
     const hi = panelFraction(i + 1, steps)
@@ -134,6 +177,92 @@ function addSectionEdge(
   }
 }
 
+/** Mesh one conductor's faces, splitting the sides wherever dielectric material changes. */
+function appendConductorPanels(
+  mesh: PanelMesh,
+  {
+    conductor,
+    group,
+    height,
+    layers,
+    probe,
+    tolerance,
+  }: {
+    conductor: SectionConductor
+    group: number
+    height: number
+    layers: SectionDielectric[]
+    probe: number
+    tolerance: number
+  },
+): void {
+  const bottom = conductor.zMm
+  const top = bottom + conductor.thicknessMm
+  const left = conductor.xMm - conductor.widthMm / 2
+  const right = conductor.xMm + conductor.widthMm / 2
+  const bottomMaterial = material(layers, bottom - probe)
+  const topMaterial = material(layers, top + probe)
+  let reach = bottom
+  if (height) reach = Math.min(reach, height - top)
+  addSectionEdge(
+    {
+      x1: left,
+      z1: bottom,
+      x2: right,
+      z2: bottom,
+      group,
+      ...bottomMaterial,
+      reach,
+    },
+    mesh,
+  )
+  addSectionEdge(
+    {
+      x1: right,
+      z1: top,
+      x2: left,
+      z2: top,
+      group,
+      ...topMaterial,
+      reach,
+    },
+    mesh,
+  )
+  const boundaries = layers.flatMap((layer) => [
+    layer.zMm,
+    layer.zMm + layer.thicknessMm,
+  ])
+  const interior = boundaries.filter(
+    (z) => z > bottom + tolerance && z < top - tolerance,
+  )
+  const cuts = coordinates([bottom, top, ...interior], tolerance)
+  for (let k = 1; k < cuts.length; k++) {
+    const adjacent = material(layers, (cuts[k - 1] + cuts[k]) / 2)
+    addSectionEdge(
+      {
+        x1: right,
+        z1: cuts[k - 1],
+        x2: right,
+        z2: cuts[k],
+        group,
+        ...adjacent,
+      },
+      mesh,
+    )
+    addSectionEdge(
+      {
+        x1: left,
+        z1: cuts[k],
+        x2: left,
+        z2: cuts[k - 1],
+        group,
+        ...adjacent,
+      },
+      mesh,
+    )
+  }
+}
+
 /** Quartically graded surface panels, split at all material and conductor projection boundaries.
  * Only dielectric interfaces are truncated horizontally; fields and solid planes remain infinite.
  * A conductor face longer than six plane distances gets proportionally more panels, so the middle panel
@@ -146,125 +275,79 @@ export function sectionPanels({
   vacuum,
 }: SectionMeshInput): SectionPanel[] {
   const result: SectionPanel[] = []
-  const scale = Math.max(
-    ...region.conductors.map((c) => Math.max(c.widthMm, c.zMm + c.thicknessMm)),
-    ...region.dielectrics.map((d) => d.zMm + d.thicknessMm),
+  const conductorSpans = region.conductors.map((c) =>
+    Math.max(c.widthMm, c.zMm + c.thicknessMm),
   )
+  const slabTops = region.dielectrics.map(
+    (layer) => layer.zMm + layer.thicknessMm,
+  )
+  const scale = Math.max(...conductorSpans, ...slabTops)
+  const conductorSizes = region.conductors.flatMap((c) => [
+    c.widthMm,
+    c.thicknessMm,
+  ])
+  const slabThicknesses = region.dielectrics.map((layer) => layer.thicknessMm)
   const probe =
-    Math.min(
-      ...region.conductors.flatMap((c) => [c.widthMm, c.thicknessMm]),
-      ...region.dielectrics.map((d) => d.thicknessMm),
-    ) * 1e-7
+    Math.min(...conductorSizes, ...slabThicknesses) * MATERIAL_PROBE_FRACTION
+  const tolerance = probe / COORDINATE_TOLERANCE_DIVISOR
   let layers = region.dielectrics
   if (vacuum) layers = []
   const mesh = { count, result }
-  for (const [group, c] of region.conductors.entries()) {
-    const left = c.xMm - c.widthMm / 2
-    const right = c.xMm + c.widthMm / 2
-    const top = c.zMm + c.thicknessMm
-    const bottomMaterial = material(layers, c.zMm - probe)
-    const topMaterial = material(layers, top + probe)
-    let reach = c.zMm
-    if (region.height) reach = Math.min(reach, region.height - top)
-    addSectionEdge(
-      {
-        x1: left,
-        z1: c.zMm,
-        x2: right,
-        z2: c.zMm,
-        group,
-        ...bottomMaterial,
-        reach,
-      },
-      mesh,
-    )
-    addSectionEdge(
-      { x1: right, z1: top, x2: left, z2: top, group, ...topMaterial, reach },
-      mesh,
-    )
-    const cuts = coordinates(
-      [
-        c.zMm,
-        top,
-        ...layers
-          .flatMap((d) => [d.zMm, d.zMm + d.thicknessMm])
-          .filter((z) => z > c.zMm + probe / 100 && z < top - probe / 100),
-      ],
-      probe / 100,
-    )
-    for (let k = 1; k < cuts.length; k++) {
-      const adjacent = material(layers, (cuts[k - 1] + cuts[k]) / 2)
-      addSectionEdge(
-        {
-          x1: right,
-          z1: cuts[k - 1],
-          x2: right,
-          z2: cuts[k],
-          group,
-          ...adjacent,
-        },
-        mesh,
-      )
-      addSectionEdge(
-        {
-          x1: left,
-          z1: cuts[k],
-          x2: left,
-          z2: cuts[k - 1],
-          group,
-          ...adjacent,
-        },
-        mesh,
-      )
-    }
+  for (const [group, conductor] of region.conductors.entries()) {
+    appendConductorPanels(mesh, {
+      conductor,
+      group,
+      height: region.height,
+      layers,
+      probe,
+      tolerance,
+    })
   }
+
   const projections = region.conductors.flatMap((c) => [
     c.xMm - c.widthMm / 2,
     c.xMm + c.widthMm / 2,
   ])
-  const xs = coordinates(
-    [
-      Math.min(...projections) - extent * scale,
-      ...projections,
-      Math.max(...projections) + extent * scale,
-    ],
-    probe / 100,
-  )
-  const boundaries = coordinates(
-    layers.flatMap((d) => [d.zMm, d.zMm + d.thicknessMm]),
-    probe / 100,
-  ).filter(
-    (z) =>
-      z > probe / 100 && (!region.height || z < region.height - probe / 100),
-  )
+  const padding = extent * scale
+  const first = Math.min(...projections) - padding
+  const last = Math.max(...projections) + padding
+  const xs = coordinates([first, ...projections, last], tolerance)
+  const slabBoundaries = layers.flatMap((layer) => [
+    layer.zMm,
+    layer.zMm + layer.thicknessMm,
+  ])
+  const boundaries = coordinates(slabBoundaries, tolerance).filter((z) => {
+    return z > tolerance && (!region.height || z < region.height - tolerance)
+  })
   for (const z of boundaries) {
     const below = material(layers, z - probe)
     const above = material(layers, z + probe)
     if (below.er === above.er && below.lossTangent === above.lossTangent)
       continue
-    const contrast = (2 * (below.er - above.er)) / (below.er + above.er)
+    const permittivitySum = below.er + above.er
+    const contrast = (2 * (below.er - above.er)) / permittivitySum
     const derivative =
       (4 * below.er * above.er * (below.lossTangent - above.lossTangent)) /
-      (below.er + above.er) ** 2
+      permittivitySum ** 2
     for (let k = 1; k < xs.length; k++) {
       const middle = (xs[k - 1] + xs[k]) / 2
-      if (
-        region.conductors.some(
-          (c) =>
-            middle > c.xMm - c.widthMm / 2 &&
-            middle < c.xMm + c.widthMm / 2 &&
-            z >= c.zMm - probe &&
-            z <= c.zMm + c.thicknessMm + probe,
+      const covered = region.conductors.some((c) => {
+        const withinWidth =
+          middle > c.xMm - c.widthMm / 2 && middle < c.xMm + c.widthMm / 2
+        return (
+          withinWidth &&
+          z >= c.zMm - probe &&
+          z <= c.zMm + c.thicknessMm + probe
         )
-      )
-        continue
+      })
+      if (covered) continue
       addSectionEdge(
         {
           x1: xs[k - 1],
           z1: z,
           x2: xs[k],
           z2: z,
-          group: -1,
+          group: DIELECTRIC_GROUP,
           er: 1,
           lossTangent: 0,
           contrast,
@@ -277,82 +360,86 @@ export function sectionPanels({
   return result
 }
 
-/** Reject unsupported/degenerate geometry rather than changing copper or material boundaries. */
-export function validateSection(section: CrossSection): void {
-  if (!section.conductors.length || !section.planes.length)
-    fail(
-      "native_geometry",
-      "A cross-section needs signals and at least one solid reference plane",
-    )
-  const ids = new Set(section.conductors.map((c) => c.id))
-  if (ids.size !== section.conductors.length || [...ids].some((id) => !id))
+/** Check conductor dimensions, clearance from planes and separation between rectangular signals. */
+function validateConductors({ conductors, planes }: CrossSection): void {
+  const ids = new Set(conductors.map((c) => c.id))
+  if (ids.size !== conductors.length || [...ids].some((id) => !id)) {
     fail(
       "native_geometry",
       "Cross-section conductor IDs must be unique and nonempty",
     )
-  for (const c of section.conductors) {
-    if (
-      ![
-        c.xMm,
-        c.zMm,
-        c.widthMm,
-        c.thicknessMm,
-        c.conductivitySm ?? copperConductivity,
-      ].every(Number.isFinite) ||
-      c.widthMm <= 0 ||
-      c.thicknessMm <= 0 ||
-      (c.conductivitySm ?? copperConductivity) <= 0
+  }
+  for (const c of conductors) {
+    const conductivity = c.conductivitySm ?? copperConductivity
+    const finite = [c.xMm, c.zMm, c.widthMm, c.thicknessMm, conductivity].every(
+      Number.isFinite,
     )
+    if (!finite || c.widthMm <= 0 || c.thicknessMm <= 0 || conductivity <= 0) {
       fail(
         "native_geometry",
         "Finite positive conductor dimensions and conductivity required",
       )
-    if (
-      section.planes.some(
-        (p) => p.zMm >= c.zMm && p.zMm <= c.zMm + c.thicknessMm,
-      )
-    )
+    }
+    if (planes.some((p) => p.zMm >= c.zMm && p.zMm <= c.zMm + c.thicknessMm)) {
       fail("native_geometry", "A signal touches or crosses a reference plane")
+    }
   }
-  for (const [i, a] of section.conductors.entries())
-    for (const b of section.conductors.slice(i + 1)) {
-      if (
-        Math.abs(a.xMm - b.xMm) <= (a.widthMm + b.widthMm) / 2 &&
-        a.zMm <= b.zMm + b.thicknessMm &&
-        b.zMm <= a.zMm + a.thicknessMm
-      )
+  for (const [i, a] of conductors.entries()) {
+    for (const b of conductors.slice(i + 1)) {
+      const horizontalOverlap =
+        Math.abs(a.xMm - b.xMm) <= (a.widthMm + b.widthMm) / 2
+      const verticalOverlap =
+        a.zMm <= b.zMm + b.thicknessMm && b.zMm <= a.zMm + a.thicknessMm
+      if (horizontalOverlap && verticalOverlap)
         fail("native_geometry", "Signal rectangles overlap or touch")
     }
-  for (const [i, p] of section.planes.entries())
-    if (
-      ![p.zMm, p.conductivitySm ?? copperConductivity].every(Number.isFinite) ||
-      (p.conductivitySm ?? copperConductivity) <= 0 ||
-      section.planes.slice(i + 1).some((q) => q.zMm === p.zMm)
+  }
+}
+
+/** Check that dielectric slabs have physical properties and occupy distinct height intervals. */
+function validateDielectrics(dielectrics: SectionDielectric[]): void {
+  for (const [i, a] of dielectrics.entries()) {
+    const finite = [a.zMm, a.thicknessMm, a.er, a.lossTangent].every(
+      Number.isFinite,
     )
-      fail(
-        "native_geometry",
-        "Reference planes need unique finite heights and positive conductivity",
-      )
-  for (const [i, a] of section.dielectrics.entries()) {
-    if (
-      ![a.zMm, a.thicknessMm, a.er, a.lossTangent].every(Number.isFinite) ||
-      a.thicknessMm <= 0 ||
-      a.er < 1 ||
-      a.lossTangent < 0
-    )
+    if (!finite || a.thicknessMm <= 0 || a.er < 1 || a.lossTangent < 0) {
       fail(
         "native_geometry",
         "Finite positive slabs, er >= 1 and nonnegative loss tangent required",
       )
-    if (
-      section.dielectrics
-        .slice(i + 1)
-        .some(
-          (b) =>
-            a.zMm < b.zMm + b.thicknessMm - 1e-12 &&
-            b.zMm < a.zMm + a.thicknessMm - 1e-12,
-        )
-    )
-      fail("native_geometry", "Dielectric slabs overlap")
+    }
+    const overlaps = dielectrics.slice(i + 1).some((b) => {
+      return (
+        a.zMm < b.zMm + b.thicknessMm - SLAB_TOLERANCE_MM &&
+        b.zMm < a.zMm + a.thicknessMm - SLAB_TOLERANCE_MM
+      )
+    })
+    if (overlaps) fail("native_geometry", "Dielectric slabs overlap")
   }
+}
+
+/** Reject unsupported/degenerate geometry rather than changing copper or material boundaries. */
+export function validateSection(section: CrossSection): void {
+  if (!section.conductors.length || !section.planes.length) {
+    fail(
+      "native_geometry",
+      "A cross-section needs signals and at least one solid reference plane",
+    )
+  }
+  validateConductors(section)
+  for (const [i, plane] of section.planes.entries()) {
+    const conductivity = plane.conductivitySm ?? copperConductivity
+    const finite = [plane.zMm, conductivity].every(Number.isFinite)
+    if (
+      !finite ||
+      conductivity <= 0 ||
+      section.planes.slice(i + 1).some((p) => p.zMm === plane.zMm)
+    ) {
+      fail(
+        "native_geometry",
+        "Reference planes need unique finite heights and positive conductivity",
+      )
+    }
+  }
+  validateDielectrics(section.dielectrics)
 }

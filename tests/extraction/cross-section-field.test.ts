@@ -6,12 +6,28 @@ import { type CrossSection, solveCrossSection } from "../../src/extraction"
 test("layered/mask energy sensitivity and Wheeler loss approach the analytic parallel-plate limits", () => {
   const section: CrossSection = {
     conductors: [
-      { id: "s", xMm: 0, zMm: 0.2, widthMm: 100, thicknessMm: 0.035 },
+      {
+        id: "s",
+        xMm: 0,
+        zMm: 0.2,
+        widthMm: 100,
+        thicknessMm: 0.035,
+      },
     ],
     planes: [{ zMm: 0 }],
     dielectrics: [
-      { zMm: 0, thicknessMm: 0.18, er: 4.1, lossTangent: 0.02 },
-      { zMm: 0.18, thicknessMm: 0.02, er: 3.3, lossTangent: 0.025 },
+      {
+        zMm: 0,
+        thicknessMm: 0.18,
+        er: 4.1,
+        lossTangent: 0.02,
+      },
+      {
+        zMm: 0.18,
+        thicknessMm: 0.02,
+        er: 3.3,
+        lossTangent: 0.025,
+      },
     ],
   }
   const result = solveCrossSection(section)
@@ -51,13 +67,12 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
         1,
     ) < 1e-6,
   )
+  // Quartering conductivity doubles skin resistance and quadruples DC resistance.
+  const conductivitySm = 5.8e7 / 4
   const lowerConductivity = solveCrossSection({
     ...section,
-    conductors: section.conductors.map((c) => ({
-      ...c,
-      conductivitySm: 5.8e7 / 4,
-    })),
-    planes: section.planes.map((p) => ({ ...p, conductivitySm: 5.8e7 / 4 })),
+    conductors: section.conductors.map((c) => ({ ...c, conductivitySm })),
+    planes: section.planes.map((p) => ({ ...p, conductivitySm })),
   })
   assert.ok(
     Math.abs(

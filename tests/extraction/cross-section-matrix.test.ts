@@ -22,13 +22,15 @@ test("boundary factor reuses pivoting for independent excitations and rejects si
     [[1], [-2], [3]],
   ]) {
     const x = solve(rhs)
-    for (let i = 0; i < 3; i++)
-      for (let j = 0; j < rhs[0].length; j++)
-        assert.ok(
-          Math.abs(
-            matrix[i].reduce((s, v, k) => s + v * x[k][j], 0) - rhs[i][j],
-          ) < 1e-12,
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < rhs[0].length; j++) {
+        const product = matrix[i].reduce(
+          (sum, value, k) => sum + value * x[k][j],
+          0,
         )
+        assert.ok(Math.abs(product - rhs[i][j]) < 1e-12)
+      }
+    }
   }
   const inverse = sectionInverse([
     [2, 1],
