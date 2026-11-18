@@ -6,9 +6,12 @@ import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import { sha256 } from "../../src/kernel"
 import { RoutedAdmissionSolver } from "../../src/pipeline"
 import { prepareBlockById, signalBlocks } from "../../src/pipeline/signals"
+import { circuitNodes } from "../../src/simulation"
+import { AdmissionChannel } from "../fixtures/admission-channel"
 import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
 import { routedVisualIbis } from "../support/routed-visual-fixture"
+import { renderSignals } from "../support/signal-render"
 
 test("admission uses shared block lowering, retains warnings and rejects invalid scope", async (context) => {
   const input = await routedProblem(context)
@@ -144,4 +147,36 @@ test("sectioning and binding share one frozen board", async () => {
   assert.ok(Object.isFrozen(plan.sections.circuitJson))
   assert.ok(Object.isFrozen(plan.sections.circuitJson[0]))
   assert.ok(Object.isFrozen(value))
+})
+
+test("allowed unrouted channels retain ideal source connectivity", async () => {
+  const circuitJson = await renderSignals(
+    <AdmissionChannel route="unrouted" />,
+    ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
+  )
+  const solver = new RoutedAdmissionSolver({
+    circuitJson,
+    ibisSources: { [inverterModelPath]: routedVisualIbis },
+  })
+  solver.solve()
+  const [{ bindings, sections }] = solver.getOutput().value
+  assert.deepEqual(bindings.mappings, [])
+  assert.deepEqual(sections.requiredSourcePortIds, [])
+  const signal = circuitJson.find(
+    (record) => record.type === "simulation_pcb_driver_receiver_channel",
+  )
+  assert.ok(
+    signal &&
+      "source_port_id" in signal.driver &&
+      "source_port_id" in signal.receivers[0],
+  )
+  const { node } = circuitNodes({
+    circuit: bindings.circuitJson,
+    modeling: bindings.modeling,
+    mappings: bindings.mappings,
+  })
+  assert.equal(
+    node(signal.driver.source_port_id),
+    node(signal.receivers[0].source_port_id),
+  )
 })
