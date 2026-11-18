@@ -1,0 +1,275 @@
+import {
+  ConnectivityMap,
+  findConnectedNetworks,
+} from "circuit-json-to-connectivity-map"
+import {
+  type CircuitJson,
+  passiveConnections,
+  type SimulationPcbDriverReceiverChannel,
+  sourceConnections,
+  sourceNetMembers,
+} from "../board"
+
+export type ConnectedSourceId = string
+
+type CopperPointKey = string
+type CopperPoint = { x: number; y: number; layer: string }
+type CopperGraph = Map<CopperPointKey, Set<CopperPointKey>>
+type PcbTrace = Extract<CircuitJson[number], { type: "pcb_trace" }>
+type RoutePoint = Exclude<
+  PcbTrace["route"][number],
+  { route_type: "through_pad" }
+>
+
+/** Extend the source nets through series passives for this block's rail set. */
+export function signalTopology({
+  circuit,
+  rails,
+}: {
+  circuit: CircuitJson
+  rails: ReadonlySet<ConnectedSourceId>
+}): ConnectivityMap {
+  const passiveBridges = passiveConnections(circuit, rails)
+  return new ConnectivityMap(
+    findConnectedNetworks([...sourceConnections(circuit), ...passiveBridges]),
+  )
+}
+
+/** Select the approached layer when the routed point is a via. */
+function routeLayer(
+  point: RoutePoint,
+  viaSide: "from_layer" | "to_layer",
+): string {
+  if (point.route_type === "via") return point[viaSide]
+  return point.layer
+}
+
+/** Stable physical identity at the geometry admission tolerance. */
+function recordCopperPoint(
+  points: Map<CopperPointKey, CopperPoint>,
+  point: CopperPoint,
+): CopperPointKey {
+  const key = `${Math.round(point.x * 1e5)},${Math.round(point.y * 1e5)},${point.layer}`
+  points.set(key, point)
+  return key
+}
+
+/** Add an undirected physical edge. */
+function joinCopperPoints(
+  graph: CopperGraph,
+  { a, b }: { a: CopperPointKey; b: CopperPointKey },
+): void {
+  if (a === b) return
+  if (!graph.has(a)) graph.set(a, new Set())
+  if (!graph.has(b)) graph.set(b, new Set())
+  graph.get(a)!.add(b)
+  graph.get(b)!.add(a)
+}
+
+/** All vertices physically reachable from the given terminals. */
+function reachable(
+  starts: CopperPointKey[],
+  graph: CopperGraph,
+): Set<CopperPointKey> {
+  const found = new Set(starts)
+  for (const key of found)
+    for (const next of graph.get(key) ?? []) found.add(next)
+  return found
+}
+
+/** Verify physical connectivity through passives and reject branched routed graphs independently of source grouping. */
+export function validateSignalGraph({
+  circuit,
+  connectivity,
+  signalConnectivity,
+  signals,
+  rails,
+  allowUnroutedTraces,
+}: {
+  circuit: CircuitJson
+  connectivity: ConnectivityMap
+  signalConnectivity: ConnectivityMap
+  signals: SimulationPcbDriverReceiverChannel[]
+  rails: ReadonlySet<ConnectedSourceId>
+  allowUnroutedTraces: boolean
+}): void {
+  const drivers = signals.map(({ driver }) => {
+    if ("source_port_id" in driver) return [driver.source_port_id]
+    return [driver.p_source_port_id, driver.n_source_port_id]
+  })
+  const selected = new Set(
+    drivers.flatMap((ports) =>
+      ports.flatMap((port) => [...sourceNetMembers(signalConnectivity, port)]),
+    ),
+  )
+  const sourceTraces = new Set(
+    circuit
+      .filter((r) => r.type === "source_trace")
+      .filter(
+        (trace) =>
+          trace.connected_source_port_ids.some((port) => selected.has(port)) &&
+          !trace.connected_source_port_ids.some((port) => rails.has(port)),
+      )
+      .map((trace) => trace.source_trace_id),
+  )
+  const routes = circuit
+    .filter((r) => r.type === "pcb_trace")
+    .filter((r) => sourceTraces.has(r.source_trace_id ?? ""))
+  const ports = circuit
+    .filter((r) => r.type === "pcb_port")
+    .filter((r) => selected.has(r.source_port_id))
+  const edges: {
+    layer: string
+    ax: number
+    ay: number
+    bx: number
+    by: number
+  }[] = []
+  const points = new Map<CopperPointKey, CopperPoint>()
+  const graph: CopperGraph = new Map()
+  for (const route of routes)
+    for (let i = 1; i < route.route.length; i++) {
+      const a = route.route[i - 1]
+      const b = route.route[i]
+      if (a.route_type === "through_pad" || b.route_type === "through_pad")
+        continue
+      const layer = routeLayer(a, "to_layer")
+      const first = recordCopperPoint(points, { x: a.x, y: a.y, layer })
+      const last = recordCopperPoint(points, {
+        x: b.x,
+        y: b.y,
+        layer: routeLayer(b, "from_layer"),
+      })
+      if (b.route_type === "via") {
+        const otherSide = recordCopperPoint(points, {
+          x: b.x,
+          y: b.y,
+          layer: b.to_layer,
+        })
+        joinCopperPoints(graph, { a: last, b: otherSide })
+      }
+      if (first !== last)
+        edges.push({ layer, ax: a.x, ay: a.y, bx: b.x, by: b.y })
+    }
+  const terminals = new Map<ConnectedSourceId, CopperPointKey[]>()
+  for (const port of ports)
+    terminals.set(
+      port.source_port_id,
+      port.layers.map((layer) =>
+        recordCopperPoint(points, { x: port.x, y: port.y, layer }),
+      ),
+    )
+  // Split at every physical junction, including a branch terminating inside another segment.
+  for (const edge of edges) {
+    const dx = edge.bx - edge.ax
+    const dy = edge.by - edge.ay
+    const length = dx * dx + dy * dy
+    const vertices = [...points]
+      .flatMap(([key, p]) => {
+        const t = ((p.x - edge.ax) * dx + (p.y - edge.ay) * dy) / length
+        if (
+          p.layer === edge.layer &&
+          t >= -1e-8 &&
+          t <= 1 + 1e-8 &&
+          Math.abs((p.x - edge.ax) * dy - (p.y - edge.ay) * dx) <
+            1e-5 * Math.sqrt(length)
+        )
+          return [{ key, t }]
+        return []
+      })
+      .sort((a, b) => a.t - b.t)
+    for (let i = 1; i < vertices.length; i++)
+      joinCopperPoints(graph, { a: vertices[i - 1].key, b: vertices[i].key })
+  }
+  for (const source of circuit
+    .filter((r) => r.type === "source_port")
+    .filter((r) => selected.has(r.source_port_id))) {
+    if (terminals.has(source.source_port_id)) continue
+    const copper = sourceNetMembers(connectivity, source.source_port_id)
+    terminals.set(
+      source.source_port_id,
+      ports
+        .filter((p) => copper.has(p.source_port_id))
+        .flatMap((p) => terminals.get(p.source_port_id) ?? []),
+    )
+  }
+  const copperGraph = new Map(
+    [...graph].map(([key, values]) => [key, new Set(values)]),
+  )
+  for (const [pinA, pinB] of passiveConnections(circuit, rails)) {
+    for (const a of terminals.get(pinA) ?? [])
+      for (const b of terminals.get(pinB) ?? [])
+        joinCopperPoints(graph, { a, b })
+  }
+  for (const [index, signal] of signals.entries()) {
+    for (const [leg, port] of drivers[index].entries()) {
+      const topology = sourceNetMembers(signalConnectivity, port)
+      if (!allowUnroutedTraces) {
+        const traces = new Set(
+          circuit
+            .filter((record) => record.type === "source_trace")
+            .filter(
+              (trace) =>
+                trace.connected_source_port_ids.some((id) =>
+                  topology.has(id),
+                ) &&
+                !trace.connected_source_port_ids.some((id) => rails.has(id)),
+            )
+            .map((trace) => trace.source_trace_id),
+        )
+        const selected = new Set(
+          ports
+            .filter(
+              (pin) =>
+                topology.has(pin.source_port_id) &&
+                !rails.has(pin.source_port_id),
+            )
+            .map((pin) => pin.pcb_port_id),
+        )
+        const error = circuit.find(
+          (record) =>
+            (record.type === "pcb_trace_missing_error" &&
+              traces.has(record.source_trace_id)) ||
+            (record.type === "pcb_port_not_connected_error" &&
+              record.pcb_port_ids.some((id) => selected.has(id))),
+        )
+        if (error)
+          throw new Error(
+            `Signal "${signal.name}" is not routed between ${port} and its receivers (${error.type}).`,
+          )
+      }
+      const starts = terminals.get(port) ?? []
+      const connected = reachable(starts, graph)
+      const copper = reachable(starts, copperGraph)
+      const routed = [...copper].some((key) => copperGraph.has(key))
+      if (
+        routed &&
+        (signal.receivers.length > 1 ||
+          starts.some((key) => (copperGraph.get(key)?.size ?? 0) > 1) ||
+          [...connected].some((key) => (copperGraph.get(key)?.size ?? 0) > 2))
+      )
+        throw new Error(
+          `Signal "${signal.name}": branched routed graphs are not implemented yet.`,
+        )
+      if (allowUnroutedTraces) continue
+      const receivers = signal.receivers.map((receiver) => {
+        if ("source_port_id" in receiver) return receiver.source_port_id
+        if (leg === 0) return receiver.p_source_port_id
+        return receiver.n_source_port_id
+      })
+      const required = circuit
+        .filter((r) => r.type === "source_trace")
+        .filter(
+          (r) =>
+            r.connected_source_port_ids.some((id) => topology.has(id)) &&
+            !r.connected_source_port_ids.some((id) => rails.has(id)),
+        )
+        .flatMap((r) => r.connected_source_port_ids)
+      for (const target of new Set([...receivers, ...required]))
+        if (!(terminals.get(target) ?? []).some((key) => connected.has(key)))
+          throw new Error(
+            `Signal "${signal.name}" is not routed between ${port} and ${target}.`,
+          )
+    }
+  }
+}
