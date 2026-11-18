@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { simulation } from "@tscircuit/core"
 import React from "react"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
@@ -13,7 +14,62 @@ import { routedProblem } from "../support/routed-fixture"
 import { routedVisualIbis } from "../support/routed-visual-fixture"
 import { renderSignals } from "../support/signal-render"
 
-test("admission uses shared block lowering, retains warnings and rejects invalid scope", async (context) => {
+const inverterModelPath = "models/sn74lvc1g04.ibs"
+
+test("synthetic admission emits the board mappings and hashes the supplied bytes", async () => {
+  const circuitJson = await renderCoreSignals(<TwoTraceBoard />)
+  const bytes = Buffer.from(routedVisualIbis)
+  const input = {
+    circuitJson,
+    ibisSources: { [inverterModelPath]: bytes },
+    scopeDistanceMm: 1,
+  }
+  const solver = new RoutedAdmissionSolver(input)
+  solver.step()
+  assert.equal(solver.solved, true)
+  const {
+    value: [plan],
+    artifacts,
+  } = solver.getOutput()
+  const [block] = signalBlocks(circuitJson)
+  const id = block.simulation_pcb_transient_channel_simulation_id
+  const signals = circuitJson.filter(
+    (record) => record.type === "simulation_pcb_driver_receiver_channel",
+  )
+  const traces = circuitJson.filter((record) => record.type === "source_trace")
+  const expectedMappings = signals.map((signal) => {
+    assert.ok(
+      "source_port_id" in signal.driver &&
+        "source_port_id" in signal.receivers[0],
+    )
+    const from = signal.driver.source_port_id
+    const to = signal.receivers[0].source_port_id
+    const trace = traces.find((record) => {
+      const ports = record.connected_source_port_ids
+      return ports.length === 2 && ports.includes(from) && ports.includes(to)
+    })
+    assert.ok(trace, signal.name)
+    return { port: signal.name, from, to, sourceTraceId: trace.source_trace_id }
+  })
+  assert.deepEqual(plan.bindings.mappings, expectedMappings)
+  assert.equal(plan.sections.scope.selectedPcbTraceIds.length, 2)
+  assert.deepEqual(
+    artifacts.map((artifact) => artifact.path),
+    ["admission.json"],
+  )
+  assert.deepEqual(JSON.parse(artifacts[0].body), {
+    blocks: [{ id, name: "TWO", warnings: [] }],
+    models: {
+      [inverterModelPath]: createHash("sha256").update(bytes).digest("hex"),
+    },
+  })
+  assert.throws(
+    () => new RoutedAdmissionSolver({ ...input, scopeDistanceMm: 0 }).solve(),
+    /scope distance/,
+  )
+})
+
+test("vendor admission retains shared block lowering and warnings", async (context) => {
   const input = await routedProblem(context)
   if (!input) return
   const [id] = signalBlocks(input.circuitJson).map(
@@ -36,10 +92,6 @@ test("admission uses shared block lowering, retains warnings and rejects invalid
     solver.getOutput().value[0].sections.scope.selectedPcbTraceIds.length,
     2,
   )
-  assert.throws(
-    () => new RoutedAdmissionSolver({ ...input, scopeDistanceMm: 0 }).solve(),
-    /scope distance/,
-  )
 })
 
 test("empty boards admit no fake blocks", () => {
@@ -48,12 +100,11 @@ test("empty boards admit no fake blocks", () => {
   assert.deepEqual(solver.getOutput().value, [])
 })
 
-const inverterModelPath = "models/sn74lvc1g04.ibs"
-
 test("byte inputs retain the exact admitted model bytes", async () => {
   const circuitJson = await renderCoreSignals(<TwoTraceBoard />)
-  const bytes = Buffer.from(`﻿| Synthetic Ω fixture
-${routedVisualIbis}`)
+  const bytes = Buffer.from(
+    "\uFEFF| Synthetic Ω fixture\r\n" + routedVisualIbis,
+  )
   const solver = new RoutedAdmissionSolver({
     circuitJson,
     ibisSources: { [inverterModelPath]: bytes },
