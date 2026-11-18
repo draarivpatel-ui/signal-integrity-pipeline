@@ -46,6 +46,7 @@ const testFileMatchesSource = {
       duplicate: '{{source}} already has a test file ({{other}}). Keep one test file per source file.',
     },
   },
+  /** @returns {import('eslint').Rule.RuleListener} */
   create(context) {
     const root = context.cwd
     const test = relative(root, context.filename).split(sep).join('/')

@@ -14,11 +14,14 @@ const finite = (input: unknown, label: string, positive: boolean = false): numbe
 /** Checks an electrical input and formats it for the deck in one step. */
 const value = (input: unknown, label: string, positive: boolean = false): string => num(finite(input, label, positive))
 
+/** The rewritten SPICE source and name of its prefixed wrapper. */
+type NamespacedSpice = { source: string; wrapper: string }
+
 /**
  * Prefixes every subcircuit name in a converter library so several IBIS models can share one deck.
  * Also returns the prefixed name of the top-level wrapper to instantiate.
  */
-export function namespaceSpice(source: string, prefix: string): { source: string; wrapper: string } {
+export function namespaceSpice(source: string, prefix: string): NamespacedSpice {
   const names: string[] = []
   for (let offset = source.indexOf('.'); offset !== -1; offset = source.indexOf('.', offset + 1)) {
     if (offset > 0 && !isSpiceLineBreak(source[offset - 1])) continue
@@ -127,8 +130,11 @@ function hasUnsupportedPlacedSpice(source: string): boolean {
   return false
 }
 
+/** The two terminals on a SPICE resistor or inductor line. */
+type SpiceTerminalPair = [first: string, second: string]
+
 /** Read the terminals of a resistor or inductor line that also has a separator after the second terminal. */
-function dcSpiceTerminals(line: string): [string, string] | undefined {
+function dcSpiceTerminals(line: string): SpiceTerminalPair | undefined {
   const deviceStart = skipSpiceWhitespace(line, 0)
   const device = line[deviceStart]
   if (!device || !'RLrl'.includes(device)) return undefined

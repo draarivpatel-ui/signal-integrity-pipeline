@@ -62,8 +62,11 @@ function startsWithWord(text: string, word: string): boolean {
   return text.startsWith(word) && !isWordCharacter(text[word.length] ?? '')
 }
 
+/** A string literal or a word from a regular expression in a test assertion. */
+type AssertionLiteral = string
+
 /** Extracts ASCII words from a test assertion's regular expression literal. */
-function collectWords(text: string, words: Set<string>): void {
+function collectWords(text: string, words: Set<AssertionLiteral>): void {
   let word = ''
   for (const char of text) {
     if (isWordCharacter(char)) word += char
@@ -137,8 +140,11 @@ export function findDiagnosticsCalls(root: string): DiagnosticsCall[] {
   return calls
 }
 
+/** Parsed exemptions and any reported file error. */
+type LoadedExemptions = { value: Exemptions; problem?: string }
+
 /** Reads tools/exemptions.json, treating a missing file as no exemptions and reporting unparsable JSON as a problem. */
-function loadExemptions(path: string): { value: Exemptions; problem?: string } {
+function loadExemptions(path: string): LoadedExemptions {
   if (!existsSync(path)) return { value: {} }
   try {
     return { value: JSON.parse(readFileSync(path, 'utf8')) as Exemptions }
@@ -146,10 +152,20 @@ function loadExemptions(path: string): { value: Exemptions; problem?: string } {
   catch (e) { return { value: {}, problem: `${toPosix(path)}: ${(e as Error).message}` } }
 }
 
+/** A rule name supplied by a module waiver. */
+type WaiverRuleName = string
+
+/** Paths and module waivers still in force, plus exemption violations. */
+type ActiveExemptions = {
+  legacy: string[]
+  waivers: Map<ModuleInfo['dir'], Set<WaiverRuleName>>
+  violations: Violation[]
+}
+
 /** Validates expiry; returns the waivers that are still in force plus EX violations. */
-export function activeExemptions(ex: Exemptions, today: string = todayUtc()): { legacy: string[]; waivers: Map<string, Set<string>>; violations: Violation[] } {
+export function activeExemptions(ex: Exemptions, today: string = todayUtc()): ActiveExemptions {
   const violations: Violation[] = []
-  const waivers = new Map<string, Set<string>>()
+  const waivers = new Map<ModuleInfo['dir'], Set<WaiverRuleName>>()
   /** True when an entry's expiry is valid and not yet passed; otherwise records an EX violation. */
   const live = (expires: unknown, module: string, what: string): boolean => {
     if (!isoDate(expires)) {
@@ -182,8 +198,8 @@ const isLegacy = (rel: string, legacy: readonly string[]): boolean =>
  * naming it as a word) inside the arguments of an assertion call, or inside the iterable of a for-of
  * loop whose body makes an assertion (table-driven tests).
  */
-function assertedLiterals(file: string): Set<string> {
-  const found = new Set<string>()
+function assertedLiterals(file: string): Set<AssertionLiteral> {
+  const found = new Set<AssertionLiteral>()
   const sf = parse(file)
   /** True for calls that look like test assertions (assert.*, expect, rejects, throws and friends). */
   const isAssertion = (n: ts.Node): n is ts.CallExpression => {
@@ -212,7 +228,7 @@ function assertedLiterals(file: string): Set<string> {
 /** Checks one module against M1-M3, skipping rules its exemption waives. */
 export function checkModule(m: ModuleInfo, options: CheckOptions = {}): Violation[] {
   const { waivers } = activeExemptions(options.exemptions ?? {}, options.today)
-  const waived = waivers.get(m.dir) ?? new Set<string>()
+  const waived = waivers.get(m.dir) ?? new Set<WaiverRuleName>()
   const out: Violation[] = []
   /** Records a violation for this module unless that rule is waived. */
   const push = (rule: 'M1' | 'M2' | 'M3', message: string): void => {
@@ -234,7 +250,7 @@ export function checkModule(m: ModuleInfo, options: CheckOptions = {}): Violatio
 
   const codes = [...new Set(calls.flatMap(c => c.codes ?? []))]
   if (codes.length) {
-    const asserted = new Set<string>()
+    const asserted = new Set<AssertionLiteral>()
     for (const t of tests) for (const s of assertedLiterals(t)) asserted.add(s)
     for (const code of codes) if (!asserted.has(code)) push('M3', `declared code '${code}' is not asserted by any test in ${toPosix(m.tests)}/`)
   }
@@ -380,8 +396,11 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
   return out
 }
 
+/** The literals declared in the generated module and diagnostic code unions. */
+type GeneratedModuleLiterals = { domains: Set<string>; codes: Set<string> }
+
 /** The string literals of the DomainName and DiagnosticCode unions, read from the AST. */
-export function parseModulesGenerated(text: string): { domains: Set<string>; codes: Set<string> } {
+export function parseModulesGenerated(text: string): GeneratedModuleLiterals {
   const sf = ts.createSourceFile('modules.generated.ts', text, ts.ScriptTarget.Latest, true)
   const result = { domains: new Set<string>(), codes: new Set<string>() }
   for (const s of sf.statements) if (ts.isTypeAliasDeclaration(s)) {

@@ -2,12 +2,18 @@ import { fail } from './diagnostics'
 
 interface ScopeRecord { type: string; source_group_id?: string; subcircuit_id?: string; parent_source_group_id?: string }
 
+/** Queries for subcircuit containment and the nearest common ancestor. */
+export type SubcircuitTree = {
+  within: (inner: unknown, outer: unknown) => boolean
+  common: (scopes: readonly unknown[]) => unknown
+}
+
 /**
  * Saved subcircuits nest: a board subcircuit can contain sibling subcircuits
  * (for example a processor and its DDR memory). A channel between siblings
  * belongs to their nearest common subcircuit. `undefined` is the unscoped root.
  */
-export function subcircuitTree(records: readonly ScopeRecord[]): { within: (inner: unknown, outer: unknown) => boolean; common: (scopes: readonly unknown[]) => unknown } {
+export function subcircuitTree(records: readonly ScopeRecord[]): SubcircuitTree {
   const groups = new Map(records.filter(record => record.type === 'source_group').map(record => [record.source_group_id, record]))
   const parents = new Map<unknown, unknown>()
   for (const group of groups.values()) {
@@ -47,4 +53,3 @@ export function subcircuitTree(records: readonly ScopeRecord[]): { within: (inne
   }
   return { within, common }
 }
-export type SubcircuitTree = ReturnType<typeof subcircuitTree>

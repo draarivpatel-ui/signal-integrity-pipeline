@@ -72,7 +72,6 @@ function isDecimal(value: string): boolean {
 }
 const SECTIONS = ['domain', 'general', 'abbreviations', 'avoid'] as const
 type Section = typeof SECTIONS[number]
-
 /** Drops a trailing ` # comment` (a `#` preceded by whitespace) and surrounding whitespace. */
 function stripComment(line: string): string {
   const lastBreak = Math.max(...LINE_BREAKS.map(char => line.lastIndexOf(char)))
@@ -81,9 +80,10 @@ function stripComment(line: string): string {
   }
   return line.trim()
 }
-
+/** A dictionary entry's key and optional value. */
+type DictionaryEntry = [key: string, value: string | undefined]
 /** Splits a dictionary line into its key and optional value. */
-function readEntry(body: string): [string, string | undefined] | undefined {
+function readEntry(body: string): DictionaryEntry | undefined {
   const colon = body.indexOf(':')
   if (colon < 1) return undefined
   const key = body.slice(0, colon)
@@ -277,9 +277,12 @@ function hasExport(node: ts.Node): boolean {
   return ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some(m => m.kind === ts.SyntaxKind.ExportKeyword)
 }
 
+/** The text of an exported declaration name. */
+type ExportedName = ts.Identifier["text"]
+
 /** Names that the file's top-level statements export: `export <declaration>` and local `export { name }` lists. */
-function exportedNames(sf: ts.SourceFile): Set<string> {
-  const out = new Set<string>()
+function exportedNames(sf: ts.SourceFile): Set<ExportedName> {
+  const out = new Set<ExportedName>()
   for (const s of sf.statements) {
     if (ts.isExportDeclaration(s) && !s.moduleSpecifier && s.exportClause && ts.isNamedExports(s.exportClause)) {
       for (const e of s.exportClause.elements) out.add((e.propertyName ?? e.name).text)
@@ -475,8 +478,11 @@ export function formatReport(report: Report): string {
   return out.join('\n')
 }
 
+/** Command-line options for reporting vocabulary coverage. */
+type VocabularyArgs = { json: boolean; root: string }
+
 /** Parses `[--json] [--root <dir>]`; throws on anything else. */
-export function parseArgs(args: readonly string[], defaultRoot: string): { json: boolean; root: string } {
+export function parseArgs(args: readonly string[], defaultRoot: string): VocabularyArgs {
   let json = false
   let root = defaultRoot
   for (let i = 0; i < args.length; i++) {
