@@ -276,7 +276,7 @@ test("an unlisted output on the same net is diagnosed before routed branch check
   )
 })
 
-test("core seeds PRBS across blocks, preserves explicit seeds and emits eye times in ms", async () => {
+test("preparation keeps controls and probes independent across blocks", async () => {
   const board = TwoTraceBoard({ "data-pattern": "prbs7" })
   const circuit = await renderSignals(
     React.cloneElement(
@@ -293,12 +293,6 @@ test("core seeds PRBS across blocks, preserves explicit seeds and emits eye time
             seed={42}
           />
         </simulation.pcbtransientchannelsimulation>
-        <simulation.eyediagram
-          name="DATA_EYE"
-          simulationRef="TWO"
-          startTime="0UI"
-          endTime="2UI"
-        />
       </>,
     ),
   )
@@ -312,11 +306,44 @@ test("core seeds PRBS across blocks, preserves explicit seeds and emits eye time
     channels.find((channel) => channel.name === "VICTIM")?.seed,
     undefined,
   )
-  const eye = circuit.find((record) => record.type === "simulation_eye_diagram")
-  const blockId = data?.simulation_pcb_transient_channel_simulation_id
-  assert.equal(eye?.simulation_pcb_transient_channel_simulation_id, blockId)
-  assert.equal(eye?.start_time_ms, 0)
-  assert.equal(eye?.end_time_ms, 40e-6)
+  const [two, alt] = prepareBlocks({ circuit, sources: inverterSources })
+  assert.equal(two.block.name, "TWO")
+  assert.equal(alt.block.name, "ALT")
+  assert.deepEqual(Object.keys(two.controls), [
+    two.block.simulation_pcb_transient_channel_simulation_id,
+  ])
+  assert.deepEqual(Object.keys(alt.controls), [
+    alt.block.simulation_pcb_transient_channel_simulation_id,
+  ])
+  const [twoPlan] = generalDeclarations(declarationInput(two)).plans
+  const [altPlan] = generalDeclarations(declarationInput(alt)).plans
+  assert.deepEqual(
+    twoPlan.stimuli.map((stimulus) => stimulus.name),
+    ["DATA", "VICTIM"],
+  )
+  assert.equal(
+    altPlan.stimuli.find((stimulus) => stimulus.name === "DATA"),
+    undefined,
+  )
+  const alternate = altPlan.stimuli.find((stimulus) => stimulus.name === "A")
+  assert.ok(alternate)
+  assert.notEqual(
+    twoPlan.stimuli[0].transmission_pattern.bits,
+    alternate.transmission_pattern.bits,
+  )
+  const [dataSignal, victim] = two.signals
+  assert.deepEqual(
+    twoPlan.probes.map((probe) => [probe.name, probe.signalSourceId]),
+    [
+      ["DATA_0", endpointPorts(dataSignal.receivers[0])[0]],
+      ["VICTIM_0", endpointPorts(victim.receivers[0])[0]],
+      ["VICTIM_1", endpointPorts(victim.driver)[0]],
+    ],
+  )
+  assert.deepEqual(
+    altPlan.probes.map((probe) => probe.name),
+    ["A_0"],
+  )
 })
 
 test("unlisted outputs drive low and the listed driver receives a legal seed", async () => {
