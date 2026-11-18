@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises"
 import { BasePipelineSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import React from "react"
+import Differential from "../../examples/level1-differential/level1-differential"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import type { CircuitJson } from "../../src/board"
 import { boardPictureView } from "../../src/board/board-picture"
@@ -376,9 +377,26 @@ function assertDrawing({
   )
 }
 
-for (const name of ["two-trace"])
+for (const name of ["two-trace", "level1-differential"])
   test(`${name}: every iteration, stage boundary and pending transient has a physical drawing`, async () => {
-    const input = (await routedVisualFixture()).root.inputProblem
+    let input
+    if (name === "two-trace")
+      input = (await routedVisualFixture()).root.inputProblem
+    else {
+      if (!process.env.IBIS_MODEL_DIR)
+        return context.skip(
+          "Set IBIS_MODEL_DIR for the local differential vendor model",
+        )
+      input = {
+        circuitJson: await renderCoreSignals(<Differential />),
+        ibisSources: {
+          "models/sn65hvd72.ibs": await readFile(
+            `${process.env.IBIS_MODEL_DIR}/sn65hvd72.ibs`,
+            "utf8",
+          ),
+        },
+      }
+    }
     const circuit: CircuitJson = input.circuitJson
     let calls = 0
     const solverContext: SolverContext = {
