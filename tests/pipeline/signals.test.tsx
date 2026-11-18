@@ -12,10 +12,14 @@ import {
   signalBits,
   signalBlocks,
 } from "../../src/pipeline/signals"
-import { generalDeclarations } from "../../src/simulation"
-import { routedVisualIbis } from "../support/routed-visual-fixture"
+import { electricalSources, generalDeclarations } from "../../src/simulation"
+import {
+  differentialIbis,
+  routedVisualIbis,
+} from "../support/routed-visual-fixture"
 import { Inverter, Reference } from "../support/signal-parts"
 import { prepareBlocks, renderSignals } from "../support/signal-render"
+import Differential from "../support/unit-differential"
 
 const inverterIbisPath = "models/sn74lvc1g04.ibs"
 
@@ -407,6 +411,33 @@ function declarationInput(prepared: PreparedBlock): DeclarationInput {
     controls: prepared.controls,
   }
 }
+
+test("a routed differential termination shares the receiver endpoint on each leg", async () => {
+  const circuit = await renderSignals(<Differential routedTermination />, [
+    "pcb_port_not_connected_error",
+  ])
+  const [prepared] = prepareBlocks({
+    circuit,
+    sources: { "models/sn65hvd72.ibs": differentialIbis },
+  })
+  const input = declarationInput(prepared)
+  const { nodes, plans } = generalDeclarations(input)
+  assert.equal(input.mappings.length, 4)
+  const [positive, negative] = endpointPorts(prepared.signals[0].receivers[0])
+  for (const port of [positive, negative]) {
+    assert.equal(
+      input.mappings.filter((lane) => lane.from === port || lane.to === port)
+        .length,
+      2,
+    )
+  }
+  const { lines } = electricalSources(input.circuit, input.modeling, nodes)
+  assert.ok(
+    lines.some((line) => line.startsWith("RPHYSICAL") && line.endsWith(" 120")),
+  )
+  assert.equal(plans[0].probes[0].signalNode, nodes.node(positive))
+  assert.equal(plans[0].probes[0].referenceNode, nodes.node(negative))
+})
 
 test("PRBS31 fits the pattern limit at exactly 65536 intervals", async () => {
   const circuit = await renderSignals(

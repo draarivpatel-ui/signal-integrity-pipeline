@@ -12,8 +12,10 @@ const CAPTURE_BITS = 48
 /** Build an RS-485 channel, optionally swapping the differential pin order. */
 export default function ({
   reversed = false,
+  routedTermination = false,
 }: {
   reversed?: boolean
+  routedTermination?: boolean
 }): React.JSX.Element {
   const positive = reversed ? "B" : "A"
   const negative = reversed ? "A" : "B"
@@ -48,8 +50,10 @@ export default function ({
       <resistor
         name="RTERM"
         resistance="120"
-        pcbX={5}
-        connections={{ pin1: ".RX > .A", pin2: ".RX > .B" }}
+        pcbX={routedTermination ? 7 : 5}
+        connections={
+          routedTermination ? undefined : { pin1: ".RX > .A", pin2: ".RX > .B" }
+        }
         footprint={
           <footprint>
             <smtpad
@@ -71,6 +75,22 @@ export default function ({
           </footprint>
         }
       />
+      {routedTermination && (
+        <>
+          <trace
+            from=".RX > .A"
+            to=".RTERM > .pin1"
+            width={0.2}
+            pcbPath={[".RX > .A", ".RTERM > .pin1"]}
+          />
+          <trace
+            from=".RX > .B"
+            to=".RTERM > .pin2"
+            width={0.2}
+            pcbPath={[".RX > .B", ".RTERM > .pin2"]}
+          />
+        </>
+      )}
       <simulation.pcbtransientchannelsimulation
         name="RS485"
         bitRate={BIT_RATE_BPS}
