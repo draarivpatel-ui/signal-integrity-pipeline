@@ -7,6 +7,21 @@ const RECORDING_SECONDS = 40e-9
 /** Centre-to-centre spacing of the two parallel traces. */
 const TRACE_SPACING_MM = 0.35
 
+const transmitter = {
+  prefix: "TX",
+  x: -4,
+  pin: "4",
+  label: "Y",
+  model: "LVC1G04_OUT_33",
+}
+const receiver = {
+  prefix: "RX",
+  x: 4,
+  pin: "2",
+  label: "A",
+  model: "LVC1G04_IN_33",
+}
+
 interface TwoTraceBoardProps {
   "bit-rate"?: string
   "duration-seconds"?: number
@@ -32,11 +47,8 @@ export function TwoTraceBoard({
     >
       {[0, 1].map((index) => (
         <React.Fragment key={index}>
-          {[-4, 4].map((x) => {
-            const driver = x < 0
-            const name = `${driver ? "TX" : "RX"}${index}`
-            const pin = driver ? "4" : "2"
-            const label = driver ? "Y" : "A"
+          {[transmitter, receiver].map(({ prefix, x, pin, label, model }) => {
+            const name = `${prefix}${index}`
             const y = index * TRACE_SPACING_MM
             const ground = -2.5 - index
             const power = 2.5 + index
@@ -105,9 +117,7 @@ export function TwoTraceBoard({
                     "3": "GND",
                     "5": "VCC",
                   }}
-                  ibisPinNameToModelName={{
-                    [pin]: driver ? "LVC1G04_OUT_33" : "LVC1G04_IN_33",
-                  }}
+                  ibisPinNameToModelName={{ [pin]: model }}
                   ibisPinNameToReferencePortLabels={{
                     [pin]: {
                       pullup: "VCC",
