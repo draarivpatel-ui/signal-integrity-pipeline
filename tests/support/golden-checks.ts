@@ -1,6 +1,15 @@
 // Shared helpers for the golden known-answer checks (docs/golden-checks.md). They only measure;
 // every expected value and tolerance lives beside its check, with its source.
 
+/** Bound the cyclic Jacobi solve to a fixed number of sweeps. */
+const MAX_JACOBI_SWEEPS = 60
+
+/** Stop when the largest off-diagonal entry falls below this share of the input scale. */
+const JACOBI_RELATIVE_TOLERANCE = 1e-15
+
+/** Avoid dividing by a near-underflow off-diagonal coefficient. */
+const MIN_JACOBI_COEFFICIENT = 1e-300
+
 /**
  * Eigenvalues of a real symmetric matrix, ascending, by cyclic Jacobi rotations
  * (Golub & Van Loan, Matrix Computations, 4th ed., §8.5.2). Independent of production linear algebra.
@@ -9,15 +18,16 @@ export function symmetricEigenvalues(matrix: number[][]): number[] {
   const n = matrix.length
   const a = matrix.map((row) => [...row])
   const scale = Math.max(...a.flat().map(Math.abs)) || 1
-  for (let sweep = 0; sweep < 60; sweep++) {
+  for (let sweep = 0; sweep < MAX_JACOBI_SWEEPS; sweep++) {
     let largest = 0
-    for (let p = 0; p < n; p++)
+    for (let p = 0; p < n; p++) {
       for (let q = p + 1; q < n; q++)
         largest = Math.max(largest, Math.abs(a[p][q]))
-    if (largest <= 1e-15 * scale) break
-    for (let p = 0; p < n; p++)
+    }
+    if (largest <= JACOBI_RELATIVE_TOLERANCE * scale) break
+    for (let p = 0; p < n; p++) {
       for (let q = p + 1; q < n; q++) {
-        if (Math.abs(a[p][q]) <= 1e-300) continue
+        if (Math.abs(a[p][q]) <= MIN_JACOBI_COEFFICIENT) continue
         const theta = (a[q][q] - a[p][p]) / (2 * a[p][q])
         const t =
           (theta >= 0 ? 1 : -1) /
@@ -37,6 +47,7 @@ export function symmetricEigenvalues(matrix: number[][]): number[] {
           a[q][k] = s * pk + c * qk
         }
       }
+    }
   }
   return a.map((row, i) => row[i]).sort((x, y) => x - y)
 }
@@ -56,7 +67,7 @@ export function energyFacts(matrix: number[][]): EnergyFacts {
   let asymmetry = 0
   let coupling = 0
   let pair: [number, number] = [0, 0]
-  for (let i = 0; i < matrix.length; i++)
+  for (let i = 0; i < matrix.length; i++) {
     for (let j = 0; j < matrix.length; j++) {
       asymmetry = Math.max(
         asymmetry,
@@ -69,6 +80,7 @@ export function energyFacts(matrix: number[][]): EnergyFacts {
         pair = [i, j]
       }
     }
+  }
   const values = symmetricEigenvalues(
     matrix.map((row, i) => row.map((value, j) => (value + matrix[j][i]) / 2)),
   )
@@ -81,19 +93,23 @@ export function energyFacts(matrix: number[][]): EnergyFacts {
   }
 }
 
-/** Maxwell (grounded) capacitance sign facts: smallest diagonal, largest off-diagonal and smallest row sum relative to its diagonal. */
-export function maxwellFacts(matrix: number[][]): {
+/** Extremal entries and relative row sum for a Maxwell (grounded) capacitance matrix. */
+interface MaxwellFacts {
   minimumDiagonal: number
   maximumOffDiagonal: number
   minimumRowSum: number
-} {
+}
+
+/** Find the smallest diagonal, largest off-diagonal and smallest row sum relative to its diagonal. */
+export function maxwellFacts(matrix: number[][]): MaxwellFacts {
   let minimumDiagonal = Infinity
   let maximumOffDiagonal = -Infinity
   let minimumRowSum = Infinity
   for (const [i, row] of matrix.entries()) {
     minimumDiagonal = Math.min(minimumDiagonal, row[i])
-    for (const [j, value] of row.entries())
+    for (const [j, value] of row.entries()) {
       if (i !== j) maximumOffDiagonal = Math.max(maximumOffDiagonal, value)
+    }
     minimumRowSum = Math.min(
       minimumRowSum,
       row.reduce((sum, value) => sum + value, 0) / row[i],
