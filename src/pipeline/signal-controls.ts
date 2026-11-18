@@ -8,11 +8,14 @@ import {
   type SourcePortId,
 } from "../board"
 import { type InspectedPin, pinCapabilities } from "../buffers"
-import type { RunControls } from "../simulation"
+import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
 import { defaultDurationSeconds } from "./timing"
 
 /** Circuit JSON timings are in milliseconds. */
 const MILLISECONDS_PER_SECOND = 1_000
+
+/** Round bit intervals with the same floating-point tolerance as the IBIS converter. */
+const INTERVAL_ROUNDING_ULPS = 8
 
 /** Solver error tolerances for the routed transient (relative, current in amps, voltage in volts). */
 const SPICE_OPTIONS: NonNullable<SimulationExperiment["spice_options"]> = {
@@ -106,14 +109,21 @@ export function signalBits(
   }
 
   let state = seed!
-  const captureSeconds = Math.max(
-    0,
-    duration - signal.offset_ms / MILLISECONDS_PER_SECOND,
-  )
+  const captureSeconds = duration - signal.offset_ms / MILLISECONDS_PER_SECOND
+  const bitSeconds =
+    MILLISECONDS_PER_SECOND / signal.bit_rate_bps / MILLISECONDS_PER_SECOND
+  const intervals = captureSeconds / bitSeconds
+  const roundingTolerance =
+    Math.max(1, intervals) * Number.EPSILON * INTERVAL_ROUNDING_ULPS
   const count = Math.min(
     mask,
-    Math.ceil(captureSeconds * signal.bit_rate_bps) + 1,
+    Math.max(1, Math.ceil(intervals - roundingTolerance)),
   )
+  if (!Number.isFinite(count) || count > MAX_STIMULUS_BITS) {
+    throw new Error(
+      `Signal "${signal.name}": ${pattern} patterns must contain at most ${MAX_STIMULUS_BITS} bits.`,
+    )
+  }
   const { width, tap } = prbs
   let bits = ""
   for (let i = 0; i < count; i++) {

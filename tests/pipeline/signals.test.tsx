@@ -8,9 +8,11 @@ import type { SimulationPcbDriverReceiverChannel } from "../../src/board"
 import {
   compareNames,
   endpointPorts,
+  type PreparedBlock,
   signalBits,
   signalBlocks,
 } from "../../src/pipeline/signals"
+import { generalDeclarations } from "../../src/simulation"
 import { routedVisualIbis } from "../support/routed-visual-fixture"
 import { Inverter, Reference } from "../support/signal-parts"
 import { prepareBlocks, renderSignals } from "../support/signal-render"
@@ -26,6 +28,7 @@ interface BoardProps {
   unlisted?: boolean
   extraDriver?: boolean
   driverDisabled?: boolean
+  pattern?: string
   offset?: number
   duration?: number
   allowUnroutedTraces?: boolean
@@ -39,6 +42,7 @@ function Board({
   unlisted = false,
   extraDriver = false,
   driverDisabled = false,
+  pattern,
   offset = 0,
   duration,
   allowUnroutedTraces = false,
@@ -162,6 +166,7 @@ function Board({
       >
         <simulation.pcbdriverreceiverchannel
           offset={offset}
+          pattern={pattern}
           name="D81"
           driverDisabled={driverDisabled}
           driverRef={driverRef}
@@ -347,6 +352,42 @@ test("via plating comes from the preset and must be in the stackup", async () =>
   )
 })
 
+type DeclarationInput = Parameters<typeof generalDeclarations>[0]
+
+/** Map each prepared physical lane to its declaration endpoints. */
+function declarationInput(prepared: PreparedBlock): DeclarationInput {
+  return {
+    circuit: prepared.circuit,
+    mappings: prepared.settings.lanes.map((lane) => ({
+      port: lane.port,
+      sourceTraceId: lane.sourceTraceId!,
+      from: lane.from.sourcePortId!,
+      to: lane.to.sourcePortId!,
+    })),
+    modeling: prepared.settings,
+    controls: prepared.controls,
+  }
+}
+
+test("PRBS31 fits the pattern limit at exactly 65536 intervals", async () => {
+  const circuit = await renderSignals(
+    <Board pattern="prbs31" duration={65_536 / 20e6} />,
+  )
+  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [plan] = generalDeclarations(declarationInput(prepared)).plans
+  assert.equal(plan.stimuli[0].transmission_pattern.bits.length, 65_536)
+})
+
+test("PRBS31 rejects overlong captures during preparation", async () => {
+  const circuit = await renderSignals(
+    <Board pattern="prbs31" duration={70_000 / 20e6} />,
+  )
+  assert.throws(
+    () => prepareBlocks({ circuit, sources: inverterSources }),
+    /at most 65536 bits/,
+  )
+})
+
 const signal: SimulationPcbDriverReceiverChannel = {
   type: "simulation_pcb_driver_receiver_channel",
   simulation_pcb_driver_receiver_channel_id: "s",
@@ -367,11 +408,11 @@ test("PRBS7 has a complete stable 127-bit period with decorrelated seeds", () =>
   assert.equal(a, signalBits(signal, 1000))
   assert.notEqual(a, signalBits({ ...signal, seed: 41 }, 127))
   for (const pattern of ["prbs15", "prbs31"]) {
-    assert.equal(signalBits({ ...signal, pattern }, 20).length, 21)
+    assert.equal(signalBits({ ...signal, pattern }, 20).length, 20)
   }
   assert.equal(
     signalBits({ ...signal, pattern: "prbs31", offset_ms: 1e6 }, 1002).length,
-    3,
+    2,
   )
   assert.throws(
     () => signalBits({ ...signal, seed: undefined }, 20),
