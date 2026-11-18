@@ -8,6 +8,7 @@ import {
   coupledPackageElements,
 } from "../../src/buffers/coupled-package"
 import { convertPackaged } from "../../src/buffers/package"
+import { splitWords, subcircuitHeader } from "../../src/buffers/text"
 
 import { Board, source } from "../support/coupled-package-fixture"
 
@@ -134,7 +135,11 @@ A1
   assert.match(unlisted.source, /VPDN3 DIE3 0 0/)
   const identifiers = unlisted.source
     .split("\n")
-    .filter((line) => /^[RVLCHK]PKG/.test(line))
+    .filter((line) =>
+      ["R", "V", "L", "C", "H", "K"].some((kind) =>
+        line.startsWith(kind + "PKG"),
+      ),
+    )
     .map((line) => line.split(" ")[0])
   assert.equal(
     new Set(identifiers).size,
@@ -271,12 +276,9 @@ V2 NC VDD NC NC
     outputFiles: ["package.dat"],
   })
   assert.doesNotMatch(result.stdout + result.stderr, /error|fatal|aborted/i)
-  const values = result.files["package.dat"]
-    .trim()
-    .split("\n")[1]
-    .trim()
-    .split(/\s+/)
-    .map(Number)
+  const values = splitWords(
+    result.files["package.dat"].trim().split("\n")[1].trim(),
+  ).map(Number)
   const omega = 2 * Math.PI * 1e6
   for (let i = 0; i < 2; i++) {
     const real = [0, 1].reduce(
@@ -309,7 +311,7 @@ V2 NC VDD NC NC
     )
   }
   for (const mixed of [unlisted, merged]) {
-    const name = /^\.subckt (\S+)/m.exec(mixed.source)![1]
+    const name = subcircuitHeader(mixed.source)![1]
     const deck = [
       "Mixed package only AC oracle",
       mixed.source,

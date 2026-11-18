@@ -16,6 +16,11 @@ import type { ModelRunDefinition } from "../../src/buffers"
 import { referenceVoltages } from "../../src/buffers/inspect"
 import { convertPackaged } from "../../src/buffers/package"
 import { convertSwitching } from "../../src/buffers/switching"
+import {
+  lineRanges,
+  splitWords,
+  subcircuitHeader,
+} from "../../src/buffers/text"
 import { sha256 } from "../../src/kernel"
 
 // Original two-fixture CMOS model: the edge finishes at 0.8 ns, but the
@@ -72,6 +77,24 @@ ${(["rising", "falling"] as const)
   )
   .join("\n")}
 [End]`
+
+/** Recover emitted PWL knots so assertions exercise the electrical artifact. */
+function points(text: string, label: "KU" | "KD"): Array<[number, number]> {
+  const prefix = `V${label}0 `
+  let match: [string, string] | null = null
+  for (const { start, end } of lineRanges(text)) {
+    const line = text.slice(start, end)
+    if (!line.startsWith(prefix) || !line.endsWith(")")) continue
+    const open = line.lastIndexOf("PWL(")
+    if (open < prefix.length) continue
+    match = [line, line.slice(open + "PWL(".length, -1)]
+    break
+  }
+  const values = splitWords(match![1]).map(Number)
+  return values
+    .filter((_, i) => i % 2 === 0)
+    .map((value, i) => [value, values[i * 2 + 1]])
+}
 
 test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.25 ns bit", async () => {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
@@ -192,16 +215,6 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
       },
     })
   }
-  /** Recover emitted PWL knots so assertions exercise the electrical artifact. */
-  function points(text: string, label: string): Array<[number, number]> {
-    const values = new RegExp(`^V${label}0 .*PWL\\((.*)\\)$`, "m")
-      .exec(text)![1]
-      .split(/\s+/)
-      .map(Number)
-    return values
-      .filter((_, i) => i % 2 === 0)
-      .map((value, i) => [value, values[i * 2 + 1]])
-  }
   const knots = points(converted.source, "KU")
   assert.ok(knots.every((row, i) => i === 0 || row[0] > knots[i - 1][0]))
   assert.equal(knots.at(-1)![0], 5e-9)
@@ -216,7 +229,7 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
   const resolution = Math.min(
     ...table.slice(1).map((row, i) => row[0] - table[i][0]),
   )
-  for (const label of ["KU", "KD"]) {
+  for (const label of ["KU", "KD"] as const) {
     const column = points(converted.source, label)
     assert.ok(
       column.every(
@@ -372,7 +385,7 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
     const nodes = Object.values(model.spicePinMapping).map((port) =>
       port === pinMap["1"] ? "out" : port === pinMap["2"] ? "vdd" : "vss",
     )
-    const name = /^\.subckt (\S+)/m.exec(model.source)![1]
+    const name = subcircuitHeader(model.source)![1]
     const deck = `Buffer-only settled tail oracle\n${model.source}\nXU ${nodes.join(" ")} ${name}\nRload out vss 50\n.control\nset wr_singlescale\nset wr_vecnames\ntran 2p ${duration}\nwrdata waveform.dat v(out)\nquit\n.endc\n.end\n`
     const output = await solve({
       solver: "ngspice",
@@ -389,9 +402,7 @@ test("TSX 800 Mbps driver accepts a settled acquisition tail longer than its 1.2
         .trim()
         .split("\n")
         .slice(1)
-        .map(
-          (line) => line.trim().split(/\s+/).map(Number) as [number, number],
-        ),
+        .map((line) => splitWords(line.trim()).map(Number) as [number, number]),
     )
   }
   for (const time of [0.1e-9, 0.3e-9, 0.5e-9, 0.7e-9, 1e-9]) {

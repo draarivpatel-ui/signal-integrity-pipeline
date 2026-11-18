@@ -2,6 +2,27 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { parsePackageModel } from "../../src/buffers/package-model"
 
+/** Rewrite fixture keywords in the uppercase, underscore-separated spelling. */
+function underscoreKeywords(source: string): string {
+  let text = ""
+  let start = 0
+  while (start < source.length) {
+    const open = source.indexOf("[", start)
+    if (open < 0) break
+    const close = source.indexOf("]", open + 1)
+    if (close < 0) break
+    text +=
+      source.slice(start, open + 1) +
+      source
+        .slice(open + 1, close)
+        .replaceAll(" ", "_")
+        .toUpperCase() +
+      "]"
+    start = close + 1
+  }
+  return text + source.slice(start)
+}
+
 /** Small original fixture; numeric-looking names still follow the declared pin order. */
 function fixture(data: string, pins: string[] = ["Z9", "A1", "7"]): string {
   return `[Define Package Model] Example package
@@ -71,13 +92,7 @@ test("IBIS package matrices use named upper-triangle rows, exact widths and expl
   )
   assert.equal(parsePackageModel(valid, "Example package").R[1][1], 0.002)
   assert.deepEqual(
-    parsePackageModel(
-      valid.replace(
-        /\[([^\]]+)\]/g,
-        (_, key) => `[${key.replaceAll(" ", "_").toUpperCase()}]`,
-      ),
-      "Example package",
-    ).pins,
+    parsePackageModel(underscoreKeywords(valid), "Example package").pins,
     ["Z9", "A1", "7"],
   )
   assert.deepEqual(

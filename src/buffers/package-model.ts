@@ -1,3 +1,12 @@
+import {
+  asciiLowerCase,
+  isDigit,
+  isLineBreak,
+  isSpace,
+  lineEnd,
+  splitWords,
+} from "./text"
+
 /** IBIS section 7 lumped package data; matrix order is exactly [Pin Numbers]. */
 export interface PackageModel {
   name: string
@@ -15,6 +24,70 @@ interface Section {
   lines: string[]
 }
 
+/** Scan just the package definition markers and global comment declarations. */
+function* packageHeaders(text: string): IterableIterator<{
+  key: string
+  argument: string
+  start: number
+  end: number
+}> {
+  for (let start = 0; start < text.length; ) {
+    let end = lineEnd(text, start)
+    let open = start
+    while (text[open] === " " || text[open] === "\t") open++
+    if (text[open] === "[") {
+      const header = text.slice(open + 1, end)
+      const close = header.indexOf("]")
+      if (close >= 0) {
+        const key = asciiLowerCase(header.slice(0, close)).replaceAll("_", " ")
+        if (
+          key === "define package model" ||
+          key === "end package model" ||
+          key === "comment char"
+        ) {
+          let argument = open + close + 2
+          while (text[argument] === " " || text[argument] === "\t") argument++
+          // Marker arguments end at CR or LF, even when they contain a Unicode line separator.
+          while (end < text.length && text[end] !== "\r" && text[end] !== "\n")
+            end++
+          yield { key, argument: text.slice(argument, end), start, end }
+        }
+      }
+    }
+    start = end + 1
+  }
+}
+
+/** Read a comment marker followed by the IBIS "_char" suffix. */
+function commentCharacter(argument: string): string | undefined {
+  if (
+    isLineBreak(argument[0]) ||
+    argument.slice(1, 6).toLowerCase() !== "_char"
+  )
+    return undefined
+  return argument[0]
+}
+
+/** Read a selected definition's section header and optional argument. */
+function sectionHeader(
+  line: string,
+): Pick<Section, "key" | "argument"> | undefined {
+  if (!line.startsWith("[")) return undefined
+  const close = line.indexOf("]")
+  if (close <= 1) return undefined
+  const argument = line.slice(close + 1).trimStart()
+  if (lineEnd(argument, 0) !== argument.length) return undefined
+  const key = line.slice(1, close).toLowerCase().replaceAll("_", " ")
+  return { key, argument }
+}
+
+/** Check that a count is spelled with one or more ASCII digits. */
+function isUnsignedInteger(text: string): boolean {
+  if (!text.length) return false
+  for (const char of text) if (!isDigit(char)) return false
+  return true
+}
+
 /** Read the named local definition without splitting a large vendor file into lines. */
 export function parsePackageModel(text: string, name: string): PackageModel {
   let body: string | undefined
@@ -23,29 +96,28 @@ export function parsePackageModel(text: string, name: string): PackageModel {
   let comment = "|"
   let initialComment = "|"
   // Comment changes outside the selected definition still affect its contents.
-  for (const match of text.matchAll(
-    /^[ \t]*\[(define[ _]package[ _]model|end[ _]package[ _]model|comment[ _]char)\][ \t]*([^\r\n]*)/gim,
-  )) {
-    const key = match[1].toLowerCase().replace(/_/g, " ")
+  for (const header of packageHeaders(text)) {
+    const { key, argument } = header
     if (key === "comment char") {
-      const next = /^(.)_char(?:\s|$)/i.exec(match[2])
-      if (!next) throw new Error(`${name}: invalid [Comment Char]`)
-      comment = next[1]
+      const next = commentCharacter(argument)
+      if (next === undefined || (argument.length > 6 && !isSpace(argument[6])))
+        throw new Error(`${name}: invalid [Comment Char]`)
+      comment = next
       continue
     }
     if (key === "define package model") {
       if (active) throw new Error(`${active}: missing [End Package Model]`)
-      active = match[2].split(comment)[0].trim()
+      active = argument.split(comment)[0].trim()
       if (active === name && body !== undefined)
         throw new Error(`${name}: duplicate package definition`)
       if (active === name) initialComment = comment
-      start = match.index! + match[0].length
+      start = header.end
       continue
     }
     if (key === "end package model") {
-      if (active === name && match[2].split(comment)[0].trim())
+      if (active === name && argument.split(comment)[0].trim())
         throw new Error(`${name}: unexpected data after [End Package Model]`)
-      if (active === name) body = text.slice(start, match.index)
+      if (active === name) body = text.slice(start, header.start)
       active = undefined
     }
   }
@@ -58,22 +130,39 @@ export function parsePackageModel(text: string, name: string): PackageModel {
     throw new Error(`${name}: invalid package name`)
   const sections: Section[] = []
   comment = initialComment
-  for (const raw of body.split(/\r?\n/)) {
-    const change = /^\s*\[comment[ _]char\]\s*(.)_char/i.exec(raw)
-    if (change) {
-      comment = change[1]
-      continue
+  const lines = body.split("\n")
+  for (const [i, raw] of lines.entries()) {
+    const lineText =
+      i < lines.length - 1 && raw.endsWith("\r") ? raw.slice(0, -1) : raw
+    const trimmed = lineText.trimStart()
+    const commentHeader = "[comment char]"
+    if (
+      asciiLowerCase(trimmed.slice(0, commentHeader.length)).replaceAll(
+        "_",
+        " ",
+      ) === commentHeader
+    ) {
+      const argument = trimmed.slice(commentHeader.length)
+      const marker = argument.trimStart()
+      const spacing = argument.length - marker.length
+      let change = commentCharacter(marker)
+      // The last whitespace can itself be the marker when it immediately precedes "_char".
+      if (change === undefined && spacing > 0)
+        change = commentCharacter(argument.slice(spacing - 1))
+      if (change !== undefined) {
+        comment = change
+        continue
+      }
     }
-    const line = raw.split(comment)[0].trim()
+    const line = lineText.split(comment)[0].trim()
     if (!line) continue
-    const header = /^\[([^\]]+)\]\s*(.*)$/.exec(line)
-    const key = header?.[1].toLowerCase().replace(/_/g, " ")
-    if (key === "number of sections")
+    const header = sectionHeader(line)
+    if (header?.key === "number of sections")
       throw new Error(
         `${name}: package sections are unsupported ([Number Of Sections]); scalar fallback is forbidden`,
       )
     if (header) {
-      sections.push({ key: key!, argument: header[2], lines: [] })
+      sections.push({ ...header, lines: [] })
       continue
     }
     if (!sections.length)
@@ -96,7 +185,7 @@ export function parsePackageModel(text: string, name: string): PackageModel {
       metadata[key] = argument
       if (key === "number of pins") {
         if (
-          !/^\d+$/.test(argument) ||
+          !isUnsignedInteger(argument) ||
           Number(argument) < 1 ||
           !Number.isSafeInteger(Number(argument))
         )
@@ -114,7 +203,14 @@ export function parsePackageModel(text: string, name: string): PackageModel {
       if (phase !== "metadata" || !count || argument)
         throw new Error(`${name}: [Number Of Pins] must precede [Pin Numbers]`)
       for (const line of lines) {
-        if (/\s|[=/]/.test(line) || /^(fork|endfork)$/i.test(line))
+        const pinKey = asciiLowerCase(line)
+        if (
+          [...line].some(isSpace) ||
+          line.includes("=") ||
+          line.includes("/") ||
+          pinKey === "fork" ||
+          pinKey === "endfork"
+        )
           throw new Error(
             `${name}: package section syntax is unsupported in [Pin Numbers]`,
           )
@@ -182,13 +278,27 @@ export function parsePackageModel(text: string, name: string): PackageModel {
 
 /** Require a finite standard IBIS number; suffix characters after the scale denote units. */
 function matrixNumber(token: string, label: string): number {
-  const match =
-    /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)([TGMkmunpf]?)[a-zA-Z]*$/.exec(
-      token,
-    )
-  if (!match) throw new Error(`${label}: invalid numeric matrix value ${token}`)
+  let end = 0
+  if (token[end] === "+" || token[end] === "-") end++
+  const start = end
+  while (isDigit(token[end])) end++
+  const hasWholeDigits = end > start
+  if (token[end] === ".") {
+    end++
+    while (isDigit(token[end])) end++
+  }
+  if (!hasWholeDigits && !isDigit(token[end - 1]))
+    throw new Error(`${label}: invalid numeric matrix value ${token}`)
+  if (token[end] === "e" || token[end] === "E") {
+    let exponent = end + 1
+    if (token[exponent] === "+" || token[exponent] === "-") exponent++
+    // An e without exponent digits can still be part of an alphabetic unit.
+    if (isDigit(token[exponent])) {
+      while (isDigit(token[exponent])) exponent++
+      end = exponent
+    }
+  }
   const scales: Record<string, number> = {
-    "": 1,
     T: 1e12,
     G: 1e9,
     M: 1e6,
@@ -199,7 +309,14 @@ function matrixNumber(token: string, label: string): number {
     p: 1e-12,
     f: 1e-15,
   }
-  const coefficient = Number(match[1]) * scales[match[2]]
+  const scale = scales[token[end]]
+  const unit = scale === undefined ? end : end + 1
+  for (let i = unit; i < token.length; i++) {
+    const char = token[i]
+    if ((char >= "a" && char <= "z") || (char >= "A" && char <= "Z")) continue
+    throw new Error(`${label}: invalid numeric matrix value ${token}`)
+  }
+  const coefficient = Number(token.slice(0, end)) * (scale ?? 1)
   if (!Number.isFinite(coefficient))
     throw new Error(`${label}: finite matrix value required: ${token}`)
   return coefficient
@@ -227,7 +344,7 @@ function parseMatrix({
   if (
     banded !== hasBand ||
     (hasBand &&
-      (!/^\d+$/.test(sections[1].argument) || sections[1].lines.length))
+      (!isUnsignedInteger(sections[1].argument) || sections[1].lines.length))
   )
     throw new Error(
       `${label}: [Bandwidth] required only for Banded_matrix before rows`,
@@ -241,9 +358,7 @@ function parseMatrix({
     rows.some((row, i) => row.key !== "row" || row.argument !== pins[i])
   )
     throw new Error(`${label}: row order must match [Pin Numbers] exactly`)
-  const values = rows.map((row) =>
-    row.lines.flatMap((line) => line.split(/\s+/)),
-  )
+  const values = rows.map((row) => row.lines.flatMap(splitWords))
   const circular =
     banded && width > 0 && values.every((row) => row.length === width + 1)
   if (circular && width > Math.floor((pins.length - 1) / 2))
@@ -254,7 +369,7 @@ function parseMatrix({
     if (format === "sparse_matrix") {
       const seen = new Set<number>()
       for (const line of rows[i].lines) {
-        const tokens = line.split(/\s+/)
+        const tokens = splitWords(line)
         if (tokens.length !== 2)
           throw new Error(
             `${label} ${pins[i]}: each sparse (index, value) pair needs its own line`,

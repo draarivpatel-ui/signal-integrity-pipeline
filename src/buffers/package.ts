@@ -5,9 +5,11 @@ import {
   coupledPackageElements,
   packageCapacitanceWarnings,
   packageComparisons,
+  packageRail,
 } from "./coupled-package"
 import { referenceVoltages } from "./inspect"
 import { convertSwitching } from "./switching"
+import { asciiLowerCase, isSpace, tokenEnd } from "./text"
 import type { ModelRunDefinition, PackagedComponent } from "./types"
 
 type SpiceTerminal = keyof PackagedComponent["spicePinMapping"]
@@ -16,6 +18,26 @@ type PhysicalPin = keyof ReturnType<
   typeof parseIbis
 >["components"][string]["pins"]
 type SpiceNode = string
+
+/** Remap whole SPICE tokens while retaining all original whitespace. */
+function remapNodes(
+  line: string,
+  nodes: ReadonlyMap<string, SpiceNode>,
+): string {
+  let source = ""
+  for (let start = 0; start < line.length; ) {
+    if (isSpace(line[start])) {
+      source += line[start]
+      start++
+      continue
+    }
+    const end = tokenEnd(line, start)
+    const token = line.slice(start, end)
+    source += nodes.get(token) ?? token
+    start = end
+  }
+  return source
+}
 
 /** Convert die buffers, retaining every vendor pin package with ideal die rails. */
 export function convertPackaged({
@@ -44,7 +66,9 @@ export function convertPackaged({
   const selected = coupledPackage({ text, component, pins: physicalPins })
   const top = converted.source.indexOf("\n.ends ")
   const wrapper = converted.source.slice(0, top).split("\n")
-  const header = wrapper.findIndex((line) => /^\.subckt /i.test(line))
+  const header = wrapper.findIndex(
+    (line) => asciiLowerCase(line.slice(0, ".subckt ".length)) === ".subckt ",
+  )
   const nodes = new Map<SpiceTerminal, SpiceNode>()
   const elements: string[] = []
   const refs = converted.metadata.pins.map((pin) => pin.references.pulldown)
@@ -75,7 +99,7 @@ export function convertPackaged({
     Object.entries(converted.spicePinMapping).flatMap(([terminal], i) => {
       const physical = physicalPins[i]
       const pin = component.pins[physical]
-      if (!/^(power|gnd)$/i.test(pin.model)) return []
+      if (packageRail(pin.model) === undefined) return []
       const key = selected?.mergedPins[physical] ?? physical
       if (!rails.has(key)) rails.set(key, `DIE${i}`)
       return [[terminal, rails.get(key)!] as const]
@@ -129,7 +153,7 @@ export function convertPackaged({
     nodes.set(terminal, reference || node)
     if (reference) {
       let voltage = voltages.get(port)
-      if (voltage == null && /^gnd$/i.test(pin.model)) voltage = 0
+      if (voltage == null && packageRail(pin.model) === "pulldown") voltage = 0
       if (voltage === undefined)
         throw new Error(`${port}: no selected model defines this die rail`)
       if (
@@ -188,7 +212,7 @@ export function convertPackaged({
   }
   const body = wrapper.map((line, index) => {
     if (index <= header) return line
-    return line.replace(/\S+/g, (token) => nodes.get(token) ?? token)
+    return remapNodes(line, nodes)
   })
   converted.source =
     [...body, ...elements].join("\n") + converted.source.slice(top)
