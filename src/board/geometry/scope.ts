@@ -17,7 +17,15 @@ import {
   type SourceConnectionGroup,
   sourceNetMembers,
 } from "../connectivity"
-import type { SourceNetId, SourcePortId, SourceTraceId } from "../ids"
+import type {
+  PcbCopperPourId,
+  PcbPortId,
+  PcbTraceId,
+  PcbViaId,
+  SourceNetId,
+  SourcePortId,
+  SourceTraceId,
+} from "../ids"
 import type { CircuitJson } from "../schema"
 
 /** Lateral search radius in millimetres when the caller supplies no admission cap. */
@@ -31,15 +39,15 @@ const ADJACENT_LAYER_OFFSET = 1
 
 export interface CopperScope {
   lateralDistanceMm: number
-  selectedPcbTraceIds: string[]
-  pcbTraceIds: string[]
-  pcbViaIds: string[]
-  pcbCopperPourIds: string[]
+  selectedPcbTraceIds: PcbTraceId[]
+  pcbTraceIds: PcbTraceId[]
+  pcbViaIds: PcbViaId[]
+  pcbCopperPourIds: PcbCopperPourId[]
   nearbyPadIds: CopperPadId[]
   openPadIds: CopperPadId[]
   padOnlySourcePortIds: SourcePortId[]
-  nonReferenceRailTraceIds: string[]
-  nearbyNonReferencePourIds: string[]
+  nonReferenceRailTraceIds: PcbTraceId[]
+  nearbyNonReferencePourIds: PcbCopperPourId[]
   unassociatedCopper: string[]
   omitted: {
     traces: number
@@ -368,7 +376,7 @@ export function channelCopperScope({
   const vias = circuit.filter((record) => record.type === "pcb_via")
   const pours = circuit.filter((record) => record.type === "pcb_copper_pour")
   const pcbPorts = circuit.filter((record) => record.type === "pcb_port")
-  const ports = new Map(
+  const ports = new Map<PcbPortId, SourcePortId>(
     pcbPorts.map((port) => [port.pcb_port_id, port.source_port_id]),
   )
   const pads = circuit.filter(
@@ -378,11 +386,11 @@ export function channelCopperScope({
   const sourceTraces = circuit.filter(
     (record) => record.type === "source_trace",
   )
-  const sources = new Map(
+  const sources = new Map<SourceTraceId, SourceTrace>(
     sourceTraces.map((trace) => [trace.source_trace_id, trace]),
   )
   const associations = { sources, traces }
-  const boxes = new Map(
+  const boxes = new Map<PcbTraceId, Box[]>(
     traces.map((trace) => {
       const segments = trace.route
         .slice(1)
