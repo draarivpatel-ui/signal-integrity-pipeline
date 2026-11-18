@@ -80,6 +80,7 @@ export {
 } from "./route-visual"
 export type {
   CircuitJson,
+  Point,
   SimulationExperiment,
   SimulationIbisModel,
 } from "./schema"

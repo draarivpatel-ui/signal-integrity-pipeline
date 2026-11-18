@@ -2,6 +2,7 @@ import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
   getSourcePortConnectivityMapFromCircuitJson,
+  type Point,
   type RouteStripRow,
   type RouteWire,
   type RouteXY,
@@ -653,7 +654,7 @@ function offsetPoint({
   wire: RouteWire
   position: number
   transverse: number
-}): { x: number; y: number } {
+}): Point {
   const [x, y] = routePosition({ ...wire, transverse }, position)
   return { x, y }
 }
