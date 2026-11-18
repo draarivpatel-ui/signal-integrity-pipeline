@@ -15,13 +15,15 @@ import {
   stackupFromCircuitJson,
 } from "../board"
 import {
+  coupledPackage,
   edgeSeconds,
   type IbisSources,
   type InspectedPin,
   inspectPins,
+  packageCapacitanceWarnings,
   pinCapabilities,
 } from "../buffers"
-import { safeId } from "../kernel"
+import { safeId, sha256 } from "../kernel"
 import { type RunControls, voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import {
@@ -80,6 +82,7 @@ interface SignalIndexOptions {
 
 /** The lowered circuit and controls for a single transient simulation block. */
 export interface PreparedBlock {
+  warnings: string[]
   durationSeconds: number
   block: SimulationPcbTransientChannelSimulation
   signals: SimulationPcbDriverReceiverChannel[]
@@ -466,6 +469,34 @@ function pruneIbisModels({
   }
 }
 
+/** Report package corrections for the same retained physical pins that will be compiled. */
+function blockPackageWarnings(
+  { circuit, pins }: Pick<PreparedBlock, "circuit" | "pins">,
+  sources: IbisSources,
+): string[] {
+  const warnings: string[] = []
+  for (const model of circuit.filter(
+    (record) => record.type === "simulation_ibis_model",
+  )) {
+    const pin = [...pins.values()].find((pin) => pin.model === model)
+    if (!pin || pin.component.coupledPackage === undefined) continue
+    const selected = coupledPackage({
+      text: pin.text,
+      component: pin.component,
+      pins: Object.keys(model.ibis_pin_name_to_source_port_id),
+    })
+    const file = model.ibis_model_asset.project_relative_path
+    warnings.push(
+      ...packageCapacitanceWarnings({
+        selected,
+        file,
+        sourceSha256: sha256(sources[file]),
+      }),
+    )
+  }
+  return warnings
+}
+
 /** Find nodes that exist independently of the passive loads. */
 function loadNodes({
   circuit,
@@ -670,6 +701,7 @@ function prepareBlock({
   // Stable physical endpoint identities order the matrix; route coordinates set coupling.
   lanes.sort((a, b) => a.from.sourcePortId!.localeCompare(b.from.sourcePortId!))
   pruneIbisModels({ circuit, pins })
+  const warnings = blockPackageWarnings({ circuit, pins }, sources)
   const stack = stackupFromCircuitJson(circuit)
   if (!stack.relativePermittivity) {
     throw new Error(
@@ -730,6 +762,7 @@ function prepareBlock({
     signals,
     circuit,
     controls: { [id]: controls },
+    warnings,
     pins,
     settings,
     durationSeconds,
