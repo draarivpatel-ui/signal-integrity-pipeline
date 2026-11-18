@@ -41,6 +41,9 @@ const STEPS_PER_BIT = 100
 /** Set the maximum transient step relative to the fastest edge. */
 const STEPS_PER_EDGE = 20
 
+/** Ensure the maximum step is strictly shorter than the recording. */
+const MIN_STEPS_PER_RECORDING = 2
+
 /** Allowed difference between typical IBIS voltages on one reference net. */
 const REFERENCE_VOLTAGE_TOLERANCE_V = 1e-8
 
@@ -514,7 +517,11 @@ function prepareBlock({
   })
   const edge = Math.min(...edges)
   const rate = Math.max(...signals.map((signal) => signal.bit_rate_bps))
-  const step = Math.min(1 / rate / STEPS_PER_BIT, edge / STEPS_PER_EDGE)
+  const step = Math.min(
+    1 / rate / STEPS_PER_BIT,
+    edge / STEPS_PER_EDGE,
+    duration / MIN_STEPS_PER_RECORDING,
+  )
   const reference = pins.get([...driven.keys()].sort()[0])!.ground
   const copperScope = channelCopperScope({
     circuit,
