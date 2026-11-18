@@ -58,7 +58,7 @@ export function prepareBlocks({
   )
 }
 
-/** The first admitted block's bindings, admitted through the public root so IBIS bytes are decoded as in production. */
+/** Gets the first block's bindings through the same IBIS decoding path as the public solver. */
 export function admittedBindings(
   circuitJson: CircuitJson,
   ibisSources: IbisSources,
