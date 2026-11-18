@@ -88,15 +88,18 @@ function simplifyRun(
   })
 }
 
+/** Simplified wires and the total route lengths before and after simplification. */
+type SimplifiedRouteWires = {
+  wires: RouteWire[]
+  originalLengthMm: number
+  simplifiedLengthMm: number
+}
+
 /** Bounded Douglas-Peucker chords for densely tessellated curved routes; physical records remain unchanged. */
 export function simplifyRouteWires(
   wires: RouteWire[],
   toleranceMm: number,
-): {
-  wires: RouteWire[]
-  originalLengthMm: number
-  simplifiedLengthMm: number
-} {
+): SimplifiedRouteWires {
   const output: RouteWire[] = []
   let index = 0
   while (index < wires.length) {

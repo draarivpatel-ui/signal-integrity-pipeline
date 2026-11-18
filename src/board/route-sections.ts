@@ -8,7 +8,7 @@ import {
   simplifyRouteWires,
 } from "./route-simplify"
 import { unionRouteWires } from "./route-union"
-import type { CircuitJson } from "./schema"
+import type { CircuitJson, LayerRef } from "./schema"
 import { type BoardStackup, stackupFromCircuitJson } from "./stackup"
 
 export type RouteXY = [number, number]
@@ -187,7 +187,7 @@ function referenceCuts(wire: RouteWire, geometry: SectionGeometry): number[] {
 }
 
 /** Layer after leaving a physical route point. */
-function routedLayer(point: RoutedPoint): string {
+function routedLayer(point: RoutedPoint): LayerRef {
   if (point.route_type === "via") return point.to_layer
   return point.layer
 }
