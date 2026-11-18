@@ -52,6 +52,9 @@ const GEAR_MAX_ORDER = 2
 /** Relative pivot threshold used by ngspice during sparse elimination. */
 const PIVOT_TOLERANCE = "0.1"
 
+/** Omit coupling bands below 1% so weak interactions do not crowd the drawing. */
+const MINIMUM_DRAWN_COUPLING = 0.01
+
 /** Physical node identity, coupled ladders, corrections and the single deck assembly. */
 export class RouteNetworkSolver extends BaseSolver {
   private steps?: Generator<void, Produced<RoutedDeck>>
@@ -438,7 +441,10 @@ export class RouteNetworkSolver extends BaseSolver {
     return [this.input]
   }
 
-  /** Coupling bands between parallel sections (width grows with k), ladder cells as ticks across the selected copper, and every modelled via with the shared glyph. */
+  /**
+   * Coupling bands between parallel sections (width grows with k), ladder cells as ticks across the selected
+   * copper, and every modelled via with the shared glyph.
+   */
   override visualize(): GraphicsObject {
     const { geometry, bindings, extracted } = this.input
     const circuit = bindings.circuitJson
@@ -457,16 +463,21 @@ export class RouteNetworkSolver extends BaseSolver {
               Math.abs(slice.line.L[i][j]) /
                 Math.sqrt(slice.line.L[i][i] * slice.line.L[j][j]),
             )
-            return { slice, a, b, k }
+            return {
+              slice,
+              a,
+              b,
+              k,
+            }
           }),
         ),
       )
-      .filter(
-        ({ a, b, k }) =>
-          k >= 0.01 &&
-          (view.traces.has(a.trace) || view.traces.has(b.trace)) &&
-          (!built || (built.has(a.id) && built.has(b.id))),
-      )
+      .filter(({ a, b, k }) => {
+        const visibleCoupling = k >= MINIMUM_DRAWN_COUPLING
+        if (!visibleCoupling) return false
+        if (!view.traces.has(a.trace) && !view.traces.has(b.trace)) return false
+        return !built || (built.has(a.id) && built.has(b.id))
+      })
       .sort((p, q) => q.k - p.k)
       .slice(0, 800)
     for (const { slice, a, b, k } of bands) {
@@ -565,7 +576,11 @@ export class RouteNetworkSolver extends BaseSolver {
         via.y >= minY &&
         via.y <= maxY
       )
-        routeVia({ drawing, center: via, radius: width * 1.4 })
+        routeVia({
+          drawing,
+          center: via,
+          radius: width * 1.4,
+        })
     }
     // The pane unrolls each net with its ladder cells as ticks and its coupling as violet under the bar.
     const unrolled = routeUnrolled(view, geometry.wires)

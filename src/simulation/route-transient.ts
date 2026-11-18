@@ -1,6 +1,6 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
-import type { RoutedSections } from "../board"
+import type { LaneMapping, RoutedSections } from "../board"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
 import { type SpiceProbeRow, spiceProbeRows } from "../observation"
 import { invoke, type SolverContext, type SolverRequest } from "../solver"
@@ -51,9 +51,10 @@ export class RouteTransientSolver extends BaseSolver {
     const scope = rootScope("simulation").child(this.input.artifactPrefix)
     this.running = true
     try {
+      const solverScope = scope.child("solver").handTo("solver")
       const execution = await invoke(
         this.input.context,
-        scope.child("solver").handTo("solver"),
+        solverScope,
         routedRequest(compiled),
       )
       const run = execution.value
@@ -101,14 +102,13 @@ export class RouteTransientSolver extends BaseSolver {
   override visualize(): GraphicsObject {
     const { compiled, board } = this.input
     const routes = compiled.evidence.routes as
-      | { from: string; to: string }[]
+      | Pick<LaneMapping, "from">[]
       | undefined
     const probes = compiled.probes.map((probe) => ({
       name: probe.name,
       sourcePortId: probe.signalSourceId,
-      near: Boolean(
-        routes?.some((route) => route.from === probe.signalSourceId),
-      ),
+      near:
+        routes?.some((route) => route.from === probe.signalSourceId) === true,
     }))
     let error: string | undefined
     if (this.failed) error = this.error ?? "Transient failed"

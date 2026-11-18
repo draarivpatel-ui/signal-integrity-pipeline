@@ -357,7 +357,10 @@ export class RoutedAdmissionSolver extends BaseSolver {
     return [this.input]
   }
 
-  /** Selected copper in net colours with drivers as dots and receivers as rings, and each net's routed length unrolled in the pane; a rejection writes one red reason. */
+  /**
+   * Selected copper in net colours with drivers as dots and receivers as rings, and each net's routed length
+   * unrolled in the pane; a rejection writes one red reason.
+   */
   override visualize(): GraphicsObject {
     const plan = this.plans.at(-1)
     const circuit = this.input.circuitJson

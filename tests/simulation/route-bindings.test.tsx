@@ -92,11 +92,10 @@ test("two-trace TSX route-bindings visual SVG snapshot", async () => {
 
 test("missing IBIS bytes mark physical endpoints and rejection reason red", async () => {
   const { root } = await routedVisualFixture()
-  const params = root
-    .getSolver<RoutedStageSolver<RouteBindingsInput, RoutedBindings>>(
-      "RouteBindingsSolver",
-    )!
-    .getConstructorParams()[0][0]
+  const stage = root.getSolver<
+    RoutedStageSolver<RouteBindingsInput, RoutedBindings>
+  >("RouteBindingsSolver")!
+  const [[params]] = stage.getConstructorParams()
   const missing = new RouteBindingsSolver({ ...params, ibisSources: {} })
   assert.throws(() => missing.solve())
   const drawing = missing.visualize()

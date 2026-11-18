@@ -261,7 +261,10 @@ export class RouteFieldsSolver extends BaseSolver {
     return [this.input]
   }
 
-  /** Solved copper coloured by Z0 with the slice on screen cut in amber; once finished, the slice with the most selected conductors. */
+  /**
+   * Solved copper coloured by Z0 with the slice on screen cut in amber; once finished, the slice with the most
+   * selected conductors.
+   */
   override visualize(): GraphicsObject {
     const { geometry, circuitJson, scope } = this.input
     const selected = new Set(

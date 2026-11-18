@@ -160,7 +160,10 @@ export class RouteBindingsSolver extends BaseSolver {
     return [this.input]
   }
 
-  /** Bound components outlined, IBIS buffer glyphs at their signal pins (▶ driver, ◀ receiver) and rail pins as grey dots; unbound lane ends turn red. */
+  /**
+   * Bound components outlined, IBIS buffer glyphs at their signal pins (▶ driver, ◀ receiver) and rail pins as
+   * grey dots; unbound lane ends turn red.
+   */
   override visualize(): GraphicsObject {
     const circuit = this.input.circuitJson
     const view = routeView(circuit, this.input.scope)
@@ -175,7 +178,12 @@ export class RouteBindingsSolver extends BaseSolver {
         .filter((component) => component.type === "pcb_component")
         .map((component) => [component.pcb_component_id, component]),
     )
-    const outlineContext = { pcbPorts, components, drawing, unit: view.unit }
+    const outlineContext = {
+      pcbPorts,
+      components,
+      drawing,
+      unit: view.unit,
+    }
     const buffers = this.models.flatMap((model) => {
       outlinePortComponents(
         {
@@ -189,10 +197,11 @@ export class RouteBindingsSolver extends BaseSolver {
         (id) => {
           const point = routePortPoint(circuit, id)
           if (!point) return []
+          const mappedSignal = this.input.mappings.some(
+            (mapping) => mapping.from === id || mapping.to === id,
+          )
           if (
-            !this.input.mappings.some(
-              (mapping) => mapping.from === id || mapping.to === id,
-            ) ||
+            !mappedSignal ||
             !model.metadata.pins.some((pin) => pin.port === id)
           ) {
             drawing.circles!.push({

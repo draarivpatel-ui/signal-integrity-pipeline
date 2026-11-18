@@ -63,6 +63,7 @@ function sectionColor(net: RouteNet | undefined, index: number): string {
 /** Segment one real route per step, then admit selected endpoint contacts. */
 export class RouteSectionsSolver extends BaseSolver {
   private steps?: Generator<SectionGeometry, SectionGeometry>
+  private geometry?: SectionGeometry
   private output?: Produced<RoutedSections>
   private scope: CopperScope
   /** Capture source values and correct the owned AC rail scope. */
@@ -106,6 +107,7 @@ export class RouteSectionsSolver extends BaseSolver {
     })
     const result = this.steps.next()
     const geometry = result.value
+    this.geometry = geometry
     this.stats = {
       routes: Math.min(this.iterations, this.scope.pcbTraceIds.length),
       wires: geometry.wires.length,
@@ -174,7 +176,10 @@ export class RouteSectionsSolver extends BaseSolver {
     return [this.input]
   }
 
-  /** Sections alternate two tones of their net's hue, the route cut this step wears a white casing, and copper not yet cut stays neutral grey. */
+  /**
+   * Sections alternate two tones of their net's hue, the route cut this step wears a white casing, and copper
+   * not yet cut stays neutral grey.
+   */
   override visualize(): GraphicsObject {
     const circuit = this.input.circuitJson
     const view = routeView(circuit, this.scope)
@@ -219,7 +224,10 @@ export class RouteSectionsSolver extends BaseSolver {
     const rows = new Map<RouteNetLabel, RouteStripRow>(
       routeLengths(circuit, view).map((row) => [
         row.net.label,
-        { ...row, parts: [] },
+        {
+          ...row,
+          parts: [],
+        },
       ]),
     )
     tone.clear()

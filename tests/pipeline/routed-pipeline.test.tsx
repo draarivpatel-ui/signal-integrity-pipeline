@@ -227,9 +227,10 @@ test("every completed stage retains its own final drawing with few, readable lab
       1000 / (view.maxX - view.minX),
       540 / (view.maxY - view.minY),
     )
+    const readableLabels = texts.every((text) => text.fontSize! * scale >= 10)
     assert.ok(
-      texts.every((text) => text.fontSize! * scale >= 10),
-      `${definition.solverName}: a 1080 x 620 picture keeps every label readable`,
+      readableLabels,
+      `${definition.solverName}: all labels are readable at 1080 × 620`,
     )
   }
 })
@@ -327,8 +328,9 @@ test("actual two-block TSX advances every flat stage and invokes transients sequ
   await root.solveAsync()
   assert.equal(calls, 2)
   assert.equal(root.getOutput().blocks.length, 2)
+  const retainedSections = root.getSolver("RouteSectionsSolver")!.visualize()
   assert.deepEqual(
-    root.getSolver("RouteSectionsSolver")!.visualize(),
+    retainedSections,
     sections,
     "later stages preserve the final Sections drawing",
   )
@@ -344,8 +346,13 @@ test("actual two-block TSX advances every flat stage and invokes transients sequ
 /** Every frame must give the board picture a finite, nondegenerate camera, including async waits. */
 function assertDrawing(
   circuit: CircuitJson,
-  drawing: GraphicsObject,
-  state: string,
+  {
+    drawing,
+    state,
+  }: {
+    drawing: GraphicsObject
+    state: string
+  },
 ): void {
   const view = boardPictureView(circuit, drawing)
   assert.ok(
@@ -368,43 +375,45 @@ for (const name of ["two-trace"])
       runSolver: async (request) => {
         calls++
         const drawing: GraphicsObject = solver.visualize()
-        assertDrawing(circuit, drawing, `${name}: ngspice pending`)
-        assert.equal(
-          drawing.lines!.filter((line) => line.layer === "waveform").length,
-          0,
-          "no curves while ngspice runs",
+        assertDrawing(circuit, { drawing, state: `${name}: ngspice pending` })
+        const curves = drawing.lines!.filter(
+          (line) => line.layer === "waveform",
         )
+        assert.equal(curves.length, 0, "no curves while ngspice runs")
         await new Promise<void>((resolve) => setImmediate(resolve))
         return synthetic.runSolver(request)
       },
     })
-    assertDrawing(circuit, solver.visualize(), `${name}: initial`)
+    assertDrawing(circuit, {
+      drawing: solver.visualize(),
+      state: `${name}: initial`,
+    })
     while (!solver.solved && !solver.failed) {
       assert.ok(solver.iterations < 200, "bounded iteration check")
       const pending = solver.stepAsync()
-      assertDrawing(
-        circuit,
-        solver.visualize(),
-        `${name}: iteration ${solver.iterations} pending`,
-      )
+      const state = `${name}: iteration ${solver.iterations}`
+      assertDrawing(circuit, {
+        drawing: solver.visualize(),
+        state: `${state} pending`,
+      })
       await pending
-      assertDrawing(
-        circuit,
-        solver.visualize(),
-        `${name}: iteration ${solver.iterations}`,
-      )
-      if (solver.getStageOutput("RoutedAdmissionSolver"))
+      assertDrawing(circuit, {
+        drawing: solver.visualize(),
+        state: `${name}: iteration ${solver.iterations}`,
+      })
+      if (solver.getStageOutput("RoutedAdmissionSolver")) {
         assert.ok(
           solver.visualize().lines!.length > 0,
-          `${name}: once admitted, every stage draws the selected copper`,
+          `${name}: every admitted stage draws selected copper`,
         )
+      }
     }
     assert.equal(solver.failed, false)
     assert.equal(calls, 1)
-    for (const number of [1, 2, 3, 4, 5, 6])
-      assertDrawing(
-        circuit,
-        solver.visualizeStage(number),
-        `${name}: retained ${number}`,
-      )
+    for (const number of [1, 2, 3, 4, 5, 6]) {
+      assertDrawing(circuit, {
+        drawing: solver.visualizeStage(number),
+        state: `${name}: retained ${number}`,
+      })
+    }
   })
