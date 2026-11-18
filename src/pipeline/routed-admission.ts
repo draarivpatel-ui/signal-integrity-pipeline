@@ -190,9 +190,18 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
   )
   const experiment = block.circuit.find(
     (record) => record.type === "simulation_experiment",
-  )!
-  if (experiment.type !== "simulation_experiment")
-    throw new Error("Missing admitted experiment")
+  )
+  if (!experiment) throw new Error("Missing admitted experiment")
+  const { time_per_step: timePerStep } = experiment
+  if (
+    timePerStep === undefined ||
+    !Number.isFinite(timePerStep) ||
+    timePerStep <= 0
+  ) {
+    throw new Error(
+      "The admitted experiment requires a finite positive time_per_step",
+    )
+  }
   const driverPorts = block.signals.flatMap((signal) =>
     endpointPorts(signal.driver),
   )
@@ -202,7 +211,7 @@ function planRoutedBlock(input: RoutedProblem, id: string): RoutedBlockPlan {
   const options: RoutedCompileOptions = {
     riseSeconds: Math.min(...driverRiseSeconds),
     refinement: BASE_REFINEMENT,
-    stepSeconds: experiment.time_per_step! / MILLISECONDS_PER_SECOND,
+    stepSeconds: timePerStep / MILLISECONDS_PER_SECOND,
     durationSeconds: block.duration,
   }
   const artifactPrefix = `blocks/${id}`
