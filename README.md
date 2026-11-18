@@ -125,9 +125,10 @@ IBIS edge rates, bit rates, stackup and actual routes. Every block produces an
 independent run. A differential endpoint drives opposite physical levels and
 measures P minus N. Quiet channels remain connected and are probed at the far
 receiver and at the near quiet driver. Single-ended probes always use their chip's
-local ground. Numeric offsets are seconds; automatic duration is startup plus 128
-of the slowest UI (32 UI for quiet-only blocks). Explicit durations are never
-extended. IBIS values always use the typical corner.
+local ground. Numeric offsets are seconds. Automatic duration adds 128 unit
+intervals at the slowest switching bit rate after startup. Quiet-only blocks use
+32 unit intervals at the slowest bit rate. Explicit durations are never extended.
+IBIS values always use the typical corner.
 
 ## Development validation
 
