@@ -3,8 +3,9 @@ import assert from "node:assert/strict"
 import React from "react"
 import {
   channelCopperScope,
-  connectedSourceIds,
+  getSourcePortConnectivityMapFromCircuitJson,
   segmentRoutes,
+  sourceNetMembers,
 } from "../../src/board"
 import { routeCrossSection, solveCrossSection } from "../../src/extraction"
 import { renderCoreSignals } from "../support/core-render"
@@ -186,12 +187,14 @@ test("cross-section mesh preserves references, rejects invalid geometry and coal
       .filter((record) => record.type === "source_trace")
       .flatMap((trace) => trace.connected_source_port_ids),
   )
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const geometry = segmentRoutes(
     circuit,
     channelCopperScope({
       circuit,
+      connectivity,
       selected,
-      reference: connectedSourceIds(circuit, ground.source_net_id),
+      reference: sourceNetMembers(connectivity, ground.source_net_id),
     }),
   )
   const slice = geometry.slices.find(

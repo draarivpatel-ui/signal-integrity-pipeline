@@ -3,8 +3,9 @@ import assert from "node:assert/strict"
 import React from "react"
 import {
   channelCopperScope,
-  connectedSourceIds,
+  getSourcePortConnectivityMapFromCircuitJson,
   segmentRoutes,
+  sourceNetMembers,
 } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
 import Board from "../fixtures/return-agreement"
@@ -28,10 +29,12 @@ test("TSX parallel coupling uses solved electric AND magnetic coupling instead o
     const ground = circuit
       .filter((record) => record.type === "source_net")
       .find((net) => net.name === "GND")!
+    const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
     const scope = channelCopperScope({
       circuit,
+      connectivity,
       selected,
-      reference: connectedSourceIds(circuit, ground.source_net_id),
+      reference: sourceNetMembers(connectivity, ground.source_net_id),
       rails: new Set(),
       distanceMm: 32,
     })
