@@ -222,9 +222,7 @@ export function validateSignalGraph({
       })
     }
   }
-  const copperGraph = new Map(
-    [...graph].map(([key, values]) => [key, new Set(values)]),
-  )
+  const copperPoints = new Set(graph.keys())
   for (const [pinA, pinB] of passiveBridges(circuit, rails)) {
     for (const a of terminals.get(pinA) ?? []) {
       for (const b of terminals.get(pinB) ?? [])
@@ -235,15 +233,15 @@ export function validateSignalGraph({
     for (const [leg, port] of drivers[index].entries()) {
       const starts = terminals.get(port) ?? []
       const connected = reachable(starts, graph)
-      const routed = starts.some((key) => copperGraph.has(key))
+      const routed = starts.some((key) => copperPoints.has(key))
       if (routed) {
         const branchAtDriver = starts.some(
-          (key) => (copperGraph.get(key)?.size ?? 0) > 1,
+          (key) => (graph.get(key)?.size ?? 0) > 1,
         )
-        const branchInCopper = [...connected].some(
-          (key) => (copperGraph.get(key)?.size ?? 0) > 2,
+        const branchInPath = [...connected].some(
+          (key) => (graph.get(key)?.size ?? 0) > 2,
         )
-        if (branchAtDriver || branchInCopper) {
+        if (branchAtDriver || branchInPath) {
           throw new Error(
             `Signal "${signal.name}": branched routed graphs are not implemented yet.`,
           )

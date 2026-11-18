@@ -9,6 +9,7 @@ import { driverReceiverChannel } from "../fixtures/driver-receiver-channel"
 import {
   daisyChain,
   missingReceiverTerminal,
+  seriesResistor,
   unroutedExtraPin,
 } from "../fixtures/topology-board"
 
@@ -52,4 +53,11 @@ test("a linear copper path supports more than one receiver", async () => {
   const circuit = await daisyChain()
   assert.doesNotThrow(() => validate(circuit))
   assert.doesNotThrow(() => validate(circuit, ["MID", "RX"]))
+})
+
+test("two copper legs leaving a series resistor form a branch", async () => {
+  const straight = await seriesResistor(false)
+  assert.doesNotThrow(() => validate(straight))
+  const branched = await seriesResistor(true)
+  assert.throws(() => validate(branched), /branched routed graphs/)
 })
