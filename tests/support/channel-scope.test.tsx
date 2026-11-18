@@ -1,8 +1,8 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
 import { simulation } from "@tscircuit/core"
 import React from "react"
+import { routedVisualIbis } from "./routed-visual-fixture"
 import { Inverter, Reference } from "./signal-parts"
 import { prepareBlocks, renderSignals } from "./signal-render"
 
@@ -91,64 +91,56 @@ function Board({
   )
 }
 
-const modelDir = process.env.IBIS_MODEL_DIR
-
-test(
-  "unrelated branched copper cannot reject a selected channel",
-  { skip: !modelDir },
-  async () => {
-    const circuit = await renderSignals(<Board />)
-    const sources = {
-      "models/sn74lvc1g04.ibs": await readFile(`${modelDir}/sn74lvc1g04.ibs`),
-    }
-    const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
-    assert.equal(block.settings.lanes.length, 1)
-    assert.equal(block.settings.copperScope?.omitted.traces, 2)
-    const near = prepareBlocks({
-      circuit: await renderSignals(<Board neighbour />),
-      sources,
-      distanceMm: 1,
-    })[0]
-    assert.equal(
-      near.settings.lanes.length,
-      1,
-      "only the selected channel is a lane",
+test("unrelated branched copper cannot reject a selected channel", async () => {
+  const circuit = await renderSignals(<Board />)
+  const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
+  const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
+  assert.equal(block.settings.lanes.length, 1)
+  assert.equal(block.settings.copperScope?.omitted.traces, 2)
+  const near = prepareBlocks({
+    circuit: await renderSignals(<Board neighbour />),
+    sources,
+    distanceMm: 1,
+  })[0]
+  assert.equal(
+    near.settings.lanes.length,
+    1,
+    "only the selected channel is a lane",
+  )
+  const { pcbTraceIds, selectedPcbTraceIds } = near.settings.copperScope
+  assert.ok(
+    pcbTraceIds.length > selectedPcbTraceIds.length,
+    "the nearby quiet conductor stays in the copper scope",
+  )
+  const quiet = [...near.pins.values()].find((pin) => {
+    if (pin.buffer.type !== "output") return false
+    return !near.signals.some(
+      ({ driver }) =>
+        "source_port_id" in driver && driver.source_port_id === pin.port,
     )
-    const { pcbTraceIds, selectedPcbTraceIds } = near.settings.copperScope
-    assert.ok(
-      pcbTraceIds.length > selectedPcbTraceIds.length,
-      "the nearby quiet conductor stays in the copper scope",
+  })!
+  const { stimuli } =
+    near.controls[near.block.simulation_pcb_transient_channel_simulation_id]
+  const quietStimulus = stimuli.some((stimulus) => {
+    return (
+      stimulus.source_port_id === quiet.port &&
+      stimulus.transmission_pattern.bits === "0"
     )
-    const quiet = [...near.pins.values()].find((pin) => {
-      if (pin.buffer.type !== "output") return false
-      return !near.signals.some(
-        ({ driver }) =>
-          "source_port_id" in driver && driver.source_port_id === pin.port,
-      )
-    })!
-    const { stimuli } =
-      near.controls[near.block.simulation_pcb_transient_channel_simulation_id]
-    const quietStimulus = stimuli.some((stimulus) => {
-      return (
-        stimulus.source_port_id === quiet.port &&
-        stimulus.transmission_pattern.bits === "0"
-      )
-    })
-    assert.ok(quietStimulus)
-    const nearbyBranch = await renderSignals(<Board unrelatedY={0.5} />)
-    const branched = prepareBlocks({
-      circuit: nearbyBranch,
-      sources,
-      distanceMm: 1,
-    })[0]
-    assert.equal(
-      branched.settings.lanes.length,
-      1,
-      "nearby branched copper is a scoped neighbour, not a rejected lane",
-    )
-    assert.ok(
-      branched.settings.copperScope.pcbTraceIds.length >
-        branched.settings.copperScope.selectedPcbTraceIds.length,
-    )
-  },
-)
+  })
+  assert.ok(quietStimulus)
+  const nearbyBranch = await renderSignals(<Board unrelatedY={0.5} />)
+  const branched = prepareBlocks({
+    circuit: nearbyBranch,
+    sources,
+    distanceMm: 1,
+  })[0]
+  assert.equal(
+    branched.settings.lanes.length,
+    1,
+    "nearby branched copper is a scoped neighbour, not a rejected lane",
+  )
+  assert.ok(
+    branched.settings.copperScope.pcbTraceIds.length >
+      branched.settings.copperScope.selectedPcbTraceIds.length,
+  )
+})

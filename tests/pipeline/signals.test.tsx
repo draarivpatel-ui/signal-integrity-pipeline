@@ -1,6 +1,5 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
 import { simulation } from "@tscircuit/core"
 import type { TraceProps } from "@tscircuit/props"
 import React from "react"
@@ -16,13 +15,9 @@ import { routedVisualIbis } from "../support/routed-visual-fixture"
 import { Inverter, Reference } from "../support/signal-parts"
 import { prepareBlocks, renderSignals } from "../support/signal-render"
 
-const modelDir = process.env.IBIS_MODEL_DIR
 const inverterIbisPath = "models/sn74lvc1g04.ibs"
 
-/** Load the local vendor model for the tests that exercise its exact pin declarations. */
-async function sources(): Promise<Record<string, Uint8Array>> {
-  return { [inverterIbisPath]: await readFile(`${modelDir}/sn74lvc1g04.ibs`) }
-}
+const inverterSources = { [inverterIbisPath]: routedVisualIbis }
 
 interface BoardProps {
   missing?: boolean
@@ -177,59 +172,49 @@ function Board({
   )
 }
 
-test(
-  "full unrouted check reaches the segment after a series passive",
-  { skip: !modelDir },
-  async () => {
-    await assert.rejects(
-      renderSignals(<Board missing />),
-      /is not routed between/,
-    )
-    // Render the gap with ideal routing allowed, then test the strict policy on the saved records.
-    const circuit = await renderSignals(<Board missing allowUnroutedTraces />, [
-      "pcb_trace_missing_error",
-      "pcb_port_not_connected_error",
-    ])
-    const block = circuit.find(
-      (record) => record.type === "simulation_pcb_transient_channel_simulation",
-    )!
-    if (block.type !== "simulation_pcb_transient_channel_simulation")
-      throw new Error("Missing block")
-    block.allow_unrouted_traces = false
-    const ibis = await sources()
-    assert.throws(
-      () => prepareBlocks({ circuit, sources: ibis }),
-      /is not routed between/,
-    )
-    const geometryOnly = circuit.filter(
-      (record) => !record.type.endsWith("_error"),
-    )
-    assert.throws(
-      () => prepareBlocks({ circuit: geometryOnly, sources: ibis }),
-      /is not routed between/,
-    )
-    block.allow_unrouted_traces = true
-    const [prepared] = prepareBlocks({ circuit, sources: ibis })
-    assert.equal(
-      prepared.settings.lanes.length,
-      1,
-      "only the routed segment before RS is a physical lane",
-    )
-  },
-)
+test("full unrouted check reaches the segment after a series passive", async () => {
+  await assert.rejects(
+    renderSignals(<Board missing />),
+    /is not routed between/,
+  )
+  // Render the gap with ideal routing allowed, then test the strict policy on the saved records.
+  const circuit = await renderSignals(<Board missing allowUnroutedTraces />, [
+    "pcb_trace_missing_error",
+    "pcb_port_not_connected_error",
+  ])
+  const block = circuit.find(
+    (record) => record.type === "simulation_pcb_transient_channel_simulation",
+  )!
+  if (block.type !== "simulation_pcb_transient_channel_simulation")
+    throw new Error("Missing block")
+  block.allow_unrouted_traces = false
+  assert.throws(
+    () => prepareBlocks({ circuit, sources: inverterSources }),
+    /is not routed between/,
+  )
+  const geometryOnly = circuit.filter(
+    (record) => !record.type.endsWith("_error"),
+  )
+  assert.throws(
+    () => prepareBlocks({ circuit: geometryOnly, sources: inverterSources }),
+    /is not routed between/,
+  )
+  block.allow_unrouted_traces = true
+  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  assert.equal(
+    prepared.settings.lanes.length,
+    1,
+    "only the routed segment before RS is a physical lane",
+  )
+})
 
-test(
-  "routed receiver arrays get the RFC not-implemented diagnostic",
-  { skip: !modelDir },
-  async () => {
-    const circuit = await renderSignals(<Board branch />)
-    const ibis = await sources()
-    assert.throws(
-      () => prepareBlocks({ circuit, sources: ibis }),
-      /branched routed graphs are not implemented yet/,
-    )
-  },
-)
+test("routed receiver arrays get the RFC not-implemented diagnostic", async () => {
+  const circuit = await renderSignals(<Board branch />)
+  assert.throws(
+    () => prepareBlocks({ circuit, sources: inverterSources }),
+    /branched routed graphs are not implemented yet/,
+  )
+})
 
 test("pipeline checks selected IBIS roles and disabled states after TSX rendering", async () => {
   const circuit = await renderSignals(<Board />)
@@ -317,57 +302,50 @@ test("core seeds PRBS across blocks, preserves explicit seeds and emits eye time
   assert.equal(eye?.end_time_ms, 40e-6)
 })
 
-test(
-  "unlisted outputs drive low and the listed driver receives a legal seed",
-  { skip: !modelDir },
-  async () => {
-    const circuit = await renderSignals(<Board unlisted />)
-    const prepared = prepareBlocks({ circuit, sources: await sources() })[0]
-    assert.equal(prepared.signals[0].seed, 127)
-    const { driver } = prepared.signals[0]
-    const listedPort = "source_port_id" in driver ? driver.source_port_id : ""
-    const extra = [...prepared.pins.values()].find(
-      (pin) => pin.buffer.type === "output" && pin.port !== listedPort,
-    )!
-    const { states, stimuli } =
-      prepared.controls[
-        prepared.block.simulation_pcb_transient_channel_simulation_id
-      ]
-    assert.equal(
-      states.find((state) => state.source_port_id === extra.port)
-        ?.is_output_enabled,
-      true,
-    )
-    assert.equal(
-      stimuli.find((stimulus) => stimulus.source_port_id === extra.port)
-        ?.transmission_pattern.bits,
-      "0",
-    )
-  },
-)
+test("unlisted outputs drive low and the listed driver receives a legal seed", async () => {
+  const circuit = await renderSignals(<Board unlisted />)
+  const prepared = prepareBlocks({ circuit, sources: inverterSources })[0]
+  assert.equal(prepared.signals[0].seed, 127)
+  const { driver } = prepared.signals[0]
+  const listedPort = "source_port_id" in driver ? driver.source_port_id : ""
+  const extra = [...prepared.pins.values()].find(
+    (pin) => pin.buffer.type === "output" && pin.port !== listedPort,
+  )!
+  const { states, stimuli } =
+    prepared.controls[
+      prepared.block.simulation_pcb_transient_channel_simulation_id
+    ]
+  assert.equal(
+    states.find((state) => state.source_port_id === extra.port)
+      ?.is_output_enabled,
+    true,
+  )
+  assert.equal(
+    stimuli.find((stimulus) => stimulus.source_port_id === extra.port)
+      ?.transmission_pattern.bits,
+    "0",
+  )
+})
 
-test(
-  "via plating comes from the preset and must be in the stackup",
-  { skip: !modelDir },
-  async () => {
-    const circuit = await renderSignals(<Board via />)
-    const ibis = await sources()
-    const stack = circuit.find((record) => record.type === "pcb_stackup")!
-    if (stack.type !== "pcb_stackup") throw new Error("Missing stackup")
-    assert.equal(stack.plated_hole_copper_thickness, 0.018)
-    assert.ok(
-      prepareBlocks({ circuit, sources: ibis })[0].settings.copperScope
-        .pcbViaIds.length >= 2,
-    )
-    delete stack.plated_hole_copper_thickness
-    assert.throws(
-      () => prepareBlocks({ circuit, sources: ibis }),
-      /pcb_stackup must specify plated_hole_copper_thickness/,
-    )
-    stack.plated_hole_copper_thickness = 0.025
-    assert.doesNotThrow(() => prepareBlocks({ circuit, sources: ibis }))
-  },
-)
+test("via plating comes from the preset and must be in the stackup", async () => {
+  const circuit = await renderSignals(<Board via />)
+  const stack = circuit.find((record) => record.type === "pcb_stackup")!
+  if (stack.type !== "pcb_stackup") throw new Error("Missing stackup")
+  assert.equal(stack.plated_hole_copper_thickness, 0.018)
+  assert.ok(
+    prepareBlocks({ circuit, sources: inverterSources })[0].settings.copperScope
+      .pcbViaIds.length >= 2,
+  )
+  delete stack.plated_hole_copper_thickness
+  assert.throws(
+    () => prepareBlocks({ circuit, sources: inverterSources }),
+    /pcb_stackup must specify plated_hole_copper_thickness/,
+  )
+  stack.plated_hole_copper_thickness = 0.025
+  assert.doesNotThrow(() =>
+    prepareBlocks({ circuit, sources: inverterSources }),
+  )
+})
 
 const signal: SimulationPcbDriverReceiverChannel = {
   type: "simulation_pcb_driver_receiver_channel",
@@ -426,43 +404,37 @@ test("the removed modeling API cannot supply a test or synthesize a block", () =
   assert.deepEqual(signalBlocks([]), [])
 })
 
-test(
-  "explicit duration converts to ms and automatic duration stays absent",
-  { skip: !modelDir },
-  async () => {
-    const automatic = await renderSignals(<Board />)
-    const ibis = await sources()
-    const automaticBlock = automatic.find(
-      (record) => record.type === "simulation_pcb_transient_channel_simulation",
-    )
-    assert.equal(automaticBlock?.duration_ms, undefined)
-    assert.equal(
-      prepareBlocks({ circuit: automatic, sources: ibis })[0].duration,
-      144 / 20e6,
-    )
+test("explicit duration converts to ms and automatic duration stays absent", async () => {
+  const automatic = await renderSignals(<Board />)
+  const automaticBlock = automatic.find(
+    (record) => record.type === "simulation_pcb_transient_channel_simulation",
+  )
+  assert.equal(automaticBlock?.duration_ms, undefined)
+  assert.equal(
+    prepareBlocks({ circuit: automatic, sources: inverterSources })[0].duration,
+    144 / 20e6,
+  )
 
-    const explicit = await renderSignals(<Board duration={1e-9} />)
-    const [prepared] = prepareBlocks({ circuit: explicit, sources: ibis })
-    assert.ok(Math.abs(prepared.duration - 1e-9) <= Number.EPSILON * 1e-9)
-    assert.ok(
-      Math.abs((prepared.block.duration_ms ?? NaN) - 1e-6) <=
-        Number.EPSILON * 1e-6,
-    )
-  },
-)
+  const explicit = await renderSignals(<Board duration={1e-9} />)
+  const [prepared] = prepareBlocks({
+    circuit: explicit,
+    sources: inverterSources,
+  })
+  assert.ok(Math.abs(prepared.duration - 1e-9) <= Number.EPSILON * 1e-9)
+  assert.ok(
+    Math.abs((prepared.block.duration_ms ?? NaN) - 1e-6) <=
+      Number.EPSILON * 1e-6,
+  )
+})
 
-test(
-  "numeric TSX offsets are seconds, with startup added before the finite capture",
-  { skip: !modelDir },
-  async () => {
-    const [prepared] = prepareBlocks({
-      circuit: await renderSignals(<Board offset={0.5} />),
-      sources: await sources(),
-    })
-    assert.equal(prepared.signals[0].offset_ms, 500)
-    assert.ok(Math.abs(prepared.duration - (0.5 + 144 / 20e6)) < 1e-15)
-  },
-)
+test("numeric TSX offsets are seconds, with startup added before the finite capture", async () => {
+  const [prepared] = prepareBlocks({
+    circuit: await renderSignals(<Board offset={0.5} />),
+    sources: inverterSources,
+  })
+  assert.equal(prepared.signals[0].offset_ms, 500)
+  assert.ok(Math.abs(prepared.duration - (0.5 + 144 / 20e6)) < 1e-15)
+})
 
 test("source signal names use Unicode code point order", () => {
   assert.ok(compareNames("\uE000", "\u{10000}") < 0)
