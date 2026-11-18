@@ -82,7 +82,7 @@ interface SignalIndexOptions {
 
 /** The lowered circuit and controls for a single transient simulation block. */
 export interface PreparedBlock {
-  warnings: string[]
+  warnings?: string[]
   durationSeconds: number
   block: SimulationPcbTransientChannelSimulation
   signals: SimulationPcbDriverReceiverChannel[]
@@ -757,14 +757,15 @@ function prepareBlock({
     rate,
     stepSeconds,
   })
-  return {
+  const prepared: PreparedBlock = {
     block,
     signals,
     circuit,
     controls: { [id]: controls },
-    warnings,
     pins,
     settings,
     durationSeconds,
   }
+  if (warnings.length > 0) prepared.warnings = warnings
+  return prepared
 }

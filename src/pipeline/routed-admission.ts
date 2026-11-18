@@ -251,7 +251,7 @@ function planRoutedBlock({
   return Object.freeze({
     id,
     name: block.block.name ?? id,
-    warnings: snapshot(block.warnings),
+    warnings: snapshot(block.warnings ?? []),
     sections: Object.freeze({
       circuitJson,
       scope: modeling.copperScope,
