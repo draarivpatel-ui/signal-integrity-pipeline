@@ -2,7 +2,7 @@
  * buffers — IBIS driver/receiver models as SPICE.
  * Owns: IbisSources admission (path safety, size, ZIP/HTML rejection, UTF-8), SHA-256 pinning
  * (modeling.ibisModelAssetSha256), the pinned @tscircuit/ibis-to-spice converter, compiled
- * libraries and their evidence.
+ * libraries and their evidence, plus inspection of IBIS pin bindings, references and capabilities.
  * Order (today's runPipeline): assertConverter -> admitBuffers (pure checks, no solver work) ->
  * compileBuffers -> per experiment ibisAssembly.
  * compileBuffers takes AdmittedBuffers so only checked bytes reach the converter.
@@ -17,9 +17,15 @@ export {
   compileBuffers,
   ibisAssembly,
 } from "./buffers"
-export type { InspectedPin } from "./inspect"
+export { edgeDurationSeconds } from "./edge-duration"
+export type {
+  InspectedPin,
+  InspectedPins,
+  PinCapabilities,
+  ReferencePorts,
+  ReferenceVoltages,
+} from "./inspect"
 export {
-  edgeSeconds,
   inspectPins,
   pinCapabilities,
   referenceVoltages,
