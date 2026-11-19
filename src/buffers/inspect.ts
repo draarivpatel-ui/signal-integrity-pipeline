@@ -292,13 +292,14 @@ function edgeCrossingSeconds({
     const [endSeconds, endVoltage] = samples[i]
     const low = Math.min(startVoltage, endVoltage)
     const high = Math.max(startVoltage, endVoltage)
-    if (low === high || target < low || target > high) continue
+    if (target < low || target > high) continue
 
     const voltageChange = endVoltage - startVoltage
     const elapsedSeconds = endSeconds - startSeconds
     const crossingSeconds =
       startSeconds + ((target - startVoltage) * elapsedSeconds) / voltageChange
-    return crossingSeconds
+    // A threshold can round to the voltage of a flat interval.
+    if (!Number.isNaN(crossingSeconds)) return crossingSeconds
   }
   return undefined
 }
@@ -343,16 +344,19 @@ export function edgeDurationSeconds(pin: InspectedPin): number {
     })
     if (startSeconds === undefined || endSeconds === undefined) continue
     const durationSeconds = endSeconds - startSeconds
+    // Subtracting finite crossing times can overflow.
     if (durationSeconds > 0 && Number.isFinite(durationSeconds))
       durationsSeconds.push(durationSeconds)
   }
   if (durationsSeconds.length) return Math.min(...durationsSeconds)
 
-  // IBIS 7.2 §6.1 requires [Ramp] for drivers and makes waveforms optional.
+  // Read IbisBuffer.ramp (ibis-to-spice#6, merged) when no waveform is usable.
   const ramp = pin.buffer.ramp
-  for (const ratio of [ramp?.rising[0], ramp?.falling[0]]) {
-    if (!ratio || ratio.voltage <= 0 || ratio.timeSeconds <= 0) continue
+  const ratios = [ramp?.rising[0] ?? null, ramp?.falling[0] ?? null]
+  for (const ratio of ratios) {
+    if (ratio === null || ratio.voltage <= 0 || ratio.timeSeconds <= 0) continue
     const durationSeconds = ratio.timeSeconds * RAMP_TO_EDGE_DURATION
+    // Scaling a finite ramp time can overflow.
     if (Number.isFinite(durationSeconds)) durationsSeconds.push(durationSeconds)
   }
   if (!durationsSeconds.length)

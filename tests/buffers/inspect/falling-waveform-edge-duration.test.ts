@@ -6,21 +6,23 @@ import {
   inspectedPin,
   inspectionIbis,
   PICOSECONDS_PER_SECOND,
-  ramp,
 } from "../../fixtures/ibis-inspection"
 
-test("only ramp rows in the selected model Ramp section are used", async () => {
+test("a falling waveform measures the 10–90% duration in its falling direction", async () => {
   const board = await ibisInspectionBoard()
-  const otherSection = "[Model Spec]\ndV/dt_r 0.36/100p 0.36/100p 0.36/100p"
   const text = inspectionIbis({
     modelType: "Output",
-    modelData: [ramp, otherSection].join("\n"),
+    modelData: `[Falling Waveform]
+R_fixture = 50
+V_fixture = 1.2
+0 1.2 NA NA
+100p 1.19 NA NA
+200p 1.14 NA NA
+2n 0.6 NA NA`,
   })
+  const pin = inspectedPin({ board, text })
   assert.equal(
-    Math.round(
-      edgeDurationSeconds(inspectedPin({ board, text })) *
-        PICOSECONDS_PER_SECOND,
-    ),
-    800,
+    Math.round(edgeDurationSeconds(pin) * PICOSECONDS_PER_SECOND),
+    1600,
   )
 })
