@@ -1,10 +1,15 @@
 import { EventEmitter } from "node:events"
-import type { PcbTraceRoutePointWire, Point } from "circuit-json"
+import type {
+  PcbTraceRoutePointVia,
+  PcbTraceRoutePointWire,
+  Point,
+} from "circuit-json"
 import { SignalPin, type TopologyBoard, topologyBoard } from "./topology-board"
 
 /** A route point accepted by core's autorouter adapter before it emits a PCB trace. */
 type RouterPoint =
   | PcbTraceRoutePointWire
+  | PcbTraceRoutePointVia
   | {
       route_type: "through_obstacle"
       start: Point
@@ -18,15 +23,17 @@ type RouterPoint =
 async function routedBoard({
   route,
   receiverX = 4,
+  receiverLayer = "top",
 }: {
   route: RouterPoint[]
   receiverX?: number
+  receiverLayer?: "top" | "bottom"
 }): Promise<TopologyBoard> {
   return topologyBoard({
     children: (
       <>
         <SignalPin name="TX" x={-4} />
-        <SignalPin name="RX" x={receiverX} />
+        <SignalPin name="RX" x={receiverX} layer={receiverLayer} />
         <trace from=".TX > .SIG" to=".RX > .SIG" />
         <autoroutingphase
           algorithmFn={async ({
@@ -114,6 +121,18 @@ export async function taperedRoute({
       { route_type: "wire", x: 1, y: 0.42, layer: "top", width: 0.1 },
       taper,
       end,
+    ],
+  })
+}
+
+/** The router stores the barrel directly in its trace route. */
+export async function routeOnlyVia(): Promise<TopologyBoard> {
+  return routedBoard({
+    receiverLayer: "bottom",
+    route: [
+      { route_type: "wire", x: -4, y: 0, layer: "top", width: 0.1 },
+      { route_type: "via", x: 0, y: 0, from_layer: "top", to_layer: "bottom" },
+      { route_type: "wire", x: 4, y: 0, layer: "bottom", width: 0.1 },
     ],
   })
 }
