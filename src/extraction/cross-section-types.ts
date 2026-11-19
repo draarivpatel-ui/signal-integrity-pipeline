@@ -33,9 +33,16 @@ export interface CrossSectionOptions {
   interfaceExtent?: number
   recessionFraction?: number
 }
+/** Resolution, raw reciprocity error and wall displacement of a field solve. */
+interface CrossSectionDiagnostics {
+  panels: number
+  reciprocityResidual: number
+  recessionMm: number
+}
+
 /** Per-unit-length matrices in SI units, indexed by conductorIds in input order. */
 export interface CrossSectionResult {
-  conductorIds: string[]
+  conductorIds: SectionConductor["id"][]
   C: Matrix
   C0: Matrix
   L: Matrix
@@ -47,15 +54,14 @@ export interface CrossSectionResult {
   skinResistance: Matrix
   /** The share of skinResistance from the signal conductors' own walls (planes held fixed); the rest is plane loss. */
   stripSkinResistance: Matrix
-  diagnostics: {
-    panels: number
-    reciprocityResidual: number
-    recessionMm: number
-  }
+  diagnostics: CrossSectionDiagnostics
 }
 
+/** Vacuum permittivity in farads per meter. */
 export const sectionEpsilon0 = 8.8541878128e-12
+/** Vacuum permeability in henries per meter. */
 export const sectionMu0 = 1.25663706212e-6
+/** Default conductivity of copper in siemens per meter. */
 export const copperConductivity = 5.8e7
 
 /** A constant-charge boundary element, carrying total equivalent charge divided by epsilon0. */

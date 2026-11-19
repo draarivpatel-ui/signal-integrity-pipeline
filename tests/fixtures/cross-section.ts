@@ -1,10 +1,15 @@
 import type { CrossSection } from "../../src/extraction"
 
+const DEFAULT_CONDUCTOR_COUNT = 1
+
 /** Thin rectangular lines approach the zero-thickness published oracles without altering them. */
-export function sectionFixture(
-  kind: "microstrip" | "stripline" | "mask",
-  count = 1,
-): CrossSection {
+export function sectionFixture({
+  kind,
+  count = DEFAULT_CONDUCTOR_COUNT,
+}: {
+  kind: "microstrip" | "stripline" | "mask"
+  count?: number
+}): CrossSection {
   let thicknessMm = 0.001
   if (kind === "mask") thicknessMm = 0.035
   const conductors = Array.from({ length: count }, (_, i) => ({

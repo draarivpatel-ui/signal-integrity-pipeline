@@ -30,7 +30,7 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
       },
     ],
   }
-  const result = solveCrossSection(section)
+  const result = solveCrossSection({ section })
   const electrical = 0.18 / 4.1 + 0.02 / 3.3
   const expectedC = (8.8541878128e-12 * 100) / electrical
   const expectedLoss =
@@ -46,18 +46,22 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
   // Finite difference is an independent oracle for the analytic directional sensitivity.
   const step = 0.001
   const plus = solveCrossSection({
-    ...section,
-    dielectrics: section.dielectrics.map((d) => ({
-      ...d,
-      er: d.er * (1 + step * d.lossTangent),
-    })),
+    section: {
+      ...section,
+      dielectrics: section.dielectrics.map((d) => ({
+        ...d,
+        er: d.er * (1 + step * d.lossTangent),
+      })),
+    },
   })
   const minus = solveCrossSection({
-    ...section,
-    dielectrics: section.dielectrics.map((d) => ({
-      ...d,
-      er: d.er * (1 - step * d.lossTangent),
-    })),
+    section: {
+      ...section,
+      dielectrics: section.dielectrics.map((d) => ({
+        ...d,
+        er: d.er * (1 - step * d.lossTangent),
+      })),
+    },
   })
   assert.ok(
     Math.abs(
@@ -70,9 +74,11 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
   // Quartering conductivity doubles skin resistance and quadruples DC resistance.
   const conductivitySm = 5.8e7 / 4
   const lowerConductivity = solveCrossSection({
-    ...section,
-    conductors: section.conductors.map((c) => ({ ...c, conductivitySm })),
-    planes: section.planes.map((p) => ({ ...p, conductivitySm })),
+    section: {
+      ...section,
+      conductors: section.conductors.map((c) => ({ ...c, conductivitySm })),
+      planes: section.planes.map((p) => ({ ...p, conductivitySm })),
+    },
   })
   assert.ok(
     Math.abs(
@@ -84,16 +90,17 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
       lowerConductivity.dcResistance[0][0] / result.dcResistance[0][0] - 4,
     ) < 1e-12,
   )
-  const half = solveCrossSection(section, { recessionFraction: 0.005 })
+  const half = solveCrossSection({
+    section,
+    options: { recessionFraction: 0.005 },
+  })
   assert.ok(
     Math.abs(half.skinResistance[0][0] / result.skinResistance[0][0] - 1) <
       0.001,
   )
   // Equal er but different tangents must retain a loss-only dielectric interface.
-  const equal = solveCrossSection({
-    ...section,
-    dielectrics: section.dielectrics.map((d) => ({ ...d, er: 4 })),
-  })
+  const dielectrics = section.dielectrics.map((d) => ({ ...d, er: 4 }))
+  const equal = solveCrossSection({ section: { ...section, dielectrics } })
   const expectedEqual = (equal.C[0][0] * (0.18 * 0.02 + 0.02 * 0.025)) / 0.2
   assert.ok(Math.abs(equal.dielectricLoss[0][0] / expectedEqual - 1) < 0.005)
 }, 300_000)

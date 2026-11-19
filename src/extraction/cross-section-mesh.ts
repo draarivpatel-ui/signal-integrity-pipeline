@@ -37,7 +37,13 @@ const DIELECTRIC_GROUP = -1
 type SectionMaterial = Pick<SectionDielectric, "er" | "lossTangent">
 
 /** Material adjacent to a boundary; non-overlapping slabs leave air elsewhere. */
-function material(layers: SectionDielectric[], z: number): SectionMaterial {
+function material({
+  layers,
+  z,
+}: {
+  layers: SectionDielectric[]
+  z: number
+}): SectionMaterial {
   return (
     layers.find(
       (layer) => z > layer.zMm && z < layer.zMm + layer.thicknessMm,
@@ -46,7 +52,13 @@ function material(layers: SectionDielectric[], z: number): SectionMaterial {
 }
 
 /** Merge floating-point copies of one boundary before making panels; never create zero-size seams. */
-function coordinates(values: number[], tolerance: number): number[] {
+function coordinates({
+  values,
+  tolerance,
+}: {
+  values: number[]
+  tolerance: number
+}): number[] {
   return values
     .sort((a, b) => a - b)
     .filter((value, i, sorted) => !i || value - sorted[i - 1] > tolerance)
@@ -105,6 +117,7 @@ export function sectionRegions(section: CrossSection): IndexedSectionRegion[] {
   })
 }
 
+/** Segment geometry and material for a conductor or dielectric edge. */
 interface SectionEdge {
   x1: number
   z1: number
@@ -125,28 +138,27 @@ interface PanelMesh {
 }
 
 /** Quartic grading resolves the integrable corner charge singularity. */
-function panelFraction(i: number, steps: number): number {
+function panelFraction({ i, steps }: { i: number; steps: number }): number {
   const start = i ** PANEL_GRADING_POWER
   const end = (steps - i) ** PANEL_GRADING_POWER
   return start / (start + end)
 }
 
 /** Append panels along a straight segment, with its outward metal normal. */
-function addSectionEdge(
-  {
-    x1,
-    z1,
-    x2,
-    z2,
-    group,
-    er,
-    lossTangent,
-    contrast = 0,
-    derivative = 0,
-    reach = Infinity,
-  }: SectionEdge,
-  { count, result }: PanelMesh,
-): void {
+function addSectionEdge({
+  x1,
+  z1,
+  x2,
+  z2,
+  group,
+  er,
+  lossTangent,
+  contrast = 0,
+  derivative = 0,
+  reach = Infinity,
+  mesh,
+}: SectionEdge & { mesh: PanelMesh }): void {
+  const { count, result } = mesh
   const dx = x2 - x1
   const dz = z2 - z1
   const length = Math.hypot(dx, dz)
@@ -160,8 +172,8 @@ function addSectionEdge(
       Math.ceil(count / VERTICAL_PANEL_DIVISOR),
     )
   for (let i = 0; i < steps; i++) {
-    const lo = panelFraction(i, steps)
-    const hi = panelFraction(i + 1, steps)
+    const lo = panelFraction({ i, steps })
+    const hi = panelFraction({ i: i + 1, steps })
     result.push({
       x: x1 + (dx * (lo + hi)) / 2,
       z: z1 + (dz * (lo + hi)) / 2,
@@ -178,56 +190,51 @@ function addSectionEdge(
 }
 
 /** Mesh one conductor's faces, splitting the sides wherever dielectric material changes. */
-function appendConductorPanels(
-  mesh: PanelMesh,
-  {
-    conductor,
-    group,
-    height,
-    layers,
-    probe,
-    tolerance,
-  }: {
-    conductor: SectionConductor
-    group: number
-    height: number
-    layers: SectionDielectric[]
-    probe: number
-    tolerance: number
-  },
-): void {
+function appendConductorPanels({
+  mesh,
+  conductor,
+  group,
+  height,
+  layers,
+  probe,
+  tolerance,
+}: {
+  mesh: PanelMesh
+  conductor: SectionConductor
+  group: number
+  height: number
+  layers: SectionDielectric[]
+  probe: number
+  tolerance: number
+}): void {
   const bottom = conductor.zMm
   const top = bottom + conductor.thicknessMm
   const left = conductor.xMm - conductor.widthMm / 2
   const right = conductor.xMm + conductor.widthMm / 2
-  const bottomMaterial = material(layers, bottom - probe)
-  const topMaterial = material(layers, top + probe)
+  const bottomMaterial = material({ layers, z: bottom - probe })
+  const topMaterial = material({ layers, z: top + probe })
   let reach = bottom
   if (height) reach = Math.min(reach, height - top)
-  addSectionEdge(
-    {
-      x1: left,
-      z1: bottom,
-      x2: right,
-      z2: bottom,
-      group,
-      ...bottomMaterial,
-      reach,
-    },
+  addSectionEdge({
+    x1: left,
+    z1: bottom,
+    x2: right,
+    z2: bottom,
+    group,
+    ...bottomMaterial,
+    reach,
     mesh,
-  )
-  addSectionEdge(
-    {
-      x1: right,
-      z1: top,
-      x2: left,
-      z2: top,
-      group,
-      ...topMaterial,
-      reach,
-    },
+  })
+  addSectionEdge({
+    x1: right,
+    z1: top,
+    x2: left,
+    z2: top,
+    group,
+    ...topMaterial,
+    reach,
     mesh,
-  )
+  })
   const boundaries = layers.flatMap((layer) => [
     layer.zMm,
     layer.zMm + layer.thicknessMm,
@@ -235,31 +242,27 @@ function appendConductorPanels(
   const interior = boundaries.filter(
     (z) => z > bottom + tolerance && z < top - tolerance,
   )
-  const cuts = coordinates([bottom, top, ...interior], tolerance)
+  const cuts = coordinates({ values: [bottom, top, ...interior], tolerance })
   for (let k = 1; k < cuts.length; k++) {
-    const adjacent = material(layers, (cuts[k - 1] + cuts[k]) / 2)
-    addSectionEdge(
-      {
-        x1: right,
-        z1: cuts[k - 1],
-        x2: right,
-        z2: cuts[k],
-        group,
-        ...adjacent,
-      },
+    const adjacent = material({ layers, z: (cuts[k - 1] + cuts[k]) / 2 })
+    addSectionEdge({
+      x1: right,
+      z1: cuts[k - 1],
+      x2: right,
+      z2: cuts[k],
+      group,
+      ...adjacent,
       mesh,
-    )
-    addSectionEdge(
-      {
-        x1: left,
-        z1: cuts[k],
-        x2: left,
-        z2: cuts[k - 1],
-        group,
-        ...adjacent,
-      },
+    })
+    addSectionEdge({
+      x1: left,
+      z1: cuts[k],
+      x2: left,
+      z2: cuts[k - 1],
+      group,
+      ...adjacent,
       mesh,
-    )
+    })
   }
 }
 
@@ -294,7 +297,8 @@ export function sectionPanels({
   if (vacuum) layers = []
   const mesh = { count, result }
   for (const [group, conductor] of region.conductors.entries()) {
-    appendConductorPanels(mesh, {
+    appendConductorPanels({
+      mesh,
       conductor,
       group,
       height: region.height,
@@ -311,17 +315,19 @@ export function sectionPanels({
   const padding = extent * scale
   const first = Math.min(...projections) - padding
   const last = Math.max(...projections) + padding
-  const xs = coordinates([first, ...projections, last], tolerance)
+  const xs = coordinates({ values: [first, ...projections, last], tolerance })
   const slabBoundaries = layers.flatMap((layer) => [
     layer.zMm,
     layer.zMm + layer.thicknessMm,
   ])
-  const boundaries = coordinates(slabBoundaries, tolerance).filter((z) => {
-    return z > tolerance && (!region.height || z < region.height - tolerance)
-  })
+  const boundaries = coordinates({ values: slabBoundaries, tolerance }).filter(
+    (z) => {
+      return z > tolerance && (!region.height || z < region.height - tolerance)
+    },
+  )
   for (const z of boundaries) {
-    const below = material(layers, z - probe)
-    const above = material(layers, z + probe)
+    const below = material({ layers, z: z - probe })
+    const above = material({ layers, z: z + probe })
     if (below.er === above.er && below.lossTangent === above.lossTangent)
       continue
     const permittivitySum = below.er + above.er
@@ -341,20 +347,18 @@ export function sectionPanels({
         )
       })
       if (covered) continue
-      addSectionEdge(
-        {
-          x1: xs[k - 1],
-          z1: z,
-          x2: xs[k],
-          z2: z,
-          group: DIELECTRIC_GROUP,
-          er: 1,
-          lossTangent: 0,
-          contrast,
-          derivative,
-        },
+      addSectionEdge({
+        x1: xs[k - 1],
+        z1: z,
+        x2: xs[k],
+        z2: z,
+        group: DIELECTRIC_GROUP,
+        er: 1,
+        lossTangent: 0,
+        contrast,
+        derivative,
         mesh,
-      )
+      })
     }
   }
   return result

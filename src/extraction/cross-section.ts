@@ -25,14 +25,17 @@ export type {
 
 /** Default and minimum counts of panels per conductor edge. */
 const DEFAULT_PANELS_PER_EDGE = 12
+/** Resolve conductor corners with a minimum of six panels per edge. */
 const MIN_PANELS_PER_EDGE = 6
 
 /** Default and minimum horizontal padding measured in cross-section spans. */
 const DEFAULT_INTERFACE_EXTENT = 24
+/** Keep dielectric interface truncation several spans from the conductors. */
 const MIN_INTERFACE_EXTENT = 4
 
 /** Recede conductor walls by a small fraction of their clearance for Wheeler loss. */
 const DEFAULT_RECESSION_FRACTION = 0.01
+/** Keep the recession step small relative to nearby features. */
 const MAX_RECESSION_FRACTION = 0.1
 
 /** Wall displacement is in millimeters and resistance is computed in SI units. */
@@ -42,7 +45,13 @@ const MILLIMETERS_PER_METER = 1000
 const SQUARE_MILLIMETERS_PER_SQUARE_METER = 1e6
 
 /** Check panel resolution and interface padding shared by the capacitance and full field solvers. */
-function validMesh(count: number, extent: number): boolean {
+function validMesh({
+  count,
+  extent,
+}: {
+  count: number
+  extent: number
+}): boolean {
   return (
     Number.isInteger(count) &&
     count >= MIN_PANELS_PER_EDGE &&
@@ -52,14 +61,17 @@ function validMesh(count: number, extent: number): boolean {
 }
 
 /** Electrostatic-only extraction uses the identical dielectric solve without unused magnetic/loss solves. */
-export function solveSectionCapacitance(
-  section: CrossSection,
-  options: Pick<CrossSectionOptions, "panelsPerEdge" | "interfaceExtent"> = {},
-): Matrix {
+export function solveSectionCapacitance({
+  section,
+  options = {},
+}: {
+  section: CrossSection
+  options?: Pick<CrossSectionOptions, "panelsPerEdge" | "interfaceExtent">
+}): Matrix {
   validateSection(section)
   const count = options.panelsPerEdge ?? DEFAULT_PANELS_PER_EDGE
   const extent = options.interfaceExtent ?? DEFAULT_INTERFACE_EXTENT
-  if (!validMesh(count, extent))
+  if (!validMesh({ count, extent }))
     fail("mesh_convergence", "Use >=6 panels per edge and interface extent >=4")
   const C = section.conductors.map(() => section.conductors.map(() => 0))
   for (const { region, indices } of sectionRegions(section)) {
@@ -68,7 +80,7 @@ export function solveSectionCapacitance(
       for (const [j, jj] of indices.entries()) C[ii][jj] = field.C[i][j]
     }
   }
-  sectionPassive(C, true)
+  sectionPassive({ matrix: C, strict: true })
   return C
 }
 
@@ -84,16 +96,15 @@ function inductance(C0: Matrix): Matrix {
 /** Recede every conducting wall (or only the signal conductors' walls) away from the field, weighted by its surface
  * resistivity. Vacuum is essential: moving a wall must not change the electrical dielectric geometry.
  */
-function recede(
-  region: SectionRegion,
-  {
-    distance,
-    fixedPlanes = false,
-  }: {
-    distance: number
-    fixedPlanes?: boolean
-  },
-): SectionRegion {
+function recede({
+  region,
+  distance,
+  fixedPlanes = false,
+}: {
+  region: SectionRegion
+  distance: number
+  fixedPlanes?: boolean
+}): SectionRegion {
   let lower = 0
   let upper = 0
   if (!fixedPlanes) {
@@ -127,7 +138,13 @@ function zeroMatrix(size: number): Matrix {
 }
 
 /** Bound wall recession by trace dimensions, dielectric gaps and surface resistivity. */
-function recessionStep(region: SectionRegion, fraction: number): number {
+function recessionStep({
+  region,
+  fraction,
+}: {
+  region: SectionRegion
+  fraction: number
+}): number {
   const gaps = region.conductors.flatMap((a, i) =>
     region.conductors.slice(i + 1).map((b) => {
       const horizontal = Math.max(
@@ -180,17 +197,16 @@ function wheeler({
 }
 
 /** Compute external inductance after displacing the requested conducting walls. */
-function recededInductance(
-  mesh: SectionMeshInput,
-  {
-    distance,
-    fixedPlanes,
-  }: {
-    distance: number
-    fixedPlanes?: boolean
-  },
-): Matrix {
-  const region = recede(mesh.region, { distance, fixedPlanes })
+function recededInductance({
+  mesh,
+  distance,
+  fixedPlanes,
+}: {
+  mesh: SectionMeshInput
+  distance: number
+  fixedPlanes?: boolean
+}): Matrix {
+  const region = recede({ region: mesh.region, distance, fixedPlanes })
   return inductance(sectionField({ ...mesh, region, vacuum: true }).C)
 }
 
@@ -198,10 +214,13 @@ function recededInductance(
  * and Wheeler incremental-inductance conductor loss. No native processes or pipeline integration.
  * Default work is fixed; convergence is measured by independently changing the two mesh options.
  */
-export function solveCrossSection(
-  section: CrossSection,
-  options: CrossSectionOptions = {},
-): CrossSectionResult {
+export function solveCrossSection({
+  section,
+  options = {},
+}: {
+  section: CrossSection
+  options?: CrossSectionOptions
+}): CrossSectionResult {
   validateSection(section)
   const count = options.panelsPerEdge ?? DEFAULT_PANELS_PER_EDGE
   const extent = options.interfaceExtent ?? DEFAULT_INTERFACE_EXTENT
@@ -210,7 +229,7 @@ export function solveCrossSection(
     Number.isFinite(fraction) &&
     fraction > 0 &&
     fraction <= MAX_RECESSION_FRACTION
-  if (!validMesh(count, extent) || !validRecession) {
+  if (!validMesh({ count, extent }) || !validRecession) {
     fail(
       "mesh_convergence",
       "Use >=6 panels per edge, interface extent >=4 and recession fraction in (0, .1]",
@@ -232,14 +251,16 @@ export function solveCrossSection(
     const vacuum = sectionField({ ...mesh, vacuum: true })
     const field = sectionField(mesh)
     const external = inductance(vacuum.C)
-    const step = recessionStep(region, fraction)
-    const plus = recededInductance(mesh, { distance: step })
-    const minus = recededInductance(mesh, { distance: -step })
-    const stripPlus = recededInductance(mesh, {
+    const step = recessionStep({ region, fraction })
+    const plus = recededInductance({ mesh, distance: step })
+    const minus = recededInductance({ mesh, distance: -step })
+    const stripPlus = recededInductance({
+      mesh,
       distance: step,
       fixedPlanes: true,
     })
-    const stripMinus = recededInductance(mesh, {
+    const stripMinus = recededInductance({
+      mesh,
       distance: -step,
       fixedPlanes: true,
     })
@@ -265,9 +286,9 @@ export function solveCrossSection(
     residual = Math.max(residual, field.residual, vacuum.residual)
     recessionMm = Math.min(recessionMm, step)
   }
-  for (const matrix of [C, C0, L]) sectionPassive(matrix, true)
+  for (const matrix of [C, C0, L]) sectionPassive({ matrix, strict: true })
   for (const matrix of [dielectricLoss, skinResistance, stripSkinResistance])
-    sectionPassive(matrix)
+    sectionPassive({ matrix })
   for (const [i, c] of section.conductors.entries()) {
     const conductivity = c.conductivitySm ?? copperConductivity
     dcResistance[i][i] =

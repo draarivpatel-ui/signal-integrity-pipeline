@@ -29,14 +29,14 @@ const NEAR_PANEL_LENGTHS = 2
 const SELF_LOG_INTEGRAL = 1.5
 
 /** Antiderivative of log distance, including points on a source panel. */
-function primitive(x: number, y: number): number {
+function primitive({ x, y }: { x: number; y: number }): number {
   let correction = 0
   if (y) correction = Math.abs(y) * Math.atan(x / Math.abs(y))
   return x * Math.log(Math.hypot(x, y) || 1) - x + correction
 }
 
 /** Second antiderivative of log distance, for exact Galerkin integration of parallel panels. */
-function secondPrimitive(x: number, y: number): number {
+function secondPrimitive({ x, y }: { x: number; y: number }): number {
   const r = Math.hypot(x, y)
   let logarithm = 0
   let correction = 0
@@ -46,7 +46,7 @@ function secondPrimitive(x: number, y: number): number {
 }
 
 /** Normal derivative of the second primitive; the coplanar principal value is zero. */
-function secondNormal(x: number, y: number): number {
+function secondNormal({ x, y }: { x: number; y: number }): number {
   if (!y) return 0
   return (
     Math.sign(y) *
@@ -56,24 +56,25 @@ function secondNormal(x: number, y: number): number {
 }
 
 /** Exact potential or upward field primitive at one endpoint pair. */
-function parallelPrimitive(
-  x: number,
-  {
-    v,
-    tx,
-    tz,
-    normal,
-  }: {
-    v: number
-    tx: number
-    tz: number
-    normal: boolean
-  },
-): number {
-  if (normal) return tz * primitive(x, v) + tx * secondNormal(x, v)
-  return -secondPrimitive(x, v)
+function parallelPrimitive({
+  x,
+  v,
+  tx,
+  tz,
+  normal,
+}: {
+  x: number
+  v: number
+  tx: number
+  tz: number
+  normal: boolean
+}): number {
+  if (normal)
+    return tz * primitive({ x, y: v }) + tx * secondNormal({ x, y: v })
+  return -secondPrimitive({ x, y: v })
 }
 
+/** Target and source panels for the kernel interaction. */
 interface PanelPair {
   a: SectionPanel
   b: SectionPanel
@@ -117,10 +118,10 @@ function freeKernel({
       normal,
     }
     const high =
-      parallelPrimitive(u + h, projection) -
-      parallelPrimitive(u + d, projection)
-    const low = parallelPrimitive(u - d, projection)
-    const end = parallelPrimitive(u - h, projection)
+      parallelPrimitive({ x: u + h, ...projection }) -
+      parallelPrimitive({ x: u + d, ...projection })
+    const low = parallelPrimitive({ x: u - d, ...projection })
+    const end = parallelPrimitive({ x: u - h, ...projection })
     return (high - low + end) / (2 * Math.PI * a.length * b.length)
   }
   // For unequal potential panels, average over the shorter panel and integrate the longer one.
@@ -135,7 +136,8 @@ function freeKernel({
     const h = b.length / 2
     if (!normal) {
       const potential =
-        -(primitive(u + h, v) - primitive(u - h, v)) / (2 * Math.PI * b.length)
+        -(primitive({ x: u + h, y: v }) - primitive({ x: u - h, y: v })) /
+        (2 * Math.PI * b.length)
       result += (potential * weight) / 2
       continue
     }
@@ -155,7 +157,11 @@ function freeKernel({
 }
 
 /** Integrated free-space interaction before applying grounded-plane images. */
-function directKernel({ a, b }: PanelPair, normal: boolean): number {
+function directKernel({
+  a,
+  b,
+  normal,
+}: PanelPair & { normal: boolean }): number {
   if (a !== b) return freeKernel({ a, b, normal })
   if (normal) return 0
   return (-Math.log(a.length) + SELF_LOG_INTEGRAL) / (2 * Math.PI)
@@ -171,7 +177,7 @@ export function sectionKernel({
   height,
 }: PanelPair & { height: number }): number {
   const normal = a.group < 0
-  const self = directKernel({ a, b }, normal)
+  const self = directKernel({ ...{ a, b }, normal })
   if (!height) {
     return (
       self -
