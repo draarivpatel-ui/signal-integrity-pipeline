@@ -18,177 +18,177 @@
 threshold: 85
 
 domain:
-  control: pin enable state or drive timing for a simulation
-  transient: a circuit simulation that follows voltage and current through time
-  startup: the time a switching channel needs to settle after its stimulus starts
-  constant: a bit pattern that repeats one level, so its driver never switches
-  vector: one named sequence of engine samples, such as time or a node voltage
-  admission: validation and derivation of one declared signal-integrity block
-  network: the connected electrical cells and correction elements of routed copper
-  execution: a completed invocation through the solver port
-  snapshot: a copied and frozen domain value published by a completed stage
-  pair: two conductors screened together for mutual coupling
-  arc: distance measured along a routed polyline including its bends
-  antipad: clearance opening in a plane around a signal via
-  bias: very weak DC anchor used to fix an otherwise floating common-mode voltage
-  branch: a SPICE element current or a connection in a circuit graph
-  causal: a response that depends only on present and earlier input
-  capacitive: coupling between conductors through their electric field
-  chord: straight approximation to a densely tessellated curve
-  delay: time needed for a signal edge to propagate through a line
-  inductance: magnetic flux linkage per unit current, measured in henries
-  inductive: coupling between conductors through their magnetic field
-  ladder: distributed line approximated by connected lumped electrical cells
-  lateral: distance transverse to a routed line in the board plane
-  mask: insulating soldermask on the outer copper layers
-  metre: SI unit of length used for per-unit-length electrical matrices
-  oblique: a neighbour whose direction differs from the local trace direction
-  parallel: conductors sharing a common longitudinal direction
-  pole: a stable relaxation rate in a causal rational loss model
-  rail: a power or ground supply connection
-  bus: an IBIS Pin Mapping label for pins sharing an electrical reference
-  capability: a pin role the IBIS model supports, such as driving, receiving or disabling
-  clamp: a protection circuit that conducts when a signal crosses its reference voltage
-  pulldown: the buffer path that pulls the signal toward its low reference
-  pullup: the buffer path that pulls the signal toward its high reference
-  ramp: the loaded voltage change and duration between 20% and 80% of an IBIS edge
-  swing: the voltage difference between the start and end of an edge
-  typical: the nominal vendor corner for a model value or waveform
-  shunt: an electrical branch across two conductor or reference nodes
-  simplify: reduce curve tessellation while bounding geometric displacement
-  slice: one local cross-section of routed conductors and reference surfaces
-  sparse: a matrix or realization with mostly zero couplings
-  transition: a change of layer, reference or conductor geometry
-  prepare: derive private experiment settings from the declared channel intent
-  block: an independently declared group of signals in a channel experiment
-  initial: the state or value at the beginning of a simulation
-  power: an electrical supply net or reference plane
-  nearby: inside the explicitly defined spatial coupling horizon
-  unused: a vendor package lead excluded from the selected physical pin mapping
-  remainder: the part of a matrix diagonal left after its mutual energy terms
-  cursor: the current position while traversing an ordered route
   above: toward increasing solver z in a physical stackup
-  below: toward decreasing solver z in a physical stackup
-  digital: a stimulus described by timed binary logic states
-  normal: perpendicular to a surface or conductor direction
-  correction: an explicit recorded change required by a documented numerical convention
-  deviation: the measured difference between an approximation and its reference
-  coupling: mutual electrical or magnetic interaction between conductors
-  cache: reused solution keyed only by identical physical cross-section geometry
-  diameter: the full width of a circular barrel, pad or aperture
-  diagonal: matrix entries relating each conductor to itself
   actual: read directly from the physical source-board records
-  cut: a partition point at a physical geometry or reference change
-  die: the semiconductor side of a vendor package model
-  er: relative dielectric permittivity
-  h: inductance measured in henries
-  c: capacitance matrix or its entries
-  non: prefix identifying an explicitly excluded property
-  general: shared across supported channel experiment shapes
-  allow: an explicit caller-selected modelling permission
-  join: connect physically continuous copper pieces into one path
-  self: a matrix term belonging to one conductor rather than a mutual pair
-  top: the outer copper layer on the upper face of the board
-  bottom: the outer copper layer on the lower face of the board
-  second: the SI time unit or the second member of an ordered pair
-  charge: electric charge on a conductor or dielectric interface in the cross-section solve
-  contrast: relative permittivity difference across a dielectric interface
-  derivative: sensitivity of an extracted matrix to material or boundary displacement
-  extent: horizontal reach of the discretised dielectric interfaces
-  interface: boundary between two dielectric materials
-  kernel: Green function relating boundary charge to potential or field
-  loss: energy dissipated in conductors or dielectrics
-  recession: displacement of conducting walls away from the field for Wheeler loss
-  recede: move a conducting wall away from the field region
-  skin: concentration of alternating conductor current near its surface
-  crossover: the frequency band where conductor loss turns from its DC value into skin loss
-  tangent: dielectric dissipation factor or direction along a boundary panel
-  vacuum: reference material with relative permittivity one
+  admission: validation and derivation of one declared signal-integrity block
   admit: the check that reads declared input (board records, IBIS bytes, signal-integrity blocks) before anything else uses it
+  allow: an explicit caller-selected modelling permission
+  antipad: clearance opening in a plane around a signal via
+  arc: distance measured along a routed polyline including its bends
   artifact: a file the pipeline produces (solver deck, log, capture, evidence), recorded in the ledger
   assembly: the bundle of converted IBIS chip models used by one experiment
   asset: an IBIS model file that the board names (ibis_model_asset in Circuit JSON)
   barrel: the plated copper tube that lines a via hole
+  below: toward decreasing solver z in a physical stackup
+  bias: very weak DC anchor used to fix an otherwise floating common-mode voltage
   bind: attach chip models and probes to the planned experiment
+  block: an independently declared group of signals in a channel experiment
   board: the circuit board being analysed, read from Circuit JSON
+  bottom: the outer copper layer on the lower face of the board
   bound: the pipeline state after binding; elsewhere, a lower or upper limit of a range
+  branch: a SPICE element current or a connection in a circuit graph
   brand: a TypeScript type tag that proves a value passed a check (for example an admitted id)
   buffer: an IBIS model of a chip's input or output circuit
+  bus: an IBIS Pin Mapping label for pins sharing an electrical reference
+  c: capacitance matrix or its entries
+  cache: reused solution keyed only by identical physical cross-section geometry
+  capability: an operation an IBIS model supports, such as driving, receiving or disabling
   capacitance: how much charge copper stores per volt (the C in RLGC)
-  coupled: electrical behavior in one pin or conductor that depends on another
+  capacitive: coupling between conductors through their electric field
   capture: a finite recording of voltages over time
+  causal: a response that depends only on present and earlier input
   channel: everything electrical between driver and receiver: lanes, their return paths and nearby copper
+  charge: electric charge on a conductor or dielectric interface in the cross-section solve
+  chord: straight approximation to a densely tessellated curve
   circuit: an electrical network; also the Circuit JSON document that describes the board
+  clamp: a protection circuit that conducts when a signal crosses its reference voltage
+  coefficient: a dimensionless multiplier on an IBIS pullup or pulldown current
   component: a part on the board, such as a chip, resistor or capacitor
   conductivity: how easily a material carries current, in siemens per metre
   conductor: one piece of copper the field solver treats as a single electrical body
-  coefficient: a dimensionless multiplier on an IBIS pullup or pulldown current
+  constant: a bit pattern that repeats one level, so its driver never switches
+  contrast: relative permittivity difference across a dielectric interface
+  control: pin enable state or drive timing for a simulation
   copper: the metal shapes on the board: traces, pours, pads and vias
+  correction: an explicit recorded change required by a documented numerical convention
+  coupled: electrical behavior in one pin or conductor that depends on another
+  coupling: mutual electrical or magnetic interaction between conductors
+  crossover: the frequency band where conductor loss turns from its DC value into skin loss
+  cursor: the current position while traversing an ordered route
+  cut: a partition point at a physical geometry or reference change
   deck: an input file for a solver (the ngspice netlist)
   declare: plan experiments and probes from the board's simulation records before any solver runs
+  delay: time needed for a signal edge to propagate through a line
+  derivative: sensitivity of an extracted matrix to material or boundary displacement
+  deviation: the measured difference between an approximation and its reference
   diagnostic: the library's one error type: a short code, the module that failed and the logs that explain it
+  diagonal: matrix entries relating each conductor to itself
+  diameter: the full width of a circular barrel, pad or aperture
+  die: the semiconductor side of a vendor package model
   dielectric: the insulating material between copper layers
   differential: a signal carried as the voltage difference between two wires
+  digital: a stimulus described by timed binary logic states
   driver: the chip output that sends a signal
+  er: relative dielectric permittivity
   evidence: data kept in the result that shows how a conclusion was reached
+  execution: a completed invocation through the solver port
   experiment: one transient run with stimuli and probes
+  extent: horizontal reach of the discretised dielectric interfaces
   extract: measure each wire's R, L, G and C from its board cross-sections
   extraction: measuring wire R, L, G and C from board cross-sections with the 2D field solver
   fixture: a known resistive load used to capture an IBIS switching waveform
   gate: the start of the interval compared during numerical convergence
+  general: shared across supported channel experiment shapes
   geometry: the board's copper shapes, layers and positions, in millimetres
   ground: the zero-volt reference copper that signal current returns through
+  h: inductance measured in henries
   impedance: a wire's opposition to changing current, in ohms
+  inductance: magnetic flux linkage per unit current, measured in henries
+  inductive: coupling between conductors through their magnetic field
+  initial: the state or value at the beginning of a simulation
+  interface: boundary between two dielectric materials
+  join: connect physically continuous copper pieces into one path
+  kernel: Green function relating boundary charge to potential or field
+  ladder: distributed line approximated by connected lumped electrical cells
   lane: one signal path on the board
+  lateral: distance transverse to a routed line in the board plane
   layer: one copper or insulating sheet in the stackup
   ledger: the single record of every artifact path the pipeline writes; a second write to a path fails
+  loss: energy dissipated in conductors or dielectrics
+  mask: insulating soldermask on the outer copper layers
+  metre: SI unit of length used for per-unit-length electrical matrices
   model: a chip model (IBIS) or the electrical model of the channel built from extraction
   modeling: private numerical settings derived from Circuit JSON
+  nearby: inside the explicitly defined spatial coupling horizon
   net: a set of pins and copper that are connected together
+  network: the connected electrical cells and correction elements of routed copper
   node: a named connection point in the SPICE circuit
+  non: prefix identifying an explicitly excluded property
+  normal: perpendicular to a surface or conductor direction
+  oblique: a neighbour whose direction differs from the local trace direction
   observation: adaptive waveform parsing and numerical convergence
   pad: the copper area a component pin is soldered to
+  pair: two conductors screened together for mutual coupling
   panel: a small flat boundary piece of a cross-section that the 2D field solver puts charge on
+  parallel: conductors sharing a common longitudinal direction
   passive: a component that does not amplify: resistor, capacitor or inductor
   permittivity: how strongly an insulator stores electric field (its dielectric constant)
   pin: a chip leg, named in the IBIS model
   pipeline: the whole routed run from board to transient capture, as a fixed chain of stages
-  schedule: the actual logical transitions and their times in one stimulus
-  settle: stay within a stated tolerance for the entire remaining measured waveform
-  switching: the time-dependent activation of a buffer's pullup and pulldown currents
-  tail: the inactive end of a measured transition after settling
-  weight: a switching coefficient extracted from IBIS voltage and current data
   plane: a large copper area on one layer, usually ground or power
   plating: the copper lining inside a via hole
+  pole: a stable relaxation rate in a causal rational loss model
   polygon: a closed shape made of outline rings of points
   port: a chip connection the library drives or measures (source_port in Circuit JSON)
   pour: a filled copper area on a layer (copper pour)
+  power: an electrical supply net or reference plane
+  prepare: derive private experiment settings from the declared channel intent
   probe: a point where we measure voltage
+  pulldown: the buffer path that pulls the signal toward its low reference
+  pullup: the buffer path that pulls the signal toward its high reference
+  rail: a power or ground supply connection
+  ramp: the loaded voltage change and duration between 20% and 80% of an IBIS edge
+  recede: move a conducting wall away from the field region
   receiver: the chip input that takes in a signal
+  recession: displacement of conducting walls away from the field for Wheeler loss
   reciprocity: the check that a matrix is symmetric (the effect of A on B equals B on A)
   refinement: a finer spatial subdivision of a solve, used to check that the answer stops changing
+  remainder: the part of a matrix diagonal left after its mutual energy terms
   residual: how far a computed result is from passing an exact check (smaller is better)
   resistance: how much a wire resists steady current, in ohms (the R in RLGC)
   return: the path current takes back to its source, usually through ground copper
   ring: one closed loop of points that outlines a polygon or a hole in it
   route: the path a trace follows across the board, as points and vias
+  schedule: the actual logical transitions and their times in one stimulus
   scope: a module's named artifact folder, or the board copper selected for a channel's extraction
   seal: sort and freeze a ledger's files into the published file map
+  second: the SI time unit or the second member of an ordered pair
+  self: a matrix term belonging to one conductor rather than a mutual pair
+  settle: stay within a stated tolerance for the entire remaining measured waveform
+  shunt: an electrical branch across two conductor or reference nodes
   signal: a voltage that carries data along a lane
+  simplify: reduce curve tessellation while bounding geometric displacement
   simulation: running the SPICE circuit over time with ngspice
+  skin: concentration of alternating conductor current near its surface
   slab: a flat layer of laminate or mask in a cross-section
+  slice: one local cross-section of routed conductors and reference surfaces
+  snapshot: a copied and frozen domain value published by a completed stage
   solver: an external program that does the physics (ngspice), or one stepped pipeline stage
   span: the range of layers a via crosses
+  sparse: a matrix or realization with mostly zero couplings
   stackup: the order and thickness of the board's copper and insulating layers
   stage: one fixed step of the routed pipeline (admission, sections, fields, bindings, network, transient)
+  startup: the time a switching channel needs to settle after its stimulus starts
   stimulus: the bit pattern a driver sends during an experiment
   stub: the unused part of a via beyond the layer where the signal leaves it
   subcircuit: a nested group of components on the board; in SPICE, a reusable circuit block
   subject: the thing a diagnostic points at, such as a cell, port or experiment
+  swing: the voltage difference between the start and end of an edge
+  switching: the time-dependent activation of a buffer's pullup and pulldown currents
+  tail: the inactive end of a measured transition after settling
+  tangent: dielectric dissipation factor or direction along a boundary panel
   terminal: a connection end of a conductor or source
+  top: the outer copper layer on the upper face of the board
   trace: a copper wire on one board layer
+  transient: a circuit simulation that follows voltage and current through time
+  transition: a change of layer, reference or conductor geometry
+  typical: the nominal vendor corner for a model value or waveform
+  unused: a vendor package lead excluded from the selected physical pin mapping
+  vacuum: reference material with relative permittivity one
+  vector: one named sequence of engine samples, such as time or a node voltage
   via: a plated hole that carries a signal between layers
   waveform: voltage over time at one probe
+  weight: a switching coefficient extracted from IBIS voltage and current data
   wire: a piece of copper that carries a signal; in plain words, a trace or via
 
 abbreviations:
@@ -208,8 +208,8 @@ abbreviations:
   init: initial settings
   json: JavaScript Object Notation
   m: metre
-  ms: millisecond
   mm: millimetre
+  ms: millisecond
   ns: nanosecond
   pcb: printed circuit board
   ps: picosecond
