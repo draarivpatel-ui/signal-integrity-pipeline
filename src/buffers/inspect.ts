@@ -41,9 +41,10 @@ export type ReferenceVoltages = Record<
 const GROUND_VOLTAGE_RANGE: IbisRange = [0, 0, 0]
 
 /** Selected ideal reference voltages, including the vendor's explicit overrides. */
-export function referenceVoltages({
-  buffer,
-}: Pick<InspectedPin, "buffer">): ReferenceVoltages {
+export function referenceVoltages(
+  pin: Pick<InspectedPin, "buffer">,
+): ReferenceVoltages {
+  const { buffer } = pin
   // IBIS 7.2 §6.1 defines [Voltage Range] and 0 V as the default references.
   try {
     return {
@@ -69,10 +70,21 @@ export function referenceVoltages({
       ),
     }
   } catch (error) {
-    if (!(error instanceof IbisError) || error.code !== "missing_corner")
-      throw error
-    fail("ibis_reference_voltage_missing", `${buffer.name}: ${error.message}`)
+    failReferenceVoltage({ buffer, error })
   }
+}
+
+/** Translate a missing typical voltage into the pipeline diagnostic. */
+function failReferenceVoltage({
+  buffer,
+  error,
+}: {
+  buffer: IbisBuffer
+  error: unknown
+}): never {
+  if (!(error instanceof IbisError) || error.code !== "missing_corner")
+    throw error
+  fail("ibis_reference_voltage_missing", `${buffer.name}: ${error.message}`)
 }
 
 /** A physical IBIS pin and the Circuit JSON port that uses it. */
@@ -82,7 +94,13 @@ type PinBinding = Pick<InspectedPin, "port" | "pin" | "model" | "component">
 export type ReferencePorts = ResolvedIbisReferencePorts
 
 /** Resolve converter rail ports from the Circuit JSON binding. */
-function referenceRails(binding: PinBinding): ReferencePorts {
+function referenceRails({
+  binding,
+  buffer,
+}: {
+  binding: PinBinding
+  buffer: IbisBuffer
+}): ReferencePorts {
   const { model, component, pin, port } = binding
   const explicit = model.ibis_pin_name_to_reference_source_port_ids?.[pin]
   try {
@@ -90,6 +108,7 @@ function referenceRails(binding: PinBinding): ReferencePorts {
       component,
       pin,
       pinToSourcePort: model.ibis_pin_name_to_source_port_id,
+      voltageCheck: { buffer, corner: "typical" },
       explicitReferences: {
         pullup: explicit?.pullup_reference_source_port_id,
         pulldown: explicit?.pulldown_reference_source_port_id,
@@ -105,7 +124,7 @@ function referenceRails(binding: PinBinding): ReferencePorts {
       if (error.reason === "shorted")
         fail("ibis_reference_short", `${port}: ${error.message}`)
     }
-    throw error
+    failReferenceVoltage({ buffer, error })
   }
 }
 
@@ -155,6 +174,7 @@ export function inspectPins({
   ports,
 }: PinInspectionOptions): InspectedPins {
   const pins: InspectedPins = new Map()
+  const documents = new Map<string, IbisDocument>()
   for (const model of circuit) {
     if (model.type !== "simulation_ibis_model") continue
     const selected = Object.entries(
@@ -162,11 +182,16 @@ export function inspectPins({
     ).filter(([, port]) => ports.has(port))
     if (!selected.length) continue
 
-    const { text } = loadModelSource({
-      model: { ...model, pipelineId: model.simulation_ibis_model_id },
-      sources,
-    })
-    const document = parseIbis(text)
+    const path = model.ibis_model_asset.project_relative_path
+    let document = documents.get(path)
+    if (!document) {
+      const { text } = loadModelSource({
+        model: { ...model, pipelineId: model.simulation_ibis_model_id },
+        sources,
+      })
+      document = parseIbis(text)
+      documents.set(path, document)
+    }
     const component = document.components[model.ibis_component_name]
     if (!component)
       fail(
@@ -184,10 +209,11 @@ export function inspectPins({
       if (name === undefined) continue
       if (pins.has(port))
         fail("ibis_pin_bound_twice", `${port}: more than one IBIS pin binding`)
+      const buffer = document.getBuffer(name)
       pins.set(port, {
         ...binding,
-        buffer: document.getBuffer(name),
-        references: referenceRails(binding),
+        buffer,
+        references: referenceRails({ binding, buffer }),
       })
     }
   }

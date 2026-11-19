@@ -20,9 +20,11 @@ type BoardOptions = {
   extraPin?: boolean
   mapRails?: boolean
   references?: IbisPinReferences
+  referencePin?: number
   modelChoice?: string
   componentName?: string
   extraChip?: boolean
+  extraChipAsset?: string
 }
 
 /** The rendered chip records and the source port IDs assigned to its IBIS pins. */
@@ -31,7 +33,7 @@ type InspectionBoard = {
   pinMap: SimulationIbisModel["ibis_pin_name_to_source_port_id"]
 }
 
-type ChipOptions = Omit<BoardOptions, "extraChip"> & {
+type ChipOptions = Omit<BoardOptions, "extraChip" | "extraChipAsset"> & {
   name: string
   asset: string
 }
@@ -43,6 +45,7 @@ function InspectionChip({
   extraPin,
   mapRails = true,
   references,
+  referencePin = 1,
   modelChoice,
   componentName = "Device",
 }: ChipOptions): React.JSX.Element {
@@ -55,7 +58,8 @@ function InspectionChip({
   let ibisPinNameToReferencePortLabels:
     | Record<number, IbisPinReferences>
     | undefined
-  if (references) ibisPinNameToReferencePortLabels = { 1: references }
+  if (references)
+    ibisPinNameToReferencePortLabels = { [referencePin]: references }
   let ibisPinNameToModelName: Record<number, string> | undefined
   if (modelChoice) ibisPinNameToModelName = { 1: modelChoice }
   return (
@@ -100,12 +104,12 @@ function InspectionChip({
 export async function ibisInspectionBoard(
   options: BoardOptions = {},
 ): Promise<InspectionBoard> {
-  const { extraChip, ...chipOptions } = options
+  const { extraChip, extraChipAsset = "other.ibs", ...chipOptions } = options
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
   circuit.add(
     <board width={10} height={10} schematicDisabled routeRemaining={false}>
       <InspectionChip name="U1" asset={deviceAsset} {...chipOptions} />
-      {extraChip && <InspectionChip name="U2" asset="other.ibs" />}
+      {extraChip && <InspectionChip name="U2" asset={extraChipAsset} />}
     </board>,
   )
   await circuit.renderUntilSettled()
