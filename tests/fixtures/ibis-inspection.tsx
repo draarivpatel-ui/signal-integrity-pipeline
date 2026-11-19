@@ -1,6 +1,13 @@
+import assert from "node:assert/strict"
 import { Circuit, simulation } from "@tscircuit/core"
+import {
+  convertIbisModelToSpice,
+  type IbisConversionMetadata,
+  type IbisModelDefinition,
+} from "@tscircuit/ibis-to-spice"
 import React from "react"
 import type { CircuitJson, SimulationIbisModel } from "../../src/board"
+import { type InspectedPin, inspectPins } from "../../src/buffers/inspect"
 
 export const deviceAsset = "device.ibs"
 const pinLabels = { pin1: "DQ", pin2: "VDD", pin3: "VSS", pin4: "VCLAMP" }
@@ -144,3 +151,77 @@ ${modelData}
 [End]
 `
 }
+
+/** The converter’s source port IDs for the IBIS reference roles. */
+type ReferencePorts = IbisConversionMetadata["pins"][number]["references"]
+
+/** Inspect the signal on pin 1 of the rendered chip. */
+export function inspectedPin({
+  board,
+  text,
+}: {
+  board: InspectionBoard
+  text: string
+}): InspectedPin {
+  const { circuit, pinMap } = board
+  const pin = inspectPins({
+    circuit,
+    sources: { [deviceAsset]: text },
+    ports: new Set([pinMap[1]]),
+  }).get(pinMap[1])
+  assert.ok(pin)
+  return pin
+}
+
+/** Get the converter's references for the same chip without running a solver. */
+export function convertedReferences({
+  text,
+  pinMap,
+  extraSignal,
+  references,
+}: {
+  text: string
+  pinMap: InspectionBoard["pinMap"]
+  extraSignal?: string
+  references?: IbisModelDefinition["references"]
+}): ReferencePorts {
+  const pinStates = { [pinMap[1]]: { mode: "input" as const } }
+  if (extraSignal) pinStates[extraSignal] = { mode: "input" }
+  return convertIbisModelToSpice(
+    text,
+    {
+      source: { content: text },
+      component: "Device",
+      corner: "typical",
+      pinMap,
+      references,
+      packagePolicy: "omit",
+    },
+    {
+      duration: "1ns",
+      pinStates,
+      stimuli: {},
+    },
+  ).metadata.pins[0].references
+}
+
+/** Vendor pin mapping with power and ground bus aliases. */
+export const railMapping = `[Pin Mapping] pulldown_ref pullup_ref
+1 GROUND_BUS POWER_BUS
+2 NC         POWER_BUS
+3 GROUND_BUS NC`
+
+/** Compare the measured durations in whole picoseconds. */
+export const PICOSECONDS_PER_SECOND = 1e12
+
+/** Typical 600 ps rising and 750 ps falling ramp. */
+export const ramp = `[Ramp]
+dV/dt_r 0.36/600p 0.36/600p 0.36/600p
+dV/dt_f 0.36/750p 0.36/750p 0.36/750p`
+
+/** Linear rising waveform from 0 V to 0.6 V. */
+export const waveform = `[Rising Waveform]
+R_fixture = 50
+V_fixture = 0
+0 0 NA NA
+1n 0.6 NA NA`
