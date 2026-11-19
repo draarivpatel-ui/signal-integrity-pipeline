@@ -1,11 +1,21 @@
 import { type DiagnosticInit, diagnostics } from "../kernel"
 
-/** Codes today's model-source.ts and the IBIS part of general-pipeline.ts raise. */
+/** Diagnostics for IBIS inspection, asset admission and conversion. */
 const raise = diagnostics("buffers", [
   "converter_version",
   "vendor_hash",
   "ibis_asset",
   "ibis_asset_missing",
+  "ibis_capability_unsupported",
+  "ibis_component_missing",
+  "ibis_edge_duration_missing",
+  "ibis_edge_not_driving",
+  "ibis_model_choice",
+  "ibis_pin_bound_twice",
+  "ibis_pin_missing",
+  "ibis_reference_ambiguous",
+  "ibis_reference_short",
+  "ibis_reference_voltage_missing",
   "file_path",
 ] as const)
 export type BuffersCode = Parameters<typeof raise>[0]
