@@ -12,6 +12,7 @@ type BoardOptions = {
   extraChip?: boolean
 }
 
+/** The rendered chip records and the source port IDs assigned to its IBIS pins. */
 type InspectionBoard = {
   circuit: CircuitJson
   pinMap: SimulationIbisModel["ibis_pin_name_to_source_port_id"]
@@ -29,6 +30,12 @@ function InspectionChip({
   extraPin,
   powerClamp,
 }: ChipOptions): React.JSX.Element {
+  const ibisPinNameToPortLabel: Record<number, string> = { ...powerPins }
+  if (extraPin) ibisPinNameToPortLabel[4] = "VCLAMP"
+  let ibisPinNameToReferencePortLabels:
+    | Record<number, { powerClamp: string }>
+    | undefined
+  if (powerClamp) ibisPinNameToReferencePortLabels = { 1: { powerClamp } }
   return (
     <>
       <chip
@@ -59,12 +66,8 @@ function InspectionChip({
           mimetype: "text/plain",
         }}
         ibisComponentName="Device"
-        ibisPinNameToPortLabel={
-          extraPin ? { ...powerPins, 4: "VCLAMP" } : powerPins
-        }
-        ibisPinNameToReferencePortLabels={
-          powerClamp ? { 1: { powerClamp } } : undefined
-        }
+        ibisPinNameToPortLabel={ibisPinNameToPortLabel}
+        ibisPinNameToReferencePortLabels={ibisPinNameToReferencePortLabels}
       />
     </>
   )
@@ -111,12 +114,13 @@ export function inspectionIbis({
   referenceOnly = false,
   modelData = "",
 }: IbisOptions = {}): string {
-  const references = referenceOnly
-    ? `[Pullup Reference] 1.2 1.2 1.2
+  let references = "[Voltage Range] 1.2 1.2 1.2"
+  if (referenceOnly) {
+    references = `[Pullup Reference] 1.2 1.2 1.2
 [Pulldown Reference] 0 0 0
 [POWER Clamp Reference] 1.2 1.2 1.2
 [GND Clamp Reference] 0 0 0`
-    : "[Voltage Range] 1.2 1.2 1.2"
+  }
   return `[IBIS Ver] 5.0
 [File Name] device.ibs
 [File Rev] 1.0
