@@ -2,12 +2,14 @@ import {
   cornerValue,
   type IbisBuffer,
   type IbisComponent,
-  type IbisConversionMetadata,
   type IbisDocument,
   IbisError,
   type IbisPackagePin,
   type IbisRange,
+  IbisReferenceError,
   parseIbis,
+  type ResolvedIbisReferencePorts,
+  resolveIbisReferences,
 } from "@tscircuit/ibis-to-spice"
 import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
 import { fail } from "./diagnostics"
@@ -77,92 +79,34 @@ export function referenceVoltages({
 type PinBinding = Pick<InspectedPin, "port" | "pin" | "model" | "component">
 
 /** Converter role names mapped to their source port IDs. */
-export type ReferencePorts =
-  IbisConversionMetadata["pins"][number]["references"]
+export type ReferencePorts = ResolvedIbisReferencePorts
 
-/** The Circuit JSON reference field corresponding to each converter role. */
-const REFERENCE_PORT_IDS = {
-  pullup: "pullup_reference_source_port_id",
-  pulldown: "pulldown_reference_source_port_id",
-  powerClamp: "power_clamp_reference_source_port_id",
-  groundClamp: "ground_clamp_reference_source_port_id",
-  external: "external_reference_source_port_id",
-} as const
-
-/** Matches the converter's rail inference for a single reference role. */
-function referenceRail({
-  binding,
-  role,
-}: {
-  binding: PinBinding
-  role: keyof ReferencePorts
-}): SourcePortId {
-  const { model, component, pin, port } = binding
-  const explicit =
-    model.ibis_pin_name_to_reference_source_port_ids?.[pin]?.[
-      REFERENCE_PORT_IDS[role]
-    ]
-  if (explicit) return explicit
-
-  const bus = component.pinMapping[pin]?.[role]
-  let busRole = role
-  if (role === "external") busRole = "pullup"
-  let railModel = "power"
-  if (role === "pulldown" || role === "groundClamp") railModel = "gnd"
-  const candidates = new Set<SourcePortId>()
-  for (const [id, sourcePortId] of Object.entries(
-    model.ibis_pin_name_to_source_port_id,
-  )) {
-    const candidate = component.pins[id]
-    if (candidate?.model.toLowerCase() !== railModel) continue
-    if (
-      bus &&
-      component.pinMapping[id]?.[busRole] !== bus &&
-      candidate.signal !== bus &&
-      id !== bus
-    )
-      continue
-    candidates.add(sourcePortId)
-  }
-  if (candidates.size !== 1) {
-    fail(
-      "ibis_reference_ambiguous",
-      `${port}: IBIS ${role} reference is ambiguous; provide the chip's reference mapping`,
-    )
-  }
-  const [referencePort] = candidates
-  return referencePort
-}
-
-/** Clamp roles share the drive rails when the model names no separate clamp port or bus. */
+/** Resolve converter rail ports from the Circuit JSON binding. */
 function referenceRails(binding: PinBinding): ReferencePorts {
   const { model, component, pin, port } = binding
   const explicit = model.ibis_pin_name_to_reference_source_port_ids?.[pin]
-  const buses = component.pinMapping[pin]
-  const pullup = referenceRail({ binding, role: "pullup" })
-  const pulldown = referenceRail({ binding, role: "pulldown" })
-  // IBIS 7.2 §5 [Pin Mapping] assigns unmapped clamps to their drive buses.
-  const references: ReferencePorts = {
-    pullup,
-    pulldown,
-    powerClamp: pullup,
-    groundClamp: pulldown,
+  try {
+    return resolveIbisReferences({
+      component,
+      pin,
+      pinToSourcePort: model.ibis_pin_name_to_source_port_id,
+      explicitReferences: {
+        pullup: explicit?.pullup_reference_source_port_id,
+        pulldown: explicit?.pulldown_reference_source_port_id,
+        powerClamp: explicit?.power_clamp_reference_source_port_id,
+        groundClamp: explicit?.ground_clamp_reference_source_port_id,
+        external: explicit?.external_reference_source_port_id,
+      },
+    })
+  } catch (error) {
+    if (error instanceof IbisReferenceError) {
+      if (error.reason === "ambiguous")
+        fail("ibis_reference_ambiguous", `${port}: ${error.message}`)
+      if (error.reason === "shorted")
+        fail("ibis_reference_short", `${port}: ${error.message}`)
+    }
+    throw error
   }
-  if (explicit?.power_clamp_reference_source_port_id || buses?.powerClamp) {
-    references.powerClamp = referenceRail({ binding, role: "powerClamp" })
-  }
-  if (explicit?.ground_clamp_reference_source_port_id || buses?.groundClamp) {
-    references.groundClamp = referenceRail({ binding, role: "groundClamp" })
-  }
-  if (pullup === pulldown)
-    fail(
-      "ibis_reference_short",
-      `${port}: IBIS pullup and pulldown references must differ`,
-    )
-  if (explicit?.external_reference_source_port_id || buses?.external) {
-    references.external = referenceRail({ binding, role: "external" })
-  }
-  return references
 }
 
 /** IBIS pin assignments that do not select a signal buffer. */
