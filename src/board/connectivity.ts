@@ -9,7 +9,7 @@ type SourceComponentId = SourceComponentBase['source_component_id']
 export { getSourcePortConnectivityMapFromCircuitJson, type ConnectivityMap } from 'circuit-json-to-connectivity-map'
 
 /** Resolve the seed's electrical net, including an isolated seed. */
-export function sourceNetMembers(connectivity: ConnectivityMap, seed: string): Set<SourcePortId | SourceNetId> {
+export function sourceNetMembers(connectivity: ConnectivityMap, seed: SourcePortId | SourceNetId): Set<SourcePortId | SourceNetId> {
   const netId = connectivity.getNetConnectedToId(seed)
   if (netId === undefined) return new Set([seed])
   return new Set([seed, ...connectivity.getIdsConnectedToNet(netId)])
