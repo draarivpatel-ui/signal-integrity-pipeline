@@ -15,10 +15,10 @@ import {
 
 export const deviceAsset = "device.ibs"
 const pinLabels = { pin1: "DQ", pin2: "VDD", pin3: "VSS", pin4: "VCLAMP" }
-const defaultPinLabels = { 1: "DQ", 2: "VDD", 3: "VSS" }
 
 type BoardOptions = {
   extraPin?: boolean
+  mapRails?: boolean
   references?: IbisPinReferences
   modelChoice?: string
   componentName?: string
@@ -41,11 +41,16 @@ function InspectionChip({
   name,
   asset,
   extraPin,
+  mapRails = true,
   references,
   modelChoice,
   componentName = "Device",
 }: ChipOptions): React.JSX.Element {
-  const ibisPinNameToPortLabel: Record<number, string> = { ...defaultPinLabels }
+  const ibisPinNameToPortLabel: Record<number, string> = { 1: "DQ" }
+  if (mapRails) {
+    ibisPinNameToPortLabel[2] = "VDD"
+    ibisPinNameToPortLabel[3] = "VSS"
+  }
   if (extraPin) ibisPinNameToPortLabel[4] = "VCLAMP"
   let ibisPinNameToReferencePortLabels:
     | Record<number, IbisPinReferences>
