@@ -9,11 +9,11 @@ test("chained overlap makes one physical junction along a wire", async () => {
       <>
         <SignalPin name="TX" x={-4} />
         <SignalPin name="RX" x={4} />
-        <SignalPin name="FIRST" x={-1} width={2} />
-        <SignalPin name="BRIDGE" x={0.25} width={1.5} />
-        <SignalPin name="LAST" x={0.8} />
+        <SignalPin name="FIRST" x={-1} y={0.4} width={2} />
+        <SignalPin name="BRIDGE" x={0.25} y={-0.4} width={1.5} />
+        <SignalPin name="LAST" x={0.8} y={0.4} />
         <trace
-          width={0.1}
+          width={1.4}
           from=".TX > .SIG"
           to=".RX > .SIG"
           pcbPath={[".TX > .SIG", ".RX > .SIG"]}
