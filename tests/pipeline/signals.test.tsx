@@ -1,3 +1,5 @@
+/* eslint-disable local/max-file-lines -- Preparation tests share one TSX board and declaration setup. */
+
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { simulation } from "@tscircuit/core"
@@ -708,7 +710,7 @@ test("PRBS31 rejects overlong captures during preparation", async () => {
   )
 })
 
-test("capture timing accommodates enabled quiet offsets", async () => {
+test("the default capture accepts a quiet driver whose offset is past the end", async () => {
   const automatic = await renderSignals({
     tree: <Board pattern="0" offset={3e-6} />,
   })
@@ -717,16 +719,53 @@ test("capture timing accommodates enabled quiet offsets", async () => {
     sources: inverterSources,
   })
   const [plan] = generalDeclarations(declarationInput(prepared)).plans
-  assert.ok(Math.abs(plan.durationSeconds - (3e-6 + 32 / 20e6)) < 1e-15)
+  assert.equal(plan.durationSeconds, 32 / 20e6)
 })
 
-test("capture timing rejects an explicit recording that ends at stimulus start", async () => {
+test("a constant driver with an in-range offset starts at zero", async () => {
+  const circuit = await renderSignals({
+    tree: <Board pattern="111" offset={0.5e-6} />,
+  })
+  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [plan] = generalDeclarations(declarationInput(prepared)).plans
+  assert.equal(plan.stimuli[0].start_time_ms, 0)
+})
+
+test("an explicit capture accepts a constant driver with a late offset and starts it at zero", async () => {
+  const circuit = await renderSignals({
+    tree: <Board pattern="0" offset={3e-6} duration={1e-6} />,
+  })
+  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [plan] = generalDeclarations(declarationInput(prepared)).plans
+  assert.equal(plan.stimuli[0].start_time_ms, 0)
+})
+
+test("a switching driver keeps its nonzero offset", async () => {
+  const circuit = await renderSignals({
+    tree: <Board pattern="01" offset={0.5} />,
+  })
+  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [plan] = generalDeclarations(declarationInput(prepared)).plans
+  assert.equal(plan.stimuli[0].start_time_ms, 500)
+})
+
+test("capture timing rejects a switching driver whose offset is past the end", async () => {
   const explicit = await renderSignals({
-    tree: <Board pattern="0" offset={1e-6} duration={1e-6} />,
+    tree: <Board pattern="01" offset={3e-6} duration={1e-6} />,
   })
   assert.throws(
     () => prepareBlocks({ circuit: explicit, sources: inverterSources }),
     /stimulus starts after/,
+  )
+})
+
+test("an invalid repeated pattern is rejected even with an offset past the capture", async () => {
+  const circuit = await renderSignals({
+    tree: <Board pattern="xxx" offset={3e-6} duration={1e-6} />,
+  })
+  assert.throws(
+    () => prepareBlocks({ circuit, sources: inverterSources }),
+    /pattern must be/,
   )
 })
 

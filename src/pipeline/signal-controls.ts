@@ -11,10 +11,7 @@ import {
 } from "../board"
 import { type InspectedPin, pinCapabilities } from "../buffers"
 import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
-import { defaultDurationSeconds } from "./timing"
-
-/** Circuit JSON timings are in milliseconds. */
-const MILLISECONDS_PER_SECOND = 1_000
+import { defaultDurationSeconds, MILLISECONDS_PER_SECOND } from "./timing"
 
 /** Round bit intervals with the same floating-point tolerance as the IBIS converter. */
 const INTERVAL_ROUNDING_ULPS = 8
@@ -71,6 +68,8 @@ export function blockDurationSeconds({
     const startSeconds = signal.offset_ms / MILLISECONDS_PER_SECOND
     if (!Number.isFinite(startSeconds) || startSeconds < 0)
       throw new Error(`${signal.name}: invalid stimulus offset.`)
+    // A constant driver holds its level from t=0.
+    if (isQuiet(signal)) continue
     if (startSeconds >= durationSeconds)
       throw new Error(
         `${signal.name}: stimulus starts after the experiment ends.`,
@@ -219,6 +218,8 @@ export function appendBlockControls({
     if (signal.driver_disabled) continue
     let initialState: 0 | 1 = 0
     if (bits[0] === "1") initialState = 1
+    let startTimeMs = signal.offset_ms
+    if (isQuiet(signal)) startTimeMs = 0
     for (const [index, port] of endpointPorts(signal.driver).entries()) {
       const pin = pins.get(port)!
       const inversion = Boolean(index) !== (pin.buffer.polarity === "inverting")
@@ -226,7 +227,7 @@ export function appendBlockControls({
         name: signal.name,
         source_port_id: port,
         bit_duration_ms: MILLISECONDS_PER_SECOND / signal.bit_rate_bps,
-        start_time_ms: signal.offset_ms,
+        start_time_ms: startTimeMs,
         initial_state: initialState,
         inverted: inversion,
         transmission_pattern: { transmission_type: "bits", bits, repeat: true },
