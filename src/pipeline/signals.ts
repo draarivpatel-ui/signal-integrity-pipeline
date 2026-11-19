@@ -597,11 +597,11 @@ function prepareBlock({
   const selectedPins = inspectPins({ circuit, sources, ports: endpointIds })
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const rails = collectRailIds({ circuit, connectivity, pins: selectedPins })
-  const signalConnectivity = signalTopology({ circuit, rails })
+  const routedTopology = signalTopology({ circuit, rails })
   const { driven, topology, edgeTimesSeconds } = indexBlockSignals({
     signals,
     pins: selectedPins,
-    signalConnectivity,
+    signalConnectivity: routedTopology.connectivity,
   })
   const reference = selectedPins.get([...driven.keys()].sort()[0])!.references
     .pulldown
@@ -625,9 +625,8 @@ function prepareBlock({
   }
   validateSignalGraph({
     circuit,
-    signalConnectivity,
+    topology: routedTopology,
     signals,
-    rails,
     allowUnroutedTraces: block.allow_unrouted_traces,
   })
   const edgeTimeSeconds = Math.min(...edgeTimesSeconds)
