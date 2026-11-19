@@ -192,3 +192,14 @@ export async function routeOnlyViaRing({
   const circuit = board.circuit.filter((record) => record.type !== "pcb_via")
   return { ...board, circuit }
 }
+
+/** The autorouter returns a via approached on a different layer from its entry. */
+export async function mismatchedViaEntry(): Promise<TopologyBoard> {
+  return routedBoard({
+    route: [
+      { route_type: "wire", x: -4, y: 0, layer: "top", width: 0.1 },
+      { route_type: "via", x: 0, y: 0, from_layer: "bottom", to_layer: "top" },
+      { route_type: "wire", x: 4, y: 0, layer: "top", width: 0.1 },
+    ],
+  })
+}

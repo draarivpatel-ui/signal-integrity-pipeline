@@ -12,11 +12,13 @@ export function SignalPin({
   x,
   y = 0,
   layer = "top",
+  width = 0.4,
 }: {
   name: string
   x: number
   y?: number
   layer?: "top" | "bottom"
+  width?: number
 }): JSX.Element {
   return (
     <>
@@ -32,7 +34,7 @@ export function SignalPin({
               portHints={["pin1"]}
               pcbX={0}
               pcbY={0}
-              width={0.4}
+              width={width}
               height={0.4}
               shape="rect"
             />

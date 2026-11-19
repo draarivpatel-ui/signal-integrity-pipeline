@@ -37,18 +37,12 @@ export async function parallelTraces({
 }
 
 /** A trace whose embedded via switches from the incoming layer to the destination layer. */
-export async function inlineVia({
-  fromLayer = "top",
-  toLayer = "bottom",
-}: {
-  fromLayer?: "top" | "bottom"
-  toLayer?: "top" | "bottom"
-} = {}): Promise<TopologyBoard> {
+export async function inlineVia(): Promise<TopologyBoard> {
   return topologyBoard({
     children: (
       <>
         <SignalPin name="TX" x={-4} />
-        <SignalPin name="RX" x={4} layer={toLayer} />
+        <SignalPin name="RX" x={4} layer="bottom" />
         <trace
           from=".TX > .SIG"
           to=".RX > .SIG"
@@ -452,6 +446,40 @@ export async function layeredReceiver(): Promise<TopologyBoard> {
           from=".TX > .SIG"
           to=".RX > .SIG"
           pcbPath={[".TX > .SIG", ".RX > .SIG"]}
+        />
+      </>
+    ),
+  })
+}
+
+/** A separate routed net crosses the signal stubs at its barrel. */
+export async function viaOnUnrelatedPcbTrace(): Promise<TopologyBoard> {
+  return topologyBoard({
+    children: (
+      <>
+        <SignalPin name="TX" x={-4} />
+        <SignalPin name="RX" x={4} layer="bottom" />
+        <SignalPin name="OTHER_TOP" x={0} y={-4} />
+        <SignalPin name="OTHER_BOTTOM" x={0} y={4} layer="bottom" />
+        <net name="SIGNAL" />
+        <trace
+          from=".TX > .SIG"
+          to="net.SIGNAL"
+          pcbPath={[".TX > .SIG", { x: 3.9, y: 0 }]}
+        />
+        <trace
+          from=".RX > .SIG"
+          to="net.SIGNAL"
+          pcbPath={[".RX > .SIG", { x: -3.9, y: 0 }]}
+        />
+        <trace
+          from=".OTHER_TOP > .SIG"
+          to=".OTHER_BOTTOM > .SIG"
+          pcbPath={[
+            ".OTHER_TOP > .SIG",
+            { x: 0, y: 4, via: true, toLayer: "bottom" },
+            ".OTHER_BOTTOM > .SIG",
+          ]}
         />
       </>
     ),
