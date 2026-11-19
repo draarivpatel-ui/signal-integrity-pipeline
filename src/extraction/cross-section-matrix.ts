@@ -1,6 +1,8 @@
 import { fail } from "./diagnostics"
 import type { Matrix } from "./linalg"
 
+const DEFAULT_STRICT_PASSIVITY = false
+
 /** A pivot below this magnitude cannot support a stable division in the boundary solve. */
 const MIN_PIVOT_MAGNITUDE = 1e-20
 
@@ -83,7 +85,13 @@ export function sectionReciprocity(matrix: Matrix): number {
 }
 
 /** Reject nonphysical matrices before frequency interpolation; permit exact lossless null spaces. */
-export function sectionPassive(matrix: Matrix, strict = false): void {
+export function sectionPassive({
+  matrix,
+  strict = DEFAULT_STRICT_PASSIVITY,
+}: {
+  matrix: Matrix
+  strict?: boolean
+}): void {
   const size = matrix.length
   const largest = Math.max(...matrix.flat().map(Math.abs))
   if (!Number.isFinite(largest))

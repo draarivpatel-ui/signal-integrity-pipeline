@@ -10,6 +10,9 @@ const LIGHT_SPEED = 299792458
 /** Number of image terms in the independent thin-sheet calculation. */
 const IMAGE_TERMS = 64
 
+/** Default panel count for the independent thin-sheet reference. */
+const IMAGE_PANELS = 32
+
 /** Modal impedances and mutual per-unit-length terms in a homogeneous dielectric. */
 interface CoupledLine {
   ze: number
@@ -32,7 +35,7 @@ interface MicrostripGeometry {
 }
 
 /** Hammerstad–Jensen single-line dielectric filling factor. */
-function fillingFactor(u: number, er: number): number {
+function fillingFactor({ u, er }: { u: number; er: number }): number {
   const a =
     1 +
     Math.log((u ** 4 + (u / 52) ** 2) / (u ** 4 + 0.432)) / 49 +
@@ -85,8 +88,8 @@ export function coupledMicrostrip({
   const q = Math.exp(-1.366 - gap)
   const fo =
     fo1 * Math.exp(p * Math.log(w) + q * Math.sin(Math.PI * Math.log10(w)))
-  const ee = (er + 1) / 2 + ((er - 1) / 2) * fillingFactor(mu, er)
-  const eo = (er + 1) / 2 + ((er - 1) / 2) * fo * fillingFactor(w, er)
+  const ee = (er + 1) / 2 + ((er - 1) / 2) * fillingFactor({ u: mu, er })
+  const eo = (er + 1) / 2 + ((er - 1) / 2) * fo * fillingFactor({ u: w, er })
   const zae = zair / (1 - (zair * phie) / eta)
   const zao = zair / (1 - (zair * phio) / eta)
   return {
@@ -159,11 +162,15 @@ interface StriplineReference {
  * (the familiar 30 pi is eta0/4 with eta0 ~ 120 pi). Per-unit-length C = sqrt(er)/(c Z0) = 4 eps0 er K(k')/K(k).
  * w and b share any length unit; capacitance is in F/m.
  */
-export function stripline(
-  w: number,
-  b: number,
-  er: number,
-): StriplineReference {
+export function stripline({
+  w,
+  b,
+  er,
+}: {
+  w: number
+  b: number
+  er: number
+}): StriplineReference {
   const x = (Math.PI * w) / (2 * b)
   const ratio = agm(1, 1 / Math.cosh(x)) / agm(1, Math.tanh(x))
   return {
@@ -178,13 +185,19 @@ export function stripline(
  * A = 1 + 2W/(b - t) + (b + t)/(pi (b - t)) ln((2b - t)/t), with Pozar's own Z0 = 30 pi b/(sqrt(er) (We + 0.441 b)).
  * Returns alpha_c in Np/m. Lengths in metres; a curve fit, never an exact reference.
  */
-export function pozarStriplineAttenuation(
-  w: number,
-  b: number,
-  t: number,
-  er: number,
-  surfaceResistance: number,
-): number {
+export function pozarStriplineAttenuation({
+  w,
+  b,
+  t,
+  er,
+  surfaceResistance,
+}: {
+  w: number
+  b: number
+  t: number
+  er: number
+  surfaceResistance: number
+}): number {
   let effective = w
   if (!(w / b >= 0.35)) effective = w - b * (0.35 - w / b) ** 2
   const z = (30 * Math.PI * b) / (Math.sqrt(er) * (effective + 0.441 * b))
@@ -204,8 +217,14 @@ interface MicrostripReference {
 }
 
 /** H–J single microstrip, Qucs equations 11.4–11.7 and 11.15–11.16; dimensions normalized to h. */
-export function singleMicrostrip(u: number, er: number): MicrostripReference {
-  const ee = (er + 1) / 2 + ((er - 1) / 2) * fillingFactor(u, er)
+export function singleMicrostrip({
+  u,
+  er,
+}: {
+  u: number
+  er: number
+}): MicrostripReference {
+  const ee = (er + 1) / 2 + ((er - 1) / 2) * fillingFactor({ u, er })
   const f = 6 + (2 * Math.PI - 6) * Math.exp(-((30.666 / u) ** 0.7528))
   const z =
     ((VACUUM_IMPEDANCE / (2 * Math.PI)) *
@@ -215,7 +234,7 @@ export function singleMicrostrip(u: number, er: number): MicrostripReference {
 }
 
 /** Twice-integrated log distance for the independent thin-sheet image reference. */
-function imagePrimitive(x: number, y: number): number {
+function imagePrimitive({ x, y }: { x: number; y: number }): number {
   let correction = 0
   if (y) correction = Math.abs(y) * x * Math.atan(x / Math.abs(y))
   return (
@@ -226,23 +245,28 @@ function imagePrimitive(x: number, y: number): number {
 }
 
 /** Integrate one direct or image sheet's potential over both intervals. */
-function imagePotential(
-  y: number,
-  {
-    u,
-    h,
-    d,
-    area,
-  }: {
-    u: number
-    h: number
-    d: number
-    area: number
-  },
-): number {
-  const high = imagePrimitive(u + h, y) - imagePrimitive(u + d, y)
-  return (high - imagePrimitive(u - d, y) + imagePrimitive(u - h, y)) / area
+function imagePotential({
+  y,
+  u,
+  h,
+  d,
+  area,
+}: {
+  y: number
+  u: number
+  h: number
+  d: number
+  area: number
+}): number {
+  const high = imagePrimitive({ x: u + h, y }) - imagePrimitive({ x: u + d, y })
+  return (
+    (high - imagePrimitive({ x: u - d, y }) + imagePrimitive({ x: u - h, y })) /
+    area
+  )
 }
+
+/** Grounded capacitance coefficients from the independent thin-sheet reference. */
+type ImageCapacitance = number[][]
 
 /** Independent thin-sheet layered Green reference (h=1):
  * G(x) = [-log|x| + (1+r) sum((-r)^(n-1) log(hypot(x,2n)))]/[pi*(er+1)],
@@ -250,10 +274,14 @@ function imagePotential(
  * See https://www.polarinstruments.com/support/cits/AP135.html and Chew, section 7.1.1,
  * https://wcchew.ece.illinois.edu/chew/course/tgwAll20160215.pdf .
  */
-export function imageMicrostrip(
-  { width: w, gap, er }: MicrostripGeometry,
-  count = 32,
-): number[][] {
+export function imageMicrostrip({
+  width: w,
+  gap,
+  er,
+  count = IMAGE_PANELS,
+}: MicrostripGeometry & {
+  count?: number
+}): ImageCapacitance {
   const r = (er - 1) / (er + 1)
   const panels = [0, 1].flatMap((group) =>
     Array.from({ length: count }, (_, i) => {
@@ -277,9 +305,10 @@ export function imageMicrostrip(
         d,
         area: q.length * t.length,
       }
-      let value = -imagePotential(0, intervals)
+      let value = -imagePotential({ y: 0, ...intervals })
       for (let n = 1; n <= IMAGE_TERMS; n++) {
-        value += (1 + r) * (-r) ** (n - 1) * imagePotential(2 * n, intervals)
+        value +=
+          (1 + r) * (-r) ** (n - 1) * imagePotential({ y: 2 * n, ...intervals })
       }
       return value / (Math.PI * (er + 1))
     }),
@@ -327,8 +356,8 @@ export function thickMicrostrip({
       1 + (4 * Math.E) / (thickness / Math.tanh(Math.sqrt(6.517 * u)) ** 2),
     )
   const mixed = (du / 2) * (1 + 1 / Math.cosh(Math.sqrt(er - 1)))
-  const vacuum = singleMicrostrip(u + du, 1).z
-  const dielectric = singleMicrostrip(u + mixed, 1).z
-  const line = singleMicrostrip(u + mixed, er)
+  const vacuum = singleMicrostrip({ u: u + du, er: 1 }).z
+  const dielectric = singleMicrostrip({ u: u + mixed, er: 1 }).z
+  const line = singleMicrostrip({ u: u + mixed, er })
   return { z: line.z, ee: line.ee * (vacuum / dielectric) ** 2 }
 }

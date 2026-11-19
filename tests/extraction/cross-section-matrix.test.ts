@@ -6,7 +6,7 @@ import {
   sectionPassive,
 } from "../../src/extraction/cross-section-matrix"
 
-test("boundary factor reuses pivoting for independent excitations and rejects singular/nonpassive energy", () => {
+test("pivoted factors solve independent excitations", () => {
   const matrix = [
     [0, 1, 2],
     [1, 3, 1],
@@ -32,25 +32,46 @@ test("boundary factor reuses pivoting for independent excitations and rejects si
       }
     }
   }
+})
+
+test("inverse uses pivoted factors", () => {
   const inverse = sectionInverse([
     [2, 1],
     [1, 2],
   ])
   assert.ok(Math.abs(inverse[0][0] - 2 / 3) < 1e-14)
+})
+
+test("singular pivots fail", () => {
   assert.throws(() => sectionFactor([Float64Array.of(0)]), {
     code: "matrix_zero",
   })
-  sectionPassive([
-    [0, 0],
-    [0, 1],
-  ])
-  assert.throws(() => sectionPassive([[0]], true), { code: "passivity" })
+})
+
+test("loss may have a null space", () => {
+  sectionPassive({
+    matrix: [
+      [0, 0],
+      [0, 1],
+    ],
+  })
+})
+
+test("strict passivity rejects a null space", () => {
+  assert.throws(() => sectionPassive({ matrix: [[0]], strict: true }), {
+    code: "passivity",
+  })
+})
+
+test("nonpassive energy fails", () => {
   assert.throws(
     () =>
-      sectionPassive([
-        [1, 2],
-        [2, 1],
-      ]),
+      sectionPassive({
+        matrix: [
+          [1, 2],
+          [2, 1],
+        ],
+      }),
     { code: "passivity" },
   )
 })

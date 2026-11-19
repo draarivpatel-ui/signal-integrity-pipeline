@@ -1,3 +1,5 @@
+import type { Matrix } from "../../src/extraction"
+
 // Shared helpers for the golden known-answer checks (docs/golden-checks.md). They only measure;
 // every expected value and tolerance lives beside its check, with its source.
 
@@ -14,7 +16,7 @@ const MIN_JACOBI_COEFFICIENT = 1e-300
  * Eigenvalues of a real symmetric matrix, ascending, by cyclic Jacobi rotations
  * (Golub & Van Loan, Matrix Computations, 4th ed., §8.5.2). Independent of production linear algebra.
  */
-export function symmetricEigenvalues(matrix: number[][]): number[] {
+export function symmetricEigenvalues(matrix: Matrix): number[] {
   const n = matrix.length
   const a = matrix.map((row) => [...row])
   const scale = Math.max(...a.flat().map(Math.abs)) || 1
@@ -29,9 +31,9 @@ export function symmetricEigenvalues(matrix: number[][]): number[] {
       for (let q = p + 1; q < n; q++) {
         if (Math.abs(a[p][q]) <= MIN_JACOBI_COEFFICIENT) continue
         const theta = (a[q][q] - a[p][p]) / (2 * a[p][q])
-        const t =
-          (theta >= 0 ? 1 : -1) /
-          (Math.abs(theta) + Math.sqrt(theta * theta + 1))
+        let sign = -1
+        if (theta >= 0) sign = 1
+        const t = sign / (Math.abs(theta) + Math.sqrt(theta * theta + 1))
         const c = 1 / Math.sqrt(t * t + 1)
         const s = t * c
         for (let k = 0; k < n; k++) {
@@ -52,21 +54,24 @@ export function symmetricEigenvalues(matrix: number[][]): number[] {
   return a.map((row, i) => row[i]).sort((x, y) => x - y)
 }
 
+/** Row and column of a matrix coefficient. */
+type MatrixIndexPair = [row: number, column: number]
+
 /** Measured energy-matrix facts: asymmetry, extreme eigenvalues and the strongest pairwise coupling. */
 export interface EnergyFacts {
   asymmetry: number
   minimumEigenvalue: number
   maximumEigenvalue: number
   coupling: number
-  pair: [number, number]
+  pair: MatrixIndexPair
 }
 
 /** Relative asymmetry, eigenvalue range and max |M_ij|/sqrt(M_ii M_jj) of a square matrix. */
-export function energyFacts(matrix: number[][]): EnergyFacts {
+export function energyFacts(matrix: Matrix): EnergyFacts {
   const scale = Math.max(...matrix.flat().map(Math.abs)) || 1
   let asymmetry = 0
   let coupling = 0
-  let pair: [number, number] = [0, 0]
+  let pair: MatrixIndexPair = [0, 0]
   for (let i = 0; i < matrix.length; i++) {
     for (let j = 0; j < matrix.length; j++) {
       asymmetry = Math.max(
@@ -101,7 +106,7 @@ interface MaxwellFacts {
 }
 
 /** Find the smallest diagonal, largest off-diagonal and smallest row sum relative to its diagonal. */
-export function maxwellFacts(matrix: number[][]): MaxwellFacts {
+export function maxwellFacts(matrix: Matrix): MaxwellFacts {
   let minimumDiagonal = Infinity
   let maximumOffDiagonal = -Infinity
   let minimumRowSum = Infinity
@@ -115,9 +120,6 @@ export function maxwellFacts(matrix: number[][]): MaxwellFacts {
       row.reduce((sum, value) => sum + value, 0) / row[i],
     )
   }
-  return {
-    minimumDiagonal,
-    maximumOffDiagonal: matrix.length > 1 ? maximumOffDiagonal : 0,
-    minimumRowSum,
-  }
+  if (matrix.length <= 1) maximumOffDiagonal = 0
+  return { minimumDiagonal, maximumOffDiagonal, minimumRowSum }
 }
