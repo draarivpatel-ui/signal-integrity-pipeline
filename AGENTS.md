@@ -81,7 +81,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 ## Tests
 
 - Reproductions and fixtures are **TSX source rendered through core**, not hand-written Circuit JSON (see `tests/fixtures/native-channel.tsx`).
-- Keep tests simple: one behaviour per `test()`, a short name saying what is checked, no clever helpers.
+- Put one `test()` per file. Use a short, kebab-case filename that describes the behaviour in `tests/<module>/<source>/`. Put shared setup in `tests/fixtures/`.
 - For routed pipeline refactors that claim "no behaviour change", prove it before merge:
   - golden checks unchanged (27 pass, 2 TODO, 2 n/a; vendor waveform records identical);
   - the 40 ns two-trace replay byte-identical (deck SHA-256 and every sample);
@@ -118,7 +118,7 @@ in `eslint.config.mjs` and `tools/eslint/rules.mjs`.
 | `local/typed-signature` | Named functions need parameter and return types in the signature. Constructors and setters do not need a return type. |
 | `no-restricted-syntax` | Use a string-literal union or an `as const` object in place of an enum. |
 | `local/max-file-lines` | TypeScript files over 500 lines warn. If a file needs to stay together, document the reason with `/* eslint-disable local/max-file-lines -- <reason> */` at the top. |
-| `local/test-file-matches-source` | An ordinary test file matches one source file or its directory’s `index.ts`. Cross-cutting tests in `tests/compat`, `tests/tooling` and `tests/support` are exempt. |
+| `local/test-file-matches-source` | Map each behaviour file in `tests/<module>/<source>/` to `src/<module>/<source>.ts` or its directory's `index.ts`. Existing direct test paths also map to their source. Cross-cutting tests in `tests/compat`, `tests/tooling` and `tests/support` are exempt from source-file mapping. |
 
 ## Naming vocabulary (`bun run check:vocabulary`, dictionary in `tools/vocabulary.yaml`)
 

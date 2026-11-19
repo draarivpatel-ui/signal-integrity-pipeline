@@ -70,7 +70,7 @@ export default tseslint.config(
     rules: { "jsdoc/require-jsdoc": "off", "local/typed-signature": "off" },
   },
   {
-    // 5. One test file per source file: tests/<module>/<name>.test.ts tests src/<module>/<name>.ts.
+    // 5. Every ordinary test file maps to a source file.
     files: ["tests/**/*.test.{ts,tsx,mjs}"],
     rules: { "local/test-file-matches-source": "error" },
   },

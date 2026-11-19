@@ -1,6 +1,7 @@
 import { describe, it } from "bun:test"
+import assert from "node:assert/strict"
 import { join } from "node:path"
-import { type Rule, RuleTester } from "eslint"
+import { Linter, type Rule, RuleTester } from "eslint"
 import tseslint from "typescript-eslint"
 import plugin from "../../tools/eslint/rules.mjs"
 
@@ -41,7 +42,39 @@ tester.run("max-file-lines", rules["max-file-lines"], {
 
 tester.run("test-file-matches-source", rules["test-file-matches-source"], {
   valid: [
-    { code: "", filename: join(root, "tests/board/stackup.test.ts") },
+    {
+      code: "",
+      filename: join(root, "tests/board/stackup.test.ts"),
+      after() {
+        const linter = new Linter({ cwd: root })
+        const config: Linter.Config = {
+          files: ["tests/**/*.{ts,tsx}"],
+          plugins: { local: { rules } },
+          rules: { "local/test-file-matches-source": "error" },
+        }
+        assert.deepEqual(
+          linter.verify("", config, "tests/board/stackup/reads-layers.test.ts"),
+          [],
+        )
+        assert.deepEqual(
+          linter.verify(
+            "",
+            config,
+            "tests/board/stackup/reads-materials.test.tsx",
+          ),
+          [],
+        )
+        const unmatched = linter.verify(
+          "",
+          config,
+          "tests/board/nothing-like-this/reads-layers.test.ts",
+        )
+        assert.deepEqual(
+          unmatched.map(({ messageId }) => messageId),
+          ["noSource"],
+        )
+      },
+    },
     { code: "", filename: join(root, "tests/board/index.test.ts") },
     { code: "", filename: join(root, "tests/compat/anything.test.ts") },
   ],
