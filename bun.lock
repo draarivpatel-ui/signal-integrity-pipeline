@@ -8,7 +8,7 @@
         "@flatten-js/core": "1.6.14",
         "@noble/hashes": "1.8.0",
         "@tscircuit/circuit-json-util": "0.0.123",
-        "@tscircuit/ibis-to-spice": "https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/ad1ec9e640a92a4d370fc76acbbd8db245563317",
+        "@tscircuit/ibis-to-spice": "https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/acf870145a0fc592638f2caed5ce2e9595b506c3",
         "@tscircuit/solver-utils": "https://pkg.pr.new/tscircuit/solver-utils/@tscircuit/solver-utils@127f17012c7c391005254993864b26801f418249",
         "circuit-json-to-connectivity-map": "0.0.35",
         "format-si-unit": "0.0.12",
@@ -230,7 +230,7 @@
 
     "@tscircuit/footprinter": ["@tscircuit/footprinter@0.0.451", "", { "dependencies": { "@tscircuit/mm": "0.0.8", "zod": "3.25.76" }, "peerDependencies": { "circuit-json": "0.0.552" } }, "sha512-Rpafg5M3Ovp/WrnNxMu5K2CJcWaK7TS3YFkbHULh6c/4nZbl8amTG7qUg9RmQ8iMiDN+XloP/jyyrbkjK+in3A=="],
 
-    "@tscircuit/ibis-to-spice": ["@tscircuit/ibis-to-spice@https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/ad1ec9e640a92a4d370fc76acbbd8db245563317", { "dependencies": { "@noble/hashes": "1.8.0", "fflate": "0.8.2" }, "bin": { "ibis-to-spice": "cli.mjs" } }, "sha512-X8zufqDdqeYwlD7eSW4v/hnbBlUEiePh+4y8IDyx02pjgvooD7jDwEnEQ6HOqcemnfn1nvvhM6RFGrxcr8Jelg=="],
+    "@tscircuit/ibis-to-spice": ["@tscircuit/ibis-to-spice@https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/acf870145a0fc592638f2caed5ce2e9595b506c3", { "dependencies": { "@noble/hashes": "1.8.0", "fflate": "0.8.2" }, "bin": { "ibis-to-spice": "cli.mjs" } }, "sha512-13jNWLOY7k544GjsFyeSRwaBTGy88ICjMogpGcTjb+P6IMy7WOzilsAjCDBjzSLGItyhPytN6X8mmkRS9NSsAw=="],
 
     "@tscircuit/image-utils": ["@tscircuit/image-utils@0.0.10", "", { "dependencies": { "@flatten-js/core": "1.6.14", "color-diff": "1.4.0", "fast-png": "8.0.0", "svg-path-commander": "2.3.3", "transformation-matrix": "2.16.1" } }, "sha512-2ivIRhGTnMy7a0q6fm2bk/f6cv6ZVwnF7fav+ceXPkTJYOSnzijFVtN696veyCXuiU1/Ck1QiosvWwcgeBPstw=="],
 

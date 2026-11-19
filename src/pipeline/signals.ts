@@ -16,7 +16,7 @@ import {
 } from "../board"
 import {
   coupledPackage,
-  edgeSeconds,
+  edgeDurationSeconds,
   type IbisSources,
   type InspectedPin,
   inspectPins,
@@ -356,7 +356,7 @@ function indexBlockSignals({
         )
       }
       driven.set(port, signal)
-      edgeTimesSeconds.push(edgeSeconds(pin))
+      edgeTimesSeconds.push(edgeDurationSeconds(pin))
       for (const net of sourceNetMembers({
         connectivity: signalConnectivity,
         seed: port,

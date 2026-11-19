@@ -1,28 +1,33 @@
 import {
+  cornerValue,
   type IbisBuffer,
   type IbisComponent,
-  type IbisConversionMetadata,
   type IbisDocument,
-  ibisNumber,
+  IbisError,
+  type IbisPackagePin,
+  type IbisRange,
+  IbisReferenceError,
   parseIbis,
+  type ResolvedIbisReferencePorts,
+  resolveIbisReferences,
 } from "@tscircuit/ibis-to-spice"
 import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
+import { fail } from "./diagnostics"
 import { loadModelSource } from "./source"
 import type { IbisSources } from "./types"
 
 /** The selected IBIS model, pin binding and rails for one source port. */
-export interface InspectedPin {
+export type InspectedPin = {
   /** Circuit JSON source port bound to this pin. */
   port: SourcePortId
   /** Physical pin name in the IBIS component. */
-  pin: string
+  pin: IbisPackagePin["name"]
   /** Circuit JSON model declaration for the chip. */
   model: SimulationIbisModel
+  /** Parsed IBIS component that owns the physical pin. */
   component: IbisComponent
-  document: IbisDocument
+  /** Selected IBIS buffer model for the physical pin. */
   buffer: IbisBuffer
-  /** Raw IBIS file text. */
-  text: string
   /** Source ports of the separate IBIS reference rails. */
   references: ReferencePorts
 }
@@ -32,138 +37,95 @@ export type ReferenceVoltages = Record<
   number
 >
 
-/** Ground reference at 0 V for the typical, minimum and maximum corners. */
-const GROUND_VOLTAGE_RANGE = [0, 0, 0] as const
-
-/** Reads the typical corner of one model reference range. */
-function typicalReferenceVoltage({
-  range,
-  name,
-  role,
-}: {
-  range: Readonly<IbisBuffer["voltage"]>
-  name: string
-  role: keyof ReferenceVoltages
-}): number {
-  const voltage = range[0]
-  if (voltage === null || voltage === undefined)
-    throw new Error(`${name}: missing typical ${role} voltage`)
-  return voltage
-}
+/** Default pulldown and ground clamp reference voltage in IBIS 7.2 §6.1. */
+const GROUND_VOLTAGE_RANGE: IbisRange = [0, 0, 0]
 
 /** Selected ideal reference voltages, including the vendor's explicit overrides. */
-export function referenceVoltages(buffer: IbisBuffer): ReferenceVoltages {
-  const ranges = {
-    pullup: buffer.pullupReference ?? buffer.voltage,
-    pulldown: buffer.pulldownReference ?? GROUND_VOLTAGE_RANGE,
-    powerClamp: buffer.powerClampReference ?? buffer.voltage,
-    groundClamp: buffer.groundClampReference ?? GROUND_VOLTAGE_RANGE,
-  }
-  const { name } = buffer
-  return {
-    pullup: typicalReferenceVoltage({
-      range: ranges.pullup,
-      name,
-      role: "pullup",
-    }),
-    pulldown: typicalReferenceVoltage({
-      range: ranges.pulldown,
-      name,
-      role: "pulldown",
-    }),
-    powerClamp: typicalReferenceVoltage({
-      range: ranges.powerClamp,
-      name,
-      role: "powerClamp",
-    }),
-    groundClamp: typicalReferenceVoltage({
-      range: ranges.groundClamp,
-      name,
-      role: "groundClamp",
-    }),
+export function referenceVoltages(
+  pin: Pick<InspectedPin, "buffer">,
+): ReferenceVoltages {
+  const { buffer } = pin
+  // IBIS 7.2 §6.1 defines [Voltage Range] and 0 V as the default references.
+  try {
+    return {
+      pullup: cornerValue(
+        buffer.pullupReference ?? buffer.voltage,
+        "typical",
+        "pullup reference",
+      ),
+      pulldown: cornerValue(
+        buffer.pulldownReference ?? GROUND_VOLTAGE_RANGE,
+        "typical",
+        "pulldown reference",
+      ),
+      powerClamp: cornerValue(
+        buffer.powerClampReference ?? buffer.voltage,
+        "typical",
+        "power clamp reference",
+      ),
+      groundClamp: cornerValue(
+        buffer.groundClampReference ?? GROUND_VOLTAGE_RANGE,
+        "typical",
+        "ground clamp reference",
+      ),
+    }
+  } catch (error) {
+    failReferenceVoltage({ buffer, error })
   }
 }
+
+/** Translate a missing typical voltage into the pipeline diagnostic. */
+function failReferenceVoltage({
+  buffer,
+  error,
+}: {
+  buffer: IbisBuffer
+  error: unknown
+}): never {
+  if (!(error instanceof IbisError) || error.code !== "missing_corner")
+    throw error
+  fail("ibis_reference_voltage_missing", `${buffer.name}: ${error.message}`)
+}
+
 /** A physical IBIS pin and the Circuit JSON port that uses it. */
 type PinBinding = Pick<InspectedPin, "port" | "pin" | "model" | "component">
 
 /** Converter role names mapped to their source port IDs. */
-type ReferencePorts = IbisConversionMetadata["pins"][number]["references"]
+export type ReferencePorts = ResolvedIbisReferencePorts
 
-/** The Circuit JSON reference field corresponding to each converter role. */
-const REFERENCE_PORT_IDS = {
-  pullup: "pullup_reference_source_port_id",
-  pulldown: "pulldown_reference_source_port_id",
-  powerClamp: "power_clamp_reference_source_port_id",
-  groundClamp: "ground_clamp_reference_source_port_id",
-  external: "external_reference_source_port_id",
-} as const
-
-/** Matches the converter's rail inference for a single reference role. */
-function referenceRail({
+/** Resolve converter rail ports from the Circuit JSON binding. */
+function referenceRails({
   binding,
-  role,
+  buffer,
 }: {
   binding: PinBinding
-  role: keyof ReferencePorts
-}): SourcePortId {
+  buffer: IbisBuffer
+}): ReferencePorts {
   const { model, component, pin, port } = binding
-  const explicit =
-    model.ibis_pin_name_to_reference_source_port_ids?.[pin]?.[
-      REFERENCE_PORT_IDS[role]
-    ]
-  if (explicit) return explicit
-
-  const bus = component.pinMapping[pin]?.[role]
-  let busRole = role
-  if (role === "external") busRole = "pullup"
-  let railModel = "power"
-  if (role === "pulldown" || role === "groundClamp") railModel = "gnd"
-  const candidates = new Set<SourcePortId>()
-  for (const [id, sourcePortId] of Object.entries(
-    model.ibis_pin_name_to_source_port_id,
-  )) {
-    const candidate = component.pins[id]
-    if (candidate?.model.toLowerCase() !== railModel) continue
-    if (
-      bus &&
-      component.pinMapping[id]?.[busRole] !== bus &&
-      candidate.signal !== bus &&
-      id !== bus
-    )
-      continue
-    candidates.add(sourcePortId)
-  }
-  if (candidates.size !== 1) {
-    throw new Error(
-      `${port}: IBIS ${role} reference is ambiguous; provide the chip's reference mapping`,
-    )
-  }
-  return [...candidates][0]
-}
-
-/** Clamp roles share the drive rails when the model names no separate clamp port or bus. */
-function referenceRails(binding: PinBinding): ReferencePorts {
-  const { model, component, pin } = binding
   const explicit = model.ibis_pin_name_to_reference_source_port_ids?.[pin]
-  const buses = component.pinMapping[pin]
-  const pullup = referenceRail({ binding, role: "pullup" })
-  const pulldown = referenceRail({ binding, role: "pulldown" })
-  const references: ReferencePorts = {
-    pullup,
-    pulldown,
-    powerClamp: pullup,
-    groundClamp: pulldown,
+  try {
+    return resolveIbisReferences({
+      component,
+      pin,
+      pinToSourcePort: model.ibis_pin_name_to_source_port_id,
+      voltageCheck: { buffer, corner: "typical" },
+      explicitReferences: {
+        pullup: explicit?.pullup_reference_source_port_id,
+        pulldown: explicit?.pulldown_reference_source_port_id,
+        powerClamp: explicit?.power_clamp_reference_source_port_id,
+        groundClamp: explicit?.ground_clamp_reference_source_port_id,
+        external: explicit?.external_reference_source_port_id,
+      },
+    })
+  } catch (error) {
+    if (error instanceof IbisReferenceError) {
+      if (error.reason === "ambiguous")
+        fail("ibis_reference_ambiguous", `${port}: ${error.message}`)
+      if (error.reason === "shorted")
+        fail("ibis_reference_short", `${port}: ${error.message}`)
+    }
+    failReferenceVoltage({ buffer, error })
   }
-  if (explicit?.power_clamp_reference_source_port_id || buses?.powerClamp) {
-    references.powerClamp = referenceRail({ binding, role: "powerClamp" })
-  }
-  if (explicit?.ground_clamp_reference_source_port_id || buses?.groundClamp) {
-    references.groundClamp = referenceRail({ binding, role: "groundClamp" })
-  }
-  if (explicit?.external_reference_source_port_id || buses?.external) {
-    references.external = referenceRail({ binding, role: "external" })
-  }
-  return references
 }
 
 /** IBIS pin assignments that do not select a signal buffer. */
@@ -179,39 +141,23 @@ function selectedModelName({
 }): string | undefined {
   const { model, component, pin, port } = binding
   const physical = component.pins[pin]
-  if (!physical) throw new Error(`${port}: physical IBIS pin ${pin} is missing`)
+  if (!physical)
+    fail("ibis_pin_missing", `${port}: physical IBIS pin ${pin} is missing`)
   if (NON_SIGNAL_MODELS.includes(physical.model.toLowerCase())) return undefined
 
+  // IBIS 7.2 §5 [Pin] names either a [Model] or a [Model Selector].
   const choices = selectors[physical.model] ?? [physical.model]
   let name = model.ibis_pin_name_to_model_name?.[pin]
-  if (name == null && choices.length === 1) name = choices[0]
+  if (name === undefined && choices.length === 1) name = choices[0]
   if (!name || !choices.includes(name))
-    throw new Error(`${port}: choose an IBIS model from ${choices.join(", ")}`)
+    fail(
+      "ibis_model_choice",
+      `${port}: choose an IBIS model from ${choices.join(", ")}`,
+    )
   return name
 }
 
-/** Resolves the selected buffer and its reference ports. */
-function inspectedPin({
-  binding,
-  document,
-  text,
-  name,
-}: {
-  binding: PinBinding
-  document: IbisDocument
-  text: string
-  name: string
-}): InspectedPin {
-  const buffer = document.getBuffer(name)
-  return {
-    ...binding,
-    document,
-    buffer,
-    text,
-    references: referenceRails(binding),
-  }
-}
-
+/** Circuit and assets to inspect for the requested source ports. */
 type PinInspectionOptions = {
   circuit: CircuitJson
   sources: IbisSources
@@ -219,7 +165,7 @@ type PinInspectionOptions = {
 }
 
 /** Inspected IBIS pins keyed by the selected source port IDs. */
-type InspectedPins = Map<SourcePortId, InspectedPin>
+export type InspectedPins = Map<SourcePortId, InspectedPin>
 
 /** Resolve selected signal ports and their reference rails, loading only their model declarations. */
 export function inspectPins({
@@ -228,6 +174,7 @@ export function inspectPins({
   ports,
 }: PinInspectionOptions): InspectedPins {
   const pins: InspectedPins = new Map()
+  const documents = new Map<string, IbisDocument>()
   for (const model of circuit) {
     if (model.type !== "simulation_ibis_model") continue
     const selected = Object.entries(
@@ -235,14 +182,22 @@ export function inspectPins({
     ).filter(([, port]) => ports.has(port))
     if (!selected.length) continue
 
-    const { text } = loadModelSource({
-      model: { ...model, pipelineId: model.simulation_ibis_model_id },
-      sources,
-    })
-    const document = parseIbis(text)
+    const path = model.ibis_model_asset.project_relative_path
+    let document = documents.get(path)
+    if (!document) {
+      const { text } = loadModelSource({
+        model: { ...model, pipelineId: model.simulation_ibis_model_id },
+        sources,
+      })
+      document = parseIbis(text)
+      documents.set(path, document)
+    }
     const component = document.components[model.ibis_component_name]
     if (!component)
-      throw new Error(`IBIS component ${model.ibis_component_name} is missing`)
+      fail(
+        "ibis_component_missing",
+        `IBIS component ${model.ibis_component_name} is missing`,
+      )
     for (const [pin, port] of selected) {
       const binding: PinBinding = {
         port,
@@ -253,147 +208,26 @@ export function inspectPins({
       const name = selectedModelName({ binding, selectors: document.selectors })
       if (name === undefined) continue
       if (pins.has(port))
-        throw new Error(`${port}: more than one IBIS pin binding`)
-      const inspected = inspectedPin({ binding, document, text, name })
-      pins.set(port, inspected)
+        fail("ibis_pin_bound_twice", `${port}: more than one IBIS pin binding`)
+      const buffer = document.getBuffer(name)
+      pins.set(port, {
+        ...binding,
+        buffer,
+        references: referenceRails({ binding, buffer }),
+      })
     }
   }
   return pins
 }
-/**
- * The pinned parser does not expose Ramp data. Read only the typical rows in the exact selected model's Ramp section.
- */
-function* rampRatioTokens(pin: InspectedPin): Generator<string> {
-  let selected = false
-  let inRamp = false
-  for (const raw of pin.text.split("\n")) {
-    const line = raw.split("|", 1)[0].trim()
-    if (line.startsWith("[")) {
-      const end = line.indexOf("]")
-      const keyword = line
-        .slice(1, end)
-        .trim()
-        .toLowerCase()
-        .replaceAll("_", " ")
-      if (keyword === "model") {
-        if (selected) return
-        selected = line.slice(end + 1).trim() === pin.buffer.name
-      }
-      if (
-        selected &&
-        ["component", "model selector", "define package model", "end"].includes(
-          keyword,
-        )
-      )
-        return
-      inRamp = selected && keyword === "ramp"
-      continue
-    }
-    if (!inRamp) continue
-    const [key, value] = line
-      .replaceAll("\t", " ")
-      .replaceAll("=", " ")
-      .split(" ")
-      .filter(Boolean)
-    const tag = key?.toLowerCase()
-    if (value && (tag === "dv/dt_r" || tag === "dv/dt_f")) yield value
-  }
-}
-/** Time and typical voltage at one point on an IBIS waveform. */
-type WaveformSample = readonly [timeSeconds: number, voltage: number]
 
-/** First interpolated crossing of a measured edge voltage, in seconds. */
-function edgeCrossingSeconds({
-  samples,
-  target,
-}: {
-  samples: readonly WaveformSample[]
-  target: number
-}): number | undefined {
-  for (let i = 1; i < samples.length; i++) {
-    const [startSeconds, startVoltage] = samples[i - 1]
-    const [endSeconds, endVoltage] = samples[i]
-    const crossesTarget = (startVoltage - target) * (endVoltage - target) <= 0
-    if (!crossesTarget || startVoltage === endVoltage) continue
-
-    const voltageChange = endVoltage - startVoltage
-    const elapsedSeconds = endSeconds - startSeconds
-    return (
-      startSeconds + ((target - startVoltage) * elapsedSeconds) / voltageChange
-    )
-  }
-  return undefined
-}
-
-/** Measure an edge from 10% to 90% of its voltage swing. */
-const EDGE_START_FRACTION = 0.1
-const EDGE_END_FRACTION = 0.9
-/** For a linear edge, 10–90% spans 80% of the swing and the IBIS ramp spans 20–80% (60%). */
-const RAMP_TO_EDGE_DURATION = 4 / 3
-/** A swing smaller than one microvolt is too flat to measure an edge. */
-const FLAT_WAVEFORM_TOLERANCE_VOLTS = 1e-6
-
-/** An interpolated crossing requires at least two points. */
-const MIN_EDGE_SAMPLES = 2
-
-/** Fastest measured 10–90% output edge at the typical corner, or the [Ramp] dV/dt. */
-export function edgeSeconds(pin: InspectedPin): number {
-  const durationsSeconds: number[] = []
-  for (const waveform of pin.buffer.waveforms) {
-    const samples = waveform.data
-      .filter((row) => row[1] !== null)
-      .map((row): WaveformSample => [row[0], row[1]!])
-    if (samples.length < MIN_EDGE_SAMPLES) continue
-    const first = samples[0][1]
-    const last = samples.at(-1)![1]
-    const swing = last - first
-    if (Math.abs(swing) < FLAT_WAVEFORM_TOLERANCE_VOLTS) continue
-
-    const startSeconds = edgeCrossingSeconds({
-      samples,
-      target: first + swing * EDGE_START_FRACTION,
-    })
-    const endSeconds = edgeCrossingSeconds({
-      samples,
-      target: first + swing * EDGE_END_FRACTION,
-    })
-    if (
-      startSeconds === undefined ||
-      endSeconds === undefined ||
-      !(endSeconds > startSeconds)
-    )
-      continue
-    durationsSeconds.push(endSeconds - startSeconds)
-  }
-  if (!durationsSeconds.length) {
-    for (const token of rampRatioTokens(pin)) {
-      const [voltageToken, timeToken] = token.split("/")
-      if (!voltageToken || !timeToken) continue
-      const voltage = ibisNumber(voltageToken)
-      const rampSeconds = ibisNumber(timeToken)
-      if (
-        voltage === null ||
-        voltage <= 0 ||
-        rampSeconds === null ||
-        rampSeconds <= 0
-      )
-        continue
-      const edgeSeconds = rampSeconds * RAMP_TO_EDGE_DURATION
-      if (Number.isFinite(edgeSeconds)) durationsSeconds.push(edgeSeconds)
-    }
-  }
-  if (!durationsSeconds.length)
-    throw new Error(`${pin.port}: IBIS edge rate missing at the typical corner`)
-  return Math.min(...durationsSeconds)
-}
 /** Whether an IBIS pin model can drive, receive or be disabled. */
-type PinCapabilities = {
+export type PinCapabilities = {
   drive: boolean
   receive: boolean
   disable: boolean
 }
 
-/** Drive, receive and disable roles for the pinned converter’s supported IBIS model types. */
+/** Drive, receive and disable capabilities for the pinned converter’s supported IBIS model types. */
 export function pinCapabilities(pin: InspectedPin): PinCapabilities {
   switch (pin.buffer.type) {
     case "input":
@@ -405,7 +239,8 @@ export function pinCapabilities(pin: InspectedPin): PinCapabilities {
     case "3-state":
       return { drive: true, receive: false, disable: true }
     default:
-      throw new Error(
+      fail(
+        "ibis_capability_unsupported",
         `${pin.port}: unsupported IBIS model capability ${pin.buffer.type}`,
       )
   }
