@@ -11,7 +11,7 @@ import {
 test("an explicit clamp rail preserves the separate vendor pullup rail", async () => {
   const board = await ibisInspectionBoard({
     extraPin: true,
-    powerClamp: "VCLAMP",
+    references: { powerClamp: "VCLAMP" },
   })
   const text = inspectionIbis({
     mapping: railMapping
