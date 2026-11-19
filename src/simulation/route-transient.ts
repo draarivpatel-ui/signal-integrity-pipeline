@@ -1,11 +1,11 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
-import type { Matrix } from "../extraction"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
-import { spiceProbeRows } from "../observation"
+import { type SpiceProbeRow, spiceProbeRows } from "../observation"
 import { invoke, type SolverContext, type SolverRequest } from "../solver"
 import { fail } from "./diagnostics"
 import type { RoutedCapture, RoutedDeck } from "./routed-types"
 
+/** The compiled deck and injected engine capabilities for a routed transient. */
 export interface RouteTransientInput {
   compiled: RoutedDeck
   artifactPrefix: string
@@ -43,11 +43,11 @@ export class RouteTransientSolver extends BaseSolver {
       `Simulate ${compiled.name} (${compiled.probes.length} probes)`,
     )
     const scope = rootScope("simulation").child(this.input.artifactPrefix)
-    const execution = await invoke(
-      this.input.context,
-      scope.child("solver").handTo("solver"),
-      routedRequest(compiled),
-    )
+    const execution = await invoke({
+      context: this.input.context,
+      scope: scope.child("solver").handTo("solver"),
+      request: routedRequest(compiled),
+    })
     const run = execution.value
     const logs = `${run.stdout}\n${run.stderr}`
     const diagnostic = logs.split("\n").find(hasSolverDiagnostic)
@@ -56,9 +56,9 @@ export class RouteTransientSolver extends BaseSolver {
         artifacts: run.logPaths,
       })
     const raw = run.outputs["waveform.raw"]
-    const rows = spiceProbeRows(raw, compiled.probes)
-    validateCoverage(compiled, rows)
-    const capture = completedCapture(compiled, rows)
+    const rows = spiceProbeRows({ text: raw, probes: compiled.probes })
+    validateCoverage({ compiled, rows })
+    const capture = completedCapture({ compiled, rows })
     const artifact = scope.json("capture.json", {
       ...capture,
       waveformSha256: sha256(raw),
@@ -92,20 +92,26 @@ export class RouteTransientSolver extends BaseSolver {
 const TRANSIENT_TIME_TOLERANCE = 1e-8
 
 /** Require samples covering the declared transient either side of timestamp rounding. */
-function validateCoverage(compiled: RoutedDeck, rows: Matrix): void {
+function validateCoverage({
+  compiled,
+  rows,
+}: {
+  compiled: RoutedDeck
+  rows: SpiceProbeRow[]
+}): void {
   const toleranceSeconds = compiled.durationSeconds * TRANSIENT_TIME_TOLERANCE
-  const firstTime = rows[0][0]
+  const firstTimeSeconds = rows[0][0]
   if (
-    firstTime < 0 ||
-    firstTime > Math.max(compiled.stepSeconds, toleranceSeconds)
+    firstTimeSeconds < 0 ||
+    firstTimeSeconds > Math.max(compiled.stepSeconds, toleranceSeconds)
   ) {
     fail(
       "simulation_start",
       `${compiled.name}: solver output omits the beginning of the transient`,
     )
   }
-  const lastTime = rows[rows.length - 1][0]
-  if (Math.abs(lastTime - compiled.durationSeconds) > toleranceSeconds) {
+  const lastTimeSeconds = rows[rows.length - 1][0]
+  if (Math.abs(lastTimeSeconds - compiled.durationSeconds) > toleranceSeconds) {
     fail(
       "simulation_duration",
       `${compiled.name}: solver did not complete the declared duration`,
@@ -114,7 +120,13 @@ function validateCoverage(compiled: RoutedDeck, rows: Matrix): void {
 }
 
 /** Capture the adaptive timestamps and voltage column corresponding to each declared probe. */
-function completedCapture(compiled: RoutedDeck, rows: Matrix): RoutedCapture {
+function completedCapture({
+  compiled,
+  rows,
+}: {
+  compiled: RoutedDeck
+  rows: SpiceProbeRow[]
+}): RoutedCapture {
   return snapshot<RoutedCapture>({
     kind: "completed",
     qualification: "candidate-unqualified",

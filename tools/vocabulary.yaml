@@ -39,6 +39,7 @@ domain:
   vector: one named sequence of engine samples, such as time or a node voltage
   separator: a character that marks the boundary between raw fields or lines
   word: a contiguous non-whitespace field in an ASCII raw file or diagnostic
+  timestamp: the time at which a waveform sample was recorded
   admission: validation and derivation of one declared signal-integrity block
   network: the connected electrical cells and correction elements of routed copper
   execution: a completed invocation through the solver port

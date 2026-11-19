@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process"
+import { type ExecFileException, execFile } from "node:child_process"
 import {
   mkdir,
   mkdtemp,
@@ -22,22 +22,10 @@ const exec = promisify(execFile)
 /** Cap each captured process stream at 64 MiB. */
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 
-/** Process details used to distinguish the timeout from other execution failures. */
-interface NativeProcessError extends Error {
-  code?: string | number | null
-  killed?: boolean
-  signal?: string
-  stdout?: string
-  stderr?: string
-}
-
 let nativeTail: Promise<void> = Promise.resolve()
 
 /** Give native solvers up to fifteen minutes to complete the requested run. */
 const DEFAULT_TIMEOUT_MS = 900000
-
-/** Cap each captured output stream at 64 MiB. */
-const OUTPUT_BUFFER_BYTES = 64 * 1024 * 1024
 
 /**
  * Executes only requests passed by the caller; never installs or downloads tools.
@@ -59,7 +47,7 @@ export function createNativeSolver({
     })
     await previous
     try {
-      return await runNativeRequest(request, { tools, timeoutMs })
+      return await runNativeRequest({ request, tools, timeoutMs })
     } finally {
       release()
     }
@@ -67,10 +55,13 @@ export function createNativeSolver({
 }
 
 /** Execute one request after the shared native queue grants its slot. */
-async function runNativeRequest(
-  request: SolverRequest,
-  { tools, timeoutMs }: Required<NativeSolverOptions>,
-): Promise<SolverResult> {
+async function runNativeRequest({
+  request,
+  tools,
+  timeoutMs,
+}: Required<NativeSolverOptions> & {
+  request: SolverRequest
+}): Promise<SolverResult> {
   if (request.solver !== "ngspice") fail("native_solver", "Unknown solver")
   for (const path of [...Object.keys(request.files), ...request.outputFiles])
     relativeFile(path)
@@ -94,7 +85,7 @@ async function runNativeRequest(
         },
       })
     } catch (error) {
-      const detail = error as NativeProcessError
+      const detail = error as ExecFileException
       // execFile's timeout kills with SIGTERM and no exit code. External
       // signals are not marked killed; maxBuffer errors have a string code.
       const timedOut =
@@ -114,7 +105,7 @@ async function runNativeRequest(
     for (const path of request.outputFiles) {
       try {
         files[path] = await readFile(
-          contained(root, await realpath(join(directory, path))),
+          contained({ root, path: await realpath(join(directory, path)) }),
           "utf8",
         )
       } catch (error) {
