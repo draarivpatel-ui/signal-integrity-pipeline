@@ -1,15 +1,13 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { edgeDurationSeconds } from "../../../src/buffers"
 import {
   ibisInspectionBoard,
   inspectedPin,
   inspectionIbis,
-  PICOSECONDS_PER_SECOND,
   ramp,
 } from "../../fixtures/ibis-inspection"
 
-test("the ramp supplies the edge duration when the waveform has no typical values", async () => {
+test("a valid ramp cannot mask a waveform with no typical voltages", async () => {
   const board = await ibisInspectionBoard()
   const text = inspectionIbis({
     modelType: "Output",
@@ -22,9 +20,8 @@ V_fixture = 0
 2n NA 0.6 NA`,
     ].join("\n"),
   })
-  const pin = inspectedPin({ board, text })
-  assert.equal(
-    Math.round(edgeDurationSeconds(pin) * PICOSECONDS_PER_SECOND),
-    800,
-  )
+  assert.throws(() => inspectedPin({ board, text }), {
+    code: "missing_corner",
+    message: "Fast: rising waveform sample at 0 s has no typical value",
+  })
 })

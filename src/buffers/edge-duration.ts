@@ -1,8 +1,6 @@
+import type { IbisWaveform } from "@tscircuit/ibis-to-spice"
 import { fail } from "./diagnostics"
 import { type InspectedPin, pinCapabilities } from "./inspect"
-
-/** Time and typical voltage at one point on an IBIS waveform. */
-type WaveformSample = readonly [timeSeconds: number, voltage: number]
 
 /** Start the edge duration measurement at 10% of the voltage swing. */
 const EDGE_START_FRACTION = 0.1
@@ -17,7 +15,7 @@ const RAMP_TO_EDGE_DURATION = 4 / 3
 function waveformEdgeDurationSeconds({
   samples,
 }: {
-  samples: readonly WaveformSample[]
+  samples: IbisWaveform["data"]
 }): number | undefined {
   const first = samples[0]
   const last = samples.at(-1)
@@ -72,12 +70,9 @@ export function edgeDurationSeconds(pin: InspectedPin): number {
 
   const durationsSeconds: number[] = []
   for (const waveform of pin.buffer.waveforms) {
-    const samples: WaveformSample[] = []
-    for (const [timeSeconds, typicalVoltage] of waveform.data) {
-      if (typicalVoltage === null) continue
-      samples.push([timeSeconds, typicalVoltage])
-    }
-    const durationSeconds = waveformEdgeDurationSeconds({ samples })
+    const durationSeconds = waveformEdgeDurationSeconds({
+      samples: waveform.data,
+    })
     if (durationSeconds !== undefined && durationSeconds > 0)
       durationsSeconds.push(durationSeconds)
   }
