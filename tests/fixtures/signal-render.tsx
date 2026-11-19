@@ -6,13 +6,16 @@ import {
   prepareBlockById,
   signalBlocks,
 } from "../../src/pipeline/signals"
-import { renderCoreSignals } from "./core-render"
+import { renderCoreSignals } from "../support/core-render"
 
 /** Render through real core, permitting only specifically expected physical diagnostics. */
-export async function renderSignals(
-  tree: React.ReactElement,
-  expectedErrors: string[] = [],
-): Promise<CircuitJson> {
+export async function renderSignals({
+  tree,
+  expectedErrors = [],
+}: {
+  tree: React.ReactElement
+  expectedErrors?: string[]
+}): Promise<CircuitJson> {
   try {
     return await renderCoreSignals(tree)
   } catch (error) {

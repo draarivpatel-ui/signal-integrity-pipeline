@@ -2,9 +2,9 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { simulation } from "@tscircuit/core"
 import React from "react"
-import { routedVisualIbis } from "./routed-visual-fixture"
-import { Inverter, Reference } from "./signal-parts"
-import { prepareBlocks, renderSignals } from "./signal-render"
+import { routedVisualIbis } from "../fixtures/routed-visual-fixture"
+import { Inverter, Reference } from "../fixtures/signal-parts"
+import { prepareBlocks, renderSignals } from "../fixtures/signal-render"
 
 /** The unmodelled three-pad copper is physically far from DATA, on the same real board. */
 function Board({
@@ -131,13 +131,13 @@ function Board({
 }
 
 test("unrelated branched copper cannot reject a selected channel", async () => {
-  const circuit = await renderSignals(<Board />)
+  const circuit = await renderSignals({ tree: <Board /> })
   const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
   const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
   assert.equal(block.settings.lanes.length, 1)
   assert.equal(block.settings.copperScope?.omitted.traces, 2)
   const near = prepareBlocks({
-    circuit: await renderSignals(<Board neighbour />),
+    circuit: await renderSignals({ tree: <Board neighbour /> }),
     sources,
     distanceMm: 1,
   })[0]
@@ -167,7 +167,7 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
     )
   })
   assert.ok(quietStimulus)
-  const nearbyBranch = await renderSignals(<Board unrelatedY={0.5} />)
+  const nearbyBranch = await renderSignals({ tree: <Board unrelatedY={0.5} /> })
   const branched = prepareBlocks({
     circuit: nearbyBranch,
     sources,
@@ -185,9 +185,10 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
 })
 
 test("a shunt on retained quiet copper remains a modeled load", async () => {
-  const circuit = await renderSignals(<Board neighbour termination />, [
-    "pcb_port_not_connected_error",
-  ])
+  const circuit = await renderSignals({
+    tree: <Board neighbour termination />,
+    expectedErrors: ["pcb_port_not_connected_error"],
+  })
   const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
   const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
   const termination = circuit.find(

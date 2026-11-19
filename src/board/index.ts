@@ -26,7 +26,12 @@ export type {
   RoutePoint,
   SourcePort,
 } from "./geometry/types"
-export type { SourceNetId, SourcePortId } from "./ids"
+export type {
+  SignalEndpointPortIds,
+  SimulationBlockId,
+  SourceNetId,
+  SourcePortId,
+} from "./ids"
 export type {
   CircuitJson,
   SimulationExperiment,
