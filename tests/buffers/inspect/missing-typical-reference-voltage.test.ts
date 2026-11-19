@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { parseIbis } from "@tscircuit/ibis-to-spice"
 import { referenceVoltages } from "../../../src/buffers"
 import {
   ibisInspectionBoard,
@@ -13,8 +14,11 @@ test("an explicit reference without a typical voltage raises a diagnostic", asyn
     voltageReferences: `[Voltage Range] 1.2 1.1 1.3
 [Pullup Reference] NA 1.0 1.2`,
   })
-  const pin = inspectedPin({ board, text })
-  assert.throws(() => referenceVoltages(pin), {
+  const buffer = parseIbis(text).getBuffer("Fast")
+  assert.throws(() => referenceVoltages({ buffer }), {
+    code: "ibis_reference_voltage_missing",
+  })
+  assert.throws(() => inspectedPin({ board, text }), {
     code: "ibis_reference_voltage_missing",
   })
 })
