@@ -14,8 +14,7 @@ test("a model type rejected by the converter cannot be used as a receiver", asyn
   assert.throws(() => convertedReferences({ text, ...board }), {
     code: "unsupported_model_type",
   })
-  assert.throws(
-    () => pinCapabilities(inspectedPin({ board, text })),
-    /unsupported/,
-  )
+  assert.throws(() => pinCapabilities(inspectedPin({ board, text })), {
+    code: "ibis_capability_unsupported",
+  })
 })

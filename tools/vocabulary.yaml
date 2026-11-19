@@ -45,12 +45,12 @@ domain:
   oblique: a neighbour whose direction differs from the local trace direction
   parallel: conductors sharing a common longitudinal direction
   pole: a stable relaxation rate in a causal rational loss model
-  rail: a power or ground supply connection
   bus: an IBIS Pin Mapping label for pins sharing an electrical reference
-  capability: a pin role the IBIS model supports, such as driving, receiving or disabling
+  capability: an operation an IBIS model supports, such as driving, receiving or disabling
   clamp: a protection circuit that conducts when a signal crosses its reference voltage
   pulldown: the buffer path that pulls the signal toward its low reference
   pullup: the buffer path that pulls the signal toward its high reference
+  rail: a power or ground supply connection
   ramp: the loaded voltage change and duration between 20% and 80% of an IBIS edge
   swing: the voltage difference between the start and end of an edge
   typical: the nominal vendor corner for a model value or waveform
