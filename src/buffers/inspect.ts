@@ -1,15 +1,15 @@
 import {
-  cornerValue,
   type IbisBuffer,
   type IbisComponent,
   type IbisDocument,
   IbisError,
   type IbisPackagePin,
-  type IbisRange,
   IbisReferenceError,
+  type IbisReferenceVoltages,
   parseIbis,
   type ResolvedIbisReferencePorts,
   resolveIbisReferences,
+  resolveIbisReferenceVoltages,
 } from "@tscircuit/ibis-to-spice"
 import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
 import { fail } from "./diagnostics"
@@ -32,43 +32,15 @@ export type InspectedPin = {
   references: ReferencePorts
 }
 /** Typical IBIS reference voltages for the pullup, pulldown and clamp tables. */
-export type ReferenceVoltages = Record<
-  "pullup" | "pulldown" | "powerClamp" | "groundClamp",
-  number
->
-
-/** Default pulldown and ground clamp reference voltage in IBIS 7.2 §6.1. */
-const GROUND_VOLTAGE_RANGE: IbisRange = [0, 0, 0]
+export type ReferenceVoltages = IbisReferenceVoltages
 
 /** Selected ideal reference voltages, including the vendor's explicit overrides. */
 export function referenceVoltages(
   pin: Pick<InspectedPin, "buffer">,
 ): ReferenceVoltages {
   const { buffer } = pin
-  // IBIS 7.2 §6.1 defines [Voltage Range] and 0 V as the default references.
   try {
-    return {
-      pullup: cornerValue(
-        buffer.pullupReference ?? buffer.voltage,
-        "typical",
-        "pullup reference",
-      ),
-      pulldown: cornerValue(
-        buffer.pulldownReference ?? GROUND_VOLTAGE_RANGE,
-        "typical",
-        "pulldown reference",
-      ),
-      powerClamp: cornerValue(
-        buffer.powerClampReference ?? buffer.voltage,
-        "typical",
-        "power clamp reference",
-      ),
-      groundClamp: cornerValue(
-        buffer.groundClampReference ?? GROUND_VOLTAGE_RANGE,
-        "typical",
-        "ground clamp reference",
-      ),
-    }
+    return resolveIbisReferenceVoltages({ buffer, corner: "typical" })
   } catch (error) {
     failReferenceVoltage({ buffer, error })
   }
