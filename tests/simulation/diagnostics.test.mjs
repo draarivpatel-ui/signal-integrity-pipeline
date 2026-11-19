@@ -12,7 +12,7 @@ const impls={
   current:{...current,geometry:geometryFromCircuitJson},
 }
 const one=(cj,type,pred=()=>true)=>cj.find(e=>e.type===type&&pred(e))
-const declare=(mutate=()=>{},m=undefined)=>impl=>{
+const declare=({ mutate = ()=>{}, m = undefined } = {})=>impl=>{
   const {cj,m:base,controls}=fixture()
   const modeling=m?m(base):base
   const out=mutate(cj,controls.run)??cj
@@ -24,13 +24,13 @@ const declare=(mutate=()=>{},m=undefined)=>impl=>{
     controls,
   })
 }
-const electrical=(mutate,m=base=>base)=>impl=>{
+const electrical=({ mutate, m = base=>base })=>impl=>{
   const {cj,m:base}=fixture()
   mutate?.(cj)
   const modeling=m(base)
   const g=impl.geometry(cj,modeling)
   const nodes = impl.circuitNodes({ circuit: cj, mappings: g.mappings, modeling })
-  return impl.electricalSources(cj, modeling, nodes)
+  return impl.electricalSources({ circuit: cj, modeling, nodes })
 }
 const square=extra=>cj=>{
   cj.push({
@@ -83,64 +83,76 @@ const MESSAGES={
  "ibis_contract": "ibis_contract: Converter did not emit a SPICE component wrapper"
 }
 
-test('simulation codes and messages equal the pre-module implementation', () => {
-  for (const [code, run] of [
+for (const [code, run] of [
 
-  ['simulation_reference',declare(cj=>{cj.push({...one(cj,'simulation_voltage_probe')})})],
-  ['simulation_experiment',declare(cj=>{one(cj,'simulation_experiment').spice_engine='ngspice'})],
-  ['simulation_capability',declare(cj=>{one(cj,'simulation_experiment').experiment_type='spice_dc_operating_point'})],
-  ['simulation_timing',declare(cj=>{one(cj,'simulation_experiment').time_per_step=0})],
-  ['simulation_scope',declare(cj=>{one(cj,'simulation_experiment').subcircuit_id='unrelated'})],
-  ['simulation_probe',declare(cj=>cj.filter(e=>e.type!=='simulation_voltage_probe'))],
-  ['native_declaration',declare(cj=>{cj.push({
+  ['simulation_reference',declare({ mutate: cj=>{cj.push({...one(cj,'simulation_voltage_probe')})} })],
+  ['simulation_experiment',declare({ mutate: cj=>{one(cj,'simulation_experiment').spice_engine='ngspice'} })],
+  ['simulation_capability',declare({
+    mutate: cj=>{one(cj,'simulation_experiment').experiment_type='spice_dc_operating_point'},
+  })],
+  ['simulation_timing',declare({ mutate: cj=>{one(cj,'simulation_experiment').time_per_step=0} })],
+  ['simulation_scope',declare({ mutate: cj=>{one(cj,'simulation_experiment').subcircuit_id='unrelated'} })],
+  ['simulation_probe',declare({ mutate: cj=>cj.filter(e=>e.type!=='simulation_voltage_probe') })],
+  ['native_declaration',declare({ mutate: cj=>{cj.push({
     type:'source_invalid_component_property_error',
     property_name:'ibisModel',
     message:'bad ibisModel',
-  })})],
-  ['ibis_model',declare(cj=>cj.filter(e=>e.type!=='simulation_ibis_model'))],
-  ['ibis_mapping',declare(cj=>{one(cj,'simulation_ibis_model').ibis_pin_name_to_source_port_id['9']='p2'})],
-  ['ibis_state', declare((_, run) => {
+  })} })],
+  ['ibis_model',declare({ mutate: cj=>cj.filter(e=>e.type!=='simulation_ibis_model') })],
+  ['ibis_mapping',declare({ mutate: cj=>{one(cj,'simulation_ibis_model').ibis_pin_name_to_source_port_id['9']='p2'} })],
+  ['ibis_state', declare({ mutate: (_, run) => {
     run.states.push({...run.states[0]})
-  })],
-  ['channel_model', declare((_, run) => {
+  } })],
+  ['channel_model', declare({ mutate: (_, run) => {
     run.states=run.states.filter(state=>state.source_port_id!=='p3')
-  })],
-  ['stimulus_duplicate', declare((_, run) => {
+  } })],
+  ['stimulus_duplicate', declare({ mutate: (_, run) => {
     run.stimuli.push({...run.stimuli[0]})
-  })],
-  ['stimulus_state', declare((_, run) => {
+  } })],
+  ['stimulus_state', declare({ mutate: (_, run) => {
     run.stimuli[1].source_port_id='p2'
-  })],
-  ['stimulus_missing', declare((_, run) => {
+  } })],
+  ['stimulus_missing', declare({ mutate: (_, run) => {
     run.stimuli.pop()
-  })],
-  ['stimulus_pattern', declare((_, run) => {
+  } })],
+  ['stimulus_pattern', declare({ mutate: (_, run) => {
     run.stimuli[0].transmission_pattern.bits='012'
-  })],
-  ['stimulus_coverage', declare((_, run) => {
+  } })],
+  ['stimulus_coverage', declare({ mutate: (_, run) => {
     run.stimuli[0].transmission_pattern = { transmission_type: 'bits', bits: '001', repeat: false }
+  } })],
+  ['probe_reference',declare({
+    mutate: cj=>{one(cj,'simulation_voltage_probe').signal_input_source_port_id='missing'},
   })],
-  ['probe_reference',declare(cj=>{one(cj,'simulation_voltage_probe').signal_input_source_port_id='missing'})],
   [
     'channel_short',
-    declare(cj=>{cj.push({type:'source_trace',source_trace_id:'short',connected_source_port_ids:['p0','p2']})}),
+    declare({
+      mutate: cj => {
+        cj.push({ type: 'source_trace', source_trace_id: 'short', connected_source_port_ids: ['p0', 'p2'] })
+      },
+    }),
   ],
-  ['electrical_input',electrical(undefined,m=>({...m,supplies:[{...m.supplies[0],voltageV:NaN}]}))],
-  ['supply_reference',electrical(cj=>{cj.push({
+  ['electrical_input',electrical({ mutate: undefined,m: m=>({...m,supplies:[{...m.supplies[0],voltageV:NaN}]}) })],
+  ['supply_reference',electrical({ mutate: cj=>{cj.push({
     type:'simulation_voltage_source',
     simulation_voltage_source_id:'dc',
     is_dc_source:true,
     voltage:1,
     positive_source_port_id:'v0',
-  })})],
-  ['supply_short',electrical(undefined,m=>({...m,supplies:[{...m.supplies[0],positive:{sourcePortId:'g0'}}]}))],
-  ['supply_missing',electrical(undefined,m=>({...m,supplies:[]}))],
-  ['source_edge',electrical(square({}))],
-  ['source_capability',electrical(square({wave_shape:'sinewave'}))],
-  ['passive_reference',electrical(undefined,m=>({...m,passiveComponents:[{sourceComponentId:'missing'}]}))],
-  ['passive_capability',electrical(undefined,m=>({...m,passiveComponents:[{sourceComponentId:'u0'}]}))],
-  ['ibis_contract',impl=>impl.namespaceSpice('* no wrapper\n','I0')],
-  ]) {
+  })} })],
+  ['supply_short',electrical({
+    m: m=>({...m,supplies:[{...m.supplies[0],positive:{sourcePortId:'g0'}}]}),
+  })],
+  ['supply_missing',electrical({ mutate: undefined,m: m=>({...m,supplies:[]}) })],
+  ['source_edge',electrical({ mutate: square({}) })],
+  ['source_capability',electrical({ mutate: square({wave_shape:'sinewave'}) })],
+  ['passive_reference',electrical({
+    m: m=>({...m,passiveComponents:[{sourceComponentId:'missing'}]}),
+  })],
+  ['passive_capability',electrical({ mutate: undefined,m: m=>({...m,passiveComponents:[{sourceComponentId:'u0'}]}) })],
+  ['ibis_contract',impl=>impl.namespaceSpice({ source: '* no wrapper\n', prefix: 'I0' })],
+]) {
+  test(`reports ${code}`, () => {
     assert.ok(Object.hasOwn(MESSAGES, code), code)
     assert.throws(() => run(impls.current), e => {
       assert.ok(e instanceof Diagnostic, code)
@@ -148,8 +160,8 @@ test('simulation codes and messages equal the pre-module implementation', () => 
       assert.deepEqual({ code: e.code, message: e.message }, { code, message: MESSAGES[code] })
       return true
     }, code)
-  }
-})
+  })
+}
 
 
 const {circuitNodes,electricalSources}=current
@@ -214,5 +226,5 @@ test('orphan ideal sources fail preflight',()=>{
     },
   )
   const nodes=circuitNodes({ circuit: cj, mappings: g.mappings, modeling: m })
-  assert.throws(()=>electricalSources(cj,m,nodes),/floating_source.*ORPHAN/)
+  assert.throws(()=>electricalSources({ circuit: cj, modeling: m, nodes }),/floating_source.*ORPHAN/)
 })

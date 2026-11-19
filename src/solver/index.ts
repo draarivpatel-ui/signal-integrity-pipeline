@@ -49,13 +49,13 @@ const fail = diagnostics('solver', ['solver_result', 'native_solver', 'native_ou
  *   <scope>/<input files>, <scope>/<outputs>, <solver>.stdout.log, <solver>.stderr.log, <solver>.request.json
  * On rejection it throws before recording anything, exactly like the pre-module executeSolver.
  */
-export async function invoke<const O extends string>(
-  ctx: SolverContext,
-  scope: ArtifactScope,
-  request: SolverRequest & { outputFiles: readonly O[] },
-): Promise<Produced<AcceptedRun<O>>> {
+export async function invoke<const O extends string>({ context, scope, request }: {
+  context: SolverContext
+  scope: ArtifactScope
+  request: SolverRequest & { outputFiles: readonly O[] }
+}): Promise<Produced<AcceptedRun<O>>> {
   const supplied = { ...request.files }
-  const result = await ctx.runSolver({
+  const result = await context.runSolver({
     ...request,
     files: { ...supplied },
     args: [...request.args],

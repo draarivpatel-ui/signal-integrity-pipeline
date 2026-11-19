@@ -16,7 +16,10 @@ export function relativeFile(path: string): string {
 }
 
 /** Rejects a (realpath-resolved) path outside root. */
-export function contained(root: string, path: string): string {
+export function contained({ root, path }: {
+  root: string
+  path: string
+}): string {
   const location = relative(root, path)
   if (location.replaceAll('\\', '/').split('/').includes('..') || isAbsolute(location))
     fail('file_path', `File must remain inside ${root}`)

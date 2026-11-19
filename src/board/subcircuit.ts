@@ -9,8 +9,37 @@ interface ScopeRecord {
 
 /** Queries for subcircuit containment and the nearest common ancestor. */
 export type SubcircuitTree = {
-  within: (inner: unknown, outer: unknown) => boolean
+  within: (scope: {
+    inner: unknown
+    outer: unknown
+  }) => boolean
   common: (scopes: readonly unknown[]) => unknown
+}
+
+/** A scope's ancestors, innermost first and ending with the unscoped root. */
+type ScopeChain = unknown[]
+
+/** Walks from a scope to the unscoped root and rejects cyclic ownership. */
+function scopeChain({ parents, scope }: {
+  parents: ReadonlyMap<unknown, unknown>
+  scope: unknown
+}): ScopeChain {
+  const scopes: ScopeChain = []
+  for (let current = scope; current !== undefined && current !== null; current = parents.get(current)) {
+    if (scopes.includes(current)) fail('simulation_scope', 'Cyclic subcircuit ownership')
+    scopes.push(current)
+  }
+  return [...scopes, undefined]
+}
+
+/** Finds the nearest subcircuit containing every scope. */
+function commonScope({ parents, scopes }: {
+  parents: ReadonlyMap<unknown, unknown>
+  scopes: readonly unknown[]
+}): unknown {
+  if (!scopes.length) return undefined
+  const chains = scopes.map(scope => scopeChain({ parents, scope }))
+  return chains[0].find(scope => chains.every(other => other.includes(scope)))
 }
 
 /**
@@ -40,22 +69,8 @@ export function subcircuitTree(records: readonly ScopeRecord[]): SubcircuitTree 
     }
     parents.set(group.subcircuit_id, parent)
   }
-  /** Ancestor chain of a scope, innermost first and ending with the unscoped root. */
-  const chain = (scope: unknown): unknown[] => {
-    const scopes: unknown[] = []
-    for (let current = scope; current !== undefined && current !== null; current = parents.get(current)) {
-      if (scopes.includes(current)) fail('simulation_scope', 'Cyclic subcircuit ownership')
-      scopes.push(current)
-    }
-    return [...scopes, undefined]
+  return {
+    within: ({ inner, outer }) => scopeChain({ parents, scope: inner }).includes(outer ?? undefined),
+    common: scopes => commonScope({ scopes, parents }),
   }
-  /** True when `inner` is `outer` or nested inside it. */
-  const within = (inner: unknown, outer: unknown): boolean => chain(inner).includes(outer ?? undefined)
-  /** Nearest subcircuit containing every scope. */
-  const common = (scopes: readonly unknown[]): unknown => {
-    if (!scopes.length) return undefined
-    const chains = scopes.map(chain)
-    return chains[0].find(scope => chains.every(other => other.includes(scope)))
-  }
-  return { within, common }
 }

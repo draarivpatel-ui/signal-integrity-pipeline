@@ -10,7 +10,7 @@ const model=ibis_model_asset=>({pipelineId:'model-0',ibis_model_asset})
 
 test('provided IBIS text and bytes retain BOM, CRLF and exact source hashes',()=>{
   for(const source of [bytes,bytes.toString('utf8')]) {
-    const loaded=loadModelSource(model(asset),{[asset.project_relative_path]:source})
+    const loaded=loadModelSource({ model: model(asset),sources: {[asset.project_relative_path]:source} })
     assert.deepEqual([...loaded.bytes],[...bytes])
     assert.equal(loaded.text,bytes.toString('utf8'))
     assert.equal(loaded.evidence.sourceSha256,sha256(bytes))
@@ -19,12 +19,18 @@ test('provided IBIS text and bytes retain BOM, CRLF and exact source hashes',()=
   }
 })
 test('missing bytes never resolve or download the declared URL',()=>{
-  assert.throws(()=>loadModelSource(model(asset),{}),/ibis_asset_missing/)
-  assert.throws(()=>loadModelSource(model({...asset,project_relative_path:'toString'}),{}),/ibis_asset_missing/)
+  assert.throws(()=>loadModelSource({ model: model(asset),sources: {} }),/ibis_asset_missing/)
+  assert.throws(
+    () => loadModelSource({ model: model({ ...asset, project_relative_path: 'toString' }), sources: {} }),
+    /ibis_asset_missing/,
+  )
 })
 test('model paths cannot escape the explicit project',()=>{
   for(const path of ['../outside.ibs','/outside.ibs','C:/outside.ibs','a\\b.ibs','a/../b.ibs','a\0.ibs'])
-    assert.throws(()=>loadModelSource(model({...asset,project_relative_path:path}),{[path]:bytes}),/file_path/)
+    assert.throws(
+      () => loadModelSource({ model: model({ ...asset, project_relative_path: path }), sources: { [path]: bytes } }),
+      /file_path/,
+    )
 })
 test('model loading rejects HTML, ZIP, invalid UTF-8 and oversized data',()=>{
   for(const payload of [
@@ -35,7 +41,7 @@ test('model loading rejects HTML, ZIP, invalid UTF-8 and oversized data',()=>{
     42,
   ])
     assert.throws(
-      ()=>loadModelSource(model(asset),{[asset.project_relative_path]:payload}),
+      ()=>loadModelSource({ model: model(asset),sources: {[asset.project_relative_path]:payload} }),
       /IBIS|plain|ZIP|UTF|HTML|encoded|expected/i,
     )
 })

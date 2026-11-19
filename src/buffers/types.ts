@@ -49,7 +49,10 @@ export interface AdmittedBuffers {
   readonly sources: readonly LoadedModelSource[]
 }
 
-/** Today's per-plan compiled model: the converter result plus pipeline identity and inputs. */
+/** Compiled buffers grouped by experiment, in plan and model order. */
+export type CompiledBuffersByPlan = CompiledBuffer[][]
+
+/** A converter result with its pipeline identity and inputs. */
 export type CompiledBuffer = ConvertedGeneralIbisComponent & {
   name: string
   pipelineId: string

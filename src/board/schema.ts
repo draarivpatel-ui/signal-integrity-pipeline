@@ -21,16 +21,19 @@ export function validateCircuitRecords(records: unknown): void {
   for(const record of records as Array<Record<string, unknown> | null | undefined>) {
     const type=record?.type
     const id=record?.[`${type}_id`]??record?.name??'(unnamed)'
-    const schema: Partial<z.ZodTypeAny> | undefined=typeof type==='string'?recordSchema(record as {
-      type: string
-      ftype?: string
-    }):undefined
+    let schema: Partial<z.ZodTypeAny> | undefined
+    if (typeof type === 'string') {
+      schema = recordSchema(record as {
+        type: string
+        ftype?: string
+      })
+    }
     if(!schema?.safeParse) fail('circuit_schema',`${type??'(missing type)'} ${id}: no registered record schema`)
     const parsed=schema.safeParse(record)
-    if(!parsed.success) {
-      const issue=parsed.error.issues[0]
-      const path=issue.path?.join('.')
-      fail('circuit_schema',`${type} ${id}: ${path?path+': ':''}${issue.message}`)
-    }
+    if (parsed.success) continue
+    const issue = parsed.error.issues[0]
+    let path = issue.path?.join('.') ?? ''
+    if (path) path += ': '
+    fail('circuit_schema', `${type} ${id}: ${path}${issue.message}`)
   }
 }

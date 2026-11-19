@@ -38,7 +38,7 @@ export interface ArtifactScope {
 }
 /** Top-level scope (empty prefix) for one owner; every other scope is derived from it with child() or handTo(). */
 export function rootScope(owner: DomainName): ArtifactScope {
-  return scope(owner, '')
+  return scope({ owner, prefix: '' })
 }
 
 /** Validate and brand a relative POSIX path. */
@@ -57,17 +57,27 @@ export function artifactPath(raw: string): ArtifactPath {
 /** Today's jsonFile byte format. */
 export const jsonBody = (value: unknown): string => JSON.stringify(value, null, 2) + '\n'
 
+/** Joins a file name onto its scope's prefix and validates the result. */
+function scopePath({ prefix, name }: {
+  prefix: string
+  name: string
+}): ArtifactPath {
+  if (!prefix) return artifactPath(name)
+  return artifactPath(`${prefix}/${name}`)
+}
+
 /** Builds the scope object; every artifact it creates is stamped with `owner` and has its path validated. */
-function scope(owner: DomainName, prefix: string): ArtifactScope {
-  /** Joins a file name onto this scope's prefix and validates the result. */
-  const at = (name: string): ArtifactPath => artifactPath(prefix ? `${prefix}/${name}` : name)
+function scope({ owner, prefix }: {
+  owner: DomainName
+  prefix: string
+}): ArtifactScope {
   return {
     owner,
     prefix,
-    child: (...segments) => scope(owner, [prefix, ...segments].filter(Boolean).join('/')),
-    handTo: next => scope(next, prefix),
-    json: (name, value) => ({ owner, path: at(name), body: jsonBody(value) }),
-    text: (name, body) => ({ owner, path: at(name), body }),
+    child: (...segments) => scope({ owner, prefix: [prefix, ...segments].filter(Boolean).join('/') }),
+    handTo: next => scope({ owner: next, prefix }),
+    json: (name, value) => ({ owner, path: scopePath({ prefix, name }), body: jsonBody(value) }),
+    text: (name, body) => ({ owner, path: scopePath({ prefix, name }), body }),
   }
 }
 
@@ -100,7 +110,7 @@ export class ArtifactLedger {
   /** Keys sorted by code point => byte-identical FileMap for identical inputs (determinism). */
   seal(): FileMap {
     const files: FileMap = Object.create(null)
-    const paths = [...this.entries.keys()].sort((a, b) => a < b ? -1 : a > b ? 1 : 0)
+    const paths = [...this.entries.keys()].sort()
     for (const path of paths) files[path] = this.entries.get(path)!.body
     return files
   }

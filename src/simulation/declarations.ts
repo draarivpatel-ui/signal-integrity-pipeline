@@ -1,8 +1,10 @@
+/* eslint-disable local/max-file-lines -- Experiment declaration checks share Circuit JSON and IBIS plan types. */
 // Experiment declarations (circuitNodes, generalDeclarations, modelRunDefinition).
 import { transmittedBits } from './stimulus'
 import { fail } from './diagnostics'
 import { subcircuitTree, selectPort } from '../board'
-import type { CircuitJson, LaneMapping, SourceNetId } from '../board'
+import type { CircuitJson, LaneMapping, SourceNetId, SourcePortId } from '../board'
+import type { SourceComponentBase, SourceGroup, SourceTrace } from 'circuit-json'
 import type { IbisModelDefinition, IbisRunConfig, IbisReferencePorts } from '@tscircuit/ibis-to-spice'
 import type { ModelRunDefinition } from '../buffers'
 import type {
@@ -12,18 +14,34 @@ import type {
   RunControls,
   SimulationModeling,
   SimulationPlan,
+  VoltageProbePlan,
 } from './types'
 
-/** Converts a declared millisecond time to seconds, failing unless it is finite and nonnegative (or positive). */
-const milliseconds=(value: number | undefined,label: string,{positive=false}: {positive?: boolean}={}): number=>{
-  if (typeof value !== 'number' || !Number.isFinite(value) || (positive ? value <= 0 : value < 0)) {
-    const range = positive ? 'positive' : 'nonnegative'
-    fail('simulation_timing', `${label}: finite ${range} milliseconds required`)
+/** One second contains this many milliseconds. */
+const MILLISECONDS_PER_SECOND = 1000
+
+/** Relative slack for rounding when comparing the stimulus and experiment durations. */
+const RELATIVE_DURATION_TOLERANCE = 1e-12
+
+/** Validates a declared time in milliseconds and returns it in seconds. */
+function secondsFromMilliseconds({ value, label, positive = false }: {
+  value: number | undefined
+  label: string
+  positive?: boolean
+}): number {
+  if (typeof value === 'number' && Number.isFinite(value) && (value > 0 || (!positive && value === 0))) {
+    return value / MILLISECONDS_PER_SECOND
   }
-  return value/1000
+  let range = 'nonnegative'
+  if (positive) range = 'positive'
+  return fail('simulation_timing', `${label}: finite ${range} milliseconds required`)
 }
+
 /** Returns the single matching record, failing when a reference matches none or several. */
-const exactly=<T>(items: T[],label: string): T=>{
+const exactly=<T>({ items, label }: {
+  items: T[]
+  label: string
+}): T=>{
   if(items.length!==1) fail('simulation_reference',`${label}: expected exactly one record, got ${items.length}`)
   return items[0]
 }
@@ -34,64 +52,111 @@ interface CircuitNodesInput {
   modeling: SimulationModeling
 }
 
+/** An identifier that can be used as an electrical node. */
+type SourceNodeId = SourcePortId | SourceNetId
+
+/** Representatives used to join source ports and nets before SPICE nodes are numbered. */
+type SourceParents = Map<SourceNodeId, SourceNodeId>
+
+/** Registers any source port or net that has no representative yet. */
+function addSourceNode({ parents, id }: {
+  parents: SourceParents
+  id: SourceNodeId
+}): void {
+  if (id && !parents.has(id)) parents.set(id, id)
+}
+
+/** Finds the representative of an existing port or net and compresses its path. */
+function sourceRoot({ parents, id }: {
+  parents: SourceParents
+  id: SourceNodeId
+}): SourceNodeId {
+  const parent = parents.get(id)
+  if (parent === undefined) fail('simulation_reference', `Unknown source port/net ${id}`)
+  if (parent === id) return id
+  const root = sourceRoot({ parents, id: parent })
+  parents.set(id, root)
+  return root
+}
+
+/** A net record's representative after joining net-only traces across subcircuits. */
+function netGroupRoot({ netGroup, id }: {
+  netGroup: Map<SourceNetId, SourceNetId>
+  id: SourceNetId
+}): SourceNetId {
+  const parent = netGroup.get(id) ?? id
+  if (parent === id) return id
+  const root = netGroupRoot({ netGroup, id: parent })
+  netGroup.set(id, root)
+  return root
+}
+
+/** Logical source nets attached to a physical port by single-port traces. */
+type PortNetBindings = Set<SourceNetId>
+
+/** Lists logical nets for a port, excluding traces that belong to the extracted channel. */
+function portNetBindings({ port, traces, channelTraces, netGroup }: {
+  port: SourcePortId
+  traces: readonly SourceTrace[]
+  channelTraces: ReadonlySet<SourceTrace['source_trace_id']>
+  netGroup: Map<SourceNetId, SourceNetId>
+}): PortNetBindings {
+  const bindings = traces.filter(trace => !channelTraces.has(trace.source_trace_id) &&
+    trace.connected_source_port_ids.length === 1 && trace.connected_source_port_ids[0] === port)
+  return new Set(bindings.flatMap(trace => trace.connected_source_net_ids ?? [])
+    .map(id => netGroupRoot({ netGroup, id })))
+}
+
+/** Names the SPICE node for a port or net ('0' for the reference), rejecting split channel nets. */
+function createCircuitNodeLookup({ parents, splitNets, names }: {
+  parents: SourceParents
+  splitNets: ReadonlySet<SourceNetId>
+  names: Map<SourceNodeId, string>
+}): CircuitNodes['node'] {
+  return (id) => {
+    if (splitNets.has(id)) fail(
+      'channel_net',
+      `${id}: extracted channel spans distinct endpoint nodes; select a physical port instead of the net`,
+    )
+    const root = sourceRoot({ parents, id })
+    const name = names.get(root) ?? `n${names.size}`
+    names.set(root, name)
+    return name
+  }
+}
+
 /**
- * Resolve electrical connectivity while leaving extracted PCB channel endpoints
- * distinct. Source traces describe connectivity, not ideal channels.
+ * Resolve electrical connectivity while leaving extracted PCB channel endpoints distinct.
+ * The order in which roots are registered also sets the SPICE node numbering.
  */
 export function circuitNodes({ circuit, mappings, modeling }: CircuitNodesInput): CircuitNodes {
-  const parents=new Map<string,string>()
-  /** Registers a port or net as its own connectivity set the first time it is seen. */
-  const add=(id: string): void=>{
-    if(id&&!parents.has(id)) parents.set(id,id)
-  }
-  /** Returns the representative of an id's connectivity set, compressing the path as it goes. */
-  const find=(id: string): string=>{
-    const parent=parents.get(id)
-    if(parent===undefined) fail('simulation_reference',`Unknown source port/net ${id}`)
-    if(parent===id) return id
-    const root=find(parent)
-    parents.set(id,root)
-    return root
-  }
-  /** Joins every listed port and net into one connectivity set. */
-  const union=(ids: string[]): void=>{
-    for(const id of ids) add(id)
-    for(const id of ids.slice(1)) parents.set(find(id),find(ids[0]))
-  }
+  const parents: SourceParents = new Map()
   for(const element of circuit) {
-    if(element.type==='source_port') add(element.source_port_id)
-    if(element.type==='source_net') add(element.source_net_id)
+    if (element.type === 'source_port') addSourceNode({ parents, id: element.source_port_id })
+    if (element.type === 'source_net') addSourceNode({ parents, id: element.source_net_id })
   }
   const channelTraces=new Set(mappings.flatMap(mapping=>mapping.sourceTraceIds ?? [mapping.sourceTraceId]))
   const traces=circuit.filter(e=>e.type==='source_trace')
   const nets=circuit.filter(e=>e.type==='source_net')
   // A two-terminal channel can have redundant one-port-to-net declarations
   // from component connections at both ends. Cut only that unambiguous case.
-  const splitNets=new Set<string>()
+  const splitNets = new Set<SourceNetId>()
   // Subcircuits scope net records: one logical net crossing subcircuits is
   // several records joined by net-only traces. Treat each such group as one net.
-  const netGroup=new Map<string,string>()
-  /** Returns the logical net a scoped net record belongs to after joining net-only traces. */
-  const groupOf=(id: string): string=>{
-    const parent=netGroup.get(id)??id
-    if(parent===id) return id
-    const root=groupOf(parent)
-    netGroup.set(id,root)
-    return root
+  const netGroup = new Map<SourceNetId, SourceNetId>()
+  for (const trace of traces) {
+    if (channelTraces.has(trace.source_trace_id) || trace.connected_source_port_ids.length) continue
+    const [first, ...rest] = trace.connected_source_net_ids ?? []
+    for (const id of rest) {
+      netGroup.set(netGroupRoot({ netGroup, id }), netGroupRoot({ netGroup, id: first }))
+    }
   }
-  for(const t of traces) if(!channelTraces.has(t.source_trace_id)&&!t.connected_source_port_ids.length) {
-    const [first,...rest]=t.connected_source_net_ids??[]
-    for(const id of rest) netGroup.set(groupOf(id),groupOf(first))
-  }
-  /** Lists the logical nets a port is bound to by single-port, non-channel traces. */
-  const bindings=(port: string): Set<SourceNetId>=>new Set(traces.filter(t=>!channelTraces.has(t.source_trace_id)&&
-    t.connected_source_port_ids.length===1&&t.connected_source_port_ids[0]===port)
-    .flatMap(t=>t.connected_source_net_ids??[]).map(groupOf))
-  for(const mapping of mappings) {
-    const from=bindings(mapping.from)
-    const to=bindings(mapping.to)
-    for(const group of from) if(to.has(group)) {
-      const ids=new Set(nets.map(net=>net.source_net_id).filter(id=>groupOf(id)===group))
+  for (const mapping of mappings) {
+    const from = portNetBindings({ port: mapping.from, traces, channelTraces, netGroup })
+    const to = portNetBindings({ port: mapping.to, traces, channelTraces, netGroup })
+    for (const group of from) {
+      if (!to.has(group)) continue
+      const ids = new Set(nets.map(net => net.source_net_id).filter(id => netGroupRoot({ netGroup, id }) === group))
       if(nets.some(net=>ids.has(net.source_net_id)&&net.is_ground)) fail(
         'channel_short',
         `${mapping.port}: channel is bound to ground`,
@@ -115,25 +180,19 @@ export function circuitNodes({ circuit, mappings, modeling }: CircuitNodesInput)
   for(const trace of traces) {
     if(channelTraces.has(trace.source_trace_id)) continue
     // Keep all explicit port-to-port paths, including genuine ideal bypasses.
-    union([
-      ...(trace.connected_source_port_ids??[]),
-      ...(trace.connected_source_net_ids??[]).filter(id=>!splitNets.has(id))
-    ])
+    const connected = [
+      ...(trace.connected_source_port_ids ?? []),
+      ...(trace.connected_source_net_ids ?? []).filter(id => !splitNets.has(id)),
+    ]
+    for (const id of connected) addSourceNode({ parents, id })
+    for (const id of connected.slice(1)) {
+      parents.set(sourceRoot({ parents, id }), sourceRoot({ parents, id: connected[0] }))
+    }
   }
-  const ground=selectPort(circuit,modeling.channelReference).source_port_id
-  const groundRoot=find(ground)
-  const names=new Map([[groundRoot,'0']])
-  /** Names the SPICE node for a port or net ('0' for the channel reference), refusing split channel nets. */
-  const node=(id: string): string=>{
-    if(splitNets.has(id)) fail(
-      'channel_net',
-      `${id}: extracted channel spans distinct endpoint nodes; select a physical port instead of the net`,
-    )
-    const root=find(id);
-    const name=names.get(root)??`n${names.size}`
-    names.set(root,name)
-    return name
-  }
+  const ground = selectPort({ circuit, selector: modeling.channelReference }).source_port_id
+  const groundRoot = sourceRoot({ parents, id: ground })
+  const names = new Map([[groundRoot, '0']])
+  const node = createCircuitNodeLookup({ parents, splitNets, names })
   const ids=[...parents.keys()].filter(id=>!splitNets.has(id))
   for(const id of ids) node(id)
   const endpoints=mappings.flatMap(mapping=>[node(mapping.from),node(mapping.to)])
@@ -142,6 +201,28 @@ export function circuitNodes({ circuit, mappings, modeling }: CircuitNodesInput)
     'Extracted endpoints are shorted by another ideal source trace or reference',
   )
   return {node,groundSourcePortId:ground,mapping:Object.fromEntries(ids.map(id=>[id,node(id)]))}
+}
+
+/** Finds a modeled component's subcircuit through its groups, or returns null at board level. */
+function componentScope({ id, components, groups }: {
+  id: SourceComponentBase['source_component_id'] | undefined
+  components: readonly SourceComponentBase[]
+  groups: ReadonlyMap<SourceGroup['source_group_id'], SourceGroup>
+}): NonNullable<SourceComponentBase['subcircuit_id']> | null {
+  const component = components.find(record => record.source_component_id === id)
+  if (!component) fail('simulation_scope', 'Missing component for scoped physical port')
+  if (component.subcircuit_id) return component.subcircuit_id
+  let groupId = component.source_group_id
+  const visited = new Set<SourceGroup['source_group_id']>()
+  while (groupId) {
+    if (visited.has(groupId)) fail('simulation_scope', 'Cyclic source-group ownership')
+    visited.add(groupId)
+    const group = groups.get(groupId)
+    if (!group) fail('simulation_scope', 'Missing source group for modeled component')
+    if (group.subcircuit_id) return group.subcircuit_id
+    groupId = group.parent_source_group_id
+  }
+  return null
 }
 
 /**
@@ -188,27 +269,10 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
   const groups=new Map(circuit.filter(e=>e.type==='source_group').map(e=>[e.source_group_id,e]))
   const components=circuit.filter(e=>e.type==='source_component')
   const subcircuits=subcircuitTree(circuit)
-  /** Finds the subcircuit that owns a component, directly or through its source groups (null at board level). */
-  const componentScope=(id: string | undefined): string | null=>{
-    const component=components.find(e=>e.source_component_id===id)
-    if(!component) fail('simulation_scope','Missing component for scoped physical port')
-    if(component.subcircuit_id) return component.subcircuit_id
-    let groupId=component.source_group_id
-    const visited=new Set<string>()
-    while(groupId) {
-      if(visited.has(groupId)) fail('simulation_scope','Cyclic source-group ownership')
-      visited.add(groupId)
-      const group=groups.get(groupId)
-      if(!group) fail('simulation_scope','Missing source group for modeled component')
-      if(group.subcircuit_id) return group.subcircuit_id
-      groupId=group.parent_source_group_id
-    }
-    return null
-  }
   for(const model of models) {
     const sourceComponent=exactly(
-      components.filter(e=>e.source_component_id===model.source_component_id),
-      `${model.pipelineId} component`,
+      { items: components.filter(e=>e.source_component_id===model.source_component_id),
+      label: `${model.pipelineId} component` },
     )
     for(const refs of Object.values(model.ibis_pin_name_to_reference_source_port_ids??{}))
       for(const id of Object.values(refs)) if(id!==undefined&&(!ports.has(id)||ports.get(
@@ -232,32 +296,48 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
     e=>e.type==='simulation_parameter_sweep'&&pcbExperimentIds.has(e.simulation_experiment_id),
   )) fail('simulation_capability','This PCB backend supports unswept transient experiments only')
   const ids=new Set<string>()
-  const plans: SimulationPlan[]=experiments.map(experiment=>{
+  const plans: SimulationPlan[]=experiments.map((experiment): SimulationPlan => {
     const id=experiment.simulation_experiment_id
     if(!id||ids.has(id)) fail('simulation_experiment','Experiment IDs must be unique')
     ids.add(id)
-    const scopes=new Set(models.map(model=>componentScope(model.source_component_id)))
-    const scope=experiment.subcircuit_id??(scopes.size===1?[...scopes][0]:undefined)
+    const scopes=new Set(models.map(model=>componentScope({ id: model.source_component_id, components, groups })))
+    let scope: string | null | undefined = experiment.subcircuit_id ?? undefined
+    if (scope === undefined && scopes.size === 1) scope = [...scopes][0]
     if(scope===undefined) fail(
       'simulation_scope',
       `${experiment.name}: multiple modeled subcircuits require an explicit experiment scope`,
     )
-    const scopedModels=models.filter(model=>subcircuits.within(componentScope(model.source_component_id),scope))
+    const scopedModels = models.filter(model => {
+      const inner = componentScope({ id: model.source_component_id, components, groups })
+      return subcircuits.within({ inner, outer: scope })
+    })
     if(!scopedModels.length) fail('simulation_scope',`${experiment.name}: no models in its explicit subcircuit scope`)
     for (const mapping of mappings) {
       for (const endpoint of [mapping.from, mapping.to]) {
         const port = ports.get(endpoint)
         if (!port) fail('ibis_mapping', `${mapping.port}: missing channel endpoint ${endpoint}`)
-        if (!subcircuits.within(componentScope(port.source_component_id), scope)) {
+        const inner = componentScope({ id: port.source_component_id, components, groups })
+        if (!subcircuits.within({ inner, outer: scope })) {
           const advice = 'separate channel configurations are required'
           const detail = `this explicit PCB channel belongs to another scope; ${advice}`
           fail('simulation_scope', `${experiment.name}: ${detail}`)
         }
       }
     }
-    const durationSeconds=milliseconds(experiment.end_time_ms,`${id} end_time_ms`,{positive:true})
-    const startTimeSeconds=milliseconds(experiment.start_time_ms??0,`${id} start_time_ms`)
-    const maxStepSeconds=milliseconds(experiment.time_per_step,`${id} time_per_step`,{positive:true})
+    const durationSeconds = secondsFromMilliseconds({
+      value: experiment.end_time_ms,
+      label: `${id} end_time_ms`,
+      positive: true,
+    })
+    const startTimeSeconds = secondsFromMilliseconds({
+      value: experiment.start_time_ms ?? 0,
+      label: `${id} start_time_ms`,
+    })
+    const maxStepSeconds = secondsFromMilliseconds({
+      value: experiment.time_per_step,
+      label: `${id} time_per_step`,
+      positive: true,
+    })
     if(startTimeSeconds>=durationSeconds||maxStepSeconds>=durationSeconds-startTimeSeconds) fail(
       'simulation_timing',
       `${experiment.name}: recording must have positive duration and a smaller maximum timestep`,
@@ -281,9 +361,12 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
       )
       stateIds.add(state.source_port_id)
       const hasOutputFlag = typeof state.is_output === 'boolean'
-      const validEnableFlag = state.is_output
-        ? typeof state.is_output_enabled === 'boolean'
-        : state.is_output_enabled === undefined
+      let validEnableFlag: boolean
+      if (state.is_output) {
+        validEnableFlag = typeof state.is_output_enabled === 'boolean'
+      } else {
+        validEnableFlag = state.is_output_enabled === undefined
+      }
       if (!hasOutputFlag || !validEnableFlag) {
         fail('ibis_state', `${experiment.name}: explicit compatible input/output enable state required`)
       }
@@ -319,8 +402,12 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
         'stimulus_state',
         `${stimulus.name}: stimulus requires an enabled IBIS output in this experiment`,
       )
-      milliseconds(stimulus.bit_duration_ms,`${stimulus.name} bit_duration_ms`,{positive:true})
-      milliseconds(stimulus.start_time_ms,`${stimulus.name} start_time_ms`)
+      secondsFromMilliseconds({
+        value: stimulus.bit_duration_ms,
+        label: `${stimulus.name} bit_duration_ms`,
+        positive: true,
+      })
+      secondsFromMilliseconds({ value: stimulus.start_time_ms, label: `${stimulus.name} start_time_ms` })
       const hasBinaryInitialState = [0, 1].includes(stimulus.initial_state)
       const hasValidInversion = stimulus.inverted === undefined || typeof stimulus.inverted === 'boolean'
       const pattern = stimulus.transmission_pattern
@@ -329,18 +416,16 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
         const requirements = 'explicit binary bits, inversion/repeat booleans and initial state required'
         fail('stimulus_pattern', `${stimulus.name}: ${requirements}`)
       }
-      if(stimulus.start_time_ms/1000>=durationSeconds) fail(
+      if(stimulus.start_time_ms / MILLISECONDS_PER_SECOND >=durationSeconds) fail(
         'stimulus_coverage',
         `${stimulus.name}: stimulus starts after the experiment ends`,
       )
-      if (!pattern.repeat) {
-        const patternDurationMs = pattern.bits.length * stimulus.bit_duration_ms
-        const endSeconds = (stimulus.start_time_ms + patternDurationMs) / 1000
-        // Allow for floating-point rounding when comparing the declared durations.
-        const durationTolerance = 1e-12 * durationSeconds
-        if (endSeconds < durationSeconds - durationTolerance) {
-          fail('stimulus_coverage', `${stimulus.name}: nonrepeating bits do not cover the complete run`)
-        }
+      if (pattern.repeat) continue
+      const patternDurationMs = pattern.bits.length * stimulus.bit_duration_ms
+      const endSeconds = (stimulus.start_time_ms + patternDurationMs) / MILLISECONDS_PER_SECOND
+      const durationToleranceSeconds = RELATIVE_DURATION_TOLERANCE * durationSeconds
+      if (endSeconds < durationSeconds - durationToleranceSeconds) {
+        fail('stimulus_coverage', `${stimulus.name}: nonrepeating bits do not cover the complete run`)
       }
     }
     for (const state of states) {
@@ -349,8 +434,8 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
       }
     }
     const probes=circuit.filter(e=>e.type==='simulation_voltage_probe').filter(
-      e=>subcircuits.within(e.subcircuit_id,scope),
-    ).map((probe,i)=>{
+      e => subcircuits.within({ inner: e.subcircuit_id, outer: scope }),
+    ).map((probe, i): VoltageProbePlan => {
       const signal=probe.signal_input_source_port_id??probe.signal_input_source_net_id
       const reference=probe.reference_input_source_port_id??probe.reference_input_source_net_id
       if(!signal) fail('probe_reference',`${probe.name}: signal port/net required`)
@@ -362,7 +447,8 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
         if (!exists) fail('probe_reference', `${probe.name}: unknown signal/reference source`)
       }
       const signalNode=nodes.node(signal)
-      const referenceNode=reference?nodes.node(reference):'0'
+      let referenceNode = '0'
+      if (reference) referenceNode = nodes.node(reference)
       if(signalNode===referenceNode) fail(
         'probe_reference',
         `${probe.name}: signal and reference resolve to the same circuit node`,
@@ -401,23 +487,25 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
  * Builds the converter input for one model in one experiment: its source, pin map, references, corner,
  * and the run's pin states and stimuli. Dictionaries have no prototype so any port name is safe as a key.
  */
-export function modelRunDefinition(
-  model: PipelineIbisModel,
-  plan: Pick<SimulationPlan, 'durationSeconds' | 'states' | 'stimuli'>,
-): ModelRunDefinition {
+export function modelRunDefinition({ model, plan }: {
+  model: PipelineIbisModel
+  plan: Pick<SimulationPlan, 'durationSeconds' | 'states' | 'stimuli'>
+}): ModelRunDefinition {
   const pinMap=model.ibis_pin_name_to_source_port_id
   const selected=new Set(Object.values(pinMap))
   const pinStates: IbisRunConfig['pinStates']=Object.create(null)
   const stimuli: IbisRunConfig['stimuli']=Object.create(null)
-  for(const state of plan.states) if(selected.has(state.source_port_id)) {
-    if(!state.is_output) pinStates[state.source_port_id]={mode:'input'}
-    else {
-      if(typeof state.is_output_enabled!=='boolean') fail(
-        'ibis_state',
-        `${state.source_port_id}: explicit output enable state required`,
-      )
-      pinStates[state.source_port_id]={mode:'output',enabled:state.is_output_enabled}
+  for (const state of plan.states) {
+    if (!selected.has(state.source_port_id)) continue
+    if (!state.is_output) {
+      pinStates[state.source_port_id] = { mode: 'input' }
+      continue
     }
+    if (typeof state.is_output_enabled !== 'boolean') fail(
+      'ibis_state',
+      `${state.source_port_id}: explicit output enable state required`,
+    )
+    pinStates[state.source_port_id] = { mode: 'output', enabled: state.is_output_enabled }
   }
   for (const stimulus of plan.stimuli) {
     if (!selected.has(stimulus.source_port_id)) continue
@@ -461,6 +549,6 @@ export function modelRunDefinition(
       corner: 'typical',
       packagePolicy,
     },
-    run: { duration: plan.durationSeconds * 1000, pinStates, stimuli },
+    run: { duration: plan.durationSeconds * MILLISECONDS_PER_SECOND, pinStates, stimuli },
   }
 }

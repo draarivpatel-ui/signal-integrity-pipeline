@@ -1,8 +1,15 @@
-import { pcb_stackup } from 'circuit-json'
+import { pcb_stackup, type PcbBoard } from 'circuit-json'
 import type { CircuitJson } from './schema'
 import { fail } from './diagnostics'
 
+/** Conductivity used for copper layers without a declared value, in siemens per metre. */
 export const defaultCopperConductivitySm = 5.8e7
+
+/** Rounding layer positions to 1e-10 mm prevents drift when summing thicknesses. */
+const LAYER_POSITION_SCALE = 1e10
+
+/** Rounds a layer position in millimetres to the stackup precision. */
+const roundLayerPosition = (value: number): number => Math.round(value * LAYER_POSITION_SCALE) / LAYER_POSITION_SCALE
 export interface CopperLayer {
   name: string
   zMinMm: number
@@ -15,8 +22,9 @@ export interface DielectricLayer {
   zMaxMm: number
   relativePermittivity?: number
 }
+/** Physical copper and dielectric layers in solver coordinates. */
 export interface BoardStackup {
-  pcbBoardId: string
+  pcbBoardId: PcbBoard['pcb_board_id']
   copperLayers: CopperLayer[]
   dielectrics: DielectricLayer[]
   relativePermittivity?: number
@@ -51,36 +59,39 @@ export function stackupFromCircuitJson(circuit: CircuitJson): BoardStackup {
     fail('stackup', 'Physical stack must start and end with copper (outside soldermask is ignored)')
   const copperLayers: CopperLayer[] = []
   const dielectrics: DielectricLayer[] = []
-  /** Rounds to 1e-10 mm so summed layer thicknesses do not drift by float error. */
-  const round = (value: number): number => Math.round(value * 1e10) / 1e10
   let z = -copper.at(-1)!.thickness
   for (const layer of [...layers].reverse()) {
-    const zMinMm = round(z)
-    const zMaxMm = round(z + layer.thickness)
-    if (layer.layer_type === 'copper') copperLayers.push({
-      name: layer.layer,
-      zMinMm,
-      zMaxMm,
-      conductivitySm: layer.electrical_conductivity_s_per_m ?? defaultCopperConductivitySm,
-    })
-    else dielectrics.push({
+    const zMinMm = roundLayerPosition(z)
+    const zMaxMm = roundLayerPosition(z + layer.thickness)
+    z = zMaxMm
+    if (layer.layer_type === 'copper') {
+      copperLayers.push({
+        name: layer.layer,
+        zMinMm,
+        zMaxMm,
+        conductivitySm: layer.electrical_conductivity_s_per_m ?? defaultCopperConductivitySm,
+      })
+      continue
+    }
+    dielectrics.push({
       material: layer.material_name,
       zMinMm,
       zMaxMm,
       relativePermittivity: layer.relative_permittivity,
     })
-    z = zMaxMm
   }
   for (let i = 1; i < copperLayers.length; i++) if (copperLayers[i].zMinMm <= copperLayers[i - 1].zMaxMm)
     fail('stackup', 'Copper layers require a positive dielectric gap')
   // Preserve physical layers for the native dielectric interfaces. The weighted
   // value is used only to choose initial timing and mesh settings.
   const thickness = dielectrics.reduce((sum, layer) => sum + layer.zMaxMm - layer.zMinMm, 0)
-  const relativePermittivity = thickness > 0 && dielectrics.every(layer => layer.relativePermittivity !== undefined)
-    ? dielectrics.reduce(
+  let relativePermittivity: number | undefined
+  if (thickness > 0 && dielectrics.every(layer => layer.relativePermittivity !== undefined)) {
+    relativePermittivity = dielectrics.reduce(
       (sum, layer) => sum + (layer.zMaxMm - layer.zMinMm) * layer.relativePermittivity!,
       0,
-    ) / thickness : undefined
+    ) / thickness
+  }
   return {
     pcbBoardId: stackup.pcb_board_id,
     copperLayers,

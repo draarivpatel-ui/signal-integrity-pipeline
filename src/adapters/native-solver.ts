@@ -13,13 +13,24 @@ export interface NativeSolverOptions {
 }
 const exec = promisify(execFile)
 
+/** Give native solvers up to fifteen minutes to complete the requested run. */
+const DEFAULT_TIMEOUT_MS = 900000
+
+/** Cap each captured output stream at 64 MiB. */
+const OUTPUT_BUFFER_BYTES = 64 * 1024 * 1024
+
 /**
  * Executes only requests passed by the caller; never installs or downloads tools.
  * Lifecycle: validate -> mkdtemp -> write -> spawn -> collect, with rm in `finally`.
  * Cleanup runs on every path (finally). Collects only requested outputFiles, each contained in the workdir.
  */
-export function createNativeSolver({ tools = {}, timeoutMs = 900000 }: NativeSolverOptions = {}): RunSolver {
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) fail('native_timeout', 'timeoutMs must be a positive integer')
+export function createNativeSolver({
+  tools = {},
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+}: NativeSolverOptions = {}): RunSolver {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    fail('native_timeout', 'timeoutMs must be a positive integer')
+  }
   return async request => {
     if (request.solver !== 'ngspice') fail('native_solver', 'Unknown solver')
     for (const path of [...Object.keys(request.files), ...request.outputFiles]) relativeFile(path)
@@ -39,7 +50,7 @@ export function createNativeSolver({ tools = {}, timeoutMs = 900000 }: NativeSol
           {
             cwd: directory,
             timeout: timeoutMs,
-            maxBuffer: 64 * 1024 * 1024,
+            maxBuffer: OUTPUT_BUFFER_BYTES,
             env: { ...process.env, OMP_NUM_THREADS: '1' },
           })
       } catch (error) {
@@ -53,18 +64,18 @@ export function createNativeSolver({ tools = {}, timeoutMs = 900000 }: NativeSol
         // execFile's timeout kills with SIGTERM and no exit code. External
         // signals are not marked killed; maxBuffer errors have a string code.
         const timedOut = detail.killed && detail.signal === 'SIGTERM' && detail.code === null
-        let message = detail.message
-        if (timedOut) message = `exceeded ${timeoutMs} ms process timeout; ${message}`
-        fail(
-          timedOut ? 'native_timeout' : 'native_solver',
-          `${request.solver}: ${message}\n${detail.stdout ?? ''}\n${detail.stderr ?? ''}`,
-        )
+        const output = `${detail.stdout ?? ''}\n${detail.stderr ?? ''}`
+        if (timedOut) {
+          const timeout = `exceeded ${timeoutMs} ms process timeout; ${detail.message}`
+          fail('native_timeout', `${request.solver}: ${timeout}\n${output}`)
+        }
+        fail('native_solver', `${request.solver}: ${detail.message}\n${output}`)
       }
       const files: Record<string, string> = Object.create(null)
       const root = await realpath(directory)
       for (const path of request.outputFiles) {
         try {
-          files[path] = await readFile(contained(root, await realpath(join(directory, path))), 'utf8')
+          files[path] = await readFile(contained({ root, path: await realpath(join(directory, path)) }), 'utf8')
         }
         catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
