@@ -7,7 +7,6 @@ import {
   IbisError,
   type IbisPackagePin,
   type IbisRange,
-  ibisNumber,
   parseIbis,
 } from "@tscircuit/ibis-to-spice"
 import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
@@ -27,8 +26,6 @@ export interface InspectedPin {
   component: IbisComponent
   /** Selected IBIS buffer model for the physical pin. */
   buffer: IbisBuffer
-  /** Raw IBIS file text. */
-  text: string
   /** Source ports of the separate IBIS reference rails. */
   references: ReferencePorts
 }
@@ -246,7 +243,6 @@ export function inspectPins({
       pins.set(port, {
         ...binding,
         buffer: document.getBuffer(name),
-        text,
         references: referenceRails(binding),
       })
     }
@@ -280,29 +276,6 @@ export function pinCapabilities(pin: InspectedPin): PinCapabilities {
   }
 }
 
-/** Read the typical [Ramp] ratios for this model (IBIS 7.2 §6.1). */
-function* rampRatioTokens(pin: InspectedPin): Generator<string> {
-  // The pinned parser accepts [Ramp] but exposes only the waveform data.
-  let selected = false
-  let inRamp = false
-  for (const raw of pin.text.split("\n")) {
-    const line = raw.split("|", 1)[0].trim()
-    if (line.startsWith("[")) {
-      const end = line.indexOf("]")
-      const keyword = line.slice(1, end).trim().toLowerCase()
-      if (keyword === "model") {
-        selected = line.slice(end + 1).trim() === pin.buffer.name
-      }
-      inRamp = selected && keyword === "ramp"
-      continue
-    }
-    if (!inRamp) continue
-    // IBIS 7.2 §3.2 defines both spaces and tabs as whitespace.
-    const [key, value] = line.replaceAll("\t", " ").split(" ").filter(Boolean)
-    const tag = key?.toLowerCase()
-    if (value && (tag === "dv/dt_r" || tag === "dv/dt_f")) yield value
-  }
-}
 /** Time and typical voltage at one point on an IBIS waveform. */
 type WaveformSample = readonly [timeSeconds: number, voltage: number]
 
@@ -376,14 +349,10 @@ export function edgeDurationSeconds(pin: InspectedPin): number {
   if (durationsSeconds.length) return Math.min(...durationsSeconds)
 
   // IBIS 7.2 §6.1 requires [Ramp] for drivers and makes waveforms optional.
-  for (const token of rampRatioTokens(pin)) {
-    const [voltageToken, timeToken] = token.split("/")
-    if (!voltageToken || !timeToken) continue
-    const voltage = ibisNumber(voltageToken)
-    const rampSeconds = ibisNumber(timeToken)
-    if (voltage === null || voltage <= 0 || !rampSeconds || rampSeconds < 0)
-      continue
-    const durationSeconds = rampSeconds * RAMP_TO_EDGE_DURATION
+  const ramp = pin.buffer.ramp
+  for (const ratio of [ramp?.rising[0], ramp?.falling[0]]) {
+    if (!ratio || ratio.voltage <= 0 || ratio.timeSeconds <= 0) continue
+    const durationSeconds = ratio.timeSeconds * RAMP_TO_EDGE_DURATION
     if (Number.isFinite(durationSeconds)) durationsSeconds.push(durationSeconds)
   }
   if (!durationsSeconds.length)
