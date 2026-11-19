@@ -470,10 +470,13 @@ function pruneIbisModels({
 }
 
 /** Report package corrections for the same retained physical pins that will be compiled. */
-function blockPackageWarnings(
-  { circuit, pins }: Pick<PreparedBlock, "circuit" | "pins">,
-  sources: IbisSources,
-): string[] {
+function blockPackageWarnings({
+  circuit,
+  pins,
+  sources,
+}: Pick<PreparedBlock, "circuit" | "pins"> & {
+  sources: IbisSources
+}): string[] {
   const warnings: string[] = []
   for (const model of circuit.filter(
     (record) => record.type === "simulation_ibis_model",
@@ -701,7 +704,7 @@ function prepareBlock({
   // Stable physical endpoint identities order the matrix; route coordinates set coupling.
   lanes.sort((a, b) => a.from.sourcePortId!.localeCompare(b.from.sourcePortId!))
   pruneIbisModels({ circuit, pins })
-  const warnings = blockPackageWarnings({ circuit, pins }, sources)
+  const warnings = blockPackageWarnings({ circuit, pins, sources })
   const stack = stackupFromCircuitJson(circuit)
   if (!stack.relativePermittivity) {
     throw new Error(

@@ -58,20 +58,27 @@ export function prepareBlocks({
   )
 }
 
+/** Binding inputs prepared by admission before a route binding solver allocates an artifact scope. */
+type AdmittedRouteBindings = Omit<RouteBindingsInput, "scope">
+
 /** The first admitted block's bindings, checked by the standalone admission solver. */
-export function admittedBindings(
-  circuitJson: CircuitJson,
-  ibisSources: IbisSources,
-): Omit<RouteBindingsInput, "scope"> {
+export function admittedBindings({
+  circuitJson,
+  ibisSources,
+}: {
+  circuitJson: CircuitJson
+  ibisSources: IbisSources
+}): AdmittedRouteBindings {
   const textSources = Object.fromEntries(
-    Object.entries(ibisSources).map(([name, bytes]) => [
-      name,
-      typeof bytes === "string"
-        ? bytes
-        : new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
-            bytes,
-          ),
-    ]),
+    Object.entries(ibisSources).map(([name, bytes]) => {
+      if (typeof bytes === "string") return [name, bytes] as const
+      return [
+        name,
+        new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+          bytes,
+        ),
+      ] as const
+    }),
   )
   const admission = new RoutedAdmissionSolver({
     circuitJson,

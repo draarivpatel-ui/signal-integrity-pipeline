@@ -4,6 +4,7 @@ import { sha256 } from "../kernel"
 import {
   coupledPackage,
   coupledPackageElements,
+  PACKAGE_SHUNT_COUNT,
   packageCapacitanceWarnings,
   packageComparisons,
   packageRail,
@@ -13,10 +14,13 @@ import { convertSwitching } from "./switching"
 import { asciiLowerCase, isSpace, tokenEnd } from "./text"
 import type { ModelRunDefinition, PackagedComponent } from "./types"
 
+/** External SPICE terminal named by the converter. */
 type SpiceTerminal = keyof PackagedComponent["spicePinMapping"]
+/** Pin label from the selected IBIS component. */
 type PhysicalPin = keyof ReturnType<
   typeof parseIbis
 >["components"][string]["pins"]
+/** External or internal node in the generated SPICE subcircuit. */
 type SpiceNode = string
 
 /** Maximum voltage difference allowed between die rails that share a package pin. */
@@ -37,10 +41,13 @@ const COUPLED_PACKAGE_WARNING = [
 ].join(" ")
 
 /** Remap whole SPICE tokens while retaining all original whitespace. */
-function remapNodes(
-  line: string,
-  nodes: ReadonlyMap<string, SpiceNode>,
-): string {
+function remapNodes({
+  line,
+  nodes,
+}: {
+  line: string
+  nodes: ReadonlyMap<string, SpiceNode>
+}): string {
   let source = ""
   for (let start = 0; start < line.length; ) {
     if (isSpace(line[start])) {
@@ -48,7 +55,7 @@ function remapNodes(
       start++
       continue
     }
-    const end = tokenEnd(line, start)
+    const end = tokenEnd({ text: line, start })
     const token = line.slice(start, end)
     source += nodes.get(token) ?? token
     start = end
@@ -57,10 +64,13 @@ function remapNodes(
 }
 
 /** Resolve the voltage each mapped source port must provide to an ideal die rail. */
-function dieVoltages(
-  pins: PackagedComponent["metadata"]["pins"],
-  document: IbisDocument,
-): Map<SourcePortId, number> {
+function dieVoltages({
+  pins,
+  document,
+}: {
+  pins: PackagedComponent["metadata"]["pins"]
+  document: IbisDocument
+}): Map<SourcePortId, number> {
   const voltages = new Map<SourcePortId, number>()
   for (const pin of pins) {
     for (const [role, voltage] of Object.entries(
@@ -81,10 +91,13 @@ function dieVoltages(
 }
 
 /** Require a finite, nonnegative scalar package coefficient from the pin or component default. */
-function packageCoefficient(
-  coefficient: number | null | undefined,
-  label: string,
-): number {
+function packageCoefficient({
+  coefficient,
+  label,
+}: {
+  coefficient: number | null | undefined
+  label: string
+}): number {
   if (coefficient == null || !Number.isFinite(coefficient) || coefficient < 0)
     throw new Error(label)
   return coefficient
@@ -134,7 +147,7 @@ export function convertPackaged({
   )?.[0]
   if (!groundTerminal)
     throw new Error(`${component.name}: package ground is not mapped`)
-  const voltages = dieVoltages(converted.metadata.pins, document)
+  const voltages = dieVoltages({ pins: converted.metadata.pins, document })
   const rails = new Map<PhysicalPin, SpiceNode>()
   const referenceNodes = new Map(
     Object.entries(converted.spicePinMapping).flatMap(([terminal], i) => {
@@ -172,10 +185,10 @@ export function convertPackaged({
       ["inductance", "L"],
     ] as const) {
       if (!scalar) continue
-      const coefficient = packageCoefficient(
-        pin[field] ?? component.package[field]?.[0],
-        `${physicalPins[i]}: vendor package ${field} missing`,
-      )
+      const coefficient = packageCoefficient({
+        coefficient: pin[field] ?? component.package[field]?.[0],
+        label: `${physicalPins[i]}: vendor package ${field} missing`,
+      })
       if (coefficient <= 0) continue
       const next = `${tag}${kind}${i}`
       elements.push(`${kind}${tag}${i} ${node} ${next} ${coefficient}`)
@@ -211,12 +224,12 @@ export function convertPackaged({
       supplied.set(reference, voltage)
     }
     if (!scalar) continue
-    const capacitance = packageCoefficient(
-      pin.capacitance ?? component.package.capacitance?.[0],
-      `${physicalPins[i]}: vendor package capacitance missing`,
-    )
+    const capacitance = packageCoefficient({
+      coefficient: pin.capacitance ?? component.package.capacitance?.[0],
+      label: `${physicalPins[i]}: vendor package capacitance missing`,
+    })
     if (capacitance <= 0) continue
-    const half = capacitance / 2
+    const half = capacitance / PACKAGE_SHUNT_COUNT
     elements.push(
       `C${tag}${i}a ${terminal} ${dieGround} ${half}`,
       `C${tag}${i}b ${node} ${dieGround} ${half}`,
@@ -249,7 +262,7 @@ export function convertPackaged({
   }
   const body = wrapper.map((line, index) => {
     if (index <= header) return line
-    return remapNodes(line, nodes)
+    return remapNodes({ line, nodes })
   })
   converted.source = `${[...body, ...elements].join("\n")}${converted.source.slice(top)}`
   converted.metadata.packagePolicy = "vendor"
@@ -261,7 +274,7 @@ export function convertPackaged({
   if (selected)
     converted.warnings.push(
       COUPLED_PACKAGE_WARNING,
-      ...packageComparisons(component, selected),
+      ...packageComparisons({ component, selected }),
     )
   converted.warnings.push(
     ...packageCapacitanceWarnings({

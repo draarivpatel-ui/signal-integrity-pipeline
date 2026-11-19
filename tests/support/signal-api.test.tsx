@@ -6,10 +6,14 @@ import React from "react"
 import { admitBuffers, compileBuffers } from "../../src/buffers"
 import { rootScope } from "../../src/kernel"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
-import { Inverter, Reference } from "./signal-parts"
-import { admittedBindings, prepareBlocks, renderSignals } from "./signal-render"
-import Differential from "./unit-differential"
-import Single from "./unit-single-ended"
+import { Inverter, Reference } from "../fixtures/signal-parts"
+import {
+  admittedBindings,
+  prepareBlocks,
+  renderSignals,
+} from "../fixtures/signal-render"
+import Differential from "../fixtures/unit-differential"
+import Single from "../fixtures/unit-single-ended"
 
 const modelDir = process.env.IBIS_MODEL_DIR
 /** Read actual vendor bytes only; no synthetic IBIS fallback. */
@@ -83,7 +87,7 @@ function Four(): React.JSX.Element {
 
 test("Real core renders source records and core-owned stackup without loading vendor assets", async () => {
   for (const Board of [Single, Differential, Four]) {
-    const records = await renderSignals(<Board />)
+    const records = await renderSignals({ tree: <Board /> })
     assert.equal(records.filter((r) => r.type === "pcb_stackup").length, 1)
     assert.ok(
       records.some((r) => r.type === "simulation_pcb_driver_receiver_channel"),
@@ -96,11 +100,10 @@ test("Real core renders source records and core-owned stackup without loading ve
   }
 })
 
-test(
+test.skipIf(!modelDir)(
   "four-conductor derivation is invariant under signal record order",
-  { skip: !modelDir },
   async () => {
-    const circuit = await renderSignals(<Four />)
+    const circuit = await renderSignals({ tree: <Four /> })
     const ibis = await sources()
     const a = prepareBlocks({ circuit, sources: ibis })[0]
     const channels = circuit.filter(
@@ -120,8 +123,8 @@ test(
 
 const differentialDescription =
   "RS485 differential identity and the placed termination are derived from real vendor data and TSX"
-test(differentialDescription, { skip: !modelDir }, async () => {
-  const circuit = await renderSignals(<Differential />)
+test.skipIf(!modelDir)(differentialDescription, async () => {
+  const circuit = await renderSignals({ tree: <Differential /> })
   const ibis = await sources()
   const prepared = prepareBlocks({ circuit, sources: ibis })[0]
   const receiver = prepared.signals[0].receivers[0]
@@ -135,7 +138,7 @@ test(differentialDescription, { skip: !modelDir }, async () => {
       (p) => p.sourceComponentId === resistor.source_component_id,
     ),
   )
-  const reversed = await renderSignals(<Differential reversed />)
+  const reversed = await renderSignals({ tree: <Differential reversed /> })
   assert.throws(
     () => prepareBlocks({ circuit: reversed, sources: ibis }),
     /Signal "BUS": differential pin order disagrees with IBIS/,
@@ -144,8 +147,8 @@ test(differentialDescription, { skip: !modelDir }, async () => {
 
 const signalDescription =
   "signal packages and vendor reference evidence remain present; disabled drivers reject output-only buffers"
-test(signalDescription, { skip: !modelDir }, async () => {
-  const circuit = await renderSignals(<Single />)
+test.skipIf(!modelDir)(signalDescription, async () => {
+  const circuit = await renderSignals({ tree: <Single /> })
   const signal = circuit.find(
     (r) => r.type === "simulation_pcb_driver_receiver_channel",
   )!
@@ -160,7 +163,7 @@ test(signalDescription, { skip: !modelDir }, async () => {
   signal.driver_disabled = false
   signal.pattern = "0"
   delete signal.seed
-  const bindings = admittedBindings(circuit, ibis)
+  const bindings = admittedBindings({ circuitJson: circuit, ibisSources: ibis })
   const declarations = generalDeclarations({
     circuit: bindings.circuitJson,
     mappings: bindings.mappings,
@@ -172,11 +175,11 @@ test(signalDescription, { skip: !modelDir }, async () => {
     ibisSources: ibis,
     scope: rootScope("buffers"),
   })
-  const compiled = compileBuffers(
-    admitted.value,
-    declarations.plans,
-    modelRunDefinition,
-  )[0]
+  const [compiled] = compileBuffers({
+    admitted: admitted.value,
+    plans: declarations.plans,
+    define: modelRunDefinition,
+  })
   for (const model of compiled) {
     assert.equal(model.metadata.packagePolicy, "vendor")
     assert.match(model.source, /RPKG/)

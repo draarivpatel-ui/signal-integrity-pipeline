@@ -1,6 +1,9 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { parsePackageModel } from "../../src/buffers/package-model"
+import {
+  type PackageModel,
+  parsePackageModel,
+} from "../../src/buffers/package-model"
 
 /** Rewrite fixture keywords in the uppercase, underscore-separated spelling. */
 function underscoreKeywords(source: string): string {
@@ -22,7 +25,13 @@ function underscoreKeywords(source: string): string {
 }
 
 /** Small original fixture; numeric-looking names still follow the declared pin order. */
-function fixture(data: string, pins: string[] = ["Z9", "A1", "7"]): string {
+function fixture({
+  data,
+  pins = ["Z9", "A1", "7"],
+}: {
+  data: string
+  pins?: PackageModel["pins"]
+}): string {
   return `[Define Package Model] Example package
 [Manufacturer] Example Semiconductor
 [OEM] Example Packaging
@@ -36,10 +45,18 @@ ${data}
 [End Package Model]`
 }
 
-test("IBIS package matrices use named upper-triangle rows, exact widths and explicit section rejection", () => {
-  const full = "[Row] Z9\n4nH 1n\n-0.5n\n[Row] A1\n3n 0.2n\n[Row] 7\n2n"
-  const sparse =
-    "[Row] Z9\n7 -0.5n\nZ9 4n\nA1 1n\n[Row] A1\n7 0.2n\nA1 3n\n[Row] 7\n7 2n"
+const full = "[Row] Z9\n4nH 1n\n-0.5n\n[Row] A1\n3n 0.2n\n[Row] 7\n2n"
+const sparse =
+  "[Row] Z9\n7 -0.5n\nZ9 4n\nA1 1n\n[Row] A1\n7 0.2n\nA1 3n\n[Row] 7\n7 2n"
+const resistance =
+  "[Resistance Matrix] Banded_matrix\n[Bandwidth] 0\n[Row] Z9\n1m\n[Row] A1\n2m\n[Row] 7\n3m"
+const inductance = `[Inductance Matrix] Sparse_matrix\n${sparse}`
+const capacitance = `[Capacitance Matrix] Full_matrix\n${full}`
+const valid = fixture({
+  data: [resistance, inductance, capacitance].join("\n"),
+})
+
+test("reads upper triangles in pin order", () => {
   const formats = [
     ["Full_matrix", full],
     ["Sparse_matrix", sparse],
@@ -47,7 +64,10 @@ test("IBIS package matrices use named upper-triangle rows, exact widths and expl
   ]
   for (const [format, rows] of formats) {
     const data = `[Inductance Matrix] ${format}\n${rows}\n[Capacitance Matrix] ${format}\n${rows}`
-    const parsed = parsePackageModel(fixture(data), "Example package")
+    const parsed = parsePackageModel({
+      text: fixture({ data }),
+      name: "Example package",
+    })
     assert.deepEqual(parsed.pins, ["Z9", "A1", "7"])
     const expected = [
       [4e-9, 1e-9, -5e-10],
@@ -66,6 +86,9 @@ test("IBIS package matrices use named upper-triangle rows, exact widths and expl
     )
     assert.equal(parsed.manufacturer, "Example Semiconductor")
   }
+})
+
+test("reads truncated and circular bands", () => {
   const band = "[Bandwidth] 1\n[Row] Z9\n4n 1n\n[Row] A1\n3n .2n\n[Row] 7\n2n"
   const ring = `${band} -.5n`
   for (const [rows, corner] of [
@@ -73,86 +96,227 @@ test("IBIS package matrices use named upper-triangle rows, exact widths and expl
     [ring, -5e-10],
   ] as const) {
     const data = `[Inductance Matrix] Banded_matrix\n${rows}\n[Capacitance Matrix] Banded_matrix\n${rows}`
-    const parsed = parsePackageModel(fixture(data), "Example package")
+    const parsed = parsePackageModel({
+      text: fixture({ data }),
+      name: "Example package",
+    })
     assert.equal(
       parsed.L[0][2],
       corner,
       "last row distinguishes truncated and wrap-around bands",
     )
   }
-  const resistance =
-    "[Resistance Matrix] Banded_matrix\n[Bandwidth] 0\n[Row] Z9\n1m\n[Row] A1\n2m\n[Row] 7\n3m"
-  const inductance = `[Inductance Matrix] Sparse_matrix\n${sparse}`
-  const capacitance = `[Capacitance Matrix] Full_matrix\n${full}`
-  const valid = fixture([resistance, inductance, capacitance].join("\n"))
-  assert.equal(parsePackageModel(valid, "Example package").R[1][1], 0.002)
-  assert.deepEqual(
-    parsePackageModel(underscoreKeywords(valid), "Example package").pins,
-    ["Z9", "A1", "7"],
+})
+
+test("reads zero-bandwidth resistance", () => {
+  assert.equal(
+    parsePackageModel({ text: valid, name: "Example package" }).R[1][1],
+    0.002,
   )
+})
+
+test("accepts underscore keywords", () => {
+  const parsed = parsePackageModel({
+    text: underscoreKeywords(valid),
+    name: "Example package",
+  })
+  assert.deepEqual(parsed.pins, ["Z9", "A1", "7"])
+})
+
+test("applies custom comment markers", () => {
   const comment = valid.replace("7 -0.5n", "7 -0.5n # ignored column")
   const changedMarker = valid.replace(
     "[Model Data]",
     "[Comment Char] #_char\n[Model Data]",
   )
-  assert.deepEqual(
-    parsePackageModel(`[Comment Char] #_char\n${comment}`, "Example package")
-      .pins,
-    ["Z9", "A1", "7"],
-  )
-  const changedComment = parsePackageModel(
-    `[Comment Char] |_char\n${changedMarker}`,
-    "Example package",
-  )
+  const globalComment = parsePackageModel({
+    text: `[Comment Char] #_char\n${comment}`,
+    name: "Example package",
+  })
+  assert.deepEqual(globalComment.pins, ["Z9", "A1", "7"])
+  const changedComment = parsePackageModel({
+    text: `[Comment Char] |_char\n${changedMarker}`,
+    name: "Example package",
+  })
   assert.deepEqual(changedComment.pins, ["Z9", "A1", "7"])
-  for (const [text, error] of [
-    [valid.replace("[OEM] Example Packaging\n", ""), /OEM/],
-    [valid.replace("[End Model Data]", ""), /End Model Data/],
-    [valid.replace("[End Package Model]", ""), /End Package Model/],
-    [valid.replace("[Number Of Pins] 3", "[Number Of Pins] 4"), /pin count/i],
-    [
-      valid.replace("[Pin Numbers]", "[Number Of Sections] 1\n[Pin Numbers]"),
-      /sections.*unsupported/i,
-    ],
-    [valid.replace("Z9\nA1", "Z9 Len=0 L=1n/\nA1"), /section.*unsupported/i],
-    [valid.replace("7 -0.5n", "absent -0.5n"), /unknown.*column/i],
-    [valid.replace("7 0.2n", "Z9 0.2n"), /upper triangle/i],
-    [valid.replace("7 -0.5n", "7 NA"), /numeric/i],
-    [valid.replace("7 -0.5n", "7 1e999"), /finite/i],
-    [valid.replace("7 -0.5n", "7 -0.5n\n7 1n"), /duplicate/i],
-    [valid.replace("[Bandwidth] 0", "[Bandwidth] 3"), /bandwidth/i],
-    [valid.replace("[Bandwidth] 0\n", ""), /Bandwidth/],
-    [valid.replace("4nH 1n", "4nH"), /expected.*entries/],
-    [
-      valid.replace(
-        "[Capacitance Matrix] Full_matrix",
-        "[Capacitance Matrix] Full_matrix\n[Bandwidth] 1",
-      ),
-      /Bandwidth/,
-    ],
-    [
-      valid.replace("[End Package Model]", "[End Package Model] extra"),
-      /unexpected data/,
-    ],
-    [valid.replace("[Row] A1\n3n", "[Row] Z9\n3n"), /row order/i],
-    [valid.replace("7 -0.5n", "7 -0.5n A1 1n"), /index.*value/i],
-    [valid + "\n" + valid, /duplicate.*package/i],
-  ] as const)
-    assert.throws(() => parsePackageModel(text, "Example package"), error)
+})
+
+test("requires OEM metadata", () => {
+  const text = valid.replace("[OEM] Example Packaging\n", "")
   assert.throws(
-    () => parsePackageModel(valid, "missing"),
+    () => parsePackageModel({ text, name: "Example package" }),
+    /OEM/,
+  )
+})
+
+test("requires the end of matrix data", () => {
+  const text = valid.replace("[End Model Data]", "")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /End Model Data/,
+  )
+})
+
+test("requires the end of a definition", () => {
+  const text = valid.replace("[End Package Model]", "")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /End Package Model/,
+  )
+})
+
+test("checks the declared pin count", () => {
+  const text = valid.replace("[Number Of Pins] 3", "[Number Of Pins] 4")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /pin count/i,
+  )
+})
+
+test("rejects distributed package sections", () => {
+  const text = valid.replace(
+    "[Pin Numbers]",
+    "[Number Of Sections] 1\n[Pin Numbers]",
+  )
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /sections.*unsupported/i,
+  )
+})
+
+test("rejects section syntax in pin lists", () => {
+  const text = valid.replace("Z9\nA1", "Z9 Len=0 L=1n/\nA1")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /section.*unsupported/i,
+  )
+})
+
+test("rejects unknown sparse columns", () => {
+  const text = valid.replace("7 -0.5n", "absent -0.5n")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /unknown.*column/i,
+  )
+})
+
+test("rejects lower-triangle entries", () => {
+  const text = valid.replace("7 0.2n", "Z9 0.2n")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /upper triangle/i,
+  )
+})
+
+test("rejects nonnumeric coefficients", () => {
+  const text = valid.replace("7 -0.5n", "7 NA")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /numeric/i,
+  )
+})
+
+test("rejects infinite coefficients", () => {
+  const text = valid.replace("7 -0.5n", "7 1e999")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /finite/i,
+  )
+})
+
+test("rejects duplicate sparse columns", () => {
+  const text = valid.replace("7 -0.5n", "7 -0.5n\n7 1n")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /duplicate/i,
+  )
+})
+
+test("rejects out-of-range bandwidth", () => {
+  const text = valid.replace("[Bandwidth] 0", "[Bandwidth] 3")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /bandwidth/i,
+  )
+})
+
+test("requires bandwidth on banded matrices", () => {
+  const text = valid.replace("[Bandwidth] 0\n", "")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /Bandwidth/,
+  )
+})
+
+test("rejects truncated full rows", () => {
+  const text = valid.replace("4nH 1n", "4nH")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /expected.*entries/,
+  )
+})
+
+test("rejects bandwidth on full matrices", () => {
+  const text = valid.replace(
+    "[Capacitance Matrix] Full_matrix",
+    "[Capacitance Matrix] Full_matrix\n[Bandwidth] 1",
+  )
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /Bandwidth/,
+  )
+})
+
+test("rejects data after the end marker", () => {
+  const text = valid.replace("[End Package Model]", "[End Package Model] extra")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /unexpected data/,
+  )
+})
+
+test("checks row order", () => {
+  const text = valid.replace("[Row] A1\n3n", "[Row] Z9\n3n")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /row order/i,
+  )
+})
+
+test("requires one sparse pair per line", () => {
+  const text = valid.replace("7 -0.5n", "7 -0.5n A1 1n")
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /index.*value/i,
+  )
+})
+
+test("rejects duplicate package definitions", () => {
+  const text = valid + "\n" + valid
+  assert.throws(
+    () => parsePackageModel({ text, name: "Example package" }),
+    /duplicate.*package/i,
+  )
+})
+
+test("requires the selected definition", () => {
+  assert.throws(
+    () => parsePackageModel({ text: valid, name: "missing" }),
     /missing.*scalar fallback is forbidden/i,
   )
+})
+
+test("wraps circular bands by pin order", () => {
   const five = ["z", "a", "9", "b", "0"]
   const ringRows = five
     .map((pin, i) => `[Row] ${pin}\n${i + 10} ${i + 1} ${i + 2}`)
     .join("\n")
   const ringBand = `Banded_matrix\n[Bandwidth] 2\n${ringRows}`
   const ringData = `[Inductance Matrix] ${ringBand}\n[Capacitance Matrix] ${ringBand}`
-  const ringModel = parsePackageModel(
-    fixture(ringData, five),
-    "Example package",
-  )
+  const ringModel = parsePackageModel({
+    text: fixture({ data: ringData, pins: five }),
+    name: "Example package",
+  })
   assert.deepEqual(ringModel.L, [
     [10, 1, 2, 5, 5],
     [1, 11, 2, 3, 6],

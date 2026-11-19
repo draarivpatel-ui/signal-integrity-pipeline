@@ -30,7 +30,13 @@ export function isLineBreak(char: string): boolean {
 }
 
 /** Find the next ECMAScript line terminator or the end of the source. */
-export function lineEnd(text: string, start: number): number {
+export function lineEnd({
+  text,
+  start,
+}: {
+  text: string
+  start: number
+}): number {
   let end = start
   while (end < text.length && !isLineBreak(text[end])) end++
   return end
@@ -45,14 +51,20 @@ export type TextRange = {
 /** Iterate lines with their offsets so callers can replace text without changing separators. */
 export function* lineRanges(text: string): IterableIterator<TextRange> {
   for (let start = 0; start < text.length; ) {
-    const end = lineEnd(text, start)
+    const end = lineEnd({ text, start })
     yield { start, end }
     start = end + 1
   }
 }
 
 /** Find the end of a run of non-whitespace characters. */
-export function tokenEnd(text: string, start: number): number {
+export function tokenEnd({
+  text,
+  start,
+}: {
+  text: string
+  start: number
+}): number {
   let end = start
   while (end < text.length && !isSpace(text[end])) end++
   return end
@@ -63,7 +75,7 @@ export function splitWords(text: string): string[] {
   const words: string[] = []
   let start = 0
   while (true) {
-    const end = tokenEnd(text, start)
+    const end = tokenEnd({ text, start })
     words.push(text.slice(start, end))
     if (end === text.length) return words
     start = end + 1
@@ -83,7 +95,7 @@ export function subcircuitHeader(
     if (!source.startsWith(`${directive} `, start)) continue
     const nameStart = start + directive.length + 1
     if (nameStart >= end) continue
-    const nameEnd = tokenEnd(source, nameStart)
+    const nameEnd = tokenEnd({ text: source, start: nameStart })
     if (nameEnd > nameStart)
       return [directive, source.slice(nameStart, nameEnd)]
   }

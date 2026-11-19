@@ -10,7 +10,7 @@ import {
 import { convertPackaged } from "../../src/buffers/package"
 import { splitWords, subcircuitHeader } from "../../src/buffers/text"
 
-import { Board, source } from "../support/coupled-package-fixture"
+import { Board, source } from "../fixtures/coupled-package"
 
 test("TSX coupled package replaces scalar values, preserves ideal die rails and realizes signed R/L/C", async () => {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })

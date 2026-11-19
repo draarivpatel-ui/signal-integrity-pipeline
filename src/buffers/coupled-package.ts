@@ -2,6 +2,10 @@ import type { IbisComponent } from "@tscircuit/ibis-to-spice"
 import { type SelectedPackageModel, selectPackageModel } from "./package-matrix"
 import { parsePackageModel } from "./package-model"
 
+/** A lumped pi section splits shunt capacitance between its two ends. */
+export const PACKAGE_SHUNT_COUNT = 2
+
+/** Reference roles that can share a vendor package bus. */
 type PackageRail = "pullup" | "pulldown"
 
 /** POWER and GND can share their package bus with a listed pin. */
@@ -12,6 +16,7 @@ export function packageRail(model: string): PackageRail | undefined {
   return undefined
 }
 
+/** Selected package matrices and aliases for physical pins sharing a package bus. */
 export interface CoupledPackageModel extends SelectedPackageModel {
   mergedPins: Record<string, string>
 }
@@ -45,10 +50,10 @@ export function coupledPackage({
 }: {
   text: string
   component: IbisComponent
-  pins: string[]
+  pins: SelectedPackageModel["pins"]
 }): CoupledPackageModel | undefined {
   if (component.coupledPackage === undefined) return undefined
-  const model = parsePackageModel(text, component.coupledPackage)
+  const model = parsePackageModel({ text, name: component.coupledPackage })
   const mergedPins: Record<string, string> = {}
   for (const pin of pins) {
     const physical = component.pins[pin]
@@ -76,14 +81,17 @@ export function coupledPackage({
         .filter((pin) => model.pins.includes(pin)),
     ),
   ]
-  return { ...selectPackageModel(model, selected), mergedPins }
+  return { ...selectPackageModel({ model, pins: selected }), mergedPins }
 }
 
 /** Report exact [Pin] self-term differences without substituting scalar package values. */
-export function packageComparisons(
-  component: IbisComponent,
-  selected: SelectedPackageModel,
-): string[] {
+export function packageComparisons({
+  component,
+  selected,
+}: {
+  component: IbisComponent
+  selected: SelectedPackageModel
+}): string[] {
   const { R, L, C } = selected.selfTerms
   const terms = [
     ["resistance", R],
@@ -141,7 +149,7 @@ export function coupledPackageElements({
       0,
     )
     if (reference > 0) {
-      const half = reference / 2
+      const half = reference / PACKAGE_SHUNT_COUNT
       elements.push(
         `CPKG${i}a ${terminals[i]} ${ground} ${half}`,
         `CPKG${i}b ${die[i]} ${ground} ${half}`,
@@ -152,7 +160,7 @@ export function coupledPackageElements({
         matrices.L[i][j] / Math.sqrt(matrices.L[i][i] * matrices.L[j][j])
       if (coupling !== 0)
         elements.push(`KPKG${i}_${j} LPKG${i} LPKG${j} ${coupling}`)
-      const capacitance = -matrices.C[i][j] / 2
+      const capacitance = -matrices.C[i][j] / PACKAGE_SHUNT_COUNT
       if (!(capacitance > 0)) continue
       elements.push(
         `CPKG${i}_${j}a ${terminals[i]} ${terminals[j]} ${capacitance}`,

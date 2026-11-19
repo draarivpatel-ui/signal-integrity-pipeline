@@ -13,6 +13,7 @@ import type {
   AdmittedBuffers,
   AssemblyEntry,
   CompiledBuffer,
+  CompiledBuffersByPlan,
   IbisSources,
   ModelRunDefinition,
   ModelSourceRequest,
@@ -32,7 +33,9 @@ export function admitBuffers({
   ibisSources: IbisSources
   scope: ArtifactScope
 }): Produced<AdmittedBuffers> {
-  const loaded = models.map((model) => loadModelSource(model, ibisSources))
+  const loaded = models.map((model) =>
+    loadModelSource({ model, sources: ibisSources }),
+  )
   const artifacts: Artifact[] = loaded.map((source) =>
     scope.text(source.evidence.ibsFile, source.text),
   )
@@ -49,9 +52,6 @@ export function admitBuffers({
   return { value, artifacts }
 }
 
-/** The compiled IBIS buffers for one experiment plan. */
-type CompiledBufferPlan = CompiledBuffer[]
-
 /**
  * Convert each plan's models (plan order, then model order), exactly as today: `define` builds the
  * converter input (simulation's modelRunDefinition), its source is pinned to the admitted bytes,
@@ -63,17 +63,21 @@ export function compileBuffers<
     ibis_component_name: string
   },
   P extends { readonly models: readonly M[] },
->(
-  admitted: AdmittedBuffers,
-  plans: readonly P[],
-  define: (model: M, plan: P) => ModelRunDefinition,
-): CompiledBufferPlan[] {
+>({
+  admitted,
+  plans,
+  define,
+}: {
+  admitted: AdmittedBuffers
+  plans: readonly P[]
+  define: (input: { model: M; plan: P }) => ModelRunDefinition
+}): CompiledBuffersByPlan {
   return plans.map((plan) =>
     plan.models.map((model) => {
       const index = admitted.models.findIndex(
         (selected) => selected.pipelineId === model.pipelineId,
       )
-      const input = define(model, plan)
+      const input = define({ model, plan })
       const source = admitted.sources[index]
       input.definition.source = {
         file: source.evidence.ibsFile,
@@ -93,10 +97,13 @@ export function compileBuffers<
 }
 
 /** One experiment's assembly evidence. Artifact: native-ibis-assembly.json under `experiment` (experiments/<id>). */
-export function ibisAssembly(
-  models: readonly CompiledBuffer[],
-  experiment: ArtifactScope,
-): Produced<AssemblyEntry[]> {
+export function ibisAssembly({
+  models,
+  experiment,
+}: {
+  models: readonly CompiledBuffer[]
+  experiment: ArtifactScope
+}): Produced<AssemblyEntry[]> {
   const assembly: AssemblyEntry[] = models.map((model) => ({
     simulationIbisModelId: model.pipelineId,
     definition: model.input.definition,

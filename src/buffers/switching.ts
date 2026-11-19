@@ -18,8 +18,20 @@ import {
 import { lineRanges, subcircuitHeader, tokenEnd } from "./text"
 import type { ModelRunDefinition, PackagedComponent } from "./types"
 
-type Weights = Array<[number, number, number]>
-type Edge = "rising" | "falling"
+/** Time in seconds and measured pullup and pulldown coefficients. */
+type Weights = Array<[seconds: number, pullup: number, pulldown: number]>
+
+/** Samples from a fixture at one selected IBIS corner. */
+type FixtureVoltageTable = Array<[seconds: number, voltage: number]>
+
+/** Time in seconds and a single measured switching coefficient. */
+type CoefficientSample = [seconds: number, coefficient: number]
+
+/** Measured transition direction in an IBIS waveform. */
+type Edge = IbisBuffer["waveforms"][number]["kind"]
+
+/** The extraction and settlement checks use the same two measured fixtures. */
+const WAVEFORM_FIXTURE_COUNT = 2
 /** A tail is settled within 1% of the fixture swing and within 0.01 in switching coefficient. */
 const SETTLED_TOLERANCE = 0.01
 /** The first 20 characters of the content hash identify an IBIS subcircuit. */
@@ -53,19 +65,31 @@ export interface SwitchingTail {
 }
 
 /** Earliest sample whose entire suffix stays in tolerance; a late excursion resets the window. */
-function settledIndex(deviations: number[], limit: number): number {
+function settledIndex({
+  deviations,
+  limit,
+}: {
+  deviations: number[]
+  limit: number
+}): number {
   let index = deviations.length
   while (index > 0 && deviations[index - 1] <= limit) index--
   return index
 }
 
 /** Measure a fixture's largest remaining deviation from its final voltage. */
-function fixtureDeviation(table: [number, number][], time: number): number {
+function fixtureDeviation({
+  table,
+  timeSeconds,
+}: {
+  table: FixtureVoltageTable
+  timeSeconds: number
+}): number {
   const final = table.at(-1)![1]
   const remaining = table
-    .filter(([sampleTime]) => sampleTime >= time)
+    .filter(([sampleTime]) => sampleTime >= timeSeconds)
     .map(([, voltage]) => voltage)
-  const voltages = [interpolate(table, time), ...remaining]
+  const voltages = [interpolate(table, timeSeconds), ...remaining]
   return Math.max(...voltages.map((voltage) => Math.abs(voltage - final)))
 }
 
@@ -88,30 +112,30 @@ function settledTail({
   const deviations = weights.map((row) =>
     Math.max(Math.abs(row[1] - pullup), Math.abs(row[2] - pulldown)),
   )
-  const index = settledIndex(deviations, SETTLED_TOLERANCE)
+  const index = settledIndex({ deviations, limit: SETTLED_TOLERANCE })
   if (index === weights.length) return undefined
-  let time = weights[index][0]
+  let timeSeconds = weights[index][0]
   const waves = buffer.waveforms
     .filter((wave) => wave.kind === edge)
-    .slice(0, 2)
+    .slice(0, WAVEFORM_FIXTURE_COUNT)
   const tables = waves.map((wave) =>
-    wave.data.map(([time, ...voltages]): [number, number] => [
-      time,
+    wave.data.map(([seconds, ...voltages]): FixtureVoltageTable[number] => [
+      seconds,
       cornerValue(voltages, corner, edge),
     ]),
   )
   for (const table of tables) {
     const final = table.at(-1)![1]
     const limit = SETTLED_TOLERANCE * Math.abs(final - table[0][1])
-    const start = settledIndex(
-      table.map((row) => Math.abs(row[1] - final)),
+    const start = settledIndex({
+      deviations: table.map((row) => Math.abs(row[1] - final)),
       limit,
-    )
-    time = Math.max(time, table[start][0])
+    })
+    timeSeconds = Math.max(timeSeconds, table[start][0])
   }
-  const cut = weights.findIndex((row) => row[0] >= time)
+  const cut = weights.findIndex((row) => row[0] >= timeSeconds)
   if (cut < 0) return undefined
-  const [retainedTime, heldPullup, heldPulldown] = weights[cut]
+  const [retainedDurationSeconds, heldPullup, heldPulldown] = weights[cut]
   const holdErrors = weights
     .slice(cut)
     .flatMap(([, pullup, pulldown]) => [
@@ -123,7 +147,7 @@ function settledTail({
     model: buffer.name,
     edge,
     originalDurationSeconds: weights.at(-1)![0],
-    retainedDurationSeconds: retainedTime,
+    retainedDurationSeconds,
     coefficientTolerance: SETTLED_TOLERANCE,
     maxCoefficientDeviation: Math.max(...deviations.slice(cut)),
     maxCoefficientHoldError: Math.max(...holdErrors),
@@ -132,7 +156,10 @@ function settledTail({
       voltage: cornerValue(waves[i].fixtureVoltage, corner, "V_fixture"),
       toleranceVolts:
         SETTLED_TOLERANCE * Math.abs(table.at(-1)![1] - table[0][1]),
-      maxDeviationVolts: fixtureDeviation(table, retainedTime),
+      maxDeviationVolts: fixtureDeviation({
+        table,
+        timeSeconds: retainedDurationSeconds,
+      }),
     })),
   }
 }
@@ -172,8 +199,11 @@ function scheduleWeights({
         "Switching waveform must start at zero relative time",
       )
     }
-    const next = schedule.transitions[i + 1]?.time
-    if (next !== undefined && transition.time + weights.at(-1)![0] >= next) {
+    const nextSeconds = schedule.transitions[i + 1]?.time
+    if (
+      nextSeconds !== undefined &&
+      transition.time + weights.at(-1)![0] >= nextSeconds
+    ) {
       const tail = settledTail({
         buffer,
         corner,
@@ -181,7 +211,10 @@ function scheduleWeights({
         weights,
         physicalPin,
       })
-      if (!tail || transition.time + tail.retainedDurationSeconds > next) {
+      if (
+        !tail ||
+        transition.time + tail.retainedDurationSeconds > nextSeconds
+      ) {
         const detail =
           "has not settled before the next edge (1% fixture swing and 0.01 switching-coefficient tolerances)"
         const reason = "active-transition interruption is unsupported"
@@ -202,23 +235,24 @@ function scheduleWeights({
     // first row (extraction residue up to the settled tolerance) forces sub-fs steps.
     const last = samples.at(-1)!
     weights = [[0, last[1], last[2]], ...weights.slice(1)]
-    for (const [time, ku, kd] of weights) {
-      const absolute = transition.time + time
-      if (absolute > schedule.duration) break
-      if (absolute === samples.at(-1)![0]) samples.pop()
-      samples.push([absolute, ku, kd])
+    for (const [seconds, ku, kd] of weights) {
+      const absoluteSeconds = transition.time + seconds
+      if (absoluteSeconds > schedule.duration) break
+      if (absoluteSeconds === samples.at(-1)![0]) samples.pop()
+      samples.push([absoluteSeconds, ku, kd])
     }
     if (transition.time + weights.at(-1)![0] > schedule.duration) {
-      const time = schedule.duration - transition.time
-      const pullup = weights.map(([time, ku]): [number, number] => [time, ku])
-      const pulldown = weights.map(([time, , kd]): [number, number] => [
-        time,
-        kd,
-      ])
+      const timeSeconds = schedule.duration - transition.time
+      const pullup = weights.map(
+        ([seconds, ku]): CoefficientSample => [seconds, ku],
+      )
+      const pulldown = weights.map(
+        ([seconds, , kd]): CoefficientSample => [seconds, kd],
+      )
       samples.push([
         schedule.duration,
-        interpolate(pullup, time),
-        interpolate(pulldown, time),
+        interpolate(pullup, timeSeconds),
+        interpolate(pulldown, timeSeconds),
       ])
     }
   }
@@ -229,13 +263,19 @@ function scheduleWeights({
 }
 
 /** Read the two nodes of a generated PWL voltage line. */
-function pwlNodes(line: string, voltage: string): string | undefined {
+function pwlNodes({
+  line,
+  voltage,
+}: {
+  line: string
+  voltage: string
+}): string | undefined {
   if (!line.startsWith(`${voltage} `) || !line.endsWith(")")) return undefined
   const first = voltage.length + 1
-  const firstEnd = tokenEnd(line, first)
+  const firstEnd = tokenEnd({ text: line, start: first })
   if (firstEnd === first || line[firstEnd] !== " ") return undefined
   const second = firstEnd + 1
-  const secondEnd = tokenEnd(line, second)
+  const secondEnd = tokenEnd({ text: line, start: second })
   if (secondEnd === second || !line.startsWith(" PWL(", secondEnd))
     return undefined
   return line.slice(first, secondEnd)
@@ -254,7 +294,7 @@ function replacePwl({
   column: 1 | 2
 }): string {
   for (const { start, end } of lineRanges(source)) {
-    const nodes = pwlNodes(source.slice(start, end), voltage)
+    const nodes = pwlNodes({ line: source.slice(start, end), voltage })
     if (nodes === undefined) continue
     const points = samples
       .map((row) => `${spiceNumber(row[0])} ${spiceNumber(row[column])}`)

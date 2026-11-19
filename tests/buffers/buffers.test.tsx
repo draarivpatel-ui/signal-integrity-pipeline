@@ -5,8 +5,8 @@ import React from "react"
 import { admitBuffers, compileBuffers } from "../../src/buffers"
 import { rootScope, sha256 } from "../../src/kernel"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
-import { admittedBindings, renderSignals } from "../support/signal-render"
-import Single from "../support/unit-single-ended"
+import { admittedBindings, renderSignals } from "../fixtures/signal-render"
+import Single from "../fixtures/unit-single-ended"
 
 const modelDir = process.env.IBIS_MODEL_DIR
 
@@ -15,7 +15,10 @@ const description =
 test.skipIf(!modelDir)(description, async () => {
   const bytes = await readFile(`${modelDir}/sn74lvc1g04.ibs`)
   const ibis = { "models/sn74lvc1g04.ibs": bytes }
-  const bindings = admittedBindings(await renderSignals(<Single />), ibis)
+  const bindings = admittedBindings({
+    circuitJson: await renderSignals({ tree: <Single /> }),
+    ibisSources: ibis,
+  })
   const declarations = generalDeclarations({
     circuit: bindings.circuitJson,
     mappings: bindings.mappings,
@@ -27,11 +30,11 @@ test.skipIf(!modelDir)(description, async () => {
     ibisSources: ibis,
     scope: rootScope("buffers"),
   })
-  const compiled = compileBuffers(
-    admitted.value,
-    declarations.plans,
-    modelRunDefinition,
-  )
+  const compiled = compileBuffers({
+    admitted: admitted.value,
+    plans: declarations.plans,
+    define: modelRunDefinition,
+  })
   for (const model of compiled[0]) {
     assert.equal(model.sourceEvidence.sourceSha256, sha256(bytes))
     assert.equal(model.metadata.packagePolicy, "vendor")

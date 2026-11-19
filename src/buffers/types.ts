@@ -57,6 +57,9 @@ export interface AdmittedBuffers {
   readonly sources: readonly LoadedModelSource[]
 }
 
+/** Compiled buffers grouped by experiment, in plan and model order. */
+export type CompiledBuffersByPlan = CompiledBuffer[][]
+
 /** Today's per-plan compiled model: the converter result plus pipeline identity and inputs. */
 export type CompiledBuffer = PackagedComponent & {
   name: string

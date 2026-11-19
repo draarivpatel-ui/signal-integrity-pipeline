@@ -6,23 +6,35 @@ import React from "react"
 import { convertPackaged } from "../../src/buffers/package"
 import { isDigit, lineRanges } from "../../src/buffers/text"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
-import { admittedBindings, renderSignals } from "../support/signal-render"
-import Differential from "../support/unit-differential"
-import Single from "../support/unit-single-ended"
+import { admittedBindings, renderSignals } from "../fixtures/signal-render"
+import Differential from "../fixtures/unit-differential"
+import Single from "../fixtures/unit-single-ended"
 
 const DEFAULT_DIFFERENTIAL_FIXTURE = false
 
 const modelDir = process.env.IBIS_MODEL_DIR
 
 /** Read the netlist lines with any of the requested element prefixes. */
-function sourceLines(source: string, prefixes: string[]): string[] {
+function sourceLines({
+  source,
+  prefixes,
+}: {
+  source: string
+  prefixes: string[]
+}): string[] {
   return Array.from(lineRanges(source), ({ start, end }) =>
     source.slice(start, end),
   ).filter((line) => prefixes.some((prefix) => line.startsWith(prefix)))
 }
 
 /** Recover original terminal names to compare the unchanged die buffer and drive tables. */
-function normalizeNodes(line: string, terminals: string[]): string {
+function normalizeNodes({
+  line,
+  terminals,
+}: {
+  line: string
+  terminals: string[]
+}): string {
   let result = ""
   for (let start = 0; start < line.length; ) {
     let digits = start
@@ -82,8 +94,9 @@ async function fixture(
     board = <Differential />
   }
   const bytes = await readFile(`${modelDir}/${file}`)
-  const bindings = admittedBindings(await renderSignals(board), {
-    [`models/${file}`]: bytes,
+  const bindings = admittedBindings({
+    circuitJson: await renderSignals({ tree: board }),
+    ibisSources: { [`models/${file}`]: bytes },
   })
   const declarations = generalDeclarations({
     circuit: bindings.circuitJson,
@@ -101,7 +114,7 @@ test.skipIf(!modelDir)(
       const { bytes, declarations } = await fixture(differential)
       const document = parseIbis(new TextDecoder().decode(bytes))
       for (const model of declarations.models) {
-        const input = modelRunDefinition(model, declarations.plans[0])
+        const input = modelRunDefinition({ model, plan: declarations.plans[0] })
         const converted = convertPackaged({ bytes, input })
         const die = convertIbisModelToSpice(
           bytes,
@@ -143,15 +156,23 @@ test.skipIf(!modelDir)(
         }
         // Renaming only package nodes must preserve the converter's rail references and KU/KD.
         const terminals = Object.keys(converted.spicePinMapping)
-        const buffers = sourceLines(converted.source, ["XBUF"]).map((line) =>
-          normalizeNodes(line, terminals),
+        const buffers = sourceLines({
+          source: converted.source,
+          prefixes: ["XBUF"],
+        }).map((line) => normalizeNodes({ line, terminals }))
+        assert.deepEqual(
+          buffers,
+          sourceLines({ source: die.source, prefixes: ["XBUF"] }),
         )
-        assert.deepEqual(buffers, sourceLines(die.source, ["XBUF"]))
         const drive = ["VKU", "VKD"]
-        const driveTables = sourceLines(converted.source, drive).map((line) =>
-          normalizeNodes(line, terminals),
+        const driveTables = sourceLines({
+          source: converted.source,
+          prefixes: drive,
+        }).map((line) => normalizeNodes({ line, terminals }))
+        assert.deepEqual(
+          driveTables,
+          sourceLines({ source: die.source, prefixes: drive }).map(held),
         )
-        assert.deepEqual(driveTables, sourceLines(die.source, drive).map(held))
         assert.deepEqual(converted.metadata.omissions, [])
       }
     }

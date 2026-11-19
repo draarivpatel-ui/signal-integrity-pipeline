@@ -19,11 +19,16 @@ const LINE_FEED = "\n"
 const DEFAULT_COMMENT = "|"
 /** Suffix immediately following the marker in a [Comment Char] declaration. */
 const COMMENT_CHAR_SUFFIX = "_char"
+/** End offset of a one-character marker and its suffix. */
 const COMMENT_CHAR_END = 1 + COMMENT_CHAR_SUFFIX.length
-/** IBIS length limits on package names, text metadata, and physical pin names. */
+/** IBIS maximum length for a package name, manufacturer, or OEM. */
 const PACKAGE_NAME_LIMIT = 40
+/** IBIS maximum length for the package description. */
 const DESCRIPTION_LIMIT = 59
+/** IBIS maximum length for a physical pin name. */
 const PACKAGE_PIN_LIMIT = 5
+/** Sparse rows store one column pin and one coefficient per line. */
+const SPARSE_ENTRY_FIELDS = 2
 /** IBIS matrix multipliers, case-sensitive and independent of the trailing unit. */
 const MATRIX_SCALES: Record<string, number> = {
   T: 1e12,
@@ -44,55 +49,54 @@ export interface PackageModel {
   oem: string
   description: string
   pins: string[]
-  R: number[][]
-  L: number[][]
-  C: number[][]
+  R: Matrix
+  L: Matrix
+  C: Matrix
 }
 
+/** A package marker and data lines up to the next marker. */
 interface Section {
   key: string
   argument: string
   lines: string[]
 }
 
+/** A package marker and its optional argument. */
+type SectionHeader = Pick<Section, "key" | "argument">
+
 /** An IBIS package marker, its argument and the offsets of its source line. */
-type PackageHeader = Pick<Section, "key" | "argument"> & TextRange
+type PackageHeader = SectionHeader & TextRange
 
 /** Scan just the package definition markers and global comment declarations. */
 function* packageHeaders(text: string): IterableIterator<PackageHeader> {
   for (let start = 0; start < text.length; ) {
-    let end = lineEnd(text, start)
-    let open = start
-    while (HEADER_SPACING.includes(text[open])) open++
-    if (text[open] === "[") {
-      const header = text.slice(open + 1, end)
-      const close = header.indexOf("]")
-      if (close >= 0) {
-        const key = asciiLowerCase(header.slice(0, close)).replaceAll("_", " ")
-        if (
-          key === "define package model" ||
-          key === "end package model" ||
-          key === "comment char"
-        ) {
-          let argument = open + close + 2
-          while (HEADER_SPACING.includes(text[argument])) argument++
-          // Marker arguments end at CR or LF, even when they contain a Unicode line separator.
-          while (
-            end < text.length &&
-            text[end] !== CARRIAGE_RETURN &&
-            text[end] !== LINE_FEED
-          )
-            end++
-          yield {
-            key,
-            argument: text.slice(argument, end),
-            start,
-            end,
-          }
-        }
-      }
-    }
+    const lineStart = start
+    let end = lineEnd({ text, start })
     start = end + 1
+    let open = lineStart
+    while (HEADER_SPACING.includes(text[open])) open++
+    if (text[open] !== "[") continue
+    const header = text.slice(open + 1, end)
+    const close = header.indexOf("]")
+    if (close < 0) continue
+    const key = asciiLowerCase(header.slice(0, close)).replaceAll("_", " ")
+    if (
+      key !== "define package model" &&
+      key !== "end package model" &&
+      key !== "comment char"
+    )
+      continue
+    let argument = open + close + 2
+    while (HEADER_SPACING.includes(text[argument])) argument++
+    // Marker arguments end at CR or LF, even when they contain a Unicode line separator.
+    while (
+      end < text.length &&
+      text[end] !== CARRIAGE_RETURN &&
+      text[end] !== LINE_FEED
+    )
+      end++
+    start = end + 1
+    yield { key, argument: text.slice(argument, end), start: lineStart, end }
   }
 }
 
@@ -105,14 +109,13 @@ function commentCharacter(argument: string): string | undefined {
 }
 
 /** Read a selected definition's section header and optional argument. */
-function sectionHeader(
-  line: string,
-): Pick<Section, "key" | "argument"> | undefined {
+function sectionHeader(line: string): SectionHeader | undefined {
   if (!line.startsWith("[")) return undefined
   const close = line.indexOf("]")
   if (close <= 1) return undefined
   const argument = line.slice(close + 1).trimStart()
-  if (lineEnd(argument, 0) !== argument.length) return undefined
+  if (lineEnd({ text: argument, start: 0 }) !== argument.length)
+    return undefined
   const key = line.slice(1, close).toLowerCase().replaceAll("_", " ")
   return { key, argument }
 }
@@ -125,7 +128,13 @@ function isUnsignedInteger(text: string): boolean {
 }
 
 /** Read the named local definition without splitting a large vendor file into lines. */
-export function parsePackageModel(text: string, name: string): PackageModel {
+export function parsePackageModel({
+  text,
+  name,
+}: {
+  text: string
+  name: string
+}): PackageModel {
   let body: string | undefined
   let active: string | undefined
   let start = 0
@@ -328,7 +337,13 @@ export function parsePackageModel(text: string, name: string): PackageModel {
 }
 
 /** Require a finite standard IBIS number; suffix characters after the scale denote units. */
-function matrixNumber(token: string, label: string): number {
+function matrixNumber({
+  token,
+  label,
+}: {
+  token: string
+  label: string
+}): number {
   let end = 0
   if (token[end] === "+" || token[end] === "-") end++
   const start = end
@@ -370,7 +385,7 @@ function parseMatrix({
   label,
 }: {
   sections: Section[]
-  pins: string[]
+  pins: PackageModel["pins"]
   label: string
 }): Matrix {
   const format = sections[0].argument.toLowerCase()
@@ -413,7 +428,7 @@ function parseMatrix({
       const seen = new Set<number>()
       for (const line of rows[i].lines) {
         const tokens = splitWords(line)
-        if (tokens.length !== 2) {
+        if (tokens.length !== SPARSE_ENTRY_FIELDS) {
           throw new Error(
             `${label} ${pins[i]}: each sparse (index, value) pair needs its own line`,
           )
@@ -428,7 +443,7 @@ function parseMatrix({
         if (seen.has(j))
           throw new Error(`${label}: duplicate sparse column ${tokens[0]}`)
         seen.add(j)
-        const value = matrixNumber(tokens[1], label)
+        const value = matrixNumber({ token: tokens[1], label })
         matrix[j][i] = value
         matrix[i][j] = value
       }
@@ -445,7 +460,7 @@ function parseMatrix({
     }
     for (let k = 0; k < count; k++) {
       const j = (i + k) % pins.length
-      const value = matrixNumber(values[i][k], label)
+      const value = matrixNumber({ token: values[i][k], label })
       matrix[j][i] = value
       matrix[i][j] = value
     }

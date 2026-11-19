@@ -4,7 +4,7 @@ import { Circuit } from "@tscircuit/core"
 import React from "react"
 import { convertPackaged } from "../../src/buffers/package"
 import { sha256 } from "../../src/kernel"
-import { Board, source } from "./coupled-package-fixture"
+import { Board, source } from "../fixtures/coupled-package"
 
 afterEach(() => mock.restore())
 

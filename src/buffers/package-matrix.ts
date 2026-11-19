@@ -4,21 +4,25 @@ import type { PackageModel } from "./package-model"
 /** Threshold for near-zero pivots in the scale-normalized LDL factorization. */
 const PIVOT_TOLERANCE = 1e-12
 
-export interface SelectedPackageModel {
-  pins: string[]
-  unusedPins: string[]
-  R: number[][]
-  L: number[][]
-  C: number[][]
-  selfTerms: {
-    R: number[]
-    L: number[]
-    C: number[]
-  }
-  capacitanceSignCorrection?: {
-    packageModel: string
-    negatedEntries: number
-  }
+/** Original diagonal terms for the selected physical pins. */
+interface PackageSelfTerms {
+  R: number[]
+  L: number[]
+  C: number[]
+}
+
+/** Evidence for conversion from vendor pair magnitudes to Maxwell capacitance. */
+interface CapacitanceSignCorrection {
+  packageModel: PackageModel["name"]
+  negatedEntries: number
+}
+
+/** Reduced package matrices and the original data needed to explain their construction. */
+export interface SelectedPackageModel
+  extends Pick<PackageModel, "pins" | "R" | "L" | "C"> {
+  unusedPins: PackageModel["pins"]
+  selfTerms: PackageSelfTerms
+  capacitanceSignCorrection?: CapacitanceSignCorrection
 }
 
 /** Scale-normalized LDL factorization: L/C must be definite, R may be semidefinite. */
@@ -71,7 +75,13 @@ function checkPositive({
 }
 
 /** Reject sign conventions that cannot be realized with passive pair/reference capacitors. */
-function checkCapacitance(matrix: Matrix, label: string): void {
+function checkCapacitance({
+  matrix,
+  label,
+}: {
+  matrix: Matrix
+  label: string
+}): void {
   for (let i = 0; i < matrix.length; i++) {
     const row = matrix[i]
     if (row.some((capacitance, j) => i !== j && capacitance > 0)) {
@@ -94,10 +104,13 @@ function checkCapacitance(matrix: Matrix, label: string): void {
  * electrostatic conductors (zero incremental charge) by Schur reduction of C.
  * External loads, switching and resonant circulating currents on unused pins are neglected.
  */
-export function selectPackageModel(
-  model: PackageModel,
-  pins: string[],
-): SelectedPackageModel {
+export function selectPackageModel({
+  model,
+  pins,
+}: {
+  model: PackageModel
+  pins: PackageModel["pins"]
+}): SelectedPackageModel {
   if (new Set(pins).size !== pins.length)
     throw new Error(`${model.name}: distinct selected package pins required`)
   const indices = pins.map((pin) => {
@@ -140,7 +153,7 @@ export function selectPackageModel(
     }),
   )
   checkPositive({ matrix: C, label: `${model.name} capacitance`, strict: true })
-  checkCapacitance(C, model.name)
+  checkCapacitance({ matrix: C, label: model.name })
   const unused = model.pins.map((_, i) => i).filter((i) => !indices.includes(i))
   const work = C.map((row) => [...row])
   let active = model.pins.map((_, i) => i)
@@ -152,7 +165,7 @@ export function selectPackageModel(
       }
     }
   }
-  const selected = {
+  const selected: SelectedPackageModel = {
     pins,
     unusedPins: unused.map((i) => model.pins[i]),
     R: indices.map((i) => indices.map((j) => model.R[i][j])),
@@ -174,13 +187,11 @@ export function selectPackageModel(
     label: `${model.name} extracted capacitance`,
     strict: true,
   })
-  checkCapacitance(selected.C, `${model.name} extracted`)
-  if (!correct) return selected
-  return {
-    ...selected,
-    capacitanceSignCorrection: {
+  checkCapacitance({ matrix: selected.C, label: `${model.name} extracted` })
+  if (correct)
+    selected.capacitanceSignCorrection = {
       packageModel: model.name,
       negatedEntries: offDiagonal.length,
-    },
-  }
+    }
+  return selected
 }
