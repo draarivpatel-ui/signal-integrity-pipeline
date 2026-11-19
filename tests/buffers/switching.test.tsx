@@ -636,7 +636,7 @@ test.skipIf(skipReplay)(fixtureReplay, async () => {
     const text = texts.get(replay.file)!
     const document = documents.get(replay.file)!
     const buffer = document.getBuffer(replay.model)
-    const rails = referenceVoltages(buffer)
+    const rails = referenceVoltages({ buffer })
     const oneSupply = rails.pullup === rails.powerClamp
     const commonGround = rails.pulldown === 0 && rails.groundClamp === 0
     if (buffer.polarity === "inverting" || !oneSupply || !commonGround) {
