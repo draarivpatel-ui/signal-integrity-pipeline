@@ -1,3 +1,4 @@
+/* eslint-disable local/max-file-lines -- The CLI keeps dictionary parsing and scoring together. */
 /**
  * pnpm check:vocabulary [--json] [--root <dir>]
  * Measures how many of the names declared in src/ are built only from words in tools/vocabulary.yaml.
@@ -107,14 +108,44 @@ function readList(body: string): string[] | undefined {
   const words: string[] = []
   let word = ''
   for (const char of text) {
-    if (!isSpace(char)) word += char
-    else if (word) {
+    if (!isSpace(char)) {
+      word += char
+      continue
+    }
+    if (word) {
       words.push(word)
       word = ''
     }
   }
   if (word) words.push(word)
   return words
+}
+
+/** Where a word first appeared in the dictionary. */
+interface WordLocation {
+  line: number
+  section: Section
+}
+
+/** Records a well-formed dictionary word, rejecting duplicates across all sections. */
+function claimWord({ word, line, section, seen }: {
+  word: string
+  line: number
+  section: Section
+  seen: Map<string, WordLocation>
+}): void {
+  if (!isWord(word)) {
+    const description = 'lowercase letters and digits, starting with a letter'
+    throw new VocabularyError(line, `"${word}" is not a valid word (${description})`)
+  }
+  const before = seen.get(word)
+  if (!before) {
+    seen.set(word, { line, section })
+    return
+  }
+  let where = `already listed in ${section}`
+  if (before.section !== section) where = `already listed in ${before.section}; a word belongs to one section`
+  throw new VocabularyError(line, `"${word}" is ${where} (line ${before.line})`)
 }
 
 /**
@@ -130,29 +161,13 @@ export function parseVocabulary(text: string): Vocabulary {
     abbreviations: new Map(),
     avoid: new Map(),
   }
-  const seen = new Map<string, {
-    line: number
-    section: Section
-  }>()
+  const seen = new Map<string, WordLocation>()
   const sectionsSeen = new Set<string>()
   let section: Section | undefined
-  /** Checks a word's spelling and that it appears only once in the whole file, then records where it was found. */
-  const claim = (word: string, line: number, into: Section): void => {
-    if (!isWord(word)) {
-      const description = 'lowercase letters and digits, starting with a letter'
-      throw new VocabularyError(line, `"${word}" is not a valid word (${description})`)
-    }
-    const before = seen.get(word)
-    if (before) {
-      let where = `already listed in ${into}`
-      if (before.section !== into) where = `already listed in ${before.section}; a word belongs to one section`
-      throw new VocabularyError(line, `"${word}" is ${where} (line ${before.line})`)
-    }
-    seen.set(word, { line, section: into })
-  }
   const lines = text.split('\n')
   lines.forEach((piece, i) => {
-    const raw = i < lines.length - 1 && piece.endsWith('\r') ? piece.slice(0, -1) : piece
+    let raw = piece
+    if (i < lines.length - 1 && piece.endsWith('\r')) raw = piece.slice(0, -1)
     const line = i + 1
     let indent = 0
     while (raw[indent] === ' ') indent++
@@ -193,7 +208,7 @@ export function parseVocabulary(text: string): Vocabulary {
       const list = readList(body)
       if (!list) throw new VocabularyError(line, `general entries are lists of words: "- word word ...", got "${body}"`)
       for (const word of list) {
-        claim(word, line, 'general')
+        claimWord({ word, line, section, seen })
         vocab.general.add(word)
       }
       return
@@ -204,7 +219,7 @@ export function parseVocabulary(text: string): Vocabulary {
     if (section === 'abbreviations') need = 'its expansion'
     if (!entry) throw new VocabularyError(line, `${section} entries look like "word: ${need}", got "${body}"`)
     const [word, value] = entry
-    claim(word, line, section)
+    claimWord({ word, line, section, seen })
     if (!value) throw new VocabularyError(line, `"${word}" in ${section} needs ${need}`)
     vocab[section].set(word, value)
   })
@@ -227,24 +242,31 @@ export function avoidHint(word: string, vocab: Vocabulary): string | undefined {
 }
 
 /** Removes `suffix` from the word and appends `add`, when the word ends with it and a letter stays. */
-function strip(word: string, suffix: string, add: string = ''): string[] {
-  return word.length > suffix.length && word.endsWith(suffix) ? [word.slice(0, -suffix.length) + add] : []
+function strip({ word, suffix, replacement: add = '' }: {
+  word: string
+  suffix: string
+  replacement?: string
+}): string[] {
+  if (word.length <= suffix.length || !word.endsWith(suffix)) return []
+  return [word.slice(0, -suffix.length) + add]
 }
 
 /** Plural stems: -ies → -y, -es → '', -s → '' (not after "ss"). */
 function pluralStems(word: string): string[] {
-  return [...strip(word, 'ies', 'y'), ...strip(word, 'es'), ...(word.endsWith('ss') ? [] : strip(word, 's'))]
+  const stems = [...strip({ word, suffix: 'ies', replacement: 'y' }), ...strip({ word, suffix: 'es' })]
+  if (!word.endsWith('ss')) stems.push(...strip({ word, suffix: 's' }))
+  return stems
 }
 
 /** Verb and adverb stems: -ed / -ing / -er → '' and → -e, undoing a doubled final consonant; -ly → ''. */
 function formStems(word: string): string[] {
   const out: string[] = []
-  for (const suffix of ['ed', 'ing', 'er']) for (const stem of strip(word, suffix)) {
+  for (const suffix of ['ed', 'ing', 'er']) for (const stem of strip({ word, suffix })) {
     out.push(stem, stem + 'e')
     const last = stem.at(-1) ?? ''
     if (stem.length >= 3 && last === stem.at(-2) && !VOWELS.includes(last)) out.push(stem.slice(0, -1))
   }
-  return [...out, ...strip(word, 'ly')]
+  return [...out, ...strip({ word, suffix: 'ly' })]
 }
 
 /**
@@ -274,9 +296,10 @@ export function splitWords(name: string): string[] {
   while (start < name.length) {
     let end = start
     while (isUppercase(name[end] ?? '')) end++
-    if (isLowercase(name[end] ?? '')) {
-      if (end - start > 1) end--
-      else while (isLowercase(name[end] ?? '')) end++
+    if (isLowercase(name[end] ?? '') && end - start > 1) {
+      end--
+    } else {
+      while (isLowercase(name[end] ?? '')) end++
     }
     if (end === start) {
       start++
@@ -325,12 +348,12 @@ function exportedNames(sf: ts.SourceFile): Set<ExportedName> {
       continue
     }
     if (!hasExport(s)) continue
-    if (ts.isVariableStatement(s)) for (const d of s.declarationList.declarations) bindingNames(d.name).forEach(
-      n => out.add(n),
-    )
-    else if (ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s) || ts.isInterfaceDeclaration(
-      s,
-    ) || ts.isTypeAliasDeclaration(s) || ts.isEnumDeclaration(s) || ts.isModuleDeclaration(s)) {
+    if (ts.isVariableStatement(s)) {
+      for (const d of s.declarationList.declarations) bindingNames(d.name).forEach(n => out.add(n))
+      continue
+    }
+    if (ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s) || ts.isInterfaceDeclaration(s) ||
+      ts.isTypeAliasDeclaration(s) || ts.isEnumDeclaration(s) || ts.isModuleDeclaration(s)) {
       const n = nameText(s.name)
       if (n !== undefined) out.add(n)
     }
@@ -349,9 +372,10 @@ function declaredName(n: ts.Node): string | undefined {
   ) || ts.isFunctionExpression(n) || ts.isClassDeclaration(n) || ts.isClassExpression(n) ||
     ts.isInterfaceDeclaration(n) || ts.isTypeAliasDeclaration(n) || ts.isEnumDeclaration(n) || ts.isEnumMember(n) ||
     ts.isTypeParameterDeclaration(n) || ts.isModuleDeclaration(n)) return nameText(n.name)
-  if (ts.isVariableDeclaration(n) || ts.isParameter(n) || ts.isBindingElement(n)) return ts.isIdentifier(
-    n.name,
-  ) ? n.name.text : undefined
+  if (ts.isVariableDeclaration(n) || ts.isParameter(n) || ts.isBindingElement(n)) {
+    if (ts.isIdentifier(n.name)) return n.name.text
+    return undefined
+  }
   if ((ts.isPropertySignature(
     n,
   ) || ts.isMethodSignature(n) || ts.isPropertyDeclaration(n) || ts.isMethodDeclaration(n) ||
@@ -362,21 +386,28 @@ function declaredName(n: ts.Node): string | undefined {
 /** True for names that are never counted: one character, `this`, or no letters at all. */
 const skipped = (name: string): boolean => name.length < 2 || name === 'this' || splitWords(name).length === 0
 
+/** Records each declaration once, then visits its children. */
+function collectDeclaredNames({ node, exported, found }: {
+  node: ts.Node
+  exported: ReadonlySet<ExportedName>
+  found: Map<string, CollectedName>
+}): void {
+  const name = declaredName(node)
+  if (name !== undefined && !skipped(name) && !found.has(name)) {
+    found.set(name, { name, exported: exported.has(name) })
+  }
+  ts.forEachChild(node, child => collectDeclaredNames({ node: child, exported, found }))
+}
+
 /** The distinct names a file declares (see the header for what counts), in first-seen order. */
-export function collectNames(file: string, text: string): CollectedName[] {
+export function collectNames({ file, text }: {
+  file: string
+  text: string
+}): CollectedName[] {
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)
   const exported = exportedNames(sf)
   const found = new Map<string, CollectedName>()
-  /** Records the declared name of a node, then visits its children. */
-  const visit = (n: ts.Node): void => {
-    const name = declaredName(n)
-    if (name !== undefined && !skipped(name) && !found.has(name)) found.set(name, {
-      name,
-      exported: exported.has(name),
-    })
-    ts.forEachChild(n, visit)
-  }
-  visit(sf)
+  collectDeclaredNames({ node: sf, exported, found })
   return [...found.values()]
 }
 
@@ -419,7 +450,11 @@ const percent = (good: number, all: number): number => all === 0 ? 100 : good / 
  * Unknown words are ranked by how many distinct names contain them (desc), then alphabetically;
  * examples are the shortest such names, then alphabetical.
  */
-export function scoreNames(entries: readonly NameEntry[], vocab: Vocabulary, limit: number = 30): Report {
+export function scoreNames({ entries, vocab, limit = 30 }: {
+  entries: readonly NameEntry[]
+  vocab: Vocabulary
+  limit?: number
+}): Report {
   const byModule = new Map<string, Map<string, boolean>>()
   for (const e of entries) {
     const names = byModule.get(e.module) ?? new Map<string, boolean>()
@@ -462,12 +497,9 @@ export function scoreNames(entries: readonly NameEntry[], vocab: Vocabulary, lim
   const unknown = ranked.slice(0, limit).map(([word, names]): UnknownWord => {
     const examples = [...names].sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)).slice(0, 3)
     const hint = avoidHint(word, vocab)
-    return hint === undefined ? { word, names: names.size, examples } : {
-      word,
-      names: names.size,
-      examples,
-      avoid: hint,
-    }
+    const entry: UnknownWord = { word, names: names.size, examples }
+    if (hint !== undefined) entry.avoid = hint
+    return entry
   })
   const score = percent(good, all)
   return {
@@ -491,7 +523,8 @@ function sourceFiles(dir: string): string[] {
     const path = join(dir, d.name)
     if (d.isDirectory()) return sourceFiles(path)
     const extension = ['.ts', '.tsx'].find(ext => d.name.endsWith(ext))
-    return extension && !d.name.endsWith(`.generated${extension}`) ? [path] : []
+    if (!extension || d.name.endsWith(`.generated${extension}`)) return []
+    return [path]
   }).sort()
 }
 
@@ -521,8 +554,8 @@ export function scoreProject(root: string, limit: number = 30): Report {
   const vocab = loadVocabulary(root)
   const src = join(root, 'src')
   const entries = sourceFiles(src).flatMap(file =>
-    collectNames(file, readFileSync(file, 'utf8')).map(n => ({ module: moduleOf(src, file), ...n })))
-  return scoreNames(entries, vocab, limit)
+    collectNames({ file, text: readFileSync(file, 'utf8') }).map(n => ({ module: moduleOf(src, file), ...n })))
+  return scoreNames({ entries, vocab, limit })
 }
 
 /** The human-readable report. */
@@ -545,9 +578,11 @@ export function formatReport(report: Report): string {
     const wordWidth = Math.max(10, ...report.unknown.map(u => u.word.length + 1))
     for (const u of report.unknown) {
       const detail = u.avoid === undefined ? `e.g. ${u.examples.join(', ')}` : `avoid: use "${u.avoid}"`
-      out.push(`  ${u.word.padEnd(
-        wordWidth,
-      )} ${String(u.names).padStart(3)} ${u.names === 1 ? 'name ' : 'names'}   ${detail}`)
+      let label = 'names'
+      if (u.names === 1) label = 'name '
+      const word = u.word.padEnd(wordWidth)
+      const count = String(u.names).padStart('100'.length)
+      out.push(`  ${word} ${count} ${label}   ${detail}`)
     }
   }
   return out.join('\n')
@@ -560,7 +595,10 @@ type VocabularyArgs = {
 }
 
 /** Parses `[--json] [--root <dir>]`; throws on anything else. */
-export function parseArgs(args: readonly string[], defaultRoot: string): VocabularyArgs {
+export function parseArgs({ args, defaultRoot }: {
+  args: readonly string[]
+  defaultRoot: string
+}): VocabularyArgs {
   let json = false
   let root = defaultRoot
   for (let i = 0; i < args.length; i++) {
@@ -573,7 +611,8 @@ export function parseArgs(args: readonly string[], defaultRoot: string): Vocabul
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = parseArgs(process.argv.slice(2), resolve(dirname(fileURLToPath(import.meta.url)), '..'))
+    const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+    const args = parseArgs({ args: process.argv.slice(2), defaultRoot })
     const report = scoreProject(args.root)
     console.log(args.json ? JSON.stringify(report, null, 2) : formatReport(report))
     process.exit(report.pass ? 0 : 1)

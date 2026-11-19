@@ -47,7 +47,7 @@ const maxLineLength = {
 }
 
 /** Reports every member whose start shares a line with the previous member. */
-function reportSharedMemberLines(members, context) {
+function reportSharedMemberLines({ members, context }) {
   let previousLine
   for (const member of members) {
     const line = member.loc.start.line
@@ -68,14 +68,14 @@ const oneMemberPerLine = {
   create(context) {
     return {
       TSInterfaceBody(node) {
-        reportSharedMemberLines(node.body, context)
+        reportSharedMemberLines({ members: node.body, context })
       },
       TSTypeLiteral(node) {
-        reportSharedMemberLines(node.members, context)
+        reportSharedMemberLines({ members: node.members, context })
       },
       ObjectExpression(node) {
         if (node.loc.start.line === node.loc.end.line) return
-        reportSharedMemberLines(node.properties, context)
+        reportSharedMemberLines({ members: node.properties, context })
       },
     }
   },
