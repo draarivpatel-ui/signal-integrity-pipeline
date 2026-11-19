@@ -1,0 +1,18 @@
+import { test } from "bun:test"
+import assert from "node:assert/strict"
+import { pinCapabilities } from "../../../src/buffers"
+import {
+  ibisInspectionBoard,
+  inspectedPin,
+  inspectionIbis,
+} from "../../fixtures/ibis-inspection"
+
+test("Output model declares its pin capabilities", async () => {
+  const board = await ibisInspectionBoard()
+  const text = inspectionIbis({ modelType: "Output" })
+  assert.deepEqual(pinCapabilities(inspectedPin({ board, text })), {
+    drive: true,
+    receive: false,
+    disable: false,
+  })
+})

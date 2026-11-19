@@ -96,7 +96,7 @@ export function addBlockSupplies(options: BlockSupplyOptions): void {
   const netVoltages = new Map<string, ReferenceBias>()
   const externalPorts = new Set<SourcePortId>()
   for (const pin of pins.values()) {
-    const voltages = referenceVoltages(pin.buffer)
+    const voltages = referenceVoltages(pin)
     const ports = pin.references
     if (ports.external) externalPorts.add(ports.external)
     const roles = Object.keys(voltages) as Array<keyof typeof voltages>
