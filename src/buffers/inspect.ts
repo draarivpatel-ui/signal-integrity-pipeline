@@ -1,15 +1,15 @@
 import {
-  cornerValue,
   type IbisBuffer,
   type IbisComponent,
   type IbisDocument,
   IbisError,
   type IbisPackagePin,
-  type IbisRange,
   IbisReferenceError,
+  type IbisReferenceVoltages,
   parseIbis,
   type ResolvedIbisReferencePorts,
   resolveIbisReferences,
+  resolveIbisReferenceVoltages,
 } from "@tscircuit/ibis-to-spice"
 import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
 import { fail } from "./diagnostics"
@@ -32,43 +32,15 @@ export type InspectedPin = {
   references: ReferencePorts
 }
 /** Typical IBIS reference voltages for the pullup, pulldown and clamp tables. */
-export type ReferenceVoltages = Record<
-  "pullup" | "pulldown" | "powerClamp" | "groundClamp",
-  number
->
-
-/** Default pulldown and ground clamp reference voltage in IBIS 7.2 §6.1. */
-const GROUND_VOLTAGE_RANGE: IbisRange = [0, 0, 0]
+export type ReferenceVoltages = IbisReferenceVoltages
 
 /** Selected ideal reference voltages, including the vendor's explicit overrides. */
 export function referenceVoltages(
   pin: Pick<InspectedPin, "buffer">,
 ): ReferenceVoltages {
   const { buffer } = pin
-  // IBIS 7.2 §6.1 defines [Voltage Range] and 0 V as the default references.
   try {
-    return {
-      pullup: cornerValue(
-        buffer.pullupReference ?? buffer.voltage,
-        "typical",
-        "pullup reference",
-      ),
-      pulldown: cornerValue(
-        buffer.pulldownReference ?? GROUND_VOLTAGE_RANGE,
-        "typical",
-        "pulldown reference",
-      ),
-      powerClamp: cornerValue(
-        buffer.powerClampReference ?? buffer.voltage,
-        "typical",
-        "power clamp reference",
-      ),
-      groundClamp: cornerValue(
-        buffer.groundClampReference ?? GROUND_VOLTAGE_RANGE,
-        "typical",
-        "ground clamp reference",
-      ),
-    }
+    return resolveIbisReferenceVoltages({ buffer, corner: "typical" })
   } catch (error) {
     failReferenceVoltage({ buffer, error })
   }
@@ -167,6 +139,10 @@ type PinInspectionOptions = {
 /** Inspected IBIS pins keyed by the selected source port IDs. */
 export type InspectedPins = Map<SourcePortId, InspectedPin>
 
+/** Project-relative path of an IBIS model asset. */
+type IbisAssetPath =
+  SimulationIbisModel["ibis_model_asset"]["project_relative_path"]
+
 /** Resolve selected signal ports and their reference rails, loading only their model declarations. */
 export function inspectPins({
   circuit,
@@ -174,7 +150,8 @@ export function inspectPins({
   ports,
 }: PinInspectionOptions): InspectedPins {
   const pins: InspectedPins = new Map()
-  const documents = new Map<string, IbisDocument>()
+  const documents = new Map<IbisAssetPath, IbisDocument>()
+  const boundPorts = new Set<SourcePortId>()
   for (const model of circuit) {
     if (model.type !== "simulation_ibis_model") continue
     const selected = Object.entries(
@@ -199,6 +176,9 @@ export function inspectPins({
         `IBIS component ${model.ibis_component_name} is missing`,
       )
     for (const [pin, port] of selected) {
+      if (boundPorts.has(port))
+        fail("ibis_pin_bound_twice", `${port}: more than one IBIS pin binding`)
+      boundPorts.add(port)
       const binding: PinBinding = {
         port,
         pin,
@@ -207,8 +187,6 @@ export function inspectPins({
       }
       const name = selectedModelName({ binding, selectors: document.selectors })
       if (name === undefined) continue
-      if (pins.has(port))
-        fail("ibis_pin_bound_twice", `${port}: more than one IBIS pin binding`)
       const buffer = document.getBuffer(name)
       pins.set(port, {
         ...binding,
