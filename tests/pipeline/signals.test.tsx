@@ -225,12 +225,12 @@ test("full unrouted check reaches the segment after a series passive", async () 
   )
 })
 
-test("routed receiver arrays get the RFC not-implemented diagnostic", async () => {
+test("branched routed receiver arrays get the channel fanout diagnostic", async () => {
   const circuit = await renderSignals({ tree: <Board branch /> })
-  assert.throws(
-    () => prepareBlocks({ circuit, sources: inverterSources }),
-    /branched routed graphs are not implemented yet/,
-  )
+  assert.throws(() => prepareBlocks({ circuit, sources: inverterSources }), {
+    code: "channel_fanout",
+    message: /branched routes are not supported yet/,
+  })
 })
 
 test("pipeline checks selected IBIS roles and disabled states after TSX rendering", async () => {
