@@ -167,6 +167,10 @@ type PinInspectionOptions = {
 /** Inspected IBIS pins keyed by the selected source port IDs. */
 export type InspectedPins = Map<SourcePortId, InspectedPin>
 
+/** Project-relative path of an IBIS model asset. */
+type IbisAssetPath =
+  SimulationIbisModel["ibis_model_asset"]["project_relative_path"]
+
 /** Resolve selected signal ports and their reference rails, loading only their model declarations. */
 export function inspectPins({
   circuit,
@@ -174,7 +178,8 @@ export function inspectPins({
   ports,
 }: PinInspectionOptions): InspectedPins {
   const pins: InspectedPins = new Map()
-  const documents = new Map<string, IbisDocument>()
+  const documents = new Map<IbisAssetPath, IbisDocument>()
+  const boundPorts = new Set<SourcePortId>()
   for (const model of circuit) {
     if (model.type !== "simulation_ibis_model") continue
     const selected = Object.entries(
@@ -199,6 +204,9 @@ export function inspectPins({
         `IBIS component ${model.ibis_component_name} is missing`,
       )
     for (const [pin, port] of selected) {
+      if (boundPorts.has(port))
+        fail("ibis_pin_bound_twice", `${port}: more than one IBIS pin binding`)
+      boundPorts.add(port)
       const binding: PinBinding = {
         port,
         pin,
@@ -207,8 +215,6 @@ export function inspectPins({
       }
       const name = selectedModelName({ binding, selectors: document.selectors })
       if (name === undefined) continue
-      if (pins.has(port))
-        fail("ibis_pin_bound_twice", `${port}: more than one IBIS pin binding`)
       const buffer = document.getBuffer(name)
       pins.set(port, {
         ...binding,
