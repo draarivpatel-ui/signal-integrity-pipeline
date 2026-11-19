@@ -10,14 +10,14 @@ import { RoutedAdmissionSolver } from "../../src/pipeline"
 import { prepareBlockById, signalBlocks } from "../../src/pipeline/signals"
 import { circuitNodes } from "../../src/simulation"
 import { AdmissionChannel } from "../fixtures/admission-channel"
-import { renderCoreSignals } from "../support/core-render"
-import { routedProblem } from "../support/routed-fixture"
 import {
   assertRouteVisual,
   routedVisualFixture,
-  routedVisualIbis,
-} from "../support/routed-visual-fixture"
-import { renderSignals } from "../support/signal-render"
+} from "../fixtures/routed-visual"
+import { routedVisualIbis } from "../fixtures/routed-visual-fixture"
+import { renderSignals } from "../fixtures/signal-render"
+import { renderCoreSignals } from "../support/core-render"
+import { routedProblem } from "../support/routed-fixture"
 
 import { vendorAvailable } from "../support/vendor-models"
 
@@ -341,11 +341,13 @@ test("admission rejects a transient step that underflows to zero", async () => {
 
 test("two-trace TSX routed-admission visual SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  assertRouteVisual(
-    root.getSolver<RoutedAdmissionSolver>("RoutedAdmissionSolver")!.visualize(),
-    "pipeline",
-    "routed-admission",
-  )
+  assertRouteVisual({
+    drawing: root
+      .getSolver<RoutedAdmissionSolver>("RoutedAdmissionSolver")!
+      .visualize(),
+    module: "pipeline",
+    name: "routed-admission",
+  })
 })
 
 test("rejected admission carries a visible red reason without inventing an admitted block", async () => {
@@ -364,5 +366,9 @@ test("rejected admission carries a visible red reason without inventing an admit
     drawing.texts!.map((text) => text.text).join(" "),
     /scope distance/,
   )
-  assertRouteVisual(drawing, "pipeline", "routed-admission-rejected")
+  assertRouteVisual({
+    drawing,
+    module: "pipeline",
+    name: "routed-admission-rejected",
+  })
 })

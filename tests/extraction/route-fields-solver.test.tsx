@@ -79,15 +79,17 @@ import { routeTones } from "../../src/board"
 import {
   assertRouteVisual,
   routedVisualFixture,
-} from "../support/routed-visual-fixture"
+} from "../fixtures/routed-visual"
 
 test("two-trace TSX route-fields-solver visual SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  assertRouteVisual(
-    root.getSolver<RouteFieldsSolver>("RouteFieldsSolver")!.visualize(),
-    "extraction",
-    "route-fields-solver",
-  )
+  assertRouteVisual({
+    drawing: root
+      .getSolver<RouteFieldsSolver>("RouteFieldsSolver")!
+      .visualize(),
+    module: "extraction",
+    name: "route-fields-solver",
+  })
 })
 
 /** Check the whole-ohm label used for mapped copper. */

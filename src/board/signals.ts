@@ -27,10 +27,13 @@ export function isQuiet(channel: SimulationPcbDriverReceiverChannel): boolean {
   )
 }
 
+/** The ordered physical port IDs of a signal endpoint. */
+type SignalEndpointPortIds = SourcePortId[]
+
 /** The physical ports of a signal endpoint, excluding optional IBIS model names. */
 export function signalEndpointPortIds(
   endpoint: SignalEndpoint,
-): SourcePortId[] {
+): SignalEndpointPortIds {
   if ("source_port_id" in endpoint) return [endpoint.source_port_id]
   return [endpoint.p_source_port_id, endpoint.n_source_port_id]
 }

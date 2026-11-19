@@ -87,7 +87,13 @@ function addCouplingPairs({
 }
 
 /** Rank slices by selected conductors, then by length. */
-function sliceWeight(slice: RouteSlice, selected: ReadonlySet<string>): number {
+function sliceWeight({
+  slice,
+  selected,
+}: {
+  slice: RouteSlice
+  selected: ReadonlySet<string>
+}): number {
   return (
     slice.wires.filter((wire) => selected.has(wire.trace)).length * 1e6 +
     slice.end -
@@ -273,7 +279,15 @@ export class RouteFieldsSolver extends BaseSolver {
     let best: ExtractedRouteSlice | undefined
     if (this.solved)
       best = [...this.slices].sort(
-        (a, b) => sliceWeight(b, selected) - sliceWeight(a, selected),
+        (a, b) =>
+          sliceWeight({
+            slice: b,
+            selected,
+          }) -
+          sliceWeight({
+            slice: a,
+            selected,
+          }),
       )[0]
     const slice = best ?? this.currentSlice ?? geometry.slices[0]
     let section = this.current

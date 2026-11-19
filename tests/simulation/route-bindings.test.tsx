@@ -79,15 +79,17 @@ import { routeTones } from "../../src/board"
 import {
   assertRouteVisual,
   routedVisualFixture,
-} from "../support/routed-visual-fixture"
+} from "../fixtures/routed-visual"
 
 test("two-trace TSX route-bindings visual SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  assertRouteVisual(
-    root.getSolver<RouteBindingsSolver>("RouteBindingsSolver")!.visualize(),
-    "simulation",
-    "route-bindings",
-  )
+  assertRouteVisual({
+    drawing: root
+      .getSolver<RouteBindingsSolver>("RouteBindingsSolver")!
+      .visualize(),
+    module: "simulation",
+    name: "route-bindings",
+  })
 })
 
 test("missing IBIS bytes mark physical endpoints and rejection reason red", async () => {
@@ -109,5 +111,9 @@ test("missing IBIS bytes mark physical endpoints and rejection reason red", asyn
         text.color === routeTones.failure && text.text.includes("model"),
     ),
   )
-  assertRouteVisual(drawing, "simulation", "route-bindings-missing")
+  assertRouteVisual({
+    drawing,
+    module: "simulation",
+    name: "route-bindings-missing",
+  })
 })

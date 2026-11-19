@@ -256,11 +256,11 @@ export class RoutedPipelineSolver extends BasePipelineSolver<RoutedProblem> {
       color: () => routeTones.copper,
     })
     if (!scope) return drawing
-    const view = routeView(circuit, scope)
+    const view = routeView({ circuit, scope })
     routeStrip({
       drawing,
       pane: view.pane,
-      rows: routeLengths(circuit, view).map((row) => ({
+      rows: routeLengths({ circuit, view }).map((row) => ({
         ...row,
         parts: [{ from: 0, to: row.length, color: routeTones.copper }],
       })),

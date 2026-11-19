@@ -374,8 +374,12 @@ export class RoutedAdmissionSolver extends BaseSolver {
         })
       return drawing
     }
-    const view = routeView(circuit, plan.sections.scope)
-    routeStrip({ drawing, pane: view.pane, rows: routeLengths(circuit, view) })
+    const view = routeView({ circuit, scope: plan.sections.scope })
+    routeStrip({
+      drawing,
+      pane: view.pane,
+      rows: routeLengths({ circuit, view }),
+    })
     routeMarks({
       drawing,
       marks: plan.bindings.mappings.flatMap((mapping) =>
@@ -385,7 +389,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
             [mapping.to, false],
           ] as const
         ).flatMap(([id, driver]) => {
-          const point = routePortPoint(circuit, id)
+          const point = routePortPoint({ circuit, sourcePortId: id })
           if (!point) return []
           const net = view.ports.get(id)
           return [

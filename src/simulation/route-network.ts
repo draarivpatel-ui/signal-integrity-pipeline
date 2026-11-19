@@ -1,3 +1,4 @@
+/* eslint-disable local/max-file-lines -- Stage drawings use the same intermediate state as network compilation. */
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
@@ -60,7 +61,7 @@ export class RouteNetworkSolver extends BaseSolver {
   private steps?: Generator<void, Produced<RoutedDeck>>
   private output?: Produced<RoutedDeck>
   private ladder?: RouteLadder
-  private obliqueRecords: Record<string, unknown>[] = []
+  private obliqueRecords: ReturnType<typeof routeOblique>["records"] = []
   /** Completed geometry, fields and bindings are immutable input snapshots. */
   constructor(private readonly input: RouteNetworkInput) {
     super()
@@ -448,7 +449,7 @@ export class RouteNetworkSolver extends BaseSolver {
   override visualize(): GraphicsObject {
     const { geometry, bindings, extracted } = this.input
     const circuit = bindings.circuitJson
-    const view = routeView(circuit, bindings.scope)
+    const view = routeView({ circuit, scope: bindings.scope })
     const drawing = routeBoardDrawing({ circuit, scope: bindings.scope })
     let built: Set<number> | undefined
     if (!this.output) built = new Set(this.ladder?.wireNodes.keys() ?? [])
@@ -528,8 +529,11 @@ export class RouteNetworkSolver extends BaseSolver {
         }))
       },
     )
-    for (const { wire, position } of routeDisplayItems(nodes, 1500)) {
-      const [x, y] = routePosition(wire, position)
+    for (const { wire, position } of routeDisplayItems({
+      items: nodes,
+      limit: 1500,
+    })) {
+      const [x, y] = routePosition({ wire, position })
       drawing.lines!.push({
         points: [-1, 1].map((sign) => ({
           x: x - sign * wire.u[1] * wire.width * 1.4,
@@ -539,7 +543,10 @@ export class RouteNetworkSolver extends BaseSolver {
         strokeWidth: wire.width * 0.3,
       })
     }
-    for (const record of routeDisplayItems(this.obliqueRecords, 120)) {
+    for (const record of routeDisplayItems({
+      items: this.obliqueRecords,
+      limit: 120,
+    })) {
       if (!Array.isArray(record.wires) || record.wires.length !== 2) continue
       const pair = (record.wires as number[]).map((id) => wires.get(id))
       if (!pair[0] || !pair[1]) continue
@@ -583,9 +590,10 @@ export class RouteNetworkSolver extends BaseSolver {
         })
     }
     // The pane unrolls each net with its ladder cells as ticks and its coupling as violet under the bar.
-    const unrolled = routeUnrolled(view, geometry.wires)
+    const unrolled = routeUnrolled({ view, wires: geometry.wires })
+    const lengths = routeLengths({ circuit, view })
     const rows = new Map<RouteStripRow["net"]["label"], RouteStripRow>(
-      routeLengths(circuit, view).map((row) => [
+      lengths.map((row) => [
         row.net.label,
         {
           ...row,
@@ -596,15 +604,13 @@ export class RouteNetworkSolver extends BaseSolver {
       ]),
     )
     for (const { wire, position } of nodes) {
-      const at = unrolled.along(wire.id, position)
+      const at = unrolled.along({ id: wire.id, position })
       if (at) rows.get(at.net.label)?.ticks!.push(at.distance)
     }
     for (const { slice, a, b, k } of bands)
       for (const wire of [a, b]) {
-        const [from, to] = [
-          unrolled.along(wire.id, slice.start),
-          unrolled.along(wire.id, slice.end),
-        ]
+        const from = unrolled.along({ id: wire.id, position: slice.start })
+        const to = unrolled.along({ id: wire.id, position: slice.end })
         if (from && to)
           rows
             .get(from.net.label)
@@ -670,6 +676,6 @@ function offsetPoint({
   position: number
   transverse: number
 }): Point {
-  const [x, y] = routePosition({ ...wire, transverse }, position)
+  const [x, y] = routePosition({ wire: { ...wire, transverse }, position })
   return { x, y }
 }

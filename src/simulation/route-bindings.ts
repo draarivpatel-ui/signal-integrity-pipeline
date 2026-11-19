@@ -1,4 +1,5 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
+import type { PcbComponent, PcbPort } from "circuit-json"
 import type { GraphicsObject } from "graphics-debug"
 import {
   routeBoardDrawing,
@@ -166,7 +167,7 @@ export class RouteBindingsSolver extends BaseSolver {
    */
   override visualize(): GraphicsObject {
     const circuit = this.input.circuitJson
-    const view = routeView(circuit, this.input.scope)
+    const view = routeView({ circuit, scope: this.input.scope })
     const drawing = routeBoardDrawing({ circuit, scope: this.input.scope })
     const pcbPorts = new Map(
       circuit
@@ -185,17 +186,15 @@ export class RouteBindingsSolver extends BaseSolver {
       unit: view.unit,
     }
     const buffers = this.models.flatMap((model) => {
-      outlinePortComponents(
-        {
-          ports: Object.values(model.spicePinMapping),
-          color: routeTones.via,
-          label: model.name,
-        },
-        outlineContext,
-      )
+      outlinePortComponents({
+        ports: Object.values(model.spicePinMapping),
+        color: routeTones.via,
+        label: model.name,
+        context: outlineContext,
+      })
       return [...new Set(Object.values(model.spicePinMapping))].flatMap(
         (id) => {
-          const point = routePortPoint(circuit, id)
+          const point = routePortPoint({ circuit, sourcePortId: id })
           if (!point) return []
           const mappedSignal = this.input.mappings.some(
             (mapping) => mapping.from === id || mapping.to === id,
@@ -235,23 +234,21 @@ export class RouteBindingsSolver extends BaseSolver {
     routeStrip({
       drawing,
       pane: view.pane,
-      rows: routeLengths(circuit, view).filter((row) =>
+      rows: routeLengths({ circuit, view }).filter((row) =>
         bound.has(row.net.label),
       ),
       buffers: { driver: true, receiver: true },
     })
     if (this.failed) {
-      outlinePortComponents(
-        {
-          ports: this.input.mappings.flatMap((mapping) => [
-            mapping.from,
-            mapping.to,
-          ]),
-          color: routeTones.failure,
-          label: "unbound",
-        },
-        outlineContext,
-      )
+      outlinePortComponents({
+        ports: this.input.mappings.flatMap((mapping) => [
+          mapping.from,
+          mapping.to,
+        ]),
+        color: routeTones.failure,
+        label: "unbound",
+        context: outlineContext,
+      })
       routeFailure({
         drawing,
         box: view.pane,
@@ -262,38 +259,27 @@ export class RouteBindingsSolver extends BaseSolver {
   }
 }
 
-type PcbPort = Extract<
-  RouteBindingsInput["circuitJson"][number],
-  { type: "pcb_port" }
->
-type PcbComponent = Extract<
-  RouteBindingsInput["circuitJson"][number],
-  { type: "pcb_component" }
->
+/** Circuit lookups and drawing scale shared by all component outlines. */
+interface PortOutlineContext {
+  pcbPorts: ReadonlyMap<PcbPort["source_port_id"], PcbPort>
+  components: ReadonlyMap<PcbComponent["pcb_component_id"], PcbComponent>
+  drawing: GraphicsObject
+  unit: number
+}
 
 /** Outline the parts that own the selected ports. */
-function outlinePortComponents(
-  {
-    ports,
-    color,
-    label,
-  }: {
-    ports: Iterable<PcbPort["source_port_id"]>
-    color: string
-    label: string
-  },
-  {
-    pcbPorts,
-    components,
-    drawing,
-    unit,
-  }: {
-    pcbPorts: ReadonlyMap<PcbPort["source_port_id"], PcbPort>
-    components: ReadonlyMap<PcbComponent["pcb_component_id"], PcbComponent>
-    drawing: GraphicsObject
-    unit: number
-  },
-): void {
+function outlinePortComponents({
+  ports,
+  color,
+  label,
+  context,
+}: {
+  ports: Iterable<PcbPort["source_port_id"]>
+  color: string
+  label: string
+  context: PortOutlineContext
+}): void {
+  const { pcbPorts, components, drawing, unit } = context
   for (const id of new Set(
     [...ports].map((port) => pcbPorts.get(port)?.pcb_component_id),
   )) {

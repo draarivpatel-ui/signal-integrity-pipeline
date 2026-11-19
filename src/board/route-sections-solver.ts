@@ -50,7 +50,13 @@ type PcbTraceId = RouteWire["trace"]
 type RouteNetLabel = RouteNet["label"]
 
 /** Alternate light and dark sections of the same net, keeping unassigned copper neutral. */
-function sectionColor(net: RouteNet | undefined, index: number): string {
+function sectionColor({
+  net,
+  index,
+}: {
+  net: RouteNet | undefined
+  index: number
+}): string {
   if (!net) return routeTones.copper
   let shift = -6
   if (index % 2) shift = 16
@@ -182,7 +188,7 @@ export class RouteSectionsSolver extends BaseSolver {
    */
   override visualize(): GraphicsObject {
     const circuit = this.input.circuitJson
-    const view = routeView(circuit, this.scope)
+    const view = routeView({ circuit, scope: this.scope })
     const drawing = routeCanvas(view)
     const wires = (this.geometry?.wires ?? []).filter((wire) =>
       view.traces.has(wire.trace),
@@ -212,7 +218,7 @@ export class RouteSectionsSolver extends BaseSolver {
       drawing.lines!.push(
         ...routeStroke({
           points,
-          color: sectionColor(net, index),
+          color: sectionColor({ net, index }),
           width: wire.width,
           layer: wire.layer,
           label: net?.label,
@@ -220,9 +226,9 @@ export class RouteSectionsSolver extends BaseSolver {
       )
     }
     // The pane unrolls each net: its sections in the same two tones, uncut copper grey.
-    const unrolled = routeUnrolled(view, wires)
+    const unrolled = routeUnrolled({ view, wires })
     const rows = new Map<RouteNetLabel, RouteStripRow>(
-      routeLengths(circuit, view).map((row) => [
+      routeLengths({ circuit, view }).map((row) => [
         row.net.label,
         {
           ...row,
@@ -232,7 +238,7 @@ export class RouteSectionsSolver extends BaseSolver {
     )
     tone.clear()
     for (const wire of wires) {
-      const at = unrolled.along(wire.id, wire.start)
+      const at = unrolled.along({ id: wire.id, position: wire.start })
       if (!at) continue
       const row = rows.get(at.net.label)
       if (!row) continue
@@ -241,7 +247,7 @@ export class RouteSectionsSolver extends BaseSolver {
       row.parts!.push({
         from: at.distance,
         to: at.distance + wire.end - wire.start,
-        color: sectionColor(at.net, index),
+        color: sectionColor({ net: at.net, index }),
         casing: wire.trace === active,
       })
     }

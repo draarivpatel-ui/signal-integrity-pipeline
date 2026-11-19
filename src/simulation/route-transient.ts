@@ -52,11 +52,11 @@ export class RouteTransientSolver extends BaseSolver {
     this.running = true
     try {
       const solverScope = scope.child("solver").handTo("solver")
-      const execution = await invoke(
-        this.input.context,
-        solverScope,
-        routedRequest(compiled),
-      )
+      const execution = await invoke({
+        context: this.input.context,
+        scope: solverScope,
+        request: routedRequest(compiled),
+      })
       const run = execution.value
       const logs = `${run.stdout}\n${run.stderr}`
       const diagnostic = logs.split("\n").find(hasSolverDiagnostic)
@@ -65,9 +65,9 @@ export class RouteTransientSolver extends BaseSolver {
           artifacts: run.logPaths,
         })
       const raw = run.outputs["waveform.raw"]
-      const rows = spiceProbeRows(raw, compiled.probes)
-      validateCoverage(compiled, rows)
-      const capture = completedCapture(compiled, rows)
+      const rows = spiceProbeRows({ text: raw, probes: compiled.probes })
+      validateCoverage({ compiled, rows })
+      const capture = completedCapture({ compiled, rows })
       const artifact = scope.json("capture.json", {
         ...capture,
         waveformSha256: sha256(raw),

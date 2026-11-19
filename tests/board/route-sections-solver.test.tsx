@@ -50,13 +50,15 @@ test("sections reject missing physical contacts", async () => {
 import {
   assertRouteVisual,
   routedVisualFixture,
-} from "../support/routed-visual-fixture"
+} from "../fixtures/routed-visual"
 
 test("two-trace TSX route-sections-solver visual SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  assertRouteVisual(
-    root.getSolver<RouteSectionsSolver>("RouteSectionsSolver")!.visualize(),
-    "board",
-    "route-sections-solver",
-  )
+  assertRouteVisual({
+    drawing: root
+      .getSolver<RouteSectionsSolver>("RouteSectionsSolver")!
+      .visualize(),
+    module: "board",
+    name: "route-sections-solver",
+  })
 })

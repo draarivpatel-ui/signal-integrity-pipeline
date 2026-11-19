@@ -226,6 +226,8 @@ domain:
   excursion: how far a curve goes beyond the band most samples stay in
   camera: the fixed board region a problem's stage drawings show
   halo: a dark outline behind a mark so it reads over copper
+  viewport: the world-coordinate region visible in a picture
+  axis: a plot scale representing a measured quantity
 
 abbreviations:
   ac: alternating current; in DDR thresholds, the level a signal must reach
