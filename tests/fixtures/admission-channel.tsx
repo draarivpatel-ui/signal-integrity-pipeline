@@ -1,6 +1,7 @@
 import { simulation } from "@tscircuit/core"
+import type { TraceProps } from "@tscircuit/props"
 import type React from "react"
-import { Inverter, Reference } from "../support/signal-parts"
+import { Inverter, Reference } from "./signal-parts"
 
 type Route = "series" | "unrouted" | "receiver-only"
 
@@ -14,6 +15,8 @@ export function AdmissionChannel({
   const receiver = ".RX > .A"
   const seriesInput = ".RS > .pin1"
   const seriesOutput = ".RS > .pin2"
+  let driverPath: TraceProps["pcbPath"]
+  if (route === "series") driverPath = [driver, seriesInput]
   return (
     <board
       width={18}
@@ -28,9 +31,8 @@ export function AdmissionChannel({
       <Inverter name="TX" x={-5} y={0} driver />
       <Inverter name="RX" x={5} y={0} driver={false} />
       <Reference />
-      {route === "unrouted" ? (
-        <trace from={driver} to={receiver} />
-      ) : (
+      {route === "unrouted" && <trace from={driver} to={receiver} />}
+      {route !== "unrouted" && (
         <>
           <resistor
             name="RS"
@@ -61,7 +63,7 @@ export function AdmissionChannel({
             from={driver}
             to={seriesInput}
             width={0.2}
-            pcbPath={route === "series" ? [driver, seriesInput] : undefined}
+            pcbPath={driverPath}
           />
           <trace
             from={seriesOutput}

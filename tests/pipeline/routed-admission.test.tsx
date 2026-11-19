@@ -9,10 +9,14 @@ import { RoutedAdmissionSolver } from "../../src/pipeline"
 import { prepareBlockById, signalBlocks } from "../../src/pipeline/signals"
 import { circuitNodes } from "../../src/simulation"
 import { AdmissionChannel } from "../fixtures/admission-channel"
+import { routedVisualIbis } from "../fixtures/routed-visual-fixture"
+import { renderSignals } from "../fixtures/signal-render"
 import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
-import { routedVisualIbis } from "../support/routed-visual-fixture"
-import { renderSignals } from "../support/signal-render"
+
+import { vendorAvailable } from "../support/vendor-models"
+
+const skipVendorModel = !vendorAvailable("sn74lvc1g04.ibs")
 
 const inverterModelPath = "models/sn74lvc1g04.ibs"
 
@@ -69,30 +73,32 @@ test("synthetic admission emits the board mappings and hashes the supplied bytes
   )
 })
 
-test("vendor admission retains shared block lowering and warnings", async (context) => {
-  const input = await routedProblem(context)
-  if (!input) return
-  const [id] = signalBlocks(input.circuitJson).map(
-    (block) => block.simulation_pcb_transient_channel_simulation_id,
-  )
-  const block = prepareBlockById({
-    circuit: input.circuitJson,
-    sources: input.ibisSources,
-    blockId: id,
-    distanceMm: input.scopeDistanceMm,
-  })
-  const solver = new RoutedAdmissionSolver(input)
-  solver.step()
-  assert.equal(solver.solved, true)
-  const [plan] = solver.getOutput().value
-  assert.deepEqual(plan.sections.circuitJson, block.circuit)
-  assert.deepEqual(plan.sections.scope, block.settings.copperScope)
-  assert.deepEqual(plan.warnings, [])
-  assert.equal(
-    solver.getOutput().value[0].sections.scope.selectedPcbTraceIds.length,
-    2,
-  )
-})
+test.skipIf(skipVendorModel)(
+  "vendor admission retains shared block lowering and warnings",
+  async () => {
+    const input = await routedProblem()
+    const [id] = signalBlocks(input.circuitJson).map(
+      (block) => block.simulation_pcb_transient_channel_simulation_id,
+    )
+    const block = prepareBlockById({
+      circuit: input.circuitJson,
+      sources: input.ibisSources,
+      blockId: id,
+      distanceMm: input.scopeDistanceMm,
+    })
+    const solver = new RoutedAdmissionSolver(input)
+    solver.step()
+    assert.equal(solver.solved, true)
+    const [plan] = solver.getOutput().value
+    assert.deepEqual(plan.sections.circuitJson, block.circuit)
+    assert.deepEqual(plan.sections.scope, block.settings.copperScope)
+    assert.deepEqual(plan.warnings, [])
+    assert.equal(
+      solver.getOutput().value[0].sections.scope.selectedPcbTraceIds.length,
+      2,
+    )
+  },
+)
 
 test("empty boards admit no fake blocks", () => {
   const solver = new RoutedAdmissionSolver({ circuitJson: [], ibisSources: {} })
@@ -201,10 +207,10 @@ test("sectioning and binding share one frozen board", async () => {
 })
 
 test("allowed unrouted channels retain ideal source connectivity", async () => {
-  const circuitJson = await renderSignals(
-    <AdmissionChannel route="unrouted" />,
-    ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
-  )
+  const circuitJson = await renderSignals({
+    tree: <AdmissionChannel route="unrouted" />,
+    expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
+  })
   const solver = new RoutedAdmissionSolver({
     circuitJson,
     ibisSources: { [inverterModelPath]: routedVisualIbis },
@@ -270,10 +276,10 @@ test("series resistor keeps both routed segments electrically distinct", async (
 })
 
 test("a routed receiver segment survives an ideal driver segment", async () => {
-  const circuitJson = await renderSignals(
-    <AdmissionChannel route="receiver-only" />,
-    ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
-  )
+  const circuitJson = await renderSignals({
+    tree: <AdmissionChannel route="receiver-only" />,
+    expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
+  })
   const solver = new RoutedAdmissionSolver({
     circuitJson,
     ibisSources: { [inverterModelPath]: routedVisualIbis },
