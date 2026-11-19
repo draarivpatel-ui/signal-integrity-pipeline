@@ -40,22 +40,16 @@ const maxFileLines = {
 // Test folders that check the package or the tooling as a whole, not one source file.
 const CROSS_CUTTING = ["tests/compat/", "tests/tooling/", "tests/support/"]
 
-/**
- * Each test file is named after the one source file it tests:
- * tests/<module>/<path>.test.<ext> tests src/<module>/<path>.ts (or src/<module>/<path>/index.ts).
- * Because names are unique, every source file then has at most one test file.
- */
+/** Matches direct test files and behaviour directories to their source files. */
 const testFileMatchesSource = {
   meta: {
     type: "suggestion",
     docs: {
-      description: "A test file is named after the single source file it tests",
+      description: "A test file maps to the source file it tests",
     },
     schema: [],
     messages: {
-      noSource: `{{test}} does not match a source file. Name it after the file it tests: ${"'{{expected}}' should exist (or '{{expectedIndex}}')."}`,
-      duplicate:
-        "{{source}} already has a test file ({{other}}). Keep one test file per source file.",
+      noSource: "{{test}} does not match a source file. Expected {{paths}}.",
     },
   },
   /** @returns {import('eslint').Rule.RuleListener} */
@@ -77,33 +71,21 @@ const testFileMatchesSource = {
       ["\n", "\r", "\u2028", "\u2029"].some((char) => base.includes(char))
     )
       return {}
-    const expected = `src/${base}.ts`
-    const expectedIndex = `src/${base}/index.ts`
+    const paths = [`src/${base}.ts`, `src/${base}/index.ts`]
+    const separator = base.lastIndexOf("/")
+    if (suffix !== ".test.mjs" && base.indexOf("/") < separator) {
+      const parent = base.slice(0, separator)
+      paths.push(`src/${parent}.ts`, `src/${parent}/index.ts`)
+    }
+    if (paths.some((path) => existsSync(join(root, path)))) return {}
     return {
       Program(node) {
-        const loc = { line: 1, column: 0 }
-        if (
-          !existsSync(join(root, expected)) &&
-          !existsSync(join(root, expectedIndex))
-        ) {
-          context.report({
-            node,
-            loc,
-            messageId: "noSource",
-            data: { test, expected, expectedIndex },
-          })
-          return
-        }
-        const siblings = ["ts", "tsx", "mjs"]
-          .map((ext) => `tests/${base}.test.${ext}`)
-          .filter((f) => f !== test && existsSync(join(root, f)))
-        if (siblings.length)
-          context.report({
-            node,
-            loc,
-            messageId: "duplicate",
-            data: { source: expected, other: siblings.join(", ") },
-          })
+        context.report({
+          node,
+          loc: { line: 1, column: 0 },
+          messageId: "noSource",
+          data: { test, paths: paths.join(" or ") },
+        })
       },
     }
   },
