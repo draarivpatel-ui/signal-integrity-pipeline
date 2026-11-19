@@ -6,7 +6,13 @@ import {
   compileBuffers,
   ibisAssembly,
 } from "../buffers"
-import { type Artifact, type Produced, rootScope, snapshot } from "../kernel"
+import {
+  type Artifact,
+  type ArtifactScope,
+  type Produced,
+  rootScope,
+  snapshot,
+} from "../kernel"
 import { generalDeclarations, modelRunDefinition } from "./declarations"
 import { electricalSources } from "./netlist"
 import type {
@@ -30,56 +36,60 @@ export class RouteBindingsSolver extends BaseSolver {
   constructor(private readonly input: RouteBindingsInput) {
     super()
   }
+  /** Allocate circuit nodes before compiling the first IBIS buffer. */
+  private initialize(scope: ArtifactScope): Declarations {
+    if (this.declarations) return this.declarations
+    const mappings = structuredClone(this.input.mappings)
+    if (!mappings.length)
+      throw new Error("Routed compilation requires physical signal mappings")
+    const { pcbTraceIds, nonReferenceRailTraceIds } = this.input.scope
+    const traces = this.input.circuitJson.filter(
+      (record) => record.type === "pcb_trace",
+    )
+    mappings[0].sourceTraceIds = traces
+      .filter(
+        ({ pcb_trace_id: id }) =>
+          pcbTraceIds.includes(id) && !nonReferenceRailTraceIds.includes(id),
+      )
+      .map((trace) => trace.source_trace_id!)
+
+    const { circuitJson, modeling, controls, options, ibisSources } = this.input
+    const declarations = generalDeclarations({
+      circuit: circuitJson,
+      mappings,
+      modeling,
+      controls,
+    })
+    this.declarations = declarations
+    this.plan = declarations.plans[0]
+    this.plan.durationSeconds = options.durationSeconds
+    this.plan.maxStepSeconds = options.stepSeconds
+    this.electricalLines = electricalSources({
+      circuit: circuitJson,
+      modeling,
+      nodes: declarations.nodes,
+    }).lines
+    const admitted = admitBuffers({
+      models: declarations.models,
+      ibisSources,
+      scope,
+    })
+    this.admitted = admitted.value
+    this.artifacts.push(...admitted.artifacts)
+    return declarations
+  }
+
   /** Cut physical copper out of ideal connectivity, then compile one original IBIS model. */
   override _step(): void {
     const scope = rootScope("buffers").child(this.input.artifactPrefix)
-    if (!this.declarations) {
-      const mappings = structuredClone(this.input.mappings)
-      if (!mappings.length)
-        throw new Error("Routed compilation requires physical signal mappings")
-      const { pcbTraceIds, nonReferenceRailTraceIds } = this.input.scope
-      const traces = this.input.circuitJson.filter(
-        (record) => record.type === "pcb_trace",
-      )
-      const signalTraces = traces.filter((trace) => {
-        const id = trace.pcb_trace_id
-        return (
-          pcbTraceIds.includes(id) && !nonReferenceRailTraceIds.includes(id)
-        )
-      })
-      mappings[0].sourceTraceIds = signalTraces.map(
-        (trace) => trace.source_trace_id!,
-      )
-      this.declarations = generalDeclarations({
-        circuit: this.input.circuitJson,
-        mappings,
-        modeling: this.input.modeling,
-        controls: this.input.controls,
-      })
-      this.plan = this.declarations.plans[0]
-      this.plan.durationSeconds = this.input.options.durationSeconds
-      this.plan.maxStepSeconds = this.input.options.stepSeconds
-      const { circuitJson, modeling } = this.input
-      this.electricalLines = electricalSources(
-        circuitJson,
-        modeling,
-        this.declarations.nodes,
-      ).lines
-      const admitted = admitBuffers({
-        models: this.declarations.models,
-        ibisSources: this.input.ibisSources,
-        scope,
-      })
-      this.admitted = admitted.value
-      this.artifacts.push(...admitted.artifacts)
-    }
-    const model = this.declarations.models[this.models.length]
+    const declarations = this.initialize(scope)
+    const model = declarations.models[this.models.length]
     if (model) {
-      const [compiled] = compileBuffers(
-        this.admitted!,
-        [{ ...this.plan!, models: [model] }],
-        modelRunDefinition,
-      )[0]
+      const [compiled] = compileBuffers({
+        admitted: this.admitted!,
+        plans: [{ ...this.plan!, models: [model] }],
+        define: modelRunDefinition,
+      })[0]
       this.models.push({
         name: compiled.name,
         source: compiled.source,
@@ -88,7 +98,9 @@ export class RouteBindingsSolver extends BaseSolver {
         warnings: compiled.warnings,
         sourceEvidence: compiled.sourceEvidence,
       })
-      this.assembly.push(...ibisAssembly([compiled], scope).value)
+      this.assembly.push(
+        ...ibisAssembly({ models: [compiled], experiment: scope }).value,
+      )
     }
     const warnings = this.models.reduce(
       (count, model) => count + model.warnings.length,
@@ -99,14 +111,14 @@ export class RouteBindingsSolver extends BaseSolver {
       probes: this.plan!.probes.length,
       warnings,
     }
-    if (this.models.length !== this.declarations.models.length) return
-    const bindings = snapshot({
+    if (this.models.length !== declarations.models.length) return
+    const bindings = snapshot<RoutedBindings>({
       circuitJson: this.input.circuitJson,
       scope: this.input.scope,
       mappings: this.input.mappings,
       plan: this.plan!,
-      nodeMap: this.declarations.nodes.mapping,
-      groundSourcePortId: this.declarations.nodes.groundSourcePortId,
+      nodeMap: declarations.nodes.mapping,
+      groundSourcePortId: declarations.nodes.groundSourcePortId,
       electricalLines: this.electricalLines,
       models: this.models,
     })
