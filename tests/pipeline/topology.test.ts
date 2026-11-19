@@ -1,11 +1,10 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { type CircuitJson, selectPort } from "../../src/board"
+import type { SourceNetId, SourcePortId } from "../../src/board"
 import {
   signalTopology,
   validateSignalGraph,
 } from "../../src/pipeline/topology"
-import { driverReceiverChannel } from "../fixtures/driver-receiver-channel"
 import {
   crossingRoute,
   daisyChain,
@@ -15,19 +14,13 @@ import {
   platedHoleRoute,
   seriesResistor,
   standaloneViaRoute,
+  type TopologyBoard,
   unroutedExtraPin,
 } from "../fixtures/topology-board"
 
-/** Validate a channel between the named test pins on a rendered board. */
-function validate(circuit: CircuitJson, receivers: string[] = ["RX"]): void {
-  const driver = selectPort(circuit, { component: "TX", port: "SIG" })
-  const signal = driverReceiverChannel({ pattern: "01", bitRateBps: 1e9 })
-  signal.driver = { source_port_id: driver.source_port_id }
-  signal.receivers = receivers.map((component) => ({
-    source_port_id: selectPort(circuit, { component, port: "SIG" })
-      .source_port_id,
-  }))
-  const rails = new Set<string>()
+/** Validate the declared channel against the rendered copper under the pipeline's strict routing policy. */
+function validate({ circuit, signal }: TopologyBoard): void {
+  const rails = new Set<SourcePortId | SourceNetId>()
   validateSignalGraph({
     circuit,
     signalConnectivity: signalTopology({ circuit, rails }),
@@ -38,79 +31,82 @@ function validate(circuit: CircuitJson, receivers: string[] = ["RX"]): void {
 }
 
 test("a receiver without a PCB terminal cannot inherit the driver terminal", async () => {
-  const circuit = await missingReceiverTerminal()
+  const board = await missingReceiverTerminal()
   assert.throws(
-    () => validate(circuit),
+    () => validate(board),
     /is not routed between source_port_0 and source_port_1/,
   )
 })
 
 test("an unrouted same-net pin outside the channel does not block its routed receiver", async () => {
-  const circuit = await unroutedExtraPin()
-  assert.doesNotThrow(() => validate(circuit))
+  const board = await unroutedExtraPin("RX")
+  assert.doesNotThrow(() => validate(board))
+})
+
+test("an unrouted declared receiver is rejected", async () => {
+  const board = await unroutedExtraPin("STUB")
   assert.throws(
-    () => validate(circuit, ["STUB"]),
+    () => validate(board),
     /is not routed between source_port_0 and source_port_2/,
   )
 })
 
+test("a linear copper path can pass through an undeclared intermediate pin", async () => {
+  const board = await daisyChain(["RX"])
+  assert.doesNotThrow(() => validate(board))
+})
+
 test("a linear copper path supports more than one receiver", async () => {
-  const circuit = await daisyChain()
-  assert.doesNotThrow(() => validate(circuit))
-  assert.doesNotThrow(() => validate(circuit, ["MID", "RX"]))
+  const board = await daisyChain(["MID", "RX"])
+  assert.doesNotThrow(() => validate(board))
+})
+
+test("a routed path can cross a series resistor", async () => {
+  const straight = await seriesResistor(false)
+  assert.doesNotThrow(() => validate(straight))
 })
 
 test("two copper legs leaving a series resistor form a branch", async () => {
-  const straight = await seriesResistor(false)
-  assert.doesNotThrow(() => validate(straight))
   const branched = await seriesResistor(true)
   assert.throws(() => validate(branched), /branched routed graphs/)
 })
 
 test("a plated hole connects traces on different layers", async () => {
-  const circuit = await platedHoleRoute()
-  assert.doesNotThrow(() => validate(circuit))
+  const board = await platedHoleRoute()
+  assert.doesNotThrow(() => validate(board))
 })
 
 test("a standalone via connects traces on different layers", async () => {
-  const circuit = await standaloneViaRoute()
-  assert.doesNotThrow(() => validate(circuit))
+  const board = await standaloneViaRoute()
+  assert.doesNotThrow(() => validate(board))
 })
 
 test("a same-layer crossing between route vertices forms a junction", async () => {
-  const circuit = await crossingRoute()
-  assert.throws(() => validate(circuit), /branched routed graphs/)
+  const board = await crossingRoute()
+  assert.throws(() => validate(board), /branched routed graphs/)
 })
 
 test("a route can reach the receiver pad away from its center", async () => {
-  const circuit = await padContactRoute({ offset: 0.14 })
-  assert.doesNotThrow(() => validate(circuit))
+  const board = await padContactRoute({ offset: 0.14 })
+  assert.doesNotThrow(() => validate(board))
 })
 
 test("trace width contributes to pad contact on its layer", async () => {
   const copperContact = await padContactRoute({ offset: 0.23 })
   assert.doesNotThrow(() => validate(copperContact))
+})
+
+test("a gap between trace copper and the receiver pad leaves the receiver unrouted", async () => {
   const gap = await padContactRoute({ offset: 0.3 })
   assert.throws(() => validate(gap), /is not routed between/)
+})
+
+test("trace copper cannot connect to a pad on a different layer", async () => {
   const otherLayer = await padContactRoute({ offset: 0.14, layer: "bottom" })
   assert.throws(() => validate(otherLayer), /is not routed between/)
 })
 
-test("a cross-leg termination load is not a branch in either differential path", async () => {
-  const circuit = await differentialTerminationRoute()
-  const [txp, txn, rxp, rxn] = ["TXP", "TXN", "RXP", "RXN"].map(
-    (component) =>
-      selectPort(circuit, { component, port: "SIG" }).source_port_id,
-  )
-  const signal = driverReceiverChannel({ pattern: "01", bitRateBps: 1e9 })
-  signal.driver = { p_source_port_id: txp, n_source_port_id: txn }
-  signal.receivers = [{ p_source_port_id: rxp, n_source_port_id: rxn }]
-  const rails = new Set<string>()
-  validateSignalGraph({
-    circuit,
-    signalConnectivity: signalTopology({ circuit, rails }),
-    signals: [signal],
-    rails,
-    allowUnroutedTraces: false,
-  })
+test("a cross-leg termination load leaves both differential paths linear", async () => {
+  const board = await differentialTerminationRoute()
+  assert.doesNotThrow(() => validate(board))
 })
