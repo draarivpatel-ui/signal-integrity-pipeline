@@ -18,6 +18,7 @@ import {
   buildRoutedCopper,
   type CopperGraph,
   type CopperPointKey,
+  type CopperTerminals,
   joinCopperPoints,
 } from "./topology-copper"
 
@@ -42,8 +43,11 @@ interface DifferentialCopper {
 /** Junctions physically reachable from a channel endpoint. */
 type ReachableCopper = Set<CopperPointKey>
 
-/** Selected PCB terminal junctions keyed by source port. */
-type Terminals = ReadonlyMap<SourcePortId, CopperPointKey[]>
+/** Look up the complete connected copper net for each junction. */
+type CopperNets = Record<CopperPointKey, CopperPointKey[]>
+
+/** Readable names for the ports of admitted channel endpoints. */
+type PortNames = Record<SourcePortId, string>
 
 /** Source records admitted to the routed copper graph. */
 interface SelectedCopper {
@@ -127,9 +131,6 @@ function selectCopper({
   return { selected, traceIds, traces, ports }
 }
 
-/** Look up the complete connected copper net for each junction. */
-type CopperNets = Record<CopperPointKey, CopperPointKey[]>
-
 /** Index physical nets, including junctions with no neighbors. */
 function copperNets(graph: CopperGraph): CopperNets {
   const networks = findConnectedNetworks(
@@ -158,7 +159,7 @@ function differentialLegs({
   nets,
 }: {
   signals: readonly SimulationPcbDriverReceiverChannel[]
-  terminals: Terminals
+  terminals: CopperTerminals
   nets: CopperNets
 }): DifferentialCopper[] {
   return signals.flatMap(({ driver, receivers }) => {
@@ -194,7 +195,7 @@ function joinPassiveBridges({
   bridges: PassiveBridge[]
   differential: DifferentialCopper[]
   graph: CopperGraph
-  terminals: Terminals
+  terminals: CopperTerminals
 }): void {
   for (const [pinA, pinB] of bridges) {
     const first = terminals.get(pinA)
@@ -216,24 +217,21 @@ function joinPassiveBridges({
   }
 }
 
-/** Describe schematic ports as component and pin names when the records identify both. */
-function portNames(circuit: CircuitJson): ReadonlyMap<SourcePortId, string> {
-  const components = new Map(
+/** Describe the component-bound ports admitted by channel endpoint resolution. */
+function portNames(circuit: CircuitJson): PortNames {
+  const components = Object.fromEntries(
     circuit
       .filter((record) => record.type === "source_component")
       .map((record) => [record.source_component_id, record.name]),
   )
-  return new Map(
-    circuit
-      .filter((record) => record.type === "source_port")
-      .map((port) => {
-        if (port.source_component_id === undefined)
-          return [port.source_port_id, port.name]
-        const name = components.get(port.source_component_id)
-        if (name === undefined) return [port.source_port_id, port.name]
-        return [port.source_port_id, `${name}.${port.name}`]
-      }),
-  )
+  const names: PortNames = {}
+  for (const port of circuit) {
+    if (port.type !== "source_port" || port.source_component_id === undefined)
+      continue
+    names[port.source_port_id] =
+      `${components[port.source_component_id]}.${port.name}`
+  }
+  return names
 }
 
 /** Check linearity for routed drivers and enforce receiver coverage under strict routing. */
@@ -247,27 +245,22 @@ function checkSignalRoutes({
 }: {
   signals: readonly SimulationPcbDriverReceiverChannel[]
   graph: CopperGraph
-  terminals: Terminals
+  terminals: CopperTerminals
   routed: ReadonlySet<CopperPointKey>
-  names: ReadonlyMap<SourcePortId, string>
+  names: PortNames
   allowUnroutedTraces: boolean
 }): void {
   const nets = copperNets(graph)
   for (const { name, driver, receivers } of signals) {
     const drivers = endpointPorts(driver)
     const targets = receivers.map(endpointPorts)
-    if (targets.some((ports) => ports.length !== drivers.length))
-      fail(
-        "channel_net",
-        `Signal "${name}" must use the same endpoint shape for its driver and receivers.`,
-      )
     for (const [leg, port] of drivers.entries()) {
-      const driverName = names.get(port) ?? port
+      const driverName = names[port]
       const starts = terminals.get(port)
-      if (!starts || starts.length === 0) {
+      if (!starts) {
         if (!allowUnroutedTraces)
           fail(
-            "channel_net",
+            "channel_driver_terminal_missing",
             `Signal "${name}" is not routed from ${driverName}: the driver has no PCB terminal.`,
           )
         continue
@@ -280,21 +273,19 @@ function checkSignalRoutes({
       )
         fail(
           "channel_fanout",
-          `Signal "${name}" from ${driverName} follows branched routed copper. Route it as a single path.`,
+          `Signal "${name}" from ${driverName}: branched routes are not supported yet.`,
         )
       if (allowUnroutedTraces) continue
       for (const ports of targets) {
         const target = ports[leg]
-        const targetName = names.get(target) ?? target
-        const ends = terminals.get(target)
+        const targetName = names[target]
         const unrouted = `Signal "${name}" is not routed between ${driverName} and ${targetName}`
-        if (!ends || ends.length === 0) {
+        const ends =
+          terminals.get(target) ??
           fail(
-            "channel_net",
+            "channel_receiver_terminal_missing",
             `${unrouted}: the receiver has no PCB terminal on the signal net.`,
           )
-          continue
-        }
         if (!ends.some((key) => connected.has(key)))
           fail("channel_net", `${unrouted}.`)
       }

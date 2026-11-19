@@ -7,6 +7,6 @@ test("two copper legs leaving a series resistor form a branch", async () => {
   const branched = await seriesResistor({ stub: true })
   assert.throws(() => validate(branched), {
     code: "channel_fanout",
-    message: /branched routed copper/,
+    message: /branched routes are not supported yet/,
   })
 })

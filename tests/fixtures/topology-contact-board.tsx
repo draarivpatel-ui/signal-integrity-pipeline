@@ -8,7 +8,7 @@ import {
 } from "./topology-board"
 
 /** A routed launch and a separately routed end that can approach on either side of copper contact. */
-export async function parallelTraces({
+export async function offsetTraceEnds({
   separation,
 }: {
   separation: number
@@ -37,18 +37,24 @@ export async function parallelTraces({
 }
 
 /** A trace whose embedded via switches from the incoming layer to the destination layer. */
-export async function inlineVia(): Promise<TopologyBoard> {
+export async function inlineVia({
+  fromLayer = "top",
+  toLayer = "bottom",
+}: {
+  fromLayer?: "top" | "bottom"
+  toLayer?: "top" | "bottom"
+} = {}): Promise<TopologyBoard> {
   return topologyBoard({
     children: (
       <>
         <SignalPin name="TX" x={-4} />
-        <SignalPin name="RX" x={4} layer="bottom" />
+        <SignalPin name="RX" x={4} layer={toLayer} />
         <trace
           from=".TX > .SIG"
           to=".RX > .SIG"
           pcbPath={[
             ".TX > .SIG",
-            { x: 4, y: 0, via: true, fromLayer: "top", toLayer: "bottom" },
+            { x: 4, y: 0, via: true, fromLayer, toLayer },
             ".RX > .SIG",
           ]}
         />
@@ -435,12 +441,12 @@ export async function layeredDriverBranch(): Promise<TopologyBoard> {
   })
 }
 
-/** The receiver can sample via its top pad while its bottom pad is isolated. */
+/** The receiver can sample via its bottom pad while its top pad is isolated. */
 export async function layeredReceiver(): Promise<TopologyBoard> {
   return topologyBoard({
     children: (
       <>
-        <SignalPin name="TX" x={-4} />
+        <SignalPin name="TX" x={-4} layer="bottom" />
         <LayeredSignalPin name="RX" x={4} />
         <trace
           from=".TX > .SIG"

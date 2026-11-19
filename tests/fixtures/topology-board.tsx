@@ -394,7 +394,12 @@ export async function differentialTerminationRoute({
 } = {}): Promise<TopologyBoard> {
   const reversed = positiveTerminal === "pin2"
   const positive = `.TERM > .${positiveTerminal}`
-  const negative = reversed ? ".TERM > .pin1" : ".TERM > .pin2"
+  let negative = ".TERM > .pin2"
+  let rotation = 90
+  if (reversed) {
+    negative = ".TERM > .pin1"
+    rotation = -90
+  }
   return topologyBoard({
     driverRef: { p: ".TXP > .SIG", n: ".TXN > .SIG" },
     receiverRef: { p: ".RXP > .SIG", n: ".RXN > .SIG" },
@@ -408,7 +413,7 @@ export async function differentialTerminationRoute({
           name="TERM"
           resistance="120"
           footprint="0603"
-          pcbRotation={reversed ? -90 : 90}
+          pcbRotation={rotation}
         />
         <trace
           from=".TXP > .SIG"

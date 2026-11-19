@@ -19,7 +19,7 @@ type RouterPoint =
       width: number
     }
 
-/** Render a named connection with deterministic copper from a local routing phase. */
+/** Render router-only annotations and exact taper widths unsupported by manual pcbPath. */
 async function routedBoard({
   route,
   receiverX = 4,
@@ -91,8 +91,10 @@ export async function throughPadGap(): Promise<TopologyBoard> {
 /** The wide end of a teardrop reaches the receiver while its narrow end is clear. */
 export async function taperedRoute({
   wideEnd,
+  omitEndWidth = false,
 }: {
   wideEnd: "start" | "end"
+  omitEndWidth?: boolean
 }): Promise<TopologyBoard> {
   const taper: PcbTraceRoutePointWire = {
     route_type: "wire",
@@ -110,29 +112,24 @@ export async function taperedRoute({
     layer: "top",
     width: 0.1,
   } as const
+  let receiverX = 2.8
   if (wideEnd === "end") {
     taper.start_width = 0.1
     taper.end_width = 0.6
+    receiverX = 4
+  }
+  if (omitEndWidth) {
+    // Older route records can carry only the starting width.
+    delete taper.end_width
+    receiverX = 4
   }
   return routedBoard({
-    receiverX: wideEnd === "start" ? 2.8 : 4,
+    receiverX,
     route: [
       { route_type: "wire", x: -4, y: 0, layer: "top", width: 0.1 },
       { route_type: "wire", x: 1, y: 0.42, layer: "top", width: 0.1 },
       taper,
       end,
-    ],
-  })
-}
-
-/** The router stores the barrel directly in its trace route. */
-export async function routeOnlyVia(): Promise<TopologyBoard> {
-  return routedBoard({
-    receiverLayer: "bottom",
-    route: [
-      { route_type: "wire", x: -4, y: 0, layer: "top", width: 0.1 },
-      { route_type: "via", x: 0, y: 0, from_layer: "top", to_layer: "bottom" },
-      { route_type: "wire", x: 4, y: 0, layer: "bottom", width: 0.1 },
     ],
   })
 }
@@ -178,6 +175,7 @@ export async function routeOnlyViaRing({
       { route_type: "wire", x: 4, y: 0, layer: "bottom", width: 0.1 },
     ],
   })
+  // Core emits both encodings; saved routes may carry the dimensions in only one.
   if (diameterOnViaRecord) {
     const circuit = board.circuit.map((record) => {
       if (record.type !== "pcb_trace") return record
@@ -193,13 +191,52 @@ export async function routeOnlyViaRing({
   return { ...board, circuit }
 }
 
-/** The autorouter returns a via approached on a different layer from its entry. */
-export async function mismatchedViaEntry(): Promise<TopologyBoard> {
-  return routedBoard({
+/** A saved route uses two independently located rings with copper between them. */
+export async function twoRouteViaRings(): Promise<TopologyBoard> {
+  const board = await routedBoard({
     route: [
       { route_type: "wire", x: -4, y: 0, layer: "top", width: 0.1 },
-      { route_type: "via", x: 0, y: 0, from_layer: "bottom", to_layer: "top" },
+      { route_type: "wire", x: -1.2, y: 0, layer: "top", width: 0.1 },
+      {
+        route_type: "through_obstacle",
+        start: { x: -1.2, y: 0 },
+        end: { x: -1, y: 0 },
+        from_layer: "top",
+        to_layer: "top",
+        width: 0.1,
+      },
+      {
+        route_type: "via",
+        x: -1,
+        y: 0,
+        from_layer: "top",
+        to_layer: "bottom",
+        outer_diameter: 0.45,
+      },
+      { route_type: "wire", x: 1, y: 0, layer: "bottom", width: 0.1 },
+      {
+        route_type: "via",
+        x: 1,
+        y: 0,
+        from_layer: "bottom",
+        to_layer: "top",
+        outer_diameter: 0.45,
+      },
+      {
+        route_type: "through_obstacle",
+        start: { x: 1, y: 0 },
+        end: { x: 1.2, y: 0 },
+        from_layer: "top",
+        to_layer: "top",
+        width: 0.1,
+      },
+      { route_type: "wire", x: 1.2, y: 0, layer: "top", width: 0.1 },
       { route_type: "wire", x: 4, y: 0, layer: "top", width: 0.1 },
     ],
   })
+  // Current core materializes these rings twice. A saved route can carry only the route points.
+  return {
+    ...board,
+    circuit: board.circuit.filter((record) => record.type !== "pcb_via"),
+  }
 }

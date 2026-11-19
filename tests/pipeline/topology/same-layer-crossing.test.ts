@@ -7,6 +7,6 @@ test("a same-layer crossing between route vertices forms a junction", async () =
   const board = await crossingRoute()
   assert.throws(() => validate(board), {
     code: "channel_fanout",
-    message: /branched routed copper/,
+    message: /branched routes are not supported yet/,
   })
 })

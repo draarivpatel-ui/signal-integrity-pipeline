@@ -6,7 +6,7 @@ import { validate } from "../../fixtures/validate-topology-board"
 test("strict routing diagnoses a missing driver terminal", async () => {
   const board = await missingReceiverTerminal({ missing: "driver" })
   assert.throws(() => validate(board), {
-    code: "channel_net",
-    message: /RX\.SIG/,
+    code: "channel_driver_terminal_missing",
+    message: /RX\.SIG: the driver has no PCB terminal/,
   })
 })

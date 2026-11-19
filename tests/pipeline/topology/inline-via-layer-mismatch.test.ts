@@ -1,10 +1,10 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { mismatchedViaEntry } from "../../fixtures/topology-router-board"
+import { inlineVia } from "../../fixtures/topology-contact-board"
 import { validate } from "../../fixtures/validate-topology-board"
 
 test("an incorrectly approached via cannot lay copper on its incoming layer", async () => {
-  const board = await mismatchedViaEntry()
+  const board = await inlineVia({ fromLayer: "bottom", toLayer: "top" })
   assert.ok(
     board.circuit.some(
       (record) =>

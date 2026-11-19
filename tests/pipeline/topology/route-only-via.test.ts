@@ -1,10 +1,10 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { routeOnlyVia } from "../../fixtures/topology-router-board"
+import { inlineVia } from "../../fixtures/topology-contact-board"
 import { validate } from "../../fixtures/validate-topology-board"
 
 test("an embedded barrel connects the layers without a standalone via record", async () => {
-  const board = await routeOnlyVia()
+  const board = await inlineVia()
   assert.ok(
     board.circuit.some(
       (record) =>

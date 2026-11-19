@@ -1,4 +1,9 @@
-import { Point as PlanarPoint, type Polygon, Vector } from "@flatten-js/core"
+import {
+  type Box,
+  Point as PlanarPoint,
+  type Polygon,
+  Vector,
+} from "@flatten-js/core"
 import {
   circlePolygon,
   getPlatedHolePolygon,
@@ -7,20 +12,23 @@ import {
 } from "@tscircuit/circuit-json-util"
 import type {
   LayerRef,
+  PcbComponent,
   PcbPort,
   PcbTrace,
-  PcbTraceRoutePoint,
+  PcbTraceRoutePointVia,
+  PcbTraceRoutePointWire,
   Point,
+  SourceTrace,
 } from "circuit-json"
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
-import type { CircuitJson, SourcePortId } from "../board"
+import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
 
 /** A quantized point or the key of a copper feature that acts as one junction. */
 export type CopperPointKey = string
 /** Distinct physical neighbors at each junction. */
 export type CopperGraph = Record<CopperPointKey, Set<CopperPointKey>>
 /** Selected PCB terminal junctions by their source port. */
-type CopperTerminals = Map<SourcePortId, CopperPointKey[]>
+export type CopperTerminals = ReadonlyMap<SourcePortId, CopperPointKey[]>
 /** Copper adjacency and the terminals it connects to. */
 interface RoutedCopper {
   graph: CopperGraph
@@ -55,6 +63,42 @@ interface CopperWire {
 /** One group of keys to collapse to a single junction. */
 type CopperGroup = CopperPointKey[]
 
+/** A layer's copper outline and cached bounds, with its original graph feature. */
+interface CopperFeature {
+  copper: CopperWire | CopperRegion
+  box: Box
+}
+
+/** Outlines and junctions contributed by pads and standalone vias. */
+interface RegionCopper {
+  regions: CopperRegion[]
+  groups: CopperGroup[]
+}
+
+/** Copper and junctions carried by the trace route itself. */
+interface TraceCopper extends RegionCopper {
+  wires: CopperWire[]
+}
+
+/** A wire's ordered path and its collapsed contact intervals. */
+interface WireJunctions {
+  route: CopperGroup
+  groups: CopperGroup[]
+}
+
+/** A route point that can end a wire. Through-pad copper comes from the pad record. */
+type WireEnd = PcbTraceRoutePointWire | PcbTraceRoutePointVia
+
+/** Source ports and routes admitted to physical topology validation. */
+interface CopperSelection {
+  circuit: CircuitJson
+  ports: PcbPort[]
+  traces: PcbTrace[]
+  selected: ReadonlySet<SourceNetId | SourcePortId>
+  rails: ReadonlySet<SourceNetId | SourcePortId>
+  traceIds: ReadonlySet<SourceTrace["source_trace_id"]>
+}
+
 /** Point grid spacing and maximum outline separation treated as contact, in millimeters. */
 const COPPER_TOLERANCE_MM = 1e-5
 
@@ -73,7 +117,6 @@ function pointKey({
 
 /** Compare the occupied outline on either side of a possible copper contact. */
 function outlineContact({ a, b }: { a: Polygon; b: Polygon }): PlanarPoint[] {
-  if (!a.box.extend(COPPER_TOLERANCE_MM).intersect(b.box)) return []
   const points = [
     ...a.intersect(b),
     ...a.vertices.filter((point) => b.contains(point)),
@@ -108,34 +151,52 @@ function registerContact({
   })
 }
 
-/** Put coplanar pads, barrels and overlapping wires in the ordered contacts of each wire. */
-function registerOutlineContacts({
+/** Find coplanar outline contacts with a sweep along each layer's x axis. */
+function outlineContacts({
   wires,
   regions,
 }: {
   wires: CopperWire[]
   regions: CopperRegion[]
-}): void {
-  for (const [index, wire] of wires.entries()) {
-    for (const { layer, outline, key } of regions) {
-      if (wire.layer !== layer) continue
-      const points = outlineContact({ a: wire.outline, b: outline })
-      if (points.length) registerContact({ wire, key, points })
-    }
-    for (let otherIndex = index + 1; otherIndex < wires.length; otherIndex++) {
-      const other = wires[otherIndex]
-      if (wire.layer !== other.layer) continue
-      const points = outlineContact({ a: wire.outline, b: other.outline })
+}): CopperGroup[] {
+  const features: CopperFeature[] = [...wires, ...regions]
+    .map((copper) => ({
+      copper,
+      box: copper.outline.box,
+    }))
+    .sort(
+      (a, b) =>
+        a.copper.layer.localeCompare(b.copper.layer) || a.box.xmin - b.box.xmin,
+    )
+  const groups: CopperGroup[] = []
+  for (const [index, { copper: a, box }] of features.entries()) {
+    const search = box.extend(COPPER_TOLERANCE_MM)
+    for (
+      let otherIndex = index + 1;
+      otherIndex < features.length;
+      otherIndex++
+    ) {
+      const { copper: b, box: bounds } = features[otherIndex]
+      if (a.layer !== b.layer || search.xmax < bounds.xmin) break
+      if (!search.intersect(bounds)) continue
+      const points = outlineContact({ a: a.outline, b: b.outline })
       if (!points.length) continue
+      if ("key" in a) {
+        if ("key" in b) groups.push([a.key, b.key])
+        else registerContact({ wire: b, key: a.key, points })
+        continue
+      }
+      if ("key" in b) {
+        registerContact({ wire: a, key: b.key, points })
+        continue
+      }
       const key = `contact:${index}:${otherIndex}`
-      registerContact({ wire, key, points })
-      registerContact({ wire: other, key, points })
+      registerContact({ wire: a, key, points })
+      registerContact({ wire: b, key, points })
     }
   }
+  return groups
 }
-
-/** A route point that can be an end of a wire. Through-pad copper comes from the pad record. */
-type WireEnd = Exclude<PcbTraceRoutePoint, { route_type: "through_pad" }>
 
 /** Read a via's approached layer or the wire layer at a route point. */
 function routeLayer({
@@ -183,30 +244,19 @@ function routeWire({
 }
 
 /** Build the wires and barrel connections encoded directly in each selected route. */
-function traceCopper({
-  traces,
-  regions,
-  groups,
-}: {
-  traces: PcbTrace[]
-  regions: CopperRegion[]
-  groups: CopperGroup[]
-}): CopperWire[] {
+function traceCopper(traces: PcbTrace[]): TraceCopper {
   const wires: CopperWire[] = []
-  for (const { route, pcb_trace_id } of traces) {
+  const regions: CopperRegion[] = []
+  const groups: CopperGroup[] = []
+  for (const { route } of traces) {
     for (const [index, end] of route.entries()) {
       if (end.route_type === "via") {
-        const keys = [end.from_layer, end.to_layer].map((layer) =>
-          pointKey({ point: end, layer }),
-        )
-        groups.push(keys)
+        const layers = [end.from_layer, end.to_layer]
+        const key = pointKey({ point: end, layer: end.from_layer })
+        groups.push([key, pointKey({ point: end, layer: end.to_layer })])
         if (end.outer_diameter !== undefined) {
           const outline = circlePolygon(end, end.outer_diameter / 2)
-          for (const layer of [end.from_layer, end.to_layer]) {
-            const key = `${pcb_trace_id}:via:${index}`
-            regions.push({ layer, outline, key })
-            groups.push([key, ...keys])
-          }
+          for (const layer of layers) regions.push({ layer, outline, key })
         }
       }
       if (index === 0) continue
@@ -220,7 +270,7 @@ function traceCopper({
       if (wire) wires.push(wire)
     }
   }
-  return wires
+  return { wires, regions, groups }
 }
 
 /** Use only pads linked to selected PCB ports and vias associated with selected nets or routes. */
@@ -231,24 +281,16 @@ function copperRegions({
   selected,
   rails,
   traceIds,
-  groups,
-}: {
-  circuit: CircuitJson
-  ports: PcbPort[]
-  traces: PcbTrace[]
-  selected: ReadonlySet<string>
-  rails: ReadonlySet<string>
-  traceIds: ReadonlySet<NonNullable<PcbTrace["source_trace_id"]>>
-  groups: CopperGroup[]
-}): CopperRegion[] {
+}: CopperSelection): RegionCopper {
   const selectedPorts = new Map(ports.map((port) => [port.pcb_port_id, port]))
   const selectedTraces = new Set(traces.map((trace) => trace.pcb_trace_id))
-  const rotations = new Map<string | undefined, number>(
+  const rotations = new Map<PcbComponent["pcb_component_id"], number>(
     circuit
       .filter((record) => record.type === "pcb_component")
       .map((record) => [record.pcb_component_id, record.rotation]),
   )
   const regions: CopperRegion[] = []
+  const groups: CopperGroup[] = []
   for (const record of circuit) {
     if (record.type === "pcb_via") {
       const { source_net_id, source_trace_id, pcb_trace_id } = record
@@ -279,7 +321,9 @@ function copperRegions({
       })
       continue
     }
-    const rotation = rotations.get(record.pcb_component_id)
+    let rotation: number | undefined
+    if (record.pcb_component_id !== undefined)
+      rotation = rotations.get(record.pcb_component_id)
     const outline = getPlatedHolePolygon(record, rotation)
     for (const layer of record.layers)
       regions.push({ layer, outline, key: record.pcb_plated_hole_id })
@@ -288,31 +332,25 @@ function copperRegions({
       ...record.layers.map((layer) => pointKey({ point: port, layer })),
     ])
   }
-  return regions
+  return { regions, groups }
 }
 
 /** Collapse overlapping contact intervals and keep the order of disjoint junctions on a wire. */
-function wireJunctions({
-  contacts,
-  groups,
-}: {
-  contacts: CopperContact[]
-  groups: CopperGroup[]
-}): CopperGroup {
-  contacts.sort((a, b) => a.start - b.start)
-  const [first, ...rest] = contacts
+function wireJunctions(contacts: CopperContact[]): WireJunctions {
+  const [first, ...rest] = contacts.toSorted((a, b) => a.start - b.start)
   let current = first
-  const junctions = [first.key]
+  const route = [first.key]
+  const groups: CopperGroup[] = []
   for (const contact of rest) {
     if (contact.start <= current.end + COPPER_TOLERANCE_MM) {
       groups.push([current.key, contact.key])
       if (contact.end > current.end) current = contact
       continue
     }
-    junctions.push(contact.key)
+    route.push(contact.key)
     current = contact
   }
-  return junctions
+  return { route, groups }
 }
 
 /** Add an undirected edge between two distinct copper junctions. */
@@ -331,50 +369,30 @@ export function joinCopperPoints({
 }
 
 /** Resolve the copper junctions and connect each pair of consecutive stops on a trace. */
-export function buildRoutedCopper({
-  circuit,
-  ports,
-  traces,
-  selected,
-  rails,
-  traceIds,
-}: {
-  circuit: CircuitJson
-  ports: PcbPort[]
-  traces: PcbTrace[]
-  selected: ReadonlySet<string>
-  rails: ReadonlySet<string>
-  traceIds: ReadonlySet<NonNullable<PcbTrace["source_trace_id"]>>
-}): RoutedCopper {
-  const groups: CopperGroup[] = []
-  const regions = copperRegions({
-    circuit,
-    ports,
-    traces,
-    selected,
-    rails,
-    traceIds,
-    groups,
+export function buildRoutedCopper(selection: CopperSelection): RoutedCopper {
+  const pads = copperRegions(selection)
+  const { wires, regions, groups: barrels } = traceCopper(selection.traces)
+  const contacts = outlineContacts({
+    wires,
+    regions: [...pads.regions, ...regions],
   })
-  const wires = traceCopper({ traces, regions, groups })
-  registerOutlineContacts({ wires, regions })
-  const routes = wires.map(({ contacts }) =>
-    wireJunctions({ contacts, groups }),
+  const ordered = wires.map(({ contacts }) => wireJunctions(contacts))
+  const terminalPoints = selection.ports.flatMap((port) =>
+    port.layers.map((layer) => ({
+      port: port.source_port_id,
+      key: pointKey({ point: port, layer }),
+    })),
   )
-  const terminals: CopperTerminals = new Map()
-  for (const port of ports) {
-    const keys = port.layers.map((layer) => pointKey({ point: port, layer }))
-    for (const key of keys) groups.push([key])
-    const existing = terminals.get(port.source_port_id)
-    if (!existing) {
-      terminals.set(port.source_port_id, keys)
-      continue
-    }
-    existing.push(...keys)
-  }
-  for (const keys of routes) {
-    for (const key of keys) groups.push([key])
-  }
+  const groups = [
+    ...pads.groups,
+    ...barrels,
+    ...contacts,
+    ...ordered.flatMap(({ route, groups }) => [
+      ...groups,
+      ...route.map((key) => [key]),
+    ]),
+    ...terminalPoints.map(({ key }) => [key]),
+  ]
   const networks = Object.entries(findConnectedNetworks(groups))
   const junctions = Object.fromEntries(
     networks.flatMap(([id, keys]) => keys.map((key) => [key, id])),
@@ -383,7 +401,7 @@ export function buildRoutedCopper({
     networks.map(([id]) => [id, new Set<CopperPointKey>()]),
   )
   const routed = new Set<CopperPointKey>()
-  for (const keys of routes) {
+  for (const { route: keys } of ordered) {
     for (const [index, key] of keys.entries()) {
       const a = junctions[key]
       routed.add(a)
@@ -391,10 +409,11 @@ export function buildRoutedCopper({
       joinCopperPoints({ graph, a, b: junctions[keys[index - 1]] })
     }
   }
-  for (const [port, keys] of terminals)
-    terminals.set(
-      port,
-      keys.map((key) => junctions[key]),
-    )
+  const terminals = new Map<SourcePortId, CopperPointKey[]>()
+  for (const { port, key } of terminalPoints) {
+    const terminal = terminals.get(port)
+    if (terminal) terminal.push(junctions[key])
+    else terminals.set(port, [junctions[key]])
+  }
   return { graph, terminals, routed }
 }
