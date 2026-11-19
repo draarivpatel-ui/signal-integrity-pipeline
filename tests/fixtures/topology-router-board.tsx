@@ -14,8 +14,8 @@ type RouterPoint =
       route_type: "through_obstacle"
       start: Point
       end: Point
-      from_layer: "top"
-      to_layer: "top"
+      from_layer: "top" | "bottom"
+      to_layer: "top" | "bottom"
       width: number
     }
 
@@ -135,4 +135,60 @@ export async function routeOnlyVia(): Promise<TopologyBoard> {
       { route_type: "wire", x: 4, y: 0, layer: "bottom", width: 0.1 },
     ],
   })
+}
+
+/** Copper stops either side of a barrel carried only by the saved route point. */
+export async function routeOnlyViaRing({
+  gap,
+  diameterOnViaRecord = false,
+}: {
+  gap: number
+  diameterOnViaRecord?: boolean
+}): Promise<TopologyBoard> {
+  const board = await routedBoard({
+    receiverLayer: "bottom",
+    route: [
+      { route_type: "wire", x: -4, y: 0, layer: "top", width: 0.1 },
+      { route_type: "wire", x: -gap, y: 0, layer: "top", width: 0.1 },
+      {
+        route_type: "through_obstacle",
+        start: { x: -gap, y: 0 },
+        end: { x: 0, y: 0 },
+        from_layer: "top",
+        to_layer: "top",
+        width: 0.1,
+      },
+      {
+        route_type: "via",
+        x: 0,
+        y: 0,
+        from_layer: "top",
+        to_layer: "bottom",
+        outer_diameter: 0.45,
+      },
+      {
+        route_type: "through_obstacle",
+        start: { x: 0, y: 0 },
+        end: { x: gap, y: 0 },
+        from_layer: "bottom",
+        to_layer: "bottom",
+        width: 0.1,
+      },
+      { route_type: "wire", x: gap, y: 0, layer: "bottom", width: 0.1 },
+      { route_type: "wire", x: 4, y: 0, layer: "bottom", width: 0.1 },
+    ],
+  })
+  if (diameterOnViaRecord) {
+    const circuit = board.circuit.map((record) => {
+      if (record.type !== "pcb_trace") return record
+      const route = record.route.map((point) => {
+        if (point.route_type !== "via") return point
+        return { ...point, outer_diameter: undefined }
+      })
+      return { ...record, route }
+    })
+    return { ...board, circuit }
+  }
+  const circuit = board.circuit.filter((record) => record.type !== "pcb_via")
+  return { ...board, circuit }
 }

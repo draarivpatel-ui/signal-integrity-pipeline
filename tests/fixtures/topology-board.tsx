@@ -128,8 +128,18 @@ export async function topologyBoard({
 }
 
 /** A driver stub and a schematic receiver with no footprint. */
-export async function missingReceiverTerminal(): Promise<TopologyBoard> {
+export async function missingReceiverTerminal({
+  missing = "receiver",
+}: {
+  missing?: "driver" | "receiver"
+} = {}): Promise<TopologyBoard> {
+  const endpoints: Omit<TopologyBoardOptions, "children"> = {}
+  if (missing === "driver") {
+    endpoints.driverRef = ".RX > .SIG"
+    endpoints.receiverRef = ".TX > .SIG"
+  }
   return topologyBoard({
+    ...endpoints,
     children: (
       <>
         <SignalPin name="TX" x={-4} />
@@ -281,16 +291,21 @@ export async function platedHoleRoute(): Promise<TopologyBoard> {
 export async function standaloneViaRoute({
   offset = 0,
   viaNet = "SIGNAL",
+  viaPort,
 }: {
   offset?: number
   viaNet?: string
+  viaPort?: string
 } = {}): Promise<TopologyBoard> {
+  let connectsTo = `net.${viaNet}`
+  if (viaPort) connectsTo = `.${viaPort} > .SIG`
   return topologyBoard({
     children: (
       <>
         <SignalPin name="TX" x={-4} />
         <SignalPin name="RX" x={4} layer="bottom" />
         <net name="SIGNAL" />
+        {viaPort === "OTHER" && <SignalPin name="OTHER" x={0} y={4} />}
         {viaNet !== "SIGNAL" && <net name={viaNet} />}
         <via
           name="V"
@@ -299,7 +314,7 @@ export async function standaloneViaRoute({
           layers={["top", "bottom"]}
           holeDiameter={0.2}
           outerDiameter={0.45}
-          connectsTo={`net.${viaNet}`}
+          connectsTo={connectsTo}
         />
         <trace
           from=".TX > .SIG"

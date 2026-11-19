@@ -1,3 +1,4 @@
+import type { JSX } from "react"
 import type { SourceNetId } from "../../src/board"
 import {
   SignalModel,
@@ -38,14 +39,16 @@ export async function parallelTraces({
 /** A trace whose embedded via switches from the incoming layer to the destination layer. */
 export async function inlineVia({
   fromLayer = "top",
+  toLayer = "bottom",
 }: {
   fromLayer?: "top" | "bottom"
+  toLayer?: "top" | "bottom"
 } = {}): Promise<TopologyBoard> {
   return topologyBoard({
     children: (
       <>
         <SignalPin name="TX" x={-4} />
-        <SignalPin name="RX" x={4} layer="bottom" />
+        <SignalPin name="RX" x={4} layer={toLayer} />
         <trace
           from=".TX > .SIG"
           to=".RX > .SIG"
@@ -125,11 +128,15 @@ export async function railAndOtherCopper(): Promise<
 }
 
 /** A straight trace ends inside the rotated copper outline of a plated receiver terminal. */
-export async function rotatedPlatedHole(): Promise<TopologyBoard> {
+export async function rotatedPlatedHole({
+  layer = "top",
+}: {
+  layer?: "top" | "bottom"
+} = {}): Promise<TopologyBoard> {
   return topologyBoard({
     children: (
       <>
-        <SignalPin name="TX" x={-4} />
+        <SignalPin name="TX" x={-4} layer={layer} />
         <chip
           name="RX"
           pcbX={4}
@@ -195,8 +202,12 @@ export async function midSegmentPads(): Promise<TopologyBoard> {
 }
 
 /** An unselected plated pad occupies the gap between the top and bottom signal stubs. */
-export async function unrelatedPlatedHole(): Promise<TopologyBoard> {
-  return topologyBoard({
+export async function unrelatedPlatedHole({
+  rail = false,
+}: {
+  rail?: boolean
+} = {}): Promise<TopologyBoard & { rails: ReadonlySet<SourceNetId> }> {
+  const board = await topologyBoard({
     children: (
       <>
         <SignalPin name="TX" x={-4} />
@@ -226,9 +237,26 @@ export async function unrelatedPlatedHole(): Promise<TopologyBoard> {
           to="net.SIGNAL"
           pcbPath={[".RX > .SIG", { x: -3.9, y: 0 }]}
         />
+        {rail && (
+          <>
+            <SignalModel name="UNRELATED" />
+            <trace from=".UNRELATED > .SIG" to="net.SIGNAL" />
+          </>
+        )}
       </>
     ),
   })
+  if (!rail) return { ...board, rails: new Set() }
+  const hole = board.circuit.find((record) => record.type === "pcb_plated_hole")
+  const port = board.circuit.find(
+    (record) =>
+      record.type === "pcb_port" &&
+      hole?.type === "pcb_plated_hole" &&
+      record.pcb_port_id === hole.pcb_port_id,
+  )
+  if (!port || port.type !== "pcb_port")
+    throw new Error("Expected the plated terminal")
+  return { ...board, rails: new Set([port.source_port_id]) }
 }
 
 /** Two ideal passives share the driver terminal on a board with no routed signal traces. */
@@ -260,12 +288,16 @@ export async function unroutedPassiveBranch(): Promise<TopologyBoard> {
         <SignalPin name="RX" x={4} />
         <resistor
           name="ONE"
+          pcbX={0}
+          pcbY={0}
           resistance="33"
           pcbRotation={90}
           footprint={footprint}
         />
         <resistor
           name="TWO"
+          pcbX={0}
+          pcbY={0}
           resistance="33"
           pcbRotation={-90}
           footprint={footprint}
@@ -273,6 +305,154 @@ export async function unroutedPassiveBranch(): Promise<TopologyBoard> {
         <trace from=".TX > .SIG" to=".ONE > .pin1" />
         <trace from=".TX > .SIG" to=".TWO > .pin1" />
         <trace from=".ONE > .pin2" to=".RX > .SIG" />
+      </>
+    ),
+  })
+}
+
+/** A schematic passive has only its first PCB terminal populated. */
+export async function partialPassiveFootprint(): Promise<TopologyBoard> {
+  return topologyBoard({
+    children: (
+      <>
+        <SignalPin name="TX" x={-4} />
+        <SignalPin name="RX" x={4} />
+        <resistor
+          name="PARTIAL"
+          resistance="33"
+          pcbY={4}
+          footprint={
+            <footprint>
+              <smtpad
+                portHints={["pin1"]}
+                width={0.4}
+                height={0.4}
+                shape="rect"
+              />
+            </footprint>
+          }
+        />
+        <trace
+          from=".TX > .SIG"
+          to=".RX > .SIG"
+          pcbPath={[".TX > .SIG", ".RX > .SIG"]}
+        />
+        <trace from=".TX > .SIG" to=".PARTIAL > .pin1" />
+      </>
+    ),
+  })
+}
+
+/** A passive lies in series with one leg, with no connection to the other leg. */
+export async function differentialSeriesPassive(): Promise<TopologyBoard> {
+  return topologyBoard({
+    driverRef: { p: ".TXP > .SIG", n: ".TXN > .SIG" },
+    receiverRef: { p: ".RXP > .SIG", n: ".RXN > .SIG" },
+    children: (
+      <>
+        <SignalPin name="TXP" x={-4} y={-2} />
+        <SignalPin name="RXP" x={4} y={-2} />
+        <SignalPin name="TXN" x={-4} y={2} />
+        <SignalPin name="RXN" x={4} y={2} />
+        <resistor name="SERIES" resistance="33" footprint="0402" pcbY={-2} />
+        <trace
+          from=".TXP > .SIG"
+          to=".SERIES > .pin1"
+          pcbPath={[".TXP > .SIG", ".SERIES > .pin1"]}
+        />
+        <trace
+          from=".SERIES > .pin2"
+          to=".RXP > .SIG"
+          pcbPath={[".SERIES > .pin2", ".RXP > .SIG"]}
+        />
+        <trace
+          from=".TXN > .SIG"
+          to=".RXN > .SIG"
+          pcbPath={[".TXN > .SIG", ".RXN > .SIG"]}
+        />
+      </>
+    ),
+  })
+}
+
+/** One source terminal has an SMT pad on each layer, with no shared barrel. */
+function LayeredSignalPin({
+  name,
+  x,
+}: {
+  name: string
+  x: number
+}): JSX.Element {
+  return (
+    <>
+      <chip
+        name={name}
+        pcbX={x}
+        pcbY={0}
+        pinLabels={{ pin1: "SIG" }}
+        footprint={
+          <footprint>
+            <smtpad
+              portHints={["pin1"]}
+              pcbX={0}
+              pcbY={0}
+              width={0.4}
+              height={0.4}
+              shape="rect"
+              layer="top"
+            />
+            <smtpad
+              portHints={["pin1"]}
+              pcbX={0}
+              pcbY={0}
+              width={0.4}
+              height={0.4}
+              shape="rect"
+              layer="bottom"
+            />
+          </footprint>
+        }
+      />
+      <SignalModel name={name} />
+    </>
+  )
+}
+
+/** The top copper remains branched even though the driver's bottom pad is isolated. */
+export async function layeredDriverBranch(): Promise<TopologyBoard> {
+  return topologyBoard({
+    children: (
+      <>
+        <LayeredSignalPin name="TX" x={0} />
+        <SignalPin name="RX" x={4} />
+        <SignalPin name="STUB" x={-4} />
+        <trace
+          from=".TX > .SIG"
+          to=".RX > .SIG"
+          pcbPath={[".TX > .SIG", ".RX > .SIG"]}
+        />
+        <trace
+          from=".TX > .SIG"
+          to=".STUB > .SIG"
+          pcbPath={[".TX > .SIG", ".STUB > .SIG"]}
+        />
+      </>
+    ),
+  })
+}
+
+/** The receiver can sample via its top pad while its bottom pad is isolated. */
+export async function layeredReceiver(): Promise<TopologyBoard> {
+  return topologyBoard({
+    children: (
+      <>
+        <SignalPin name="TX" x={-4} />
+        <LayeredSignalPin name="RX" x={4} />
+        <trace
+          from=".TX > .SIG"
+          to=".RX > .SIG"
+          pcbPath={[".TX > .SIG", ".RX > .SIG"]}
+        />
       </>
     ),
   })
