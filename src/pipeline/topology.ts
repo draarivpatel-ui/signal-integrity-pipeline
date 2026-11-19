@@ -28,8 +28,10 @@ import {
   sourceNetMembers,
 } from "../board"
 
+/** A quantized copper point or a collapsed pad or barrel junction. */
 type CopperPointKey = string
 type CopperPoint = Point & { layer: LayerRef }
+/** Distinct physical neighbors for each copper point. */
 type CopperGraph = Map<CopperPointKey, Set<CopperPointKey>>
 
 /** A routed copper segment on one board layer. */
@@ -40,6 +42,7 @@ interface CopperSegment {
   endWidth: number
 }
 
+/** A mapped terminal and the outline of its pad on one layer. */
 type CopperPad = CopperPoint & { polygon: Polygon }
 
 /** A point and its fractional position along a routed segment. */
@@ -48,12 +51,34 @@ interface SegmentVertex {
   position: number
 }
 
+/** Junctions electrically joined by a continuous pad or via barrel. */
+type CopperContactGroup = CopperPointKey[]
+
+/** Positions tied to one source port by its PCB terminals. */
+type CopperTerminal = {
+  port: SourcePortId
+  keys: CopperPointKey[]
+}
+
+/** Physical junctions reachable from a set of starting terminals. */
+type ReachableCopper = Set<CopperPointKey>
+
+/** One single-ended driver port or the positive and negative driver ports. */
+type DriverPorts =
+  | [single: SourcePortId]
+  | [positive: SourcePortId, negative: SourcePortId]
+
 /** Round to the geometry admission grid at 0.00001 mm per grid step. */
 const COPPER_POINTS_PER_MM = 1e5
 /** Maximum perpendicular distance from a copper segment for a physical junction, in millimeters. */
 const COPPER_JOIN_TOLERANCE_MM = 1e-5
 /** Fractional tolerance for a junction near either end of a segment. */
 const SEGMENT_POSITION_TOLERANCE = 1e-8
+
+/** A branch at the driver gives it more than one physical path out. */
+const MAX_DRIVER_NEIGHBORS = 1
+/** A linear routed path has at most one incoming and one outgoing connection at a junction. */
+const MAX_PATH_NEIGHBORS = 2
 
 /** Extend the source nets through series passives for this block's rail set. */
 export function signalTopology({
@@ -63,26 +88,32 @@ export function signalTopology({
   circuit: CircuitJson
   rails: ReadonlySet<SourcePortId | SourceNetId>
 }): ConnectivityMap {
-  const bridges = passiveBridges(circuit, rails)
+  const bridges = passiveBridges({ circuit, excluded: rails })
   return new ConnectivityMap(
     findConnectedNetworks([...sourceConnections(circuit), ...bridges]),
   )
 }
 
 /** Select the approached layer when the routed point is a via. */
-function routeLayer(
-  point: PcbTraceRoutePointWire | PcbTraceRoutePointVia,
-  viaSide: "from_layer" | "to_layer",
-): LayerRef {
+function routeLayer({
+  point,
+  viaSide,
+}: {
+  point: PcbTraceRoutePointWire | PcbTraceRoutePointVia
+  viaSide: "from_layer" | "to_layer"
+}): LayerRef {
   if (point.route_type === "via") return point[viaSide]
   return point.layer
 }
 
 /** Stable physical identity at the geometry admission tolerance. */
-function recordCopperPoint(
-  points: Map<CopperPointKey, CopperPoint>,
-  point: CopperPoint,
-): CopperPointKey {
+function recordCopperPoint({
+  points,
+  point,
+}: {
+  points: Map<CopperPointKey, CopperPoint>
+  point: CopperPoint
+}): CopperPointKey {
   const x = Math.round(point.x * COPPER_POINTS_PER_MM)
   const y = Math.round(point.y * COPPER_POINTS_PER_MM)
   const key = `${x},${y},${point.layer}`
@@ -91,23 +122,32 @@ function recordCopperPoint(
 }
 
 /** Record intersections between routes on the same layer. */
-function recordCrossings(
-  points: Map<CopperPointKey, CopperPoint>,
-  edges: CopperSegment[],
-): void {
+function recordCrossings({
+  points,
+  edges,
+}: {
+  points: Map<CopperPointKey, CopperPoint>
+  edges: CopperSegment[]
+}): void {
   for (const [index, { layer, segment }] of edges.entries()) {
     for (let other = index + 1; other < edges.length; other++) {
       const edge = edges[other]
       if (layer !== edge.layer) continue
       for (const { x, y } of segment.intersect(edge.segment)) {
-        recordCopperPoint(points, { x, y, layer })
+        recordCopperPoint({ points, point: { x, y, layer } })
       }
     }
   }
 }
 
 /** Read the pad outlines explicitly bound to the selected PCB ports. */
-function terminalPads(circuit: CircuitJson, ports: PcbPort[]): CopperPad[] {
+function terminalPads({
+  circuit,
+  ports,
+}: {
+  circuit: CircuitJson
+  ports: PcbPort[]
+}): CopperPad[] {
   const portById = new Map(ports.map((port) => [port.pcb_port_id, port]))
   const rotations = new Map(
     circuit
@@ -130,7 +170,14 @@ function terminalPads(circuit: CircuitJson, ports: PcbPort[]): CopperPad[] {
 }
 
 /** Project a point onto the segment, expressed as a fraction of its length. */
-function segmentPosition({ start, end }: Segment, point: Point): number {
+function segmentPosition({
+  segment,
+  point,
+}: {
+  segment: Segment
+  point: Point
+}): number {
+  const { start, end } = segment
   const dx = end.x - start.x
   const dy = end.y - start.y
   return (
@@ -139,10 +186,14 @@ function segmentPosition({ start, end }: Segment, point: Point): number {
 }
 
 /** Find the registered points along a segment, including intersections and terminal centers. */
-function segmentVertices(
-  points: Map<CopperPointKey, CopperPoint>,
-  { segment, layer }: CopperSegment,
-): SegmentVertex[] {
+function segmentVertices({
+  points,
+  edge,
+}: {
+  points: Map<CopperPointKey, CopperPoint>
+  edge: CopperSegment
+}): SegmentVertex[] {
+  const { segment, layer } = edge
   const { start, end } = segment
   const dx = end.x - start.x
   const dy = end.y - start.y
@@ -166,25 +217,28 @@ function segmentVertices(
 }
 
 /** Record each pad as one junction with every piece of the segment that touches its copper. */
-function padContactGroups(
-  points: Map<CopperPointKey, CopperPoint>,
-  {
-    edge,
-    pads,
-    vertices,
-  }: {
-    edge: CopperSegment
-    pads: CopperPad[]
-    vertices: SegmentVertex[]
-  },
-): CopperPointKey[][] {
+function padContactGroups({
+  points,
+  edge,
+  pads,
+  vertices,
+}: {
+  points: Map<CopperPointKey, CopperPoint>
+  edge: CopperSegment
+  pads: CopperPad[]
+  vertices: SegmentVertex[]
+}): CopperContactGroup[] {
   const { layer, segment, startWidth, endWidth } = edge
-  const footprint =
-    startWidth > 0
-      ? getTraceSegmentPolygon(segment.start, segment.end, startWidth, endWidth)
-      : null
+  let footprint: Polygon | null = null
+  if (startWidth > 0)
+    footprint = getTraceSegmentPolygon(
+      segment.start,
+      segment.end,
+      startWidth,
+      endWidth,
+    )
   const bounds = footprint?.box ?? segment.box
-  const groups: CopperPointKey[][] = []
+  const groups: CopperContactGroup[] = []
   for (const pad of pads) {
     if (pad.layer !== layer || bounds.not_intersect(pad.polygon.box)) continue
     if (footprint && !copperPolygonsTouch(footprint, pad.polygon)) continue
@@ -198,33 +252,36 @@ function padContactGroups(
         return radius > 0 && center.distanceTo(pad.polygon)[0] <= radius
       })
       .map(({ key }) => key)
-    if (!contacts.length && !overlaps.length) {
-      if (!footprint) continue
+    const missesCenterline = !contacts.length && !overlaps.length
+    if (missesCenterline && !footprint) continue
+    if (missesCenterline) {
       // The trace edge touches the pad but the centerline misses it.
       const [, distance] = segment.distanceTo(pad.polygon)
       overlaps.push(distance.start)
     }
     for (const { x, y } of overlaps) {
-      const key = recordCopperPoint(points, { x, y, layer })
+      const key = recordCopperPoint({ points, point: { x, y, layer } })
       contacts.push(key)
-      vertices.push({ key, position: segmentPosition(segment, { x, y }) })
+      vertices.push({
+        key,
+        position: segmentPosition({ segment, point: { x, y } }),
+      })
     }
-    groups.push([recordCopperPoint(points, pad), ...contacts])
+    groups.push([recordCopperPoint({ points, point: pad }), ...contacts])
   }
   return groups
 }
 
 /** Add an undirected physical edge. */
-function joinCopperPoints(
-  graph: CopperGraph,
-  {
-    a,
-    b,
-  }: {
-    a: CopperPointKey
-    b: CopperPointKey
-  },
-): void {
+function joinCopperPoints({
+  graph,
+  a,
+  b,
+}: {
+  graph: CopperGraph
+  a: CopperPointKey
+  b: CopperPointKey
+}): void {
   if (a === b) return
   if (!graph.has(a)) graph.set(a, new Set())
   if (!graph.has(b)) graph.set(b, new Set())
@@ -232,14 +289,30 @@ function joinCopperPoints(
   graph.get(b)!.add(a)
 }
 
-/** All vertices physically reachable from the given terminals. */
-function reachable(
-  starts: CopperPointKey[],
-  graph: CopperGraph,
-): Set<CopperPointKey> {
-  const found = new Set(starts)
-  for (const key of found) {
-    for (const next of graph.get(key) ?? []) found.add(next)
+/** Group the physical junctions using the copper graph's adjacency lists. */
+function copperConnectivity(graph: CopperGraph): ConnectivityMap {
+  const groups: CopperContactGroup[] = Array.from(graph, ([key, neighbors]) => [
+    key,
+    ...neighbors,
+  ])
+  return new ConnectivityMap(findConnectedNetworks(groups))
+}
+
+/** All vertices physically reachable from the given terminals, including isolated terminals. */
+function reachable({
+  starts,
+  connectivity,
+}: {
+  starts: CopperPointKey[]
+  connectivity: ConnectivityMap
+}): ReachableCopper {
+  const found: ReachableCopper = new Set(starts)
+  const nets = new Set(
+    starts.map((key) => connectivity.getNetConnectedToId(key)),
+  )
+  for (const net of nets) {
+    if (net === undefined) continue
+    for (const key of connectivity.getIdsConnectedToNet(net)) found.add(key)
   }
   return found
 }
@@ -251,16 +324,15 @@ interface DifferentialCopper {
 }
 
 /** Find each leg's copper before adding series connections through passive components. */
-function differentialLegs(
-  {
-    signals,
-    terminals,
-  }: {
-    signals: SimulationPcbDriverReceiverChannel[]
-    terminals: ReadonlyMap<SourcePortId, CopperPointKey[]>
-  },
-  graph: CopperGraph,
-): DifferentialCopper[] {
+function differentialLegs({
+  signals,
+  terminals,
+  connectivity,
+}: {
+  signals: SimulationPcbDriverReceiverChannel[]
+  terminals: ReadonlyMap<SourcePortId, CopperPointKey[]>
+  connectivity: ConnectivityMap
+}): DifferentialCopper[] {
   return signals.flatMap(({ driver, receivers }) => {
     if ("source_port_id" in driver) return []
     const endpoints = [
@@ -275,24 +347,23 @@ function differentialLegs(
     )
     return [
       {
-        positive: reachable(positive, graph),
-        negative: reachable(negative, graph),
+        positive: reachable({ starts: positive, connectivity }),
+        negative: reachable({ starts: negative, connectivity }),
       },
     ]
   })
 }
 
 /** Selects source traces that touch the signal without touching a reference rail. */
-function signalTraces(
-  traces: readonly SourceTrace[],
-  {
-    selected,
-    rails,
-  }: {
-    selected: ReadonlySet<SourcePortId | SourceNetId>
-    rails: ReadonlySet<SourcePortId | SourceNetId>
-  },
-): SourceTrace[] {
+function signalTraces({
+  traces,
+  selected,
+  rails,
+}: {
+  traces: readonly SourceTrace[]
+  selected: ReadonlySet<SourcePortId | SourceNetId>
+  rails: ReadonlySet<SourcePortId | SourceNetId>
+}): SourceTrace[] {
   return traces.filter((trace) => {
     const ports = trace.connected_source_port_ids
     return (
@@ -300,6 +371,23 @@ function signalTraces(
       !ports.some((port) => rails.has(port))
     )
   })
+}
+
+/** A routed driver or a junction along its path can have too many outgoing copper edges. */
+function hasBranch({
+  starts,
+  connected,
+  graph,
+}: {
+  starts: CopperPointKey[]
+  connected: ReachableCopper
+  graph: CopperGraph
+}): boolean {
+  if (starts.some((key) => (graph.get(key)?.size ?? 0) > MAX_DRIVER_NEIGHBORS))
+    return true
+  return [...connected].some(
+    (key) => (graph.get(key)?.size ?? 0) > MAX_PATH_NEIGHBORS,
+  )
 }
 
 /** Verify physical connectivity through passives and reject branched routed graphs independently of source grouping. */
@@ -316,19 +404,21 @@ export function validateSignalGraph({
   rails: ReadonlySet<SourcePortId | SourceNetId>
   allowUnroutedTraces: boolean
 }): void {
-  const drivers = signals.map(({ driver }) => {
+  const drivers = signals.map(({ driver }): DriverPorts => {
     if ("source_port_id" in driver) return [driver.source_port_id]
     return [driver.p_source_port_id, driver.n_source_port_id]
   })
-  const driverNets = drivers
-    .flat()
-    .flatMap((port) => [...sourceNetMembers(signalConnectivity, port)])
+  const driverNets = drivers.flat().flatMap((port) => {
+    return [
+      ...sourceNetMembers({ connectivity: signalConnectivity, seed: port }),
+    ]
+  })
   const selected = new Set(driverNets)
   const sourceTraces = circuit.filter(
     (record) => record.type === "source_trace",
   )
   const traceIds = new Set(
-    signalTraces(sourceTraces, { selected, rails }).map(
+    signalTraces({ traces: sourceTraces, selected, rails }).map(
       (trace) => trace.source_trace_id,
     ),
   )
@@ -340,27 +430,28 @@ export function validateSignalGraph({
     .filter((port) => selected.has(port.source_port_id))
   const edges: CopperSegment[] = []
   const points = new Map<CopperPointKey, CopperPoint>()
-  const connections = circuit.flatMap((record) => {
+  const connections: CopperContactGroup[] = circuit.flatMap((record) => {
     if (record.type !== "pcb_via" && record.type !== "pcb_plated_hole")
       return []
     return [
       record.layers.map((layer) =>
-        recordCopperPoint(points, { x: record.x, y: record.y, layer }),
+        recordCopperPoint({
+          points,
+          point: { x: record.x, y: record.y, layer },
+        }),
       ),
     ]
   })
   for (const { route } of routes) {
     for (const [index, end] of route.entries()) {
       if (end.route_type === "via") {
-        const from = recordCopperPoint(points, {
-          x: end.x,
-          y: end.y,
-          layer: end.from_layer,
+        const from = recordCopperPoint({
+          points,
+          point: { x: end.x, y: end.y, layer: end.from_layer },
         })
-        const to = recordCopperPoint(points, {
-          x: end.x,
-          y: end.y,
-          layer: end.to_layer,
+        const to = recordCopperPoint({
+          points,
+          point: { x: end.x, y: end.y, layer: end.to_layer },
         })
         connections.push([from, to])
       }
@@ -371,35 +462,42 @@ export function validateSignalGraph({
         end.route_type === "through_pad"
       )
         continue
-      const layer = routeLayer(start, "to_layer")
-      if (layer !== routeLayer(end, "from_layer")) continue
-      const first = recordCopperPoint(points, { x: start.x, y: start.y, layer })
-      const last = recordCopperPoint(points, { x: end.x, y: end.y, layer })
+      const layer = routeLayer({ point: start, viaSide: "to_layer" })
+      if (layer !== routeLayer({ point: end, viaSide: "from_layer" })) continue
+      const first = recordCopperPoint({
+        points,
+        point: { x: start.x, y: start.y, layer },
+      })
+      const last = recordCopperPoint({
+        points,
+        point: { x: end.x, y: end.y, layer },
+      })
       if (first === last) continue
       const segment = new Segment(
         new PlanarPoint(start.x, start.y),
         new PlanarPoint(end.x, end.y),
       )
-      const wire =
-        start.route_type === "wire"
-          ? start
-          : end.route_type === "wire"
-            ? end
-            : undefined
+      let wire: PcbTraceRoutePointWire | undefined
+      if (end.route_type === "wire") wire = end
+      if (start.route_type === "wire") wire = start
       const startWidth = wire?.start_width ?? wire?.width ?? 0
       const endWidth = wire?.end_width ?? startWidth
       edges.push({ layer, segment, startWidth, endWidth })
     }
   }
-  recordCrossings(points, edges)
-  const terminalPoints = ports.map(({ source_port_id, layers, x, y }) => ({
-    port: source_port_id,
-    keys: layers.map((layer) => recordCopperPoint(points, { x, y, layer })),
-  }))
-  const pads = terminalPads(circuit, ports)
+  recordCrossings({ points, edges })
+  const terminalPoints = ports.map(
+    ({ source_port_id, layers, x, y }): CopperTerminal => ({
+      port: source_port_id,
+      keys: layers.map((layer) =>
+        recordCopperPoint({ points, point: { x, y, layer } }),
+      ),
+    }),
+  )
+  const pads = terminalPads({ circuit, ports })
   const routeVertices = edges.map((edge) => {
-    const vertices = segmentVertices(points, edge)
-    connections.push(...padContactGroups(points, { edge, pads, vertices }))
+    const vertices = segmentVertices({ points, edge })
+    connections.push(...padContactGroups({ points, edge, pads, vertices }))
     return vertices.sort((a, b) => a.position - b.position)
   })
   // Each continuous pad or barrel forms one junction, regardless of its number of contact points.
@@ -416,15 +514,20 @@ export function validateSignalGraph({
     for (let index = 1; index < vertices.length; index++) {
       const first = vertices[index - 1].key
       const last = vertices[index].key
-      joinCopperPoints(graph, {
+      joinCopperPoints({
+        graph,
         a: junctions.getNetConnectedToId(first) ?? first,
         b: junctions.getNetConnectedToId(last) ?? last,
       })
     }
   }
   const copperPoints = new Set(graph.keys())
-  const differential = differentialLegs({ signals, terminals }, graph)
-  for (const [pinA, pinB] of passiveBridges(circuit, rails)) {
+  const differential = differentialLegs({
+    signals,
+    terminals,
+    connectivity: copperConnectivity(graph),
+  })
+  for (const [pinA, pinB] of passiveBridges({ circuit, excluded: rails })) {
     for (const a of terminals.get(pinA) ?? []) {
       for (const b of terminals.get(pinB) ?? []) {
         // A passive between the two legs is a load on those paths.
@@ -436,27 +539,20 @@ export function validateSignalGraph({
           )
         )
           continue
-        joinCopperPoints(graph, { a, b })
+        joinCopperPoints({ graph, a, b })
       }
     }
   }
+  const connectivity = copperConnectivity(graph)
   for (const [index, signal] of signals.entries()) {
     for (const [leg, port] of drivers[index].entries()) {
       const starts = terminals.get(port) ?? []
-      const connected = reachable(starts, graph)
+      const connected = reachable({ starts, connectivity })
       const routed = starts.some((key) => copperPoints.has(key))
-      if (routed) {
-        const branchAtDriver = starts.some(
-          (key) => (graph.get(key)?.size ?? 0) > 1,
+      if (routed && hasBranch({ starts, connected, graph })) {
+        throw new Error(
+          `Signal "${signal.name}": branched routed graphs are not implemented yet.`,
         )
-        const branchInPath = [...connected].some(
-          (key) => (graph.get(key)?.size ?? 0) > 2,
-        )
-        if (branchAtDriver || branchInPath) {
-          throw new Error(
-            `Signal "${signal.name}": branched routed graphs are not implemented yet.`,
-          )
-        }
       }
       if (allowUnroutedTraces) continue
       const receivers = signal.receivers.map((receiver) => {
