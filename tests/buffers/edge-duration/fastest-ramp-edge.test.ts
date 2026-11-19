@@ -5,16 +5,20 @@ import {
   ibisInspectionBoard,
   inspectedPin,
   inspectionIbis,
+  PICOSECONDS_PER_SECOND,
 } from "../../fixtures/ibis-inspection"
 
-test("a finite ramp time that overflows when scaled does not supply an edge duration", async () => {
+test("the falling ramp supplies the duration when it is faster", async () => {
   const board = await ibisInspectionBoard()
   const text = inspectionIbis({
     modelType: "Output",
-    modelData: "[Ramp]\ndV/dt_r 0.36/1.5e308 NA NA",
+    modelData: `[Ramp]
+dV/dt_r 0.36/900p 0.36/750p 0.36/1n
+dV/dt_f 0.18/600p 0.18/500p 0.18/700p`,
   })
   const pin = inspectedPin({ board, text })
-  assert.throws(() => edgeDurationSeconds(pin), {
-    code: "ibis_edge_duration_missing",
-  })
+  assert.equal(
+    Math.round(edgeDurationSeconds(pin) * PICOSECONDS_PER_SECOND),
+    800,
+  )
 })

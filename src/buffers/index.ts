@@ -17,6 +17,7 @@ export {
   compileBuffers,
   ibisAssembly,
 } from "./buffers"
+export { edgeDurationSeconds } from "./edge-duration"
 export type {
   InspectedPin,
   InspectedPins,
@@ -25,7 +26,6 @@ export type {
   ReferenceVoltages,
 } from "./inspect"
 export {
-  edgeDurationSeconds,
   inspectPins,
   pinCapabilities,
   referenceVoltages,
