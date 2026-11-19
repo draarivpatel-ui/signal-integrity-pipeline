@@ -1,15 +1,30 @@
+import assert from "node:assert/strict"
 import { Circuit, simulation } from "@tscircuit/core"
+import {
+  convertIbisModelToSpice,
+  type IbisReferencePorts,
+} from "@tscircuit/ibis-to-spice"
+import type { IbisPinReferences } from "@tscircuit/props"
 import React from "react"
 import type { CircuitJson, SimulationIbisModel } from "../../src/board"
+import {
+  type InspectedPin,
+  type InspectedPins,
+  inspectPins,
+} from "../../src/buffers"
 
 export const deviceAsset = "device.ibs"
 const pinLabels = { pin1: "DQ", pin2: "VDD", pin3: "VSS", pin4: "VCLAMP" }
-const powerPins = { 1: "DQ", 2: "VDD", 3: "VSS" }
 
 type BoardOptions = {
   extraPin?: boolean
-  powerClamp?: string
+  mapRails?: boolean
+  references?: IbisPinReferences
+  referencePin?: number
+  modelChoice?: string
+  componentName?: string
   extraChip?: boolean
+  extraChipAsset?: string
 }
 
 /** The rendered chip records and the source port IDs assigned to its IBIS pins. */
@@ -18,7 +33,7 @@ type InspectionBoard = {
   pinMap: SimulationIbisModel["ibis_pin_name_to_source_port_id"]
 }
 
-type ChipOptions = Omit<BoardOptions, "extraChip"> & {
+type ChipOptions = Omit<BoardOptions, "extraChip" | "extraChipAsset"> & {
   name: string
   asset: string
 }
@@ -28,14 +43,25 @@ function InspectionChip({
   name,
   asset,
   extraPin,
-  powerClamp,
+  mapRails = true,
+  references,
+  referencePin = 1,
+  modelChoice,
+  componentName = "Device",
 }: ChipOptions): React.JSX.Element {
-  const ibisPinNameToPortLabel: Record<number, string> = { ...powerPins }
+  const ibisPinNameToPortLabel: Record<number, string> = { 1: "DQ" }
+  if (mapRails) {
+    ibisPinNameToPortLabel[2] = "VDD"
+    ibisPinNameToPortLabel[3] = "VSS"
+  }
   if (extraPin) ibisPinNameToPortLabel[4] = "VCLAMP"
   let ibisPinNameToReferencePortLabels:
-    | Record<number, { powerClamp: string }>
+    | Record<number, IbisPinReferences>
     | undefined
-  if (powerClamp) ibisPinNameToReferencePortLabels = { 1: { powerClamp } }
+  if (references)
+    ibisPinNameToReferencePortLabels = { [referencePin]: references }
+  let ibisPinNameToModelName: Record<number, string> | undefined
+  if (modelChoice) ibisPinNameToModelName = { 1: modelChoice }
   return (
     <>
       <chip
@@ -65,7 +91,8 @@ function InspectionChip({
           url: `https://example.com/${asset}`,
           mimetype: "text/plain",
         }}
-        ibisComponentName="Device"
+        ibisComponentName={componentName}
+        ibisPinNameToModelName={ibisPinNameToModelName}
         ibisPinNameToPortLabel={ibisPinNameToPortLabel}
         ibisPinNameToReferencePortLabels={ibisPinNameToReferencePortLabels}
       />
@@ -77,17 +104,12 @@ function InspectionChip({
 export async function ibisInspectionBoard(
   options: BoardOptions = {},
 ): Promise<InspectionBoard> {
-  const { extraPin, powerClamp, extraChip } = options
+  const { extraChip, extraChipAsset = "other.ibs", ...chipOptions } = options
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
   circuit.add(
     <board width={10} height={10} schematicDisabled routeRemaining={false}>
-      <InspectionChip
-        name="U1"
-        asset={deviceAsset}
-        extraPin={extraPin}
-        powerClamp={powerClamp}
-      />
-      {extraChip && <InspectionChip name="U2" asset="other.ibs" />}
+      <InspectionChip name="U1" asset={deviceAsset} {...chipOptions} />
+      {extraChip && <InspectionChip name="U2" asset={extraChipAsset} />}
     </board>,
   )
   await circuit.renderUntilSettled()
@@ -102,7 +124,8 @@ type IbisOptions = {
   mapping?: string
   extraPin?: string
   modelType?: string
-  referenceOnly?: boolean
+  modelChoices?: readonly string[]
+  voltageReferences?: string
   modelData?: string
 }
 
@@ -111,15 +134,20 @@ export function inspectionIbis({
   mapping = "",
   extraPin = "",
   modelType = "Input",
-  referenceOnly = false,
+  modelChoices,
+  voltageReferences = "[Voltage Range] 1.2 1.2 1.2",
   modelData = "",
 }: IbisOptions = {}): string {
-  let references = "[Voltage Range] 1.2 1.2 1.2"
-  if (referenceOnly) {
-    references = `[Pullup Reference] 1.2 1.2 1.2
-[Pulldown Reference] 0 0 0
-[POWER Clamp Reference] 1.2 1.2 1.2
-[GND Clamp Reference] 0 0 0`
+  let pinModel = "Fast"
+  let selector = ""
+  if (modelChoices) {
+    pinModel = "DriveSize"
+    selector = `[Model Selector] DriveSize
+${modelChoices.join("\n")}
+[Model] Slow
+Model_type Input
+C_comp 1p 1p 1p
+[Voltage Range] 1.2 1.2 1.2`
   }
   return `[IBIS Ver] 5.0
 [File Name] device.ibs
@@ -131,16 +159,101 @@ R_pkg 0 0 0
 L_pkg 0 0 0
 C_pkg 0 0 0
 [Pin] signal_name model_name
-1 DQ Fast
+1 DQ ${pinModel}
 2 VDD POWER
 3 VSS GND
 ${extraPin}
 ${mapping}
+${selector}
 [Model] Fast
 Model_type ${modelType}
 C_comp 1p 1p 1p
-${references}
+${voltageReferences}
 ${modelData}
 [End]
 `
 }
+
+/** Inspect the requested source ports of the rendered chip. */
+export function inspectBoardPins({
+  board,
+  text,
+  ports,
+}: {
+  board: InspectionBoard
+  text: string
+  ports: Iterable<InspectionBoard["pinMap"][string]>
+}): InspectedPins {
+  return inspectPins({
+    circuit: board.circuit,
+    sources: { [deviceAsset]: text },
+    ports: new Set(ports),
+  })
+}
+
+/** Inspect the signal on pin 1 of the rendered chip. */
+export function inspectedPin({
+  board,
+  text,
+}: {
+  board: InspectionBoard
+  text: string
+}): InspectedPin {
+  const port = board.pinMap[1]
+  const pin = inspectBoardPins({ board, text, ports: [port] }).get(port)
+  assert.ok(pin)
+  return pin
+}
+
+/** Get the converter's references for the same chip without running a solver. */
+export function convertedReferences({
+  text,
+  pinMap,
+  extraSignal,
+  references,
+}: {
+  text: string
+  pinMap: InspectionBoard["pinMap"]
+  extraSignal?: string
+  references?: Record<string, IbisReferencePorts>
+}): IbisReferencePorts {
+  const pinStates = { [pinMap[1]]: { mode: "input" as const } }
+  if (extraSignal) pinStates[extraSignal] = { mode: "input" }
+  return convertIbisModelToSpice(
+    text,
+    {
+      source: { content: text },
+      component: "Device",
+      corner: "typical",
+      pinMap,
+      references,
+      packagePolicy: "omit",
+    },
+    {
+      duration: "1ns",
+      pinStates,
+      stimuli: {},
+    },
+  ).metadata.pins[0].references
+}
+
+/** Vendor pin mapping with power and ground bus aliases. */
+export const railMapping = `[Pin Mapping] pulldown_ref pullup_ref
+1 GROUND_BUS POWER_BUS
+2 NC         POWER_BUS
+3 GROUND_BUS NC`
+
+/** Compare the measured durations in whole picoseconds. */
+export const PICOSECONDS_PER_SECOND = 1e12
+
+/** Typical 600 ps rising and 750 ps falling ramp. */
+export const ramp = `[Ramp]
+dV/dt_r 0.36/600p 0.36/600p 0.36/600p
+dV/dt_f 0.36/750p 0.36/750p 0.36/750p`
+
+/** Linear rising waveform from 0 V to 0.6 V in 2 ns. */
+export const waveform = `[Rising Waveform]
+R_fixture = 50
+V_fixture = 0
+0 0 NA NA
+2n 0.6 NA NA`
