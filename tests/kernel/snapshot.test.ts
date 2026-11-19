@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { snapshot } from "../../src/kernel"
 
-test("completed domain snapshots cannot be changed through shared inputs or consumers", () => {
+test("snapshots isolate the source and freeze the copy", () => {
   const source = { nodes: [{ id: "n1" }] }
   const result = snapshot(source)
   source.nodes[0].id = "changed"
@@ -10,6 +10,9 @@ test("completed domain snapshots cannot be changed through shared inputs or cons
   assert.throws(() => {
     result.nodes[0].id = "changed"
   }, TypeError)
+})
+
+test("snapshots reject non-plain values", () => {
   const unsupported = [
     new Map(),
     new Set(),
