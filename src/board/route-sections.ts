@@ -2,8 +2,18 @@ import type { PcbPort } from "circuit-json"
 import { polygonContains } from "./geometry/polygon"
 import { resolveRouteVias } from "./geometry/ports"
 import type { CopperScope } from "./geometry/scope"
-import type { PcbTrace, RoutedPoint } from "./geometry/types"
-import type { SourceTraceId } from "./ids"
+import type {
+  CopperPoint,
+  CopperPolygon,
+  PcbTrace,
+  RoutedPoint,
+} from "./geometry/types"
+import type {
+  PcbCopperPourId,
+  PcbTraceId,
+  SourceNetId,
+  SourceTraceId,
+} from "./ids"
 import {
   chordDistance,
   projectRouteWire,
@@ -34,20 +44,23 @@ const KEY_DECIMAL_PLACES = 7
 /** Maximum chord deviation when simplifying tessellated route curves. */
 const CHORD_TOLERANCE_MM = 0.001
 
-export type RouteXY = [number, number]
+/** Physical or projected route coordinates in millimetres. */
+export type RouteXY = CopperPoint
 
+/** An equipotential join from an original wire endpoint to the union centreline. */
 interface RouteJoin {
   from: RouteXY
   to: RouteXY
   source: SourceTraceId
-  trace: PcbTrace["pcb_trace_id"]
+  trace: PcbTraceId
 }
 
+/** A straight wire with physical endpoints and projections onto its canonical axes. */
 export interface RouteWire {
   id: number
-  trace: PcbTrace["pcb_trace_id"]
+  trace: PcbTraceId
   source: SourceTraceId
-  layer: string
+  layer: LayerRef
   width: number
   joins?: RouteJoin[]
   aPort?: boolean
@@ -60,14 +73,16 @@ export interface RouteWire {
   transverse: number
 }
 
+/** A copper surface or nearby edge used as an electrical reference. */
 export interface RouteReference {
-  id: string
-  net: string
-  layer: string
+  id: PcbCopperPourId
+  net: SourceNetId
+  layer: LayerRef
   z: number
   lateralGapMm?: number
 }
 
+/** A longitudinal interval containing wires with a shared reference profile. */
 export interface RouteSlice {
   wires: RouteWire[]
   start: number
@@ -75,19 +90,22 @@ export interface RouteSlice {
   references: RouteReference[]
 }
 
+/** A via endpoint on one copper layer. */
 interface ViaContact {
-  trace: PcbTrace["pcb_trace_id"]
-  layer: string
+  trace: PcbTraceId
+  layer: LayerRef
   point: RouteXY
 }
 
+/** A scoped copper pour with outer and inner outlines. */
 interface RoutePour {
-  id: string
-  net: string
-  layer: string
-  polygon: RouteXY[][]
+  id: PcbCopperPourId
+  net: SourceNetId
+  layer: LayerRef
+  polygon: CopperPolygon
 }
 
+/** Wire, via and pour geometry plus the slices needed for extraction. */
 export interface SectionGeometry {
   viaContacts: ViaContact[]
   stack: BoardStackup
@@ -98,7 +116,13 @@ export interface SectionGeometry {
 }
 
 /** Canonical projection in mm; route direction is retained in the physical endpoints. */
-export function routePosition(wire: RouteWire, position: number): RouteXY {
+export function routePosition({
+  wire,
+  position,
+}: {
+  wire: RouteWire
+  position: number
+}): RouteXY {
   return [
     wire.u[0] * position - wire.u[1] * wire.transverse,
     wire.u[1] * position + wire.u[0] * wire.transverse,
@@ -111,20 +135,16 @@ function sameContact(a: RouteXY, b: RouteXY): boolean {
 }
 
 /** Port contact requires the same layer as well as the same position. */
-function portTouches(
-  port: PcbPort,
-  {
-    layer,
-    point,
-  }: {
-    layer: string
-    point: RouteXY
-  },
-): boolean {
-  return (
-    port.layers.includes(layer as LayerRef) &&
-    sameContact([port.x, port.y], point)
-  )
+function portTouches({
+  port,
+  layer,
+  point,
+}: {
+  port: PcbPort
+  layer: LayerRef
+  point: RouteXY
+}): boolean {
+  return port.layers.includes(layer) && sameContact([port.x, port.y], point)
 }
 
 /** Local frame at actual routed copper, including via-in-pad contacts without a planar segment. */
@@ -136,7 +156,7 @@ export function routeContactFrame({
 }: {
   geometry: SectionGeometry
   scope: CopperScope
-  layer: string
+  layer: LayerRef
   point: RouteXY
 }): RouteWire | undefined {
   const direct = geometry.wires.find((wire) => {
@@ -166,7 +186,13 @@ export function routeContactFrame({
 }
 
 /** Distance from a projected wire position to the nearest polygon edge. */
-function pourEdgeGap(point: RouteXY, polygon: RouteXY[][]): number {
+function pourEdgeGap({
+  point,
+  polygon,
+}: {
+  point: RouteXY
+  polygon: CopperPolygon
+}): number {
   const distances = polygon.flatMap((ring) =>
     ring.map((a, i) => {
       const b = ring[(i + 1) % ring.length]
@@ -174,6 +200,11 @@ function pourEdgeGap(point: RouteXY, polygon: RouteXY[][]): number {
     }),
   )
   return Math.min(...distances)
+}
+
+/** A lateral reference candidate ranked by its diagonal distance from the wire. */
+interface RouteReferenceEdge extends RouteReference {
+  distance: number
 }
 
 /** Nearest actual pour surface in each vertical direction, including intervening power copper. */
@@ -186,15 +217,15 @@ export function routeReferences({
   wire: RouteWire
   position: number
 }): RouteReference[] {
-  const point = routePosition(wire, position)
+  const point = routePosition({ wire, position })
   const signal = geometry.stack.copperLayers.find(
     (layer) => layer.name === wire.layer,
   )!
   const otherLayers = geometry.pours.filter((pour) => pour.layer !== wire.layer)
   const intersecting = otherLayers.filter((pour) =>
-    polygonContains(point, pour.polygon),
+    polygonContains({ point, polygon: pour.polygon }),
   )
-  const candidates = intersecting.map((pour) => {
+  const candidates = intersecting.map((pour): RouteReference => {
     const layer = geometry.stack.copperLayers.find(
       (layer) => layer.name === pour.layer,
     )!
@@ -215,8 +246,8 @@ export function routeReferences({
 
   // Use the nearest actual edge as an explicit quasi-static fringing and return-detour estimate.
   const edges = otherLayers
-    .map((pour) => {
-      const gap = pourEdgeGap(point, pour.polygon)
+    .map((pour): RouteReferenceEdge => {
+      const gap = pourEdgeGap({ point, polygon: pour.polygon })
       const layer = geometry.stack.copperLayers.find(
         (layer) => layer.name === pour.layer,
       )!
@@ -241,7 +272,13 @@ export function routeReferences({
 }
 
 /** Centre-line intersections with every pour boundary/cutout; no sampling can jump over a narrow void. */
-function referenceCuts(wire: RouteWire, geometry: SectionGeometry): number[] {
+function referenceCuts({
+  wire,
+  geometry,
+}: {
+  wire: RouteWire
+  geometry: SectionGeometry
+}): number[] {
   const cuts: number[] = []
   for (const pour of geometry.pours) {
     for (const ring of pour.polygon) {
@@ -273,17 +310,16 @@ function routedLayer(point: RoutedPoint): LayerRef {
 }
 
 /** Record via contacts and straight wire sections for one physical route. */
-function appendRoute(
-  geometry: SectionGeometry,
-  {
-    circuit,
-    trace,
-  }: {
-    circuit: CircuitJson
-    trace: PcbTrace
-  },
-): void {
-  const route = resolveRouteVias(circuit, trace)
+function appendRoute({
+  geometry,
+  circuit,
+  trace,
+}: {
+  geometry: SectionGeometry
+  circuit: CircuitJson
+  trace: PcbTrace
+}): void {
+  const route = resolveRouteVias({ circuit, trace })
   for (const via of route.filter((point) => point.route_type === "via")) {
     for (const layer of [via.from_layer, via.to_layer]) {
       geometry.viaContacts.push({
@@ -331,10 +367,13 @@ type RouteSliceKey = string
 type ReferenceRegion = Pick<RouteSlice, "wires" | "references">
 
 /** Collect slices in which wires have the same direction and share a reference profile. */
-function sliceParallelRoutes(
-  geometry: SectionGeometry,
-  scope: CopperScope,
-): void {
+function sliceParallelRoutes({
+  geometry,
+  scope,
+}: {
+  geometry: SectionGeometry
+  scope: CopperScope
+}): void {
   const groups = new Map<WireDirectionKey, RouteWire[]>()
   for (const wire of geometry.wires) {
     const key = wire.u.map((n) => n.toFixed(KEY_DECIMAL_PLACES)).join(",")
@@ -344,7 +383,7 @@ function sliceParallelRoutes(
     const positions = wires.flatMap((wire) => [
       wire.start,
       wire.end,
-      ...referenceCuts(wire, geometry),
+      ...referenceCuts({ wire, geometry }),
     ])
     const rounded = positions.map((position) =>
       Number(position.toFixed(KEY_DECIMAL_PLACES)),
@@ -367,8 +406,9 @@ function sliceParallelRoutes(
         )
           continue
         if (!references.length) {
+          const point = routePosition({ wire, position: middle })
           throw new Error(
-            `${wire.trace} ${wire.layer} at ${routePosition(wire, middle)}: no actual reference pour`,
+            `${wire.trace} ${wire.layer} at ${point}: no actual reference pour`,
           )
         }
         const key = references
@@ -381,25 +421,29 @@ function sliceParallelRoutes(
         regions.set(key, region)
       }
       for (const region of regions.values()) {
-        sliceRegion(
-          {
-            ...region,
-            start,
-            end,
-            scope,
-          },
-          geometry.slices,
-        )
+        sliceRegion({
+          ...region,
+          start,
+          end,
+          scope,
+          slices: geometry.slices,
+        })
       }
     }
   }
 }
 
+/** Board circuit and the copper to sweep into longitudinal sections. */
+interface RouteSectionOptions {
+  circuit: CircuitJson
+  scope: CopperScope
+}
+
 /** Sweep exact parallel directions, partitioning at route ends, widths, layers and actual pour holes. */
-export function* routeSectionSteps(
-  circuit: CircuitJson,
-  scope: CopperScope,
-): Generator<SectionGeometry, SectionGeometry> {
+export function* routeSectionSteps({
+  circuit,
+  scope,
+}: RouteSectionOptions): Generator<SectionGeometry, SectionGeometry> {
   const geometry: SectionGeometry = {
     viaContacts: [],
     stack: stackupFromCircuitJson(circuit),
@@ -410,7 +454,7 @@ export function* routeSectionSteps(
   }
   geometry.pours = circuit
     .filter((record) => record.type === "pcb_copper_pour")
-    .flatMap((pour) => {
+    .flatMap((pour): RoutePour[] => {
       if (pour.shape !== "brep")
         throw new Error(
           `${pour.pcb_copper_pour_id}: 2D route extraction needs polygonal pours`,
@@ -422,7 +466,7 @@ export function* routeSectionSteps(
           net: pour.source_net_id ?? "unassociated",
           layer: pour.layer,
           polygon: rings.map((ring) =>
-            ring.vertices.map((p) => [p.x, p.y] as RouteXY),
+            ring.vertices.map((point): RouteXY => [point.x, point.y]),
           ),
         },
       ]
@@ -431,10 +475,13 @@ export function* routeSectionSteps(
   const traces = circuit.filter((record) => record.type === "pcb_trace")
   for (const trace of traces) {
     if (!scope.pcbTraceIds.includes(trace.pcb_trace_id)) continue
-    appendRoute(geometry, { circuit, trace })
+    appendRoute({ geometry, circuit, trace })
     yield geometry
   }
-  const simplified = simplifyRouteWires(geometry.wires, CHORD_TOLERANCE_MM)
+  const simplified = simplifyRouteWires({
+    wires: geometry.wires,
+    toleranceMm: CHORD_TOLERANCE_MM,
+  })
   geometry.warnings.push(
     [
       `Curved route tessellation reduced with ${CHORD_TOLERANCE_MM} mm chord tolerance:`,
@@ -443,7 +490,7 @@ export function* routeSectionSteps(
       "Original board bytes unchanged.",
     ].join(" "),
   )
-  geometry.wires = unionRouteWires(simplified.wires, circuit)
+  geometry.wires = unionRouteWires({ wires: simplified.wires, circuit })
   geometry.warnings.push(
     [
       "Overlapping parallel same-net copper is unioned into its exact transverse rectangle, split at patch ends.",
@@ -454,13 +501,13 @@ export function* routeSectionSteps(
   const ports = circuit.filter((record) => record.type === "pcb_port")
   for (const wire of geometry.wires) {
     wire.aPort = ports.some((port) =>
-      portTouches(port, { layer: wire.layer, point: wire.a }),
+      portTouches({ port, layer: wire.layer, point: wire.a }),
     )
     wire.bPort = ports.some((port) =>
-      portTouches(port, { layer: wire.layer, point: wire.b }),
+      portTouches({ port, layer: wire.layer, point: wire.b }),
     )
   }
-  sliceParallelRoutes(geometry, scope)
+  sliceParallelRoutes({ geometry, scope })
   geometry.slices = mergeSlices(geometry.slices)
   geometry.warnings.push(
     [
@@ -481,41 +528,54 @@ export function* routeSectionSteps(
   return geometry
 }
 
+/** One candidate slice and the scope and output used to retain it. */
+interface SliceRegionOptions extends RouteSlice {
+  scope: CopperScope
+  slices: RouteSlice[]
+}
+
+/** Emit a lateral group only if it contains a signal wire. */
+function appendSignalSlice({
+  wires,
+  start,
+  end,
+  references,
+  scope,
+  slices,
+}: SliceRegionOptions): void {
+  if (
+    wires.every((wire) => scope.nonReferenceRailTraceIds.includes(wire.trace))
+  )
+    return
+  slices.push({ wires, start, end, references })
+}
+
 /** Split a region at lateral gaps and keep groups with at least one signal wire. */
-function sliceRegion(
-  { wires, references, start, end, scope }: RouteSlice & { scope: CopperScope },
-  slices: RouteSlice[],
-): void {
+function sliceRegion({
+  wires,
+  references,
+  start,
+  end,
+  scope,
+  slices,
+}: SliceRegionOptions): void {
   const ordered = wires.sort((a, b) => a.transverse - b.transverse)
-  const railTraces = scope.nonReferenceRailTraceIds
   let group: RouteWire[] = []
   for (const wire of ordered) {
     const last = group.at(-1)
-    if (last) {
-      const gap =
-        wire.transverse - last.transverse - (wire.width + last.width) / 2
-      if (gap > scope.lateralDistanceMm) {
-        if (group.some((wire) => !railTraces.includes(wire.trace))) {
-          slices.push({
-            wires: group,
-            start,
-            end,
-            references,
-          })
-        }
-        group = []
-      }
+    if (!last) {
+      group.push(wire)
+      continue
+    }
+    const gap =
+      wire.transverse - last.transverse - (wire.width + last.width) / 2
+    if (gap > scope.lateralDistanceMm) {
+      appendSignalSlice({ wires: group, start, end, references, scope, slices })
+      group = []
     }
     group.push(wire)
   }
-  if (group.some((wire) => !railTraces.includes(wire.trace))) {
-    slices.push({
-      wires: group,
-      start,
-      end,
-      references,
-    })
-  }
+  appendSignalSlice({ wires: group, start, end, references, scope, slices })
 }
 
 /** Merge consecutive slices that have the same wires and references. */
@@ -539,11 +599,8 @@ function mergeSlices(slices: RouteSlice[]): RouteSlice[] {
 }
 
 /** Drain the same segmentation algorithm for domain callers that do not need stepping. */
-export function segmentRoutes(
-  circuit: CircuitJson,
-  scope: CopperScope,
-): SectionGeometry {
-  const steps = routeSectionSteps(circuit, scope)
+export function segmentRoutes(options: RouteSectionOptions): SectionGeometry {
+  const steps = routeSectionSteps(options)
   let result = steps.next()
   while (!result.done) result = steps.next()
   return result.value

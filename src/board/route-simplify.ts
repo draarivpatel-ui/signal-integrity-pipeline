@@ -31,6 +31,7 @@ export function chordDistance({
   return Math.hypot(point[0] - a[0] - t * dx, point[1] - a[1] - t * dy)
 }
 
+/** The wire's canonical direction and signed longitudinal and transverse coordinates. */
 type WireProjection = Pick<RouteWire, "u" | "start" | "end" | "transverse">
 
 /** Use one canonical projection for both original and simplified wire segments. */
@@ -70,16 +71,15 @@ interface WireRun {
 }
 
 /** Recursive chord acceptance bounds every original vertex, preserving width/layer/via boundaries. */
-function simplifyRun(
-  {
-    start,
-    end,
-  }: {
-    start: number
-    end: number
-  },
-  run: WireRun,
-): void {
+function simplifyRun({
+  start,
+  end,
+  run,
+}: {
+  start: number
+  end: number
+  run: WireRun
+}): void {
   const { points, seed, toleranceMm, output } = run
   const a = points[start]
   const b = points[end]
@@ -92,8 +92,8 @@ function simplifyRun(
     farthest = i
   }
   if (farthest >= 0) {
-    simplifyRun({ start, end: farthest }, run)
-    simplifyRun({ start: farthest, end }, run)
+    simplifyRun({ start, end: farthest, run })
+    simplifyRun({ start: farthest, end, run })
     return
   }
   const length = Math.hypot(b[0] - a[0], b[1] - a[1])
@@ -115,10 +115,13 @@ interface SimplifiedRouteWires {
 }
 
 /** Bounded Douglas-Peucker chords for densely tessellated curved routes; physical records remain unchanged. */
-export function simplifyRouteWires(
-  wires: RouteWire[],
-  toleranceMm: number,
-): SimplifiedRouteWires {
+export function simplifyRouteWires({
+  wires,
+  toleranceMm,
+}: {
+  wires: RouteWire[]
+  toleranceMm: number
+}): SimplifiedRouteWires {
   const output: RouteWire[] = []
   let index = 0
   while (index < wires.length) {
@@ -142,15 +145,8 @@ export function simplifyRouteWires(
       index++
     }
     const points = [seed.a, ...run.map((wire) => wire.b)]
-    simplifyRun(
-      { start: 0, end: points.length - 1 },
-      {
-        points,
-        seed,
-        toleranceMm,
-        output,
-      },
-    )
+    const wireRun: WireRun = { points, seed, toleranceMm, output }
+    simplifyRun({ start: 0, end: points.length - 1, run: wireRun })
   }
   return {
     wires: output,

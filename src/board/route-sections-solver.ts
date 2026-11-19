@@ -21,6 +21,7 @@ export interface RouteSectionsInput {
   referenceSourcePortId: SourcePortId
   artifactPrefix: string
 }
+/** Completed route geometry and its outer soldermask thickness when declared. */
 export interface RoutedSections {
   circuitJson: CircuitJson
   scope: CopperScope
@@ -39,7 +40,10 @@ export class RouteSectionsSolver extends BaseSolver {
     const connectivity = getSourcePortConnectivityMapFromCircuitJson(
       input.circuitJson,
     )
-    const ground = sourceNetMembers(connectivity, input.referenceSourcePortId)
+    const ground = sourceNetMembers({
+      connectivity,
+      seed: input.referenceSourcePortId,
+    })
     const sourceTraces = input.circuitJson.filter(
       (record) => record.type === "source_trace",
     )
@@ -65,7 +69,10 @@ export class RouteSectionsSolver extends BaseSolver {
   }
   /** Each yield has performed one route's segmentation; the final pass slices actual references. */
   override _step(): void {
-    this.steps ??= routeSectionSteps(this.input.circuitJson, this.scope)
+    this.steps ??= routeSectionSteps({
+      circuit: this.input.circuitJson,
+      scope: this.scope,
+    })
     const result = this.steps.next()
     const geometry = result.value
     this.stats = {
@@ -108,7 +115,7 @@ export class RouteSectionsSolver extends BaseSolver {
       )
     }
 
-    const value = snapshot({
+    const value = snapshot<RoutedSections>({
       circuitJson,
       scope: this.scope,
       geometry,
