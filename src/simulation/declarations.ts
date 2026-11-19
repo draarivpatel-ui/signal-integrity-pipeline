@@ -2,7 +2,7 @@
 import { transmittedBits } from './stimulus'
 import { fail } from './diagnostics'
 import { subcircuitTree, selectPort } from '../board'
-import type { CircuitJson, LaneMapping } from '../board'
+import type { CircuitJson, LaneMapping, SourceNetId } from '../board'
 import type { IbisModelDefinition, IbisRunConfig, IbisReferencePorts } from '@tscircuit/ibis-to-spice'
 import type { ModelRunDefinition } from '../buffers'
 import type {
@@ -84,7 +84,7 @@ export function circuitNodes({ circuit, mappings, modeling }: CircuitNodesInput)
     for(const id of rest) netGroup.set(groupOf(id),groupOf(first))
   }
   /** Lists the logical nets a port is bound to by single-port, non-channel traces. */
-  const bindings=(port: string): Set<string>=>new Set(traces.filter(t=>!channelTraces.has(t.source_trace_id)&&
+  const bindings=(port: string): Set<SourceNetId>=>new Set(traces.filter(t=>!channelTraces.has(t.source_trace_id)&&
     t.connected_source_port_ids.length===1&&t.connected_source_port_ids[0]===port)
     .flatMap(t=>t.connected_source_net_ids??[]).map(groupOf))
   for(const mapping of mappings) {
