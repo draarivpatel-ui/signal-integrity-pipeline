@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { edgeSeconds } from "../../../src/buffers/inspect"
+import { edgeDurationSeconds } from "../../../src/buffers"
 import {
   ibisInspectionBoard,
   inspectedPin,
@@ -14,7 +14,8 @@ test("scientific notation with a trailing decimal is accepted in a ramp time", a
   const text = inspectionIbis({ modelType: "Output", modelData })
   assert.equal(
     Math.round(
-      edgeSeconds(inspectedPin({ board, text })) * PICOSECONDS_PER_SECOND,
+      edgeDurationSeconds(inspectedPin({ board, text })) *
+        PICOSECONDS_PER_SECOND,
     ),
     1333,
   )

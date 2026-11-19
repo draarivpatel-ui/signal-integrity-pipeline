@@ -117,7 +117,6 @@ type IbisOptions = {
   modelType?: string
   modelChoices?: readonly string[]
   voltageReferences?: string
-  referenceOnly?: boolean
   modelData?: string
 }
 
@@ -128,15 +127,8 @@ export function inspectionIbis({
   modelType = "Input",
   modelChoices,
   voltageReferences = "[Voltage Range] 1.2 1.2 1.2",
-  referenceOnly = false,
   modelData = "",
 }: IbisOptions = {}): string {
-  if (referenceOnly) {
-    voltageReferences = `[Pullup Reference] 1.2 1.2 1.2
-[Pulldown Reference] 0 0 0
-[POWER Clamp Reference] 1.2 1.2 1.2
-[GND Clamp Reference] 0 0 0`
-  }
   let pinModel = "Fast"
   let selector = ""
   if (modelChoices) {
@@ -250,9 +242,9 @@ export const ramp = `[Ramp]
 dV/dt_r 0.36/600p 0.36/600p 0.36/600p
 dV/dt_f 0.36/750p 0.36/750p 0.36/750p`
 
-/** Linear rising waveform from 0 V to 0.6 V. */
+/** Linear rising waveform from 0 V to 0.6 V in 2 ns. */
 export const waveform = `[Rising Waveform]
 R_fixture = 50
 V_fixture = 0
 0 0 NA NA
-1n 0.6 NA NA`
+2n 0.6 NA NA`

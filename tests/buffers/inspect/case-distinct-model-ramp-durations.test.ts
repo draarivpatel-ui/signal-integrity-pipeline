@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { edgeSeconds } from "../../../src/buffers/inspect"
+import { edgeDurationSeconds } from "../../../src/buffers"
 import {
   ibisInspectionBoard,
   inspectedPin,
@@ -17,8 +17,8 @@ C_comp 1p 1p 1p
 [Voltage Range] 1.2 1.2 1.2
 ${ramp}`
   const text = inspectionIbis({ modelType: "Output", modelData })
-  const first = edgeSeconds(inspectedPin({ board, text }))
-  const second = edgeSeconds(
+  const first = edgeDurationSeconds(inspectedPin({ board, text }))
+  const second = edgeDurationSeconds(
     inspectedPin({ board, text: text.replace("1 DQ Fast", "1 DQ FAST") }),
   )
   assert.equal(second / first, 2)

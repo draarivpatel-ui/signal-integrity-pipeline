@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { edgeSeconds } from "../../../src/buffers/inspect"
+import { edgeDurationSeconds } from "../../../src/buffers"
 import {
   ibisInspectionBoard,
   inspectedPin,
@@ -10,7 +10,7 @@ import {
   waveform,
 } from "../../fixtures/ibis-inspection"
 
-test("a linear waveform gives the 10–90% edge duration", async () => {
+test("a linear waveform gives the 10–90% edge duration ahead of a shorter ramp", async () => {
   const board = await ibisInspectionBoard()
   const text = inspectionIbis({
     modelType: "Output",
@@ -18,8 +18,9 @@ test("a linear waveform gives the 10–90% edge duration", async () => {
   })
   assert.equal(
     Math.round(
-      edgeSeconds(inspectedPin({ board, text })) * PICOSECONDS_PER_SECOND,
+      edgeDurationSeconds(inspectedPin({ board, text })) *
+        PICOSECONDS_PER_SECOND,
     ),
-    800,
+    1600,
   )
 })

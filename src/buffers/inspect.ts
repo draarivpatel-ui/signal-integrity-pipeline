@@ -289,31 +289,16 @@ function* rampRatioTokens(pin: InspectedPin): Generator<string> {
     const line = raw.split("|", 1)[0].trim()
     if (line.startsWith("[")) {
       const end = line.indexOf("]")
-      const keyword = line
-        .slice(1, end)
-        .trim()
-        .toLowerCase()
-        .replaceAll("_", " ")
+      const keyword = line.slice(1, end).trim().toLowerCase()
       if (keyword === "model") {
-        if (selected) return
         selected = line.slice(end + 1).trim() === pin.buffer.name
       }
-      if (
-        selected &&
-        ["component", "model selector", "define package model", "end"].includes(
-          keyword,
-        )
-      )
-        return
       inRamp = selected && keyword === "ramp"
       continue
     }
     if (!inRamp) continue
-    const [key, value] = line
-      .replaceAll("\t", " ")
-      .replaceAll("=", " ")
-      .split(" ")
-      .filter(Boolean)
+    // IBIS 7.2 §3.2 defines both spaces and tabs as whitespace.
+    const [key, value] = line.replaceAll("\t", " ").split(" ").filter(Boolean)
     const tag = key?.toLowerCase()
     if (value && (tag === "dv/dt_r" || tag === "dv/dt_f")) yield value
   }
@@ -332,32 +317,36 @@ function edgeCrossingSeconds({
   for (let i = 1; i < samples.length; i++) {
     const [startSeconds, startVoltage] = samples[i - 1]
     const [endSeconds, endVoltage] = samples[i]
-    const crossesTarget = (startVoltage - target) * (endVoltage - target) <= 0
-    if (!crossesTarget || startVoltage === endVoltage) continue
+    const low = Math.min(startVoltage, endVoltage)
+    const high = Math.max(startVoltage, endVoltage)
+    if (low === high || target < low || target > high) continue
 
     const voltageChange = endVoltage - startVoltage
     const elapsedSeconds = endSeconds - startSeconds
     const crossingSeconds =
       startSeconds + ((target - startVoltage) * elapsedSeconds) / voltageChange
-    if (Number.isNaN(crossingSeconds)) return undefined
     return crossingSeconds
   }
   return undefined
 }
 
-/** Measure an edge from 10% to 90% of its voltage swing. */
+/** Start the edge duration measurement at 10% of the voltage swing. */
 const EDGE_START_FRACTION = 0.1
+
+/** End the edge duration measurement at 90% of the voltage swing. */
 const EDGE_END_FRACTION = 0.9
-/** For a linear edge, 10–90% spans 80% of the swing and the IBIS ramp spans 20–80% (60%). */
+
+/** Scale the 20–80% ramp duration to 10–90% for a linear transition. */
 const RAMP_TO_EDGE_DURATION = 4 / 3
-/** A swing smaller than one microvolt is too flat to measure an edge. */
-const FLAT_WAVEFORM_TOLERANCE_VOLTS = 1e-6
 
-/** An interpolated crossing requires at least two points. */
-const MIN_EDGE_SAMPLES = 2
+/** Fastest typical 10–90% output edge duration from a waveform or [Ramp]. */
+export function edgeDurationSeconds(pin: InspectedPin): number {
+  if (!pinCapabilities(pin).drive)
+    fail(
+      "ibis_edge_not_driving",
+      `${pin.port}: input-only pin has no IBIS output edge duration`,
+    )
 
-/** Fastest measured 10–90% output edge at the typical corner, or the [Ramp] dV/dt. */
-export function edgeSeconds(pin: InspectedPin): number {
   const durationsSeconds: number[] = []
   for (const waveform of pin.buffer.waveforms) {
     const samples: WaveformSample[] = []
@@ -365,11 +354,11 @@ export function edgeSeconds(pin: InspectedPin): number {
       if (typicalVoltage === null) continue
       samples.push([timeSeconds, typicalVoltage])
     }
-    if (samples.length < MIN_EDGE_SAMPLES) continue
-    const [, firstVoltage] = samples[0]
-    const [, lastVoltage] = samples[samples.length - 1]
-    const swing = lastVoltage - firstVoltage
-    if (Math.abs(swing) < FLAT_WAVEFORM_TOLERANCE_VOLTS) continue
+    const first = samples[0]
+    const last = samples.at(-1)
+    if (!first || !last) continue
+    const firstVoltage = first[1]
+    const swing = last[1] - firstVoltage
 
     const startSeconds = edgeCrossingSeconds({
       samples,
@@ -379,13 +368,10 @@ export function edgeSeconds(pin: InspectedPin): number {
       samples,
       target: firstVoltage + swing * EDGE_END_FRACTION,
     })
-    if (
-      startSeconds === undefined ||
-      endSeconds === undefined ||
-      endSeconds <= startSeconds
-    )
-      continue
-    durationsSeconds.push(endSeconds - startSeconds)
+    if (startSeconds === undefined || endSeconds === undefined) continue
+    const durationSeconds = endSeconds - startSeconds
+    if (durationSeconds > 0 && Number.isFinite(durationSeconds))
+      durationsSeconds.push(durationSeconds)
   }
   if (durationsSeconds.length) return Math.min(...durationsSeconds)
 
@@ -395,17 +381,15 @@ export function edgeSeconds(pin: InspectedPin): number {
     if (!voltageToken || !timeToken) continue
     const voltage = ibisNumber(voltageToken)
     const rampSeconds = ibisNumber(timeToken)
-    if (
-      voltage === null ||
-      voltage <= 0 ||
-      rampSeconds === null ||
-      rampSeconds <= 0
-    )
+    if (voltage === null || voltage <= 0 || !rampSeconds || rampSeconds < 0)
       continue
     const durationSeconds = rampSeconds * RAMP_TO_EDGE_DURATION
     if (Number.isFinite(durationSeconds)) durationsSeconds.push(durationSeconds)
   }
   if (!durationsSeconds.length)
-    throw new Error(`${pin.port}: IBIS edge rate missing at the typical corner`)
+    fail(
+      "ibis_edge_duration_missing",
+      `${pin.port}: IBIS edge duration missing at the typical corner`,
+    )
   return Math.min(...durationsSeconds)
 }

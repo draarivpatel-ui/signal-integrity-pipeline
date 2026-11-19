@@ -8,6 +8,8 @@ const raise = diagnostics("buffers", [
   "ibis_asset_missing",
   "ibis_capability_unsupported",
   "ibis_component_missing",
+  "ibis_edge_duration_missing",
+  "ibis_edge_not_driving",
   "ibis_model_choice",
   "ibis_pin_bound_twice",
   "ibis_pin_missing",

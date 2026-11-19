@@ -25,7 +25,7 @@ export type {
   ReferenceVoltages,
 } from "./inspect"
 export {
-  edgeSeconds,
+  edgeDurationSeconds,
   inspectPins,
   pinCapabilities,
   referenceVoltages,

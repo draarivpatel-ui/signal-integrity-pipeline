@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { edgeSeconds } from "../../../src/buffers/inspect"
+import { edgeDurationSeconds } from "../../../src/buffers"
 import {
   ibisInspectionBoard,
   inspectedPin,
@@ -11,13 +11,14 @@ import {
 
 test("a model header accepts a comment immediately after its name", async () => {
   const board = await ibisInspectionBoard()
-  const text = inspectionIbis({ modelData: ramp }).replace(
+  const text = inspectionIbis({ modelType: "Output", modelData: ramp }).replace(
     "[Model] Fast",
     "[Model] Fast| inline comment",
   )
   assert.equal(
     Math.round(
-      edgeSeconds(inspectedPin({ board, text })) * PICOSECONDS_PER_SECOND,
+      edgeDurationSeconds(inspectedPin({ board, text })) *
+        PICOSECONDS_PER_SECOND,
     ),
     800,
   )
