@@ -17,13 +17,24 @@ const run=async(executable,args,cwd)=>{
 }
 try {
   const packed=JSON.parse((await run('npm',['pack','--json','--pack-destination',temporary],root)).stdout)[0]
-  assert.ok(packed.files.every(file=>file.path.startsWith('dist/')||['README.md','LICENSE','package.json'].includes(file.path)))
+  assert.ok(packed.files.every(file=>file.path.startsWith('dist/')||[
+    'README.md',
+    'LICENSE',
+    'package.json',
+  ].includes(file.path)))
   const privateModules = ['setup', 'runtime', 'cli', 'pipeline']
   assert.ok(!packed.files.some(file => privateModules.some(name => file.path.includes(`dist/${name}.`))))
   const consumer=join(temporary,'consumer')
   await mkdir(consumer)
   await writeFile(join(consumer,'package.json'),JSON.stringify({type:'module',private:true}))
-  await run('npm',['install','--ignore-scripts','--legacy-peer-deps','--no-audit','--no-fund',join(temporary,packed.filename)],consumer)
+  await run('npm',[
+    'install',
+    '--ignore-scripts',
+    '--legacy-peer-deps',
+    '--no-audit',
+    '--no-fund',
+    join(temporary,packed.filename),
+  ],consumer)
   const installed=join(consumer,'node_modules/@tscircuit/signal-integrity-pipeline')
   await assert.rejects(access(join(installed,'src')),{code:'ENOENT'})
   await assert.rejects(access(join(consumer,'node_modules/react')),{code:'ENOENT'})
@@ -31,7 +42,14 @@ try {
   await assert.rejects(access(join(consumer,'node_modules/circuit-json')),{code:'ENOENT'})
   // Hosts supply circuit-json, as tscircuit does for core and the other converters.
   const circuitJsonVersion=JSON.parse(await readFile(join(root,'package.json'),'utf8')).devDependencies['circuit-json']
-  await run('npm',['install','--ignore-scripts','--legacy-peer-deps','--no-audit','--no-fund',`circuit-json@${circuitJsonVersion}`],consumer)
+  await run('npm',[
+    'install',
+    '--ignore-scripts',
+    '--legacy-peer-deps',
+    '--no-audit',
+    '--no-fund',
+    `circuit-json@${circuitJsonVersion}`,
+  ],consumer)
   const manifest=JSON.parse(await readFile(join(installed,'package.json'),'utf8'))
   assert.equal(manifest.name,'@tscircuit/signal-integrity-pipeline')
   assert.equal(manifest.main,'./dist/index.js')

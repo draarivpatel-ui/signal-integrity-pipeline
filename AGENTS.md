@@ -32,6 +32,8 @@ This is the only agent rules file. Do not add CLAUDE.md, GEMINI.md, .cursorrules
 |---|---|
 | One variable per declaration | `const a = 1, b = 2` is not allowed. Write each on its own line. |
 | One statement per line | No `const a = 1; const b = 2` on one line. |
+| At most 120 characters per line | Split long lines in TypeScript, TSX and MJS. Lines containing only a URL are exempt. |
+| One member per line | Start each interface member, object type member and multiline object property on a separate line. |
 | Every named function has JSDoc and a typed signature | Function declarations, methods and `const f = () => …` need a `/** … */` comment, a type on every parameter and a return type. Inline callbacks like `xs.map(x => x * 2)` are exempt. |
 | No enums | Use a string-literal union (`type Mode = 'a' \| 'b'`) or an `as const` object. |
 | TypeScript files over 500 lines warn | Split the file. If it is important to keep it whole, add `/* eslint-disable local/max-file-lines -- <reason> */` at the top. |

@@ -123,8 +123,17 @@ function readList(body: string): string[] | undefined {
  * lists). Comments (`#`) and blank lines are allowed. Anything else throws a VocabularyError naming the line.
  */
 export function parseVocabulary(text: string): Vocabulary {
-  const vocab: Vocabulary = { threshold: DEFAULT_THRESHOLD, domain: new Map(), general: new Set(), abbreviations: new Map(), avoid: new Map() }
-  const seen = new Map<string, { line: number; section: Section }>()
+  const vocab: Vocabulary = {
+    threshold: DEFAULT_THRESHOLD,
+    domain: new Map(),
+    general: new Set(),
+    abbreviations: new Map(),
+    avoid: new Map(),
+  }
+  const seen = new Map<string, {
+    line: number
+    section: Section
+  }>()
   const sectionsSeen = new Set<string>()
   let section: Section | undefined
   /** Checks a word's spelling and that it appears only once in the whole file, then records where it was found. */
@@ -135,7 +144,8 @@ export function parseVocabulary(text: string): Vocabulary {
     }
     const before = seen.get(word)
     if (before) {
-      const where = before.section === into ? `already listed in ${into}` : `already listed in ${before.section}; a word belongs to one section`
+      let where = `already listed in ${into}`
+      if (before.section !== into) where = `already listed in ${before.section}; a word belongs to one section`
       throw new VocabularyError(line, `"${word}" is ${where} (line ${before.line})`)
     }
     seen.set(word, { line, section: into })
@@ -167,8 +177,14 @@ export function parseVocabulary(text: string): Vocabulary {
         section = undefined
         return
       }
-      if (!(SECTIONS as readonly string[]).includes(key)) throw new VocabularyError(line, `unknown key "${key}"; expected threshold, ${SECTIONS.join(', ')}`)
-      if (value !== undefined) throw new VocabularyError(line, `"${key}:" takes indented entries on the following lines, not a value`)
+      if (!(SECTIONS as readonly string[]).includes(key)) throw new VocabularyError(
+        line,
+        `unknown key "${key}"; expected threshold, ${SECTIONS.join(', ')}`,
+      )
+      if (value !== undefined) throw new VocabularyError(
+        line,
+        `"${key}:" takes indented entries on the following lines, not a value`,
+      )
       section = key as Section
       return
     }
@@ -183,7 +199,9 @@ export function parseVocabulary(text: string): Vocabulary {
       return
     }
     const entry = readEntry(body)
-    const need = section === 'domain' ? 'a meaning' : section === 'abbreviations' ? 'its expansion' : 'the word to use instead'
+    let need = 'the word to use instead'
+    if (section === 'domain') need = 'a meaning'
+    if (section === 'abbreviations') need = 'its expansion'
     if (!entry) throw new VocabularyError(line, `${section} entries look like "word: ${need}", got "${body}"`)
     const [word, value] = entry
     claim(word, line, section)
@@ -193,7 +211,10 @@ export function parseVocabulary(text: string): Vocabulary {
   return vocab
 }
 
-/** True when the word is allowed: one of its candidates is in domain, general or abbreviations, and it is not itself avoided. */
+/**
+ * True when the word is allowed: one of its candidates is in domain, general or abbreviations, and it is
+ * not itself avoided.
+ */
 export function isKnown(word: string, vocab: Vocabulary): boolean {
   if (vocab.avoid.has(word)) return false
   return candidates(word).some(c => vocab.domain.has(c) || vocab.general.has(c) || vocab.abbreviations.has(c))
@@ -268,7 +289,10 @@ export function splitWords(name: string): string[] {
 }
 
 /** One declared name in a file, and whether a top-level export declares it. */
-export interface CollectedName { name: string; exported: boolean }
+export interface CollectedName {
+  name: string
+  exported: boolean
+}
 
 /** The identifier text of a declaration name, or undefined for string, number and computed names. */
 function nameText(name: ts.Node | undefined): string | undefined {
@@ -301,8 +325,12 @@ function exportedNames(sf: ts.SourceFile): Set<ExportedName> {
       continue
     }
     if (!hasExport(s)) continue
-    if (ts.isVariableStatement(s)) for (const d of s.declarationList.declarations) bindingNames(d.name).forEach(n => out.add(n))
-    else if (ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s) || ts.isInterfaceDeclaration(s) || ts.isTypeAliasDeclaration(s) || ts.isEnumDeclaration(s) || ts.isModuleDeclaration(s)) {
+    if (ts.isVariableStatement(s)) for (const d of s.declarationList.declarations) bindingNames(d.name).forEach(
+      n => out.add(n),
+    )
+    else if (ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s) || ts.isInterfaceDeclaration(
+      s,
+    ) || ts.isTypeAliasDeclaration(s) || ts.isEnumDeclaration(s) || ts.isModuleDeclaration(s)) {
       const n = nameText(s.name)
       if (n !== undefined) out.add(n)
     }
@@ -316,11 +344,17 @@ const declaredMember = (node: ts.Node): boolean =>
 
 /** The name a node declares, when it is one of the counted kinds of declaration. */
 function declaredName(n: ts.Node): string | undefined {
-  if (ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) || ts.isClassDeclaration(n) || ts.isClassExpression(n) ||
+  if (ts.isFunctionDeclaration(
+    n,
+  ) || ts.isFunctionExpression(n) || ts.isClassDeclaration(n) || ts.isClassExpression(n) ||
     ts.isInterfaceDeclaration(n) || ts.isTypeAliasDeclaration(n) || ts.isEnumDeclaration(n) || ts.isEnumMember(n) ||
     ts.isTypeParameterDeclaration(n) || ts.isModuleDeclaration(n)) return nameText(n.name)
-  if (ts.isVariableDeclaration(n) || ts.isParameter(n) || ts.isBindingElement(n)) return ts.isIdentifier(n.name) ? n.name.text : undefined
-  if ((ts.isPropertySignature(n) || ts.isMethodSignature(n) || ts.isPropertyDeclaration(n) || ts.isMethodDeclaration(n) ||
+  if (ts.isVariableDeclaration(n) || ts.isParameter(n) || ts.isBindingElement(n)) return ts.isIdentifier(
+    n.name,
+  ) ? n.name.text : undefined
+  if ((ts.isPropertySignature(
+    n,
+  ) || ts.isMethodSignature(n) || ts.isPropertyDeclaration(n) || ts.isMethodDeclaration(n) ||
     ts.isGetAccessorDeclaration(n) || ts.isSetAccessorDeclaration(n)) && declaredMember(n)) return nameText(n.name)
   return undefined
 }
@@ -336,7 +370,10 @@ export function collectNames(file: string, text: string): CollectedName[] {
   /** Records the declared name of a node, then visits its children. */
   const visit = (n: ts.Node): void => {
     const name = declaredName(n)
-    if (name !== undefined && !skipped(name) && !found.has(name)) found.set(name, { name, exported: exported.has(name) })
+    if (name !== undefined && !skipped(name) && !found.has(name)) found.set(name, {
+      name,
+      exported: exported.has(name),
+    })
     ts.forEachChild(n, visit)
   }
   visit(sf)
@@ -344,8 +381,17 @@ export function collectNames(file: string, text: string): CollectedName[] {
 }
 
 /** A name as scored: the module it is declared in, and whether that module exports it. */
-export interface NameEntry { module: string; name: string; exported: boolean }
-export interface ModuleScore { module: string; score: number; names: number; belowTarget: boolean }
+export interface NameEntry {
+  module: string
+  name: string
+  exported: boolean
+}
+export interface ModuleScore {
+  module: string
+  score: number
+  names: number
+  belowTarget: boolean
+}
 export interface UnknownWord {
   word: string
   /** Distinct counted names (across all modules) that contain the word. */
@@ -416,10 +462,23 @@ export function scoreNames(entries: readonly NameEntry[], vocab: Vocabulary, lim
   const unknown = ranked.slice(0, limit).map(([word, names]): UnknownWord => {
     const examples = [...names].sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)).slice(0, 3)
     const hint = avoidHint(word, vocab)
-    return hint === undefined ? { word, names: names.size, examples } : { word, names: names.size, examples, avoid: hint }
+    return hint === undefined ? { word, names: names.size, examples } : {
+      word,
+      names: names.size,
+      examples,
+      avoid: hint,
+    }
   })
   const score = percent(good, all)
-  return { threshold: vocab.threshold, score, names: count, pass: score >= vocab.threshold, modules, unknownWords: ranked.length, unknown }
+  return {
+    threshold: vocab.threshold,
+    score,
+    names: count,
+    pass: score >= vocab.threshold,
+    modules,
+    unknownWords: ranked.length,
+    unknown,
+  }
 }
 
 /** Normalizes a native path to forward slashes. */
@@ -471,7 +530,9 @@ export function formatReport(report: Report): string {
   /** A count with thousands separators. */
   const n = (x: number): string => x.toLocaleString('en-US')
   const mark = report.pass ? '✓' : '✗'
-  const out = [`Vocabulary: ${report.score.toFixed(1)}% of ${n(report.names)} names follow the dictionary (target ${report.threshold}%) ${mark}`]
+  const out = [`Vocabulary: ${report.score.toFixed(
+    1,
+  )}% of ${n(report.names)} names follow the dictionary (target ${report.threshold}%) ${mark}`]
   const width = Math.max(12, ...report.modules.map(m => m.module.length + 1))
   for (const m of report.modules) {
     const line = `  ${m.module.padEnd(width)} ${`${m.score.toFixed(1)}%`.padStart(6)}  (${n(m.names)} names)`
@@ -484,7 +545,9 @@ export function formatReport(report: Report): string {
     const wordWidth = Math.max(10, ...report.unknown.map(u => u.word.length + 1))
     for (const u of report.unknown) {
       const detail = u.avoid === undefined ? `e.g. ${u.examples.join(', ')}` : `avoid: use "${u.avoid}"`
-      out.push(`  ${u.word.padEnd(wordWidth)} ${String(u.names).padStart(3)} ${u.names === 1 ? 'name ' : 'names'}   ${detail}`)
+      out.push(`  ${u.word.padEnd(
+        wordWidth,
+      )} ${String(u.names).padStart(3)} ${u.names === 1 ? 'name ' : 'names'}   ${detail}`)
     }
   }
   return out.join('\n')

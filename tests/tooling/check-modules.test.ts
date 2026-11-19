@@ -3,7 +3,13 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { runChecks, formatViolation, parseModulesGenerated, type Violation } from '../../scripts/check-modules'
+import {
+  runChecks,
+  formatViolation,
+  parseModulesGenerated,
+  renderModulesGenerated,
+  type Violation,
+} from '../../scripts/check-modules'
 
 const TODAY = '2026-11-07'
 
@@ -25,14 +31,20 @@ const BASE: Record<string, string> = {
   'src/index.ts': `export { a } from './alpha'\nexport type { DomainName } from './modules.generated'\n`,
   'src/modules.generated.ts': GENERATED,
   'src/kernel/index.ts': `import type { DomainName } from '../modules.generated'
-export const diagnostics = (d: DomainName, codes: readonly string[]) => (code: string) => { void d; void codes; throw new Error(code) }
+export const diagnostics = (d: DomainName, codes: readonly string[]) => (code: string) => {
+  void d
+  void codes
+  throw new Error(code)
+}
 export const fail = diagnostics('kernel', ['k_err'] as const)\n`,
   'src/alpha/index.ts': `import { diagnostics } from '../kernel'\nexport { a } from './internal'\n`,
   'src/alpha/internal.ts': `import { diagnostics } from '../kernel'
 export const fail = diagnostics('alpha', ['alpha_bad'] as const)
 export const a = 1\n`,
   'tests/kernel/k.test.ts': `import assert from 'node:assert/strict'\nassert.throws(() => f(), { code: 'k_err' })\n`,
-  'tests/alpha/a.test.ts': `import assert from 'node:assert/strict'\nawait assert.rejects(p(), { code: 'alpha_bad' })\n`,
+  'tests/alpha/a.test.ts': `import assert from 'node:assert/strict'
+await assert.rejects(p(), { code: 'alpha_bad' })
+`,
   'tools/exemptions.json': '{}\n',
 }
 
@@ -68,20 +80,46 @@ test('M1: exactly one diagnostics call with the directory as its domain and a li
   assert.deepEqual(rules(none).filter(r => r === 'M1'), ['M1'])
   assert.match(lines(none)[0], /^M1 alpha: expected exactly one .* found 0$/)
 
-  const two = check(repo(t, { 'src/alpha/extra.ts': `import { diagnostics } from '../kernel'\nexport const f2 = diagnostics('alpha', ['alpha_bad'] as const)\n` }))
+  const two = check(repo(
+    t,
+    {
+      'src/alpha/extra.ts': `import { diagnostics } from '../kernel'
+export const f2 = diagnostics('alpha', ['alpha_bad'] as const)
+`,
+    },
+  ))
   assert.ok(lines(two).some(l => /^M1 alpha: expected exactly one .* found 2/.test(l)))
 
-  const wrong = check(repo(t, { 'src/alpha/internal.ts': `import { diagnostics } from '../kernel'\nexport const fail = diagnostics('kernel', ['alpha_bad'] as const)\nexport const a = 1\n` }))
+  const wrong = check(repo(
+    t,
+    {
+      'src/alpha/internal.ts': `import { diagnostics } from '../kernel'
+export const fail = diagnostics('kernel', ['alpha_bad'] as const)
+export const a = 1
+`,
+    },
+  ))
   assert.ok(lines(wrong).some(l => /^M1 alpha: .*domain 'kernel' must be the directory name 'alpha'/.test(l)))
 
-  const dynamic = check(repo(t, { 'src/alpha/internal.ts': `import { diagnostics } from '../kernel'\nconst codes = ['alpha_bad'] as const\nexport const fail = diagnostics('alpha', codes)\nexport const a = 1\n` }))
+  const dynamic = check(repo(
+    t,
+    {
+      'src/alpha/internal.ts': `import { diagnostics } from '../kernel'
+const codes = ['alpha_bad'] as const
+export const fail = diagnostics('alpha', codes)
+export const a = 1
+`,
+    },
+  ))
   assert.ok(lines(dynamic).some(l => /^M1 alpha: .*array literal of string literals/.test(l)))
 })
 
 test('M1: a diagnostics call nested in a subdirectory of the module counts', t => {
   const moved = repo(t, {
     'src/alpha/internal.ts': 'export const a = 1\n',
-    'src/alpha/deep/diag.ts': `import { diagnostics } from '../../kernel'\nexport const fail = diagnostics('alpha', ['alpha_bad'] as const)\n`,
+    'src/alpha/deep/diag.ts': `import { diagnostics } from '../../kernel'
+export const fail = diagnostics('alpha', ['alpha_bad'] as const)
+`,
   })
   assert.deepEqual(lines(check(moved)), [])
 })
@@ -89,24 +127,50 @@ test('M1: a diagnostics call nested in a subdirectory of the module counts', t =
 test('M2: every module has a tests/<dir>/ with a test file', t => {
   assert.deepEqual(lines(check(repo(t, { 'tests/alpha/a.test.ts': null, 'tests/alpha/helper.ts': 'export {}\n' }))),
     ['M2 alpha: tests/alpha/ has no *.test.* file'])
-  assert.deepEqual(lines(check(repo(t, { 'tests/alpha/a.test.ts': null, 'tests/alpha/nested/x.test.mjs': `import assert from 'node:assert'\nassert.equal(e.code, 'alpha_bad')\n` }))), [])
+  assert.deepEqual(lines(check(repo(t, {
+    'tests/alpha/a.test.ts': null,
+    'tests/alpha/nested/x.test.mjs': `import assert from 'node:assert'\nassert.equal(e.code, 'alpha_bad')\n`,
+  }))), [])
 })
 
 test('M3: every declared code is asserted by a test; table-driven loops count, bare mentions do not', t => {
-  const twoCodes = `import { diagnostics } from '../kernel'\nexport const fail = diagnostics('alpha', ['alpha_bad', 'alpha_worse'] as const)\nexport const a = 1\n`
+  const twoCodes = `import { diagnostics } from '../kernel'
+export const fail = diagnostics('alpha', ['alpha_bad', 'alpha_worse'] as const)
+export const a = 1
+`
   const gen = GENERATED.replace(`'alpha_bad' | 'k_err'`, `'alpha_bad' | 'alpha_worse' | 'k_err'`)
   assert.deepEqual(lines(check(repo(t, { 'src/alpha/internal.ts': twoCodes, 'src/modules.generated.ts': gen }))),
     ["M3 alpha: declared code 'alpha_worse' is not asserted by any test in tests/alpha/"])
 
-  const mentioned = `import assert from 'node:assert/strict'\nconst unused = 'alpha_worse'\nawait assert.rejects(p(), { code: 'alpha_bad' })\n`
-  assert.equal(lines(check(repo(t, { 'src/alpha/internal.ts': twoCodes, 'src/modules.generated.ts': gen, 'tests/alpha/a.test.ts': mentioned }))).length, 1)
+  const mentioned = `import assert from 'node:assert/strict'
+const unused = 'alpha_worse'
+await assert.rejects(p(), { code: 'alpha_bad' })
+`
+  assert.equal(lines(check(repo(t, {
+    'src/alpha/internal.ts': twoCodes,
+    'src/modules.generated.ts': gen,
+    'tests/alpha/a.test.ts': mentioned,
+  }))).length, 1)
 
   const table = `import assert from 'node:assert/strict'
-for (const [input, code] of [[1, 'alpha_bad'], [2, 'alpha_worse']]) await assert.rejects(p(input), (e: any) => e.code === code)\n`
-  assert.deepEqual(lines(check(repo(t, { 'src/alpha/internal.ts': twoCodes, 'src/modules.generated.ts': gen, 'tests/alpha/a.test.ts': table }))), [])
+for (const [input, code] of [[1, 'alpha_bad'], [2, 'alpha_worse']]) {
+  await assert.rejects(p(input), (e: any) => e.code === code)
+}`
+  assert.deepEqual(lines(check(repo(t, {
+    'src/alpha/internal.ts': twoCodes,
+    'src/modules.generated.ts': gen,
+    'tests/alpha/a.test.ts': table,
+  }))), [])
 
-  const regex = `import assert from 'node:assert/strict'\nassert.throws(() => f(), /alpha_bad: nope/)\nawait assert.rejects(p(), { code: 'alpha_worse' })\n`
-  assert.deepEqual(lines(check(repo(t, { 'src/alpha/internal.ts': twoCodes, 'src/modules.generated.ts': gen, 'tests/alpha/a.test.ts': regex }))), [])
+  const regex = `import assert from 'node:assert/strict'
+assert.throws(() => f(), /alpha_bad: nope/)
+await assert.rejects(p(), { code: 'alpha_worse' })
+`
+  assert.deepEqual(lines(check(repo(t, {
+    'src/alpha/internal.ts': twoCodes,
+    'src/modules.generated.ts': gen,
+    'tests/alpha/a.test.ts': regex,
+  }))), [])
 })
 
 test('EX: an unexpired module waiver suppresses the waived rules only', t => {
@@ -132,56 +196,95 @@ test('EX: an expired waiver fails and stops waiving', t => {
 })
 
 test('EX: malformed dates, non-M rules and unparsable files fail', t => {
-  assert.ok(lines(check(repo(t, { 'tools/exemptions.json': JSON.stringify({ modules: { alpha: { expires: 'next month', waive: ['M2'] } } }) })))
+  assert.ok(lines(check(repo(t, { 'tools/exemptions.json': JSON.stringify({ modules: { alpha: {
+    expires: 'next month',
+    waive: ['M2'],
+  } } }) })))
     .some(l => /^EX alpha: .*ISO date/.test(l)))
-  assert.ok(lines(check(repo(t, { 'tools/exemptions.json': JSON.stringify({ modules: { alpha: { expires: '2026-12-07', waive: ['S4'] } } }) })))
+  assert.ok(lines(check(repo(t, { 'tools/exemptions.json': JSON.stringify({ modules: { alpha: {
+    expires: '2026-12-07',
+    waive: ['S4'],
+  } } }) })))
     .some(l => /^EX alpha: only M1-M3 can be waived, not S4/.test(l)))
-  assert.ok(lines(check(repo(t, { 'tools/exemptions.json': '{ nope' }))).some(l => /^EX src: tools\/exemptions\.json: /.test(l)))
+  assert.ok(lines(check(repo(t, { 'tools/exemptions.json': '{ nope' }))).some(
+    l => /^EX src: tools\/exemptions\.json: /.test(l),
+  ))
 })
 
 test('S1: unowned directories and flat files fail unless listed as unexpired legacy', t => {
-  const flat = { 'src/old.ts': 'export const old = 1\n', 'src/old.mjs': 'export const x = 1\n', 'src/legacy/io.mjs': 'export const io = 1\n', 'src/stray/x.ts': 'export {}\n' }
+  const flat = {
+    'src/old.ts': 'export const old = 1\n',
+    'src/old.mjs': 'export const x = 1\n',
+    'src/legacy/io.mjs': 'export const io = 1\n',
+    'src/stray/x.ts': 'export {}\n',
+  }
   assert.deepEqual(lines(check(repo(t, flat))).sort(), [
     'S1 src: src/legacy/ has no index.ts (unowned code)',
     'S1 src: src/old.mjs: only src/index.ts and src/modules.generated.ts may live directly in src/',
     'S1 src: src/old.ts: only src/index.ts and src/modules.generated.ts may live directly in src/',
     'S1 src: src/stray/ has no index.ts (unowned code)',
   ])
-  const exempt = JSON.stringify({ legacy: { expires: '2026-12-07', paths: ['src/old.ts', 'src/old.mjs', 'src/legacy/'] } })
+  const legacy = {
+    expires: '2026-12-07',
+    paths: ['src/old.ts', 'src/old.mjs', 'src/legacy/'],
+  }
+  const exempt = JSON.stringify({ legacy })
   const root = repo(t, { ...flat, 'tools/exemptions.json': exempt })
   assert.deepEqual(lines(check(root)), ['S1 src: src/stray/ has no index.ts (unowned code)'])
   const expired = lines(check(root, '2027-01-01'))
-  assert.equal(expired[0], 'EX src: legacy exemption expired on 2026-12-07; finish the move and delete the entry from tools/exemptions.json')
+  assert.equal(
+    expired[0],
+    'EX src: legacy exemption expired on 2026-12-07; finish the move and delete the entry from tools/exemptions.json',
+  )
   assert.equal(expired.filter(l => l.startsWith('S1')).length, 4)
 })
 
 test('S2: cross-module imports must target ../<other>; unowned targets fail', t => {
-  const internal = check(repo(t, { 'src/kernel/secret.ts': 'export const s = 1\n', 'src/alpha/peek.ts': `import { s } from '../kernel/secret'\nexport { s }\n` }))
-  assert.deepEqual(lines(internal), ["S2 alpha: src/alpha/peek.ts imports '../kernel/secret'; cross-module imports must target ../kernel"])
+  const internal = check(repo(t, {
+    'src/kernel/secret.ts': 'export const s = 1\n',
+    'src/alpha/peek.ts': `import { s } from '../kernel/secret'\nexport { s }\n`,
+  }))
+  assert.deepEqual(lines(internal), [
+    "S2 alpha: src/alpha/peek.ts imports '../kernel/secret'; cross-module imports must target ../kernel",
+  ])
 
   const nested = check(repo(t, { 'src/alpha/deep/x.ts': `import { fail } from '../../kernel'\nexport { fail }\n` }))
   assert.deepEqual(lines(nested), [], 'depth does not matter, only the resolved target')
 
   const unowned = check(repo(t, {
-    'src/old.ts': 'export const o = 1\n', 'src/alpha/x.ts': `import { o } from '../old'\nexport { o }\n`,
+    'src/old.ts': 'export const o = 1\n',
+    'src/alpha/x.ts': `import { o } from '../old'\nexport { o }\n`,
     'tools/exemptions.json': JSON.stringify({ legacy: { expires: '2026-12-07', paths: ['src/old.ts'] } }),
   }))
-  assert.deepEqual(lines(unowned), ["S2 alpha: src/alpha/x.ts imports '../old', which is not owned by any module"], 'legacy exemption does not let modules import old code')
+  assert.deepEqual(lines(unowned), [
+    "S2 alpha: src/alpha/x.ts imports '../old', which is not owned by any module",
+  ], 'legacy exemption does not let modules import old code')
 })
 
 test('S3: the derived module import graph is acyclic', t => {
   const root = repo(t, {
-    'src/beta/index.ts': `import { diagnostics } from '../kernel'\nimport { a } from '../alpha'\nexport const fail = diagnostics('beta', ['beta_bad'] as const)\nexport const b = a\n`,
+    'src/beta/index.ts': `import { diagnostics } from '../kernel'
+import { a } from '../alpha'
+export const fail = diagnostics('beta', ['beta_bad'] as const)
+export const b = a
+`,
     'src/alpha/cycle.ts': `import type { b } from '../beta'\nexport type B = typeof b\n`,
     'tests/beta/b.test.ts': `import assert from 'node:assert'\nassert.equal(e.code, 'beta_bad')\n`,
-    'src/modules.generated.ts': GENERATED.replace(`'alpha' | 'kernel'`, `'alpha' | 'beta' | 'kernel'`).replace(`'alpha_bad' | 'k_err'`, `'alpha_bad' | 'beta_bad' | 'k_err'`),
+    'src/modules.generated.ts': GENERATED.replace(`'alpha' | 'kernel'`, `'alpha' | 'beta' | 'kernel'`).replace(
+      `'alpha_bad' | 'k_err'`,
+      `'alpha_bad' | 'beta_bad' | 'k_err'`,
+    ),
   })
   assert.deepEqual(lines(check(root)), ['S3 alpha: import cycle among {alpha, beta}: alpha -> beta, beta -> alpha'])
 })
 
 test('S4: node:*, fs and child_process only under src/adapters (or exempt legacy files)', t => {
   const root = repo(t, {
-    'src/alpha/io.ts': `import { readFile } from 'node:fs/promises'\nimport fs from 'fs'\nimport { exec } from 'child_process'\nexport const x = [readFile, fs, exec]\n`,
+    'src/alpha/io.ts': `import { readFile } from 'node:fs/promises'
+import fs from 'fs'
+import { exec } from 'child_process'
+export const x = [readFile, fs, exec]
+`,
     'src/alpha/lazy.ts': `export const load = () => import('node:path')\n`,
   })
   assert.deepEqual(lines(check(root)), [
@@ -191,21 +294,28 @@ test('S4: node:*, fs and child_process only under src/adapters (or exempt legacy
     "S4 alpha: src/alpha/lazy.ts imports 'node:path'; Node built-ins belong in src/adapters/",
   ])
   const adapters = repo(t, {
-    'src/adapters/index.ts': `import { diagnostics } from '../kernel'\nimport { writeFile } from 'node:fs/promises'\nexport const fail = diagnostics('adapters', [] as const)\nexport { writeFile }\n`,
+    'src/adapters/index.ts': `import { diagnostics } from '../kernel'
+import { writeFile } from 'node:fs/promises'
+export const fail = diagnostics('adapters', [] as const)
+export { writeFile }
+`,
     'tests/adapters/w.test.ts': `import assert from 'node:assert'\nassert.ok(true)\n`,
     'src/modules.generated.ts': GENERATED.replace(`'alpha' | 'kernel'`, `'adapters' | 'alpha' | 'kernel'`),
     'src/node.ts': `import { tmpdir } from 'node:os'\nexport { tmpdir }\n`,
     'tools/exemptions.json': JSON.stringify({ legacy: { expires: '2026-12-07', paths: ['src/node.ts'] } }),
   })
   assert.deepEqual(lines(check(adapters)), [])
-  assert.ok(lines(check(adapters, '2026-12-08')).includes("S4 src: src/node.ts imports 'node:os'; Node built-ins belong in src/adapters/"))
+  assert.ok(lines(check(adapters, '2026-12-08')).includes(
+    "S4 src: src/node.ts imports 'node:os'; Node built-ins belong in src/adapters/",
+  ))
 })
 
 test('S5: src/index.ts imports only module surfaces and modules.generated (legacy while exempt)', t => {
   assert.deepEqual(lines(check(repo(t, { 'src/index.ts': `export { a } from './alpha/internal'\n` }))),
     ["S5 src: src/index.ts imports './alpha/internal'; only ./<module> and ./modules.generated are allowed"])
   const legacy = repo(t, {
-    'src/index.ts': `export { o } from './old'\n`, 'src/old.ts': 'export const o = 1\n',
+    'src/index.ts': `export { o } from './old'\n`,
+    'src/old.ts': 'export const o = 1\n',
     'tools/exemptions.json': JSON.stringify({ legacy: { expires: '2026-12-07', paths: ['src/old.ts'] } }),
   })
   assert.deepEqual(lines(check(legacy)), [])
@@ -214,21 +324,42 @@ test('S5: src/index.ts imports only module surfaces and modules.generated (legac
 
 test('S6: stale modules.generated.ts fails; --write regenerates, keeps seeded codes, adds tuple codes', t => {
   const seeded = GENERATED.replace(`'alpha_bad' | 'k_err'`, `'alpha_bad' | 'k_err' | 'seeded_today'`)
-  const tuple = `import { diagnostics } from '../kernel'\nexport const fail = diagnostics('alpha', ['alpha_bad', 'alpha_new'] as const)\nexport const a = 1\n`
-  const test2 = `import assert from 'node:assert/strict'\nawait assert.rejects(p(), { code: 'alpha_bad' })\nawait assert.rejects(p(), { code: 'alpha_new' })\n`
+  const tuple = `import { diagnostics } from '../kernel'
+export const fail = diagnostics('alpha', ['alpha_bad', 'alpha_new'] as const)
+export const a = 1
+`
+  const test2 = `import assert from 'node:assert/strict'
+await assert.rejects(p(), { code: 'alpha_bad' })
+await assert.rejects(p(), { code: 'alpha_new' })
+`
   const root = repo(t, {
     'src/modules.generated.ts': seeded.replace(`  | 'alpha' | 'kernel'`, `  | 'kernel'`),
-    'src/alpha/internal.ts': tuple, 'tests/alpha/a.test.ts': test2,
+    'src/alpha/internal.ts': tuple,
+    'tests/alpha/a.test.ts': test2,
   })
-  assert.deepEqual(lines(check(root)), ['S6 src: src/modules.generated.ts is stale (DomainName +alpha; DiagnosticCode +alpha_new); run check:modules --write'])
+  assert.deepEqual(lines(check(root)), [
+    `S6 src: src/modules.generated.ts is stale ${
+      '(DomainName +alpha; DiagnosticCode +alpha_new); run check:modules --write'
+    }`,
+  ])
   assert.deepEqual(lines(runChecks(root, { today: TODAY, write: true })), [])
   const written = readFileSync(join(root, 'src/modules.generated.ts'), 'utf8')
-  assert.equal(written, GENERATED.replace(`'alpha_bad' | 'k_err'`, `'alpha_bad' | 'alpha_new' | 'k_err' | 'seeded_today'`))
-  assert.deepEqual([...parseModulesGenerated(written).codes].sort(), ['alpha_bad', 'alpha_new', 'k_err', 'seeded_today'])
+  assert.equal(
+    written,
+    GENERATED.replace(`'alpha_bad' | 'k_err'`, `'alpha_bad' | 'alpha_new' | 'k_err' | 'seeded_today'`),
+  )
+  assert.deepEqual([
+    ...parseModulesGenerated(written).codes
+  ].sort(), ['alpha_bad', 'alpha_new', 'k_err', 'seeded_today'])
   assert.deepEqual(lines(check(root)), [], 'idempotent')
 
-  const reformatted = repo(t, { 'src/modules.generated.ts': GENERATED.replace(`  | 'alpha_bad' | 'k_err'`, `  | 'alpha_bad'\n  | 'k_err'`) })
-  assert.deepEqual(lines(check(reformatted)), ['S6 src: src/modules.generated.ts is stale (formatting only); run check:modules --write'])
+  const reformatted = repo(t, { 'src/modules.generated.ts': GENERATED.replace(
+    `  | 'alpha_bad' | 'k_err'`,
+    `  | 'alpha_bad'\n  | 'k_err'`,
+  ) })
+  assert.deepEqual(lines(check(reformatted)), [
+    'S6 src: src/modules.generated.ts is stale (formatting only); run check:modules --write',
+  ])
 })
 
 test('module discovery is the filesystem: adding a directory with index.ts adds a module', t => {
@@ -237,4 +368,11 @@ test('module discovery is the filesystem: adding a directory with index.ts adds 
   assert.ok(out.some(l => l.startsWith('M1 gamma:')))
   assert.ok(out.some(l => l === 'M2 gamma: tests/gamma/ has no *.test.* file'))
   assert.ok(out.some(l => /^S6 src: .*DomainName \+gamma/.test(l)))
+})
+
+test('S6: generated diagnostic unions wrap at 120 characters without dropping members', () => {
+  const codes = Array.from({ length: 6 }, (_, index) => `diagnostic_with_a_long_name_${index}`)
+  const output = renderModulesGenerated([], new Map([['module', codes]]))
+  assert.ok(output.split('\n').every(line => line.length <= 120))
+  assert.deepEqual([...parseModulesGenerated(output).codes], codes)
 })

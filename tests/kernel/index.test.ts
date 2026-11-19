@@ -14,12 +14,17 @@ test('ledger seals sorted keys with jsonFile byte format', () => {
 test('a second write to the same path is an artifact_collision naming both owners', () => {
   const ledger = ArtifactLedger.empty().add([rootScope('extraction').text('p', '1')])
   assert.throws(() => ledger.add([rootScope('simulation').text('p', '1')]),
-    (e: unknown) => e instanceof Diagnostic && e.code === 'artifact_collision' && /extraction.*simulation/.test(e.message))
+    (e: unknown) => e instanceof Diagnostic && e.code === 'artifact_collision' && /extraction.*simulation/.test(
+      e.message,
+    ))
 })
 
 test('artifact paths reject traversal, absolute and empty segments', () => {
   for (const bad of ['../x', '/x', 'a//b', 'a/./b', 'a\\b', ''])
-    assert.throws(() => rootScope('kernel').text(bad, ''), (e: unknown) => e instanceof Diagnostic && e.code === 'artifact_path')
+    assert.throws(
+      () => rootScope('kernel').text(bad, ''),
+      (e: unknown) => e instanceof Diagnostic && e.code === 'artifact_path',
+    )
 })
 
 test('diagnostics keeps the `${code}: ${text}` message and records the domain', () => {

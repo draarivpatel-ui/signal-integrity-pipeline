@@ -40,16 +40,38 @@ function containsHtmlOpening(text: string): boolean {
 export function loadModelSource(model: ModelSourceRequest, sources: IbisSources): LoadedModelSource {
   const asset = model.ibis_model_asset
   const path = relativeFile(asset.project_relative_path)
-  if (!sources || !Object.hasOwn(sources, path)) fail('ibis_asset_missing', `Supply IBIS bytes for ${path} in ibisSources`)
+  if (!sources || !Object.hasOwn(sources, path)) fail(
+    'ibis_asset_missing',
+    `Supply IBIS bytes for ${path} in ibisSources`,
+  )
   const source = sources[path]
-  if (typeof source !== 'string' && !(source instanceof Uint8Array)) fail('ibis_asset', `${path}: expected a string or Uint8Array`)
+  if (typeof source !== 'string' && !(source instanceof Uint8Array)) fail(
+    'ibis_asset',
+    `${path}: expected a string or Uint8Array`,
+  )
   const bytes = typeof source === 'string' ? new TextEncoder().encode(source) : source
   if (bytes.length > 64 * 1024 * 1024) fail('ibis_asset', 'IBIS asset exceeds 64 MiB')
-  if (bytes[0] === 0x50 && bytes[1] === 0x4b) fail('ibis_asset', 'IBIS asset must be a plain .ibs file; extract ZIP archives explicitly')
+  // ZIP archive headers begin with the ASCII characters P and K.
+  const zipSignature = [0x50, 0x4b]
+  if (zipSignature.every((byte, index) => bytes[index] === byte)) {
+    fail('ibis_asset', 'IBIS asset must be a plain .ibs file; extract ZIP archives explicitly')
+  }
   const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
   if (containsHtmlOpening(text)) fail('ibis_asset', 'IBIS asset contains HTML instead of model data')
   const id = model.pipelineId
   const sourceSha256 = sha256(bytes)
   const ibsFile = `inputs/ibis/${id}.ibs`
-  return { text, bytes, evidence: { simulationIbisModelId: id, ibisModelAsset: asset, resolvedFrom: 'provided', ibsFile, sourceSha256, rawSourceFile: ibsFile, rawSourceSha256: sourceSha256 } }
+  return {
+    text,
+    bytes,
+    evidence: {
+      simulationIbisModelId: id,
+      ibisModelAsset: asset,
+      resolvedFrom: 'provided',
+      ibsFile,
+      sourceSha256,
+      rawSourceFile: ibsFile,
+      rawSourceSha256: sourceSha256,
+    },
+  }
 }

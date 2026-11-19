@@ -14,7 +14,16 @@ const NAMED_FUNCTIONS = [
 ]
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'runs/**', '.cache/**', 'examples/**/models/**', 'src/report/client/**/*.generated.*'] },
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'runs/**',
+      '.cache/**',
+      'examples/**/models/**',
+      'src/report/client/**/*.generated.*',
+    ],
+  },
   {
     files: ['**/*.{ts,tsx,mjs}'],
     languageOptions: { parser: tseslint.parser, ecmaVersion: 'latest', sourceType: 'module' },
@@ -25,15 +34,32 @@ export default tseslint.config(
       'one-var': ['error', 'never'],
       // ...and one statement per line: no `const a = 1; const b = 2`.
       'max-statements-per-line': ['error', { max: 1 }],
+      'local/max-line-length': 'error',
+      'local/one-member-per-line': 'error',
       // 3. No enums: use a union of string literals or an `as const` object.
-      'no-restricted-syntax': ['error', { selector: 'TSEnumDeclaration', message: "Enums are not allowed. Use a string-literal union (type Mode = 'a' | 'b') or an `as const` object." }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'TSEnumDeclaration',
+          message: "Enums are not allowed. Use a string-literal union (type Mode = 'a' | 'b') or an `as const` object.",
+        },
+      ],
     },
   },
   {
     files: ['**/*.{ts,tsx}'],
     rules: {
       // 2. Every named function has a JSDoc comment and fully typed signature.
-      'jsdoc/require-jsdoc': ['error', { require: { FunctionDeclaration: false }, contexts: NAMED_FUNCTIONS, checkConstructors: false, checkGetters: true, checkSetters: true }],
+      'jsdoc/require-jsdoc': [
+        'error',
+        {
+          require: { FunctionDeclaration: false },
+          contexts: NAMED_FUNCTIONS,
+          checkConstructors: false,
+          checkGetters: true,
+          checkSetters: true,
+        },
+      ],
       'local/typed-signature': 'error',
       // 4. Files over 500 lines warn; important files may opt out with a disable comment and a reason.
       'local/max-file-lines': 'warn',

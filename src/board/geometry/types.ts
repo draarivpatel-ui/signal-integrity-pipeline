@@ -3,7 +3,15 @@ import type { PcbTraceRoutePointVia, PcbTraceRoutePointWire } from 'circuit-json
 
 export type { PcbTrace, PcbTraceRoutePoint as RoutePoint, SourcePort } from 'circuit-json'
 
-export type PortSelector = { sourcePortId: string; component?: never; port?: never } | { sourcePortId?: never; component: string; port: string }
+export type PortSelector = {
+  sourcePortId: string
+  component?: never
+  port?: never
+} | {
+  sourcePortId?: never
+  component: string
+  port: string
+}
 export interface LaneModeling {
   port: string
   from: PortSelector

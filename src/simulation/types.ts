@@ -4,8 +4,15 @@ import type { CircuitJson, PortSelector, SimulationExperiment, SimulationIbisMod
 /** simulation's slice of the flat public `Modeling`. (`channelReference` is shared with board's slice.) */
 export interface SimulationModeling {
   channelReference?: PortSelector
-  supplies?: { positive: PortSelector; negative: PortSelector; voltageV: number }[]
-  passiveComponents?: { sourceComponentId?: string; component?: string }[]
+  supplies?: {
+    positive: PortSelector
+    negative: PortSelector
+    voltageV: number
+  }[]
+  passiveComponents?: {
+    sourceComponentId?: string
+    component?: string
+  }[]
 }
 
 export interface CircuitNodes {
@@ -67,6 +74,14 @@ export interface ElectricalSources {
   lines: string[]
   activeNodes: Set<string>
   grounded: Set<string>
-  sourceBindings: Array<{ name: string; positiveNode: string; negativeNode: string }>
-  scope: { voltageSources: number; passiveComponents: number; unselectedBoardComponents: string }
+  sourceBindings: Array<{
+    name: string
+    positiveNode: string
+    negativeNode: string
+  }>
+  scope: {
+    voltageSources: number
+    passiveComponents: number
+    unselectedBoardComponents: string
+  }
 }

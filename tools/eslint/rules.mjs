@@ -4,6 +4,83 @@ import { join, relative, sep } from 'node:path'
 
 const MAX_LINES = 500
 
+const MAX_LINE_LENGTH = 120
+
+/** Whether the line contains only an HTTP(S) URL, optionally as a comment. */
+function isUrlOnly(line) {
+  let url = line.trim()
+  if (url.startsWith('/*') && url.endsWith('*/')) url = url.slice(2, -2).trim()
+  else if (url.startsWith('//')) url = url.slice(2).trim()
+  else if (url.startsWith('*')) url = url.slice(1).trim()
+  if (!url.startsWith('https://') && !url.startsWith('http://')) return false
+  if (Array.from(url).some(character => character.trim() === '')) return false
+  return URL.canParse(url)
+}
+
+/** Enforces MAX_LINE_LENGTH on every physical source line except standalone URLs. */
+const maxLineLength = {
+  meta: {
+    type: 'layout',
+    schema: [],
+    messages: {
+      tooLong: 'This line has {{length}} characters (limit {{max}}).',
+    },
+  },
+  create(context) {
+    return {
+      Program() {
+        context.sourceCode.lines.forEach((line, index) => {
+          if (line.length <= MAX_LINE_LENGTH) return
+          const characters = Array.from(line)
+          const length = characters.length
+          if (length <= MAX_LINE_LENGTH || isUrlOnly(line)) return
+          const column = characters.slice(0, MAX_LINE_LENGTH).join('').length
+          context.report({
+            loc: { line: index + 1, column },
+            messageId: 'tooLong',
+            data: { length, max: MAX_LINE_LENGTH },
+          })
+        })
+      },
+    }
+  },
+}
+
+/** Reports every member whose start shares a line with the previous member. */
+function reportSharedMemberLines(members, context) {
+  let previousLine
+  for (const member of members) {
+    const line = member.loc.start.line
+    if (line === previousLine) context.report({ node: member, messageId: 'sharedLine' })
+    previousLine = line
+  }
+}
+
+/** Gives type members and properties in multiline objects separate lines. */
+const oneMemberPerLine = {
+  meta: {
+    type: 'layout',
+    schema: [],
+    messages: {
+      sharedLine: 'Start this member on its own line.',
+    },
+  },
+  create(context) {
+    return {
+      TSInterfaceBody(node) {
+        reportSharedMemberLines(node.body, context)
+      },
+      TSTypeLiteral(node) {
+        reportSharedMemberLines(node.members, context)
+      },
+      ObjectExpression(node) {
+        if (node.loc.start.line === node.loc.end.line) return
+        reportSharedMemberLines(node.properties, context)
+      },
+    }
+  },
+}
+
 /** Warns when a TypeScript file is longer than MAX_LINES lines. */
 const maxFileLines = {
   meta: {
@@ -22,7 +99,12 @@ const maxFileLines = {
         const all = context.sourceCode.lines
         // A final newline leaves an empty last entry; it is not a line of the file.
         const lines = all.at(-1) === '' ? all.length - 1 : all.length
-        if (lines > MAX_LINES) context.report({ node, loc: { line: 1, column: 0 }, messageId: 'tooLong', data: { lines, max: MAX_LINES } })
+        if (lines > MAX_LINES) context.report({
+          node,
+          loc: { line: 1, column: 0 },
+          messageId: 'tooLong',
+          data: { lines, max: MAX_LINES },
+        })
       },
     }
   },
@@ -42,7 +124,9 @@ const testFileMatchesSource = {
     docs: { description: 'A test file is named after the single source file it tests' },
     schema: [],
     messages: {
-      noSource: "{{test}} does not match a source file. Name it after the file it tests: '{{expected}}' should exist (or '{{expectedIndex}}').",
+      noSource: `{{test}} does not match a source file. Name it after the file it tests: ${
+        "'{{expected}}' should exist (or '{{expectedIndex}}')."
+      }`,
       duplicate: '{{source}} already has a test file ({{other}}). Keep one test file per source file.',
     },
   },
@@ -64,8 +148,17 @@ const testFileMatchesSource = {
           context.report({ node, loc, messageId: 'noSource', data: { test, expected, expectedIndex } })
           return
         }
-        const siblings = ['ts', 'tsx', 'mjs'].map(ext => `tests/${base}.test.${ext}`).filter(f => f !== test && existsSync(join(root, f)))
-        if (siblings.length) context.report({ node, loc, messageId: 'duplicate', data: { source: expected, other: siblings.join(', ') } })
+        const siblings = [
+          'ts',
+          'tsx',
+          'mjs',
+        ].map(ext => `tests/${base}.test.${ext}`).filter(f => f !== test && existsSync(join(root, f)))
+        if (siblings.length) context.report({
+          node,
+          loc,
+          messageId: 'duplicate',
+          data: { source: expected, other: siblings.join(', ') },
+        })
       },
     }
   },
@@ -75,7 +168,9 @@ const testFileMatchesSource = {
 function namedFunction(node) {
   const parent = node.parent
   if (node.type === 'FunctionDeclaration') return node.id ? node.id.name : 'default export'
-  if (parent.type === 'VariableDeclarator' && parent.init === node && parent.id.type === 'Identifier') return parent.id.name
+  if (parent.type === 'VariableDeclarator' && parent.init === node && parent.id.type === 'Identifier') {
+    return parent.id.name
+  }
   if (parent.type === 'MethodDefinition' && parent.value === node) return parent.key.name ?? 'method'
   if (parent.type === 'PropertyDefinition' && parent.value === node) return parent.key.name ?? 'property'
   return undefined
@@ -107,8 +202,13 @@ const typedSignature = {
         if (!paramTyped(param)) context.report({ node: param, messageId: 'param', data: { name, index: i + 1 } })
       })
       const parent = node.parent
-      const noReturnType = parent.type === 'MethodDefinition' && (parent.kind === 'constructor' || parent.kind === 'set')
-      if (!noReturnType && !node.returnType) context.report({ node: node.id ?? node, messageId: 'returns', data: { name } })
+      const noReturnType =
+        parent.type === 'MethodDefinition' && (parent.kind === 'constructor' || parent.kind === 'set')
+      if (!noReturnType && !node.returnType) context.report({
+        node: node.id ?? node,
+        messageId: 'returns',
+        data: { name },
+      })
     }
     return { FunctionDeclaration: check, FunctionExpression: check, ArrowFunctionExpression: check }
   },
@@ -116,5 +216,11 @@ const typedSignature = {
 
 export default {
   meta: { name: 'local' },
-  rules: { 'max-file-lines': maxFileLines, 'test-file-matches-source': testFileMatchesSource, 'typed-signature': typedSignature },
+  rules: {
+    'max-file-lines': maxFileLines,
+    'max-line-length': maxLineLength,
+    'one-member-per-line': oneMemberPerLine,
+    'test-file-matches-source': testFileMatchesSource,
+    'typed-signature': typedSignature,
+  },
 }

@@ -33,7 +33,17 @@ const electrical=(mutate,m=base=>base)=>impl=>{
   return impl.electricalSources(cj, modeling, nodes)
 }
 const square=extra=>cj=>{
-  cj.push({type:'simulation_voltage_source',simulation_voltage_source_id:'sq',is_dc_source:false,terminal1_source_port_id:'v0',terminal2_source_port_id:'g0',voltage:3.3,frequency:1e6,wave_shape:'square',...extra})
+  cj.push({
+    type:'simulation_voltage_source',
+    simulation_voltage_source_id:'sq',
+    is_dc_source:false,
+    terminal1_source_port_id:'v0',
+    terminal2_source_port_id:'g0',
+    voltage:3.3,
+    frequency:1e6,
+    wave_shape:'square',
+    ...extra
+  })
 }
 
 
@@ -48,7 +58,9 @@ const MESSAGES={
  "ibis_model": "ibis_model: At least one serialized native IBIS model required",
  "ibis_mapping": "ibis_mapping: TX: physical pin mapping points outside its chip",
  "ibis_state": "ibis_state: data: duplicate run state for p0",
- "channel_model": "channel_model: data DQSn: endpoint p3 requires exactly one modeled physical pin and an explicit run state",
+ "channel_model": `channel_model: data DQSn: endpoint p3 requires ${
+  'exactly one modeled physical pin and an explicit run state'
+ }`,
  "stimulus_duplicate": "stimulus_duplicate: data: multiple stimuli drive the same physical output",
  "stimulus_state": "stimulus_state: stimulus1: stimulus requires an enabled IBIS output in this experiment",
  "stimulus_missing": "stimulus_missing: data: enabled output requires one explicit digital stimulus",
@@ -57,9 +69,13 @@ const MESSAGES={
  "probe_reference": "probe_reference: diff: unknown signal/reference source",
  "channel_short": "channel_short: Extracted endpoints are shorted by another ideal source trace or reference",
  "electrical_input": "electrical_input: declared supply: explicit finite value required",
- "supply_reference": "supply_reference: Voltage sources require explicit positive and negative source port/net terminals",
+ "supply_reference": `supply_reference: Voltage sources require explicit ${
+  'positive and negative source port/net terminals'
+ }`,
  "supply_short": "supply_short: Explicit supply terminals resolve to the same node",
- "supply_missing": "supply_missing: Declare physical voltage sources or explicit source-port supplies; this backend never invents VDD",
+ "supply_missing": `supply_missing: Declare physical voltage sources or explicit source-port supplies; ${
+  'this backend never invents VDD'
+ }`,
  "source_edge": "source_edge: Square voltage sources require explicit positive rise/fall times",
  "source_capability": "source_capability: Voltage waveform sinewave is unsupported by this PCB backend",
  "passive_reference": "passive_reference: Selected passive component is missing or ambiguous",
@@ -76,7 +92,11 @@ test('simulation codes and messages equal the pre-module implementation', () => 
   ['simulation_timing',declare(cj=>{one(cj,'simulation_experiment').time_per_step=0})],
   ['simulation_scope',declare(cj=>{one(cj,'simulation_experiment').subcircuit_id='unrelated'})],
   ['simulation_probe',declare(cj=>cj.filter(e=>e.type!=='simulation_voltage_probe'))],
-  ['native_declaration',declare(cj=>{cj.push({type:'source_invalid_component_property_error',property_name:'ibisModel',message:'bad ibisModel'})})],
+  ['native_declaration',declare(cj=>{cj.push({
+    type:'source_invalid_component_property_error',
+    property_name:'ibisModel',
+    message:'bad ibisModel',
+  })})],
   ['ibis_model',declare(cj=>cj.filter(e=>e.type!=='simulation_ibis_model'))],
   ['ibis_mapping',declare(cj=>{one(cj,'simulation_ibis_model').ibis_pin_name_to_source_port_id['9']='p2'})],
   ['ibis_state', declare((_, run) => {
@@ -101,9 +121,18 @@ test('simulation codes and messages equal the pre-module implementation', () => 
     run.stimuli[0].transmission_pattern = { transmission_type: 'bits', bits: '001', repeat: false }
   })],
   ['probe_reference',declare(cj=>{one(cj,'simulation_voltage_probe').signal_input_source_port_id='missing'})],
-  ['channel_short',declare(cj=>{cj.push({type:'source_trace',source_trace_id:'short',connected_source_port_ids:['p0','p2']})})],
+  [
+    'channel_short',
+    declare(cj=>{cj.push({type:'source_trace',source_trace_id:'short',connected_source_port_ids:['p0','p2']})}),
+  ],
   ['electrical_input',electrical(undefined,m=>({...m,supplies:[{...m.supplies[0],voltageV:NaN}]}))],
-  ['supply_reference',electrical(cj=>{cj.push({type:'simulation_voltage_source',simulation_voltage_source_id:'dc',is_dc_source:true,voltage:1,positive_source_port_id:'v0'})})],
+  ['supply_reference',electrical(cj=>{cj.push({
+    type:'simulation_voltage_source',
+    simulation_voltage_source_id:'dc',
+    is_dc_source:true,
+    voltage:1,
+    positive_source_port_id:'v0',
+  })})],
   ['supply_short',electrical(undefined,m=>({...m,supplies:[{...m.supplies[0],positive:{sourcePortId:'g0'}}]}))],
   ['supply_missing',electrical(undefined,m=>({...m,supplies:[]}))],
   ['source_edge',electrical(square({}))],
