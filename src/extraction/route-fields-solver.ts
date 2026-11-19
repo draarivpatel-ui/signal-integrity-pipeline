@@ -19,6 +19,7 @@ import {
 
 /** Standard edge resolution and lower bound accepted by the routed field stage. */
 const DEFAULT_FIELD_PANELS = 12
+/** Reject requests below the routed field stage’s minimum panel count. */
 const MIN_FIELD_PANELS = 2
 
 /** Keep the pair screen and local matrix solves within modest memory. */
@@ -32,6 +33,7 @@ const PARALLEL_COUPLING_WARNING = [
   `Local solves are capped at ${MAX_SCREEN_CONDUCTORS} conductors and fail explicitly.`,
 ].join(" ")
 
+/** Routed geometry, extraction options, and the artifact location. */
 export interface RouteFieldsInput {
   geometry: SectionGeometry
   circuitJson?: CircuitJson
@@ -59,7 +61,13 @@ function maskThicknessSource(
 }
 
 /** Queue each conductor pair in slice order so cache population precedes coupling decisions. */
-function addCouplingPairs(slices: RouteSlice[], pairs: RouteSlice[]): void {
+function addCouplingPairs({
+  slices,
+  pairs,
+}: {
+  slices: RouteSlice[]
+  pairs: RouteSlice[]
+}): void {
   for (const slice of slices) {
     const count = slice.wires.length
     if (count > MAX_SCREEN_CONDUCTORS) {
@@ -121,8 +129,9 @@ export class RouteFieldsSolver extends BaseSolver {
     let line: RouteCoefficients
     try {
       line = snapshot(
-        solveCrossSection(section, {
-          panelsPerEdge: this.input.panels ?? DEFAULT_FIELD_PANELS,
+        solveCrossSection({
+          section,
+          options: { panelsPerEdge: this.input.panels ?? DEFAULT_FIELD_PANELS },
         }),
       )
     } catch (error) {
@@ -155,7 +164,10 @@ export class RouteFieldsSolver extends BaseSolver {
   private solveNext(): void {
     if (!this.pairs) {
       this.pairs = []
-      addCouplingPairs(this.input.geometry.slices, this.pairs)
+      addCouplingPairs({
+        slices: this.input.geometry.slices,
+        pairs: this.pairs,
+      })
     }
     if (this.pairIndex < this.pairs.length) {
       this.solveSlice(this.pairs[this.pairIndex++])

@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import type React from "react"
 import {
   type CircuitJson,
+  type CopperScope,
   channelCopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
   segmentRoutes,
@@ -10,6 +11,20 @@ import {
 } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
 import { renderCoreSignals } from "../support/core-render"
+
+/** Each test strip is 0.3 mm wide and the two centre lines are 0.3 mm apart. */
+const STRIP_WIDTH_MM = 0.3
+
+/** The same-net union covers both strips, within the existing floating-point tolerance. */
+const UNION_WIDTH_MM = 0.6
+const WIDTH_TOLERANCE_MM = 1e-7
+
+const materials = {
+  maskMm: 0,
+  maskEr: 1,
+  maskLoss: 0,
+  substrateLoss: 0,
+}
 
 /** Two same-net strips meet exactly at their edges, as on the board's DDR power rail. */
 function TouchingRail({
@@ -27,38 +42,47 @@ function TouchingRail({
       routeRemaining={false}
       schematicDisabled
     >
-      {["A", "B", "C", "D"].map((name, i) => (
-        <chip
-          key={name}
-          name={name}
-          pcbX={i % 2 ? 2 : -2}
-          pcbY={i < 2 ? 0 : 0.3}
-          pinLabels={{ pin1: "P" }}
-          connections={{ P: i < 2 || sameNet ? "net.RAIL" : "net.OTHER" }}
-          footprint={
-            <footprint>
-              <smtpad
-                portHints={["pin1"]}
-                pcbX={0}
-                pcbY={0}
-                width={0.15}
-                height={0.15}
-                shape="rect"
-              />
-            </footprint>
-          }
-        />
-      ))}
+      {[
+        { name: "A", x: -2, y: 0 },
+        { name: "B", x: 2, y: 0 },
+        { name: "C", x: -2, y: STRIP_WIDTH_MM },
+        { name: "D", x: 2, y: STRIP_WIDTH_MM },
+      ].map(({ name, x, y }) => {
+        let net = "net.RAIL"
+        if (y !== 0 && !sameNet) net = "net.OTHER"
+        return (
+          <chip
+            key={name}
+            name={name}
+            pcbX={x}
+            pcbY={y}
+            pinLabels={{ pin1: "P" }}
+            connections={{ P: net }}
+            footprint={
+              <footprint>
+                <smtpad
+                  portHints={["pin1"]}
+                  pcbX={0}
+                  pcbY={0}
+                  width={0.15}
+                  height={0.15}
+                  shape="rect"
+                />
+              </footprint>
+            }
+          />
+        )
+      })}
       <trace
         from=".A > .P"
         to=".B > .P"
-        width={0.3}
+        width={STRIP_WIDTH_MM}
         pcbPath={[".A > .P", ".B > .P"]}
       />
       <trace
         from=".C > .P"
         to=".D > .P"
-        width={0.3}
+        width={STRIP_WIDTH_MM}
         pcbPath={[".C > .P", ".D > .P"]}
       />
       <net name="RAIL" />
@@ -69,8 +93,8 @@ function TouchingRail({
   )
 }
 
-test("TSX touching same-net rail strips form one physical conductor before extraction", async () => {
-  const circuit = await renderCoreSignals(<TouchingRail />)
+/** Select both same-net strips for comparison, including their reference plane. */
+function touchingRailScope(circuit: CircuitJson): CopperScope {
   const rail = circuit
     .filter((record) => record.type === "source_net")
     .find((net) => net.name === "RAIL")!
@@ -78,24 +102,25 @@ test("TSX touching same-net rail strips form one physical conductor before extra
     .filter((record) => record.type === "source_net")
     .find((net) => net.name === "GND")!
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const scope = channelCopperScope({
+  return channelCopperScope({
     circuit,
     connectivity,
-    selected: sourceNetMembers(connectivity, rail.source_net_id),
-    reference: sourceNetMembers(connectivity, ground.source_net_id),
+    selected: sourceNetMembers({ connectivity, seed: rail.source_net_id }),
+    reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
   })
-  const geometry = segmentRoutes(circuit, scope)
+}
+
+test("touching same-net strips form one conductor", async () => {
+  const circuit = await renderCoreSignals(<TouchingRail />)
+  const geometry = segmentRoutes({ circuit, scope: touchingRailScope(circuit) })
   assert.ok(
-    geometry.wires.some(
-      (wire) => Math.abs(wire.width - 0.6) < 1e-7 && wire.joins?.length,
-    ),
+    geometry.wires.some((wire) => {
+      return (
+        Math.abs(wire.width - UNION_WIDTH_MM) < WIDTH_TOLERANCE_MM &&
+        wire.joins?.length
+      )
+    }),
   )
-  const materials = {
-    maskMm: 0,
-    maskEr: 1,
-    maskLoss: 0,
-    substrateLoss: 0,
-  }
   assert.doesNotThrow(() => {
     const solver = new RouteFieldsSolver({
       geometry,
@@ -105,6 +130,11 @@ test("TSX touching same-net rail strips form one physical conductor before extra
     solver.solve()
     return solver.getOutput().value
   })
+})
+
+test("touching strips on separate nets stay separate", async () => {
+  const circuit = await renderCoreSignals(<TouchingRail />)
+  const scope = touchingRailScope(circuit)
   const board = <TouchingRail same-net={false} />
   const separate = await renderCoreSignals(board).catch(
     (error: Error & { circuitJson: CircuitJson }) => {
@@ -124,7 +154,8 @@ test("TSX touching same-net rail strips form one physical conductor before extra
     },
   )
 
-  const touching = segmentRoutes(separate, scope)
+  const touching = segmentRoutes({ circuit: separate, scope })
+  assert.ok(touching.wires.every((wire) => !wire.joins?.length))
   assert.throws(
     () => {
       const solver = new RouteFieldsSolver({

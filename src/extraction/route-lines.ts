@@ -16,7 +16,9 @@ export type SolvedRouteSection = {
   line: RouteCoefficients
 }
 
+/** A route slice with its canonical field coefficients. */
 export interface ExtractedRouteSlice extends RouteSlice, SolvedRouteSection {}
+/** Solved slices, unique field sections, and extraction evidence. */
 export interface ExtractedRoutes {
   slices: ExtractedRouteSlice[]
   sections: SolvedRouteSection[]
@@ -24,14 +26,17 @@ export interface ExtractedRoutes {
   warnings: string[]
   coupling: RouteCoupling[]
 }
+/** Laminate loss and soldermask thickness and dielectric properties. */
 export interface RouteMaterials {
   maskMm: number
   maskEr: number
   maskLoss: number
   substrateLoss: number
 }
+/** Per-unit-length field coefficients for a routed section. */
 export type RouteCoefficients = CrossSectionResult
 
+/** Stackup, slice, and materials used to form one field section. */
 interface RouteCrossSectionInput {
   geometry: SectionGeometry
   slice: RouteSlice
@@ -79,15 +84,19 @@ function routeDielectrics({
       layer.zMm + layer.thicknessMm <= upper + LAYER_TOLERANCE_MM
     )
   })
-  addOuterMask({ geometry, slice, materials }, clipped)
+  addOuterMask({ geometry, slice, materials, clipped })
   return clipped
 }
 
 /** Planar mask occupies gaps between outer traces and the overcoat over those traces. */
-function addOuterMask(
-  { geometry, slice, materials }: RouteCrossSectionInput,
-  clipped: CrossSection["dielectrics"],
-): void {
+function addOuterMask({
+  geometry,
+  slice,
+  materials,
+  clipped,
+}: RouteCrossSectionInput & {
+  clipped: CrossSection["dielectrics"]
+}): void {
   const layers = geometry.stack.copperLayers
   if (slice.wires.some((wire) => wire.layer === "top")) {
     const copper = layers.find((layer) => layer.name === "top")!
@@ -136,6 +145,7 @@ export function routeCrossSection(input: RouteCrossSectionInput): CrossSection {
   return { conductors, planes, dielectrics }
 }
 
+/** The two board coordinates that bound a straight route wire. */
 type RouteEndpoints = Pick<RouteWire, "a" | "b">
 
 /** Closest point on each centre-line and the distance between them. */
@@ -198,10 +208,13 @@ type ReferenceSeries = Pick<
 >
 
 /** Ideal AC rail voltages require induced return currents, rather than open series conductors. */
-export function referenceSeries(
-  line: RouteCoefficients,
-  grounded: number[],
-): ReferenceSeries {
+export function referenceSeries({
+  line,
+  grounded,
+}: {
+  line: RouteCoefficients
+  grounded: number[]
+}): ReferenceSeries {
   if (!grounded.length) return line
   const size = line.L.length
   const active = Array.from({ length: size }, (_, i) => i).filter(
@@ -223,14 +236,14 @@ export function referenceSeries(
   }
   const projection = transpose(current)
   return {
-    L: multiply(projection, multiply(line.L, current)),
-    skinResistance: multiply(
-      projection,
-      multiply(line.skinResistance, current),
-    ),
-    stripSkinResistance: multiply(
-      projection,
-      multiply(line.stripSkinResistance, current),
-    ),
+    L: multiply({ a: projection, b: multiply({ a: line.L, b: current }) }),
+    skinResistance: multiply({
+      a: projection,
+      b: multiply({ a: line.skinResistance, b: current }),
+    }),
+    stripSkinResistance: multiply({
+      a: projection,
+      b: multiply({ a: line.stripSkinResistance, b: current }),
+    }),
   }
 }

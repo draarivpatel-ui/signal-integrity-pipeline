@@ -28,11 +28,14 @@ export default function ReturnAgreement({
       routeRemaining={false}
       schematicDisabled
     >
-      {["TX", "RX"].map((name, i) => (
+      {[
+        { name: "TX", x: -length / 2 },
+        { name: "RX", x: length / 2 },
+      ].map(({ name, x }) => (
         <chip
           key={name}
           name={name}
-          pcbX={i ? length / 2 : -length / 2}
+          pcbX={x}
           pinLabels={{
             pin1: "S0",
             pin2: "S1",

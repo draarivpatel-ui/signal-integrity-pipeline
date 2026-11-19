@@ -1,11 +1,12 @@
-import type { RouteSlice } from "../board"
+import type { RouteSlice, RouteWire } from "../board"
 import type { RouteCoefficients } from "./route-lines"
 
 /** Retain a pair if either normalized mutual coefficient reaches 0.5%. */
 const COUPLING_THRESHOLD = 0.005
 
+/** Solved normalized coupling and retention decision for one route-wire pair. */
 export interface RouteCoupling {
-  wires: number[]
+  wires: RouteWire["id"][]
   capacitive: number
   inductive: number
   retained: boolean
