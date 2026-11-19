@@ -1,6 +1,6 @@
 import { Circuit, simulation } from "@tscircuit/core"
 import type { PcbDriverReceiverChannelProps } from "@tscircuit/props"
-import React, { type JSX, type ReactNode } from "react"
+import type { JSX, ReactNode } from "react"
 import type {
   CircuitJson,
   SimulationPcbDriverReceiverChannel,
@@ -12,11 +12,13 @@ export function SignalPin({
   x,
   y = 0,
   layer = "top",
+  width = 0.4,
 }: {
   name: string
   x: number
   y?: number
   layer?: "top" | "bottom"
+  width?: number
 }): JSX.Element {
   return (
     <>
@@ -32,7 +34,7 @@ export function SignalPin({
               portHints={["pin1"]}
               pcbX={0}
               pcbY={0}
-              width={0.4}
+              width={width}
               height={0.4}
               shape="rect"
             />
@@ -51,7 +53,7 @@ const signalModelAsset = {
 }
 
 /** Declare a synthetic model so core can bind the channel endpoints. */
-function SignalModel({ name }: { name: string }): JSX.Element {
+export function SignalModel({ name }: { name: string }): JSX.Element {
   return (
     <simulation.ibismodel
       componentRef={`.${name}`}
@@ -94,7 +96,7 @@ async function renderTopologyBoard(children: ReactNode): Promise<CircuitJson> {
 }
 
 /** Emit the channel while leaving strict routing checks to the test. */
-async function topologyBoard({
+export async function topologyBoard({
   children,
   driverRef = ".TX > .SIG",
   receiverRef = ".RX > .SIG",
@@ -128,8 +130,18 @@ async function topologyBoard({
 }
 
 /** A driver stub and a schematic receiver with no footprint. */
-export async function missingReceiverTerminal(): Promise<TopologyBoard> {
+export async function missingReceiverTerminal({
+  missing = "receiver",
+}: {
+  missing?: "driver" | "receiver"
+} = {}): Promise<TopologyBoard> {
+  const endpoints: Omit<TopologyBoardOptions, "children"> = {}
+  if (missing === "driver") {
+    endpoints.driverRef = ".RX > .SIG"
+    endpoints.receiverRef = ".TX > .SIG"
+  }
   return topologyBoard({
+    ...endpoints,
     children: (
       <>
         <SignalPin name="TX" x={-4} />
@@ -148,9 +160,11 @@ export async function missingReceiverTerminal(): Promise<TopologyBoard> {
 }
 
 /** TX and RX are routed, while a same-net stub has no trace. */
-export async function unroutedExtraPin(
-  receiver: "RX" | "STUB",
-): Promise<TopologyBoard> {
+export async function unroutedExtraPin({
+  receiver,
+}: {
+  receiver: "RX" | "STUB"
+}): Promise<TopologyBoard> {
   return topologyBoard({
     receiverRef: `.${receiver} > .SIG`,
     children: (
@@ -170,9 +184,11 @@ export async function unroutedExtraPin(
 }
 
 /** A straight route through an intermediate sampling pin. */
-export async function daisyChain(
-  receivers: ("MID" | "RX")[],
-): Promise<TopologyBoard> {
+export async function daisyChain({
+  receivers,
+}: {
+  receivers: ("MID" | "RX")[]
+}): Promise<TopologyBoard> {
   return topologyBoard({
     receiverRef: receivers.map((name) => `.${name} > .SIG`),
     children: (
@@ -196,7 +212,11 @@ export async function daisyChain(
 }
 
 /** One series resistor, optionally followed by a second copper leg to a test pin. */
-export async function seriesResistor(stub: boolean): Promise<TopologyBoard> {
+export async function seriesResistor({
+  stub = false,
+}: {
+  stub?: boolean
+}): Promise<TopologyBoard> {
   return topologyBoard({
     children: (
       <>
@@ -270,13 +290,25 @@ export async function platedHoleRoute(): Promise<TopologyBoard> {
 }
 
 /** Top and bottom traces meet at a separately rendered via. */
-export async function standaloneViaRoute(): Promise<TopologyBoard> {
+export async function standaloneViaRoute({
+  offset = 0,
+  viaNet = "SIGNAL",
+  viaPort,
+}: {
+  offset?: number
+  viaNet?: string
+  viaPort?: string
+} = {}): Promise<TopologyBoard> {
+  let connectsTo = `net.${viaNet}`
+  if (viaPort) connectsTo = `.${viaPort} > .SIG`
   return topologyBoard({
     children: (
       <>
         <SignalPin name="TX" x={-4} />
         <SignalPin name="RX" x={4} layer="bottom" />
         <net name="SIGNAL" />
+        {viaPort === "OTHER" && <SignalPin name="OTHER" x={0} y={4} />}
+        {viaNet !== "SIGNAL" && <net name={viaNet} />}
         <via
           name="V"
           pcbX={0}
@@ -284,20 +316,17 @@ export async function standaloneViaRoute(): Promise<TopologyBoard> {
           layers={["top", "bottom"]}
           holeDiameter={0.2}
           outerDiameter={0.45}
+          connectsTo={connectsTo}
         />
-        <SignalPin name="TOP" x={0} />
-        <SignalPin name="BOTTOM" x={0} layer="bottom" />
-        <trace from=".TX > .SIG" to="net.SIGNAL" />
-        <trace from=".RX > .SIG" to="net.SIGNAL" />
         <trace
           from=".TX > .SIG"
-          to=".TOP > .SIG"
-          pcbPath={[".TX > .SIG", ".TOP > .SIG"]}
+          to="net.SIGNAL"
+          pcbPath={[".TX > .SIG", { x: 4 - offset, y: 0 }]}
         />
         <trace
           from=".RX > .SIG"
-          to=".BOTTOM > .SIG"
-          pcbPath={[".RX > .SIG", ".BOTTOM > .SIG"]}
+          to="net.SIGNAL"
+          pcbPath={[".RX > .SIG", { x: -4 + offset, y: 0 }]}
         />
       </>
     ),
@@ -305,29 +334,33 @@ export async function standaloneViaRoute(): Promise<TopologyBoard> {
 }
 
 /** Two connected same-layer traces cross again between their route vertices. */
-export async function crossingRoute(): Promise<TopologyBoard> {
+export async function crossingRoute({
+  thirdLayer = "top",
+}: {
+  thirdLayer?: "top" | "bottom"
+} = {}): Promise<TopologyBoard> {
   return topologyBoard({
     children: (
       <>
         <SignalPin name="TX" x={-4} />
         <SignalPin name="RX" x={4} />
-        <SignalPin name="END" x={0} y={4} />
+        <SignalPin name="END" x={0} y={4} layer={thirdLayer} />
         <trace
           from=".TX > .SIG"
           to=".RX > .SIG"
           pcbPath={[".TX > .SIG", ".RX > .SIG"]}
         />
         <trace
-          from=".RX > .SIG"
-          to=".END > .SIG"
-          pcbPath={[".RX > .SIG", { x: -4, y: -4 }, ".END > .SIG"]}
+          from=".END > .SIG"
+          to=".RX > .SIG"
+          pcbPath={[".END > .SIG", { x: 0, y: -8 }, ".RX > .SIG"]}
         />
       </>
     ),
   })
 }
 
-/** A named-net trace passes the receiver at a specified offset from its pad center. */
+/** A named-net trace ends at x = 3.86 mm near the edge of the receiver pad. */
 export async function padContactRoute({
   offset,
   layer = "top",
@@ -354,7 +387,19 @@ export async function padContactRoute({
 }
 
 /** Two copper paths each pass through a pad of a cross-leg termination load. */
-export async function differentialTerminationRoute(): Promise<TopologyBoard> {
+export async function differentialTerminationRoute({
+  positiveTerminal = "pin1",
+}: {
+  positiveTerminal?: "pin1" | "pin2"
+} = {}): Promise<TopologyBoard> {
+  const reversed = positiveTerminal === "pin2"
+  const positive = `.TERM > .${positiveTerminal}`
+  let negative = ".TERM > .pin2"
+  let rotation = 90
+  if (reversed) {
+    negative = ".TERM > .pin1"
+    rotation = -90
+  }
   return topologyBoard({
     driverRef: { p: ".TXP > .SIG", n: ".TXN > .SIG" },
     receiverRef: { p: ".RXP > .SIG", n: ".RXN > .SIG" },
@@ -368,27 +413,27 @@ export async function differentialTerminationRoute(): Promise<TopologyBoard> {
           name="TERM"
           resistance="120"
           footprint="0603"
-          pcbRotation={90}
+          pcbRotation={rotation}
         />
         <trace
           from=".TXP > .SIG"
-          to=".TERM > .pin1"
-          pcbPath={[".TXP > .SIG", ".TERM > .pin1"]}
+          to={positive}
+          pcbPath={[".TXP > .SIG", positive]}
         />
         <trace
-          from=".TERM > .pin1"
+          from={positive}
           to=".RXP > .SIG"
-          pcbPath={[".TERM > .pin1", ".RXP > .SIG"]}
+          pcbPath={[positive, ".RXP > .SIG"]}
         />
         <trace
           from=".TXN > .SIG"
-          to=".TERM > .pin2"
-          pcbPath={[".TXN > .SIG", ".TERM > .pin2"]}
+          to={negative}
+          pcbPath={[".TXN > .SIG", negative]}
         />
         <trace
-          from=".TERM > .pin2"
+          from={negative}
           to=".RXN > .SIG"
-          pcbPath={[".TERM > .pin2", ".RXN > .SIG"]}
+          pcbPath={[negative, ".RXN > .SIG"]}
         />
       </>
     ),
