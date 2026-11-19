@@ -1,6 +1,6 @@
 import type { SimulationPcbDriverReceiverChannel } from "circuit-json"
 
-export type { SimulationPcbDriverReceiverChannel } from "circuit-json"
+export type { SimulationPcbDriverReceiverChannel }
 
 /** Check whether a valid channel pattern repeats a single bit. */
 function isConstantBitPattern(pattern: string): boolean {
