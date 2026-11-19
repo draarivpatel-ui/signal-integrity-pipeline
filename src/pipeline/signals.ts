@@ -20,10 +20,11 @@ import {
   type IbisSources,
   type InspectedPin,
   inspectPins,
+  loadModelSource,
   packageCapacitanceWarnings,
   pinCapabilities,
 } from "../buffers"
-import { safeId, sha256 } from "../kernel"
+import { safeId } from "../kernel"
 import { type RunControls, voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import {
@@ -483,8 +484,12 @@ function blockPackageWarnings({
   )) {
     const pin = [...pins.values()].find((pin) => pin.model === model)
     if (!pin || pin.component.coupledPackage === undefined) continue
+    const { text, evidence } = loadModelSource({
+      model: { ...model, pipelineId: model.simulation_ibis_model_id },
+      sources,
+    })
     const selected = coupledPackage({
-      text: pin.text,
+      text,
       component: pin.component,
       pins: Object.keys(model.ibis_pin_name_to_source_port_id),
     })
@@ -493,7 +498,7 @@ function blockPackageWarnings({
       ...packageCapacitanceWarnings({
         selected,
         file,
-        sourceSha256: sha256(sources[file]),
+        sourceSha256: evidence.sourceSha256,
       }),
     )
   }
