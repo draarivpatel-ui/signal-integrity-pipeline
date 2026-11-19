@@ -147,8 +147,11 @@ test.skipIf(!modelDir)(
           if (modelName === "power" || modelName === "gnd") {
             const buffer = document.getBuffer(converted.metadata.pins[0].model)
             let voltage = (buffer.pulldownReference ?? [0, 0, 0])[0]
-            if (modelName === "power")
-              voltage = (buffer.pullupReference ?? buffer.voltage)[0]
+            if (modelName === "power") {
+              const range = buffer.pullupReference ?? buffer.voltage
+              assert.ok(range)
+              voltage = range[0]
+            }
             assert.ok(
               converted.source.includes(`VPDN${i} DIE${i} 0 ${voltage}`),
             )

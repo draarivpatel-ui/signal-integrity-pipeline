@@ -8,7 +8,7 @@ import {
   PICOSECONDS_PER_SECOND,
 } from "../../fixtures/ibis-inspection"
 
-test("an oscillating waveform uses the first crossing of each threshold", async () => {
+test("an oscillating waveform uses the first completed excursion", async () => {
   const board = await ibisInspectionBoard()
   const text = inspectionIbis({
     modelType: "Output",
