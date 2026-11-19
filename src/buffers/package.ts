@@ -74,7 +74,7 @@ function dieVoltages({
   const voltages = new Map<SourcePortId, number>()
   for (const pin of pins) {
     for (const [role, voltage] of Object.entries(
-      referenceVoltages(document.getBuffer(pin.model)),
+      referenceVoltages({ buffer: document.getBuffer(pin.model) }),
     )) {
       const port = pin.references[role as keyof ReferenceVoltages]
       const previous = voltages.get(port)
