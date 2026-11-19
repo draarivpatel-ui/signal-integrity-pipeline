@@ -2,6 +2,8 @@ import {
   type CircuitJson,
   isQuiet,
   type SignalEndpoint,
+  type SignalEndpointPortIds,
+  type SimulationBlockId,
   type SimulationExperiment,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
@@ -32,44 +34,49 @@ const prbsPatterns = new Map([
 ])
 
 interface ControlOptions {
-  id: string
+  circuit: CircuitJson
+  id: SimulationBlockId
   block: SimulationPcbTransientChannelSimulation
   signals: SimulationPcbDriverReceiverChannel[]
   pins: Map<SourcePortId, InspectedPin>
   driven: Map<SourcePortId, SimulationPcbDriverReceiverChannel>
-  duration: number
+  durationSeconds: number
   rate: number
-  step: number
+  stepSeconds: number
 }
 
 /** Ordered physical ports. The sign of a differential signal is P minus N. */
-export function endpointPorts(endpoint: SignalEndpoint): SourcePortId[] {
+export function endpointPorts(endpoint: SignalEndpoint): SignalEndpointPortIds {
   if ("source_port_id" in endpoint) return [endpoint.source_port_id]
   return [endpoint.p_source_port_id, endpoint.n_source_port_id]
 }
 
 /** Choose the capture duration in seconds and check coverage of enabled stimuli. */
-export function blockDurationSeconds(
-  block: SimulationPcbTransientChannelSimulation,
-  signals: SimulationPcbDriverReceiverChannel[],
-): number {
-  const duration =
-    block.duration_ms === undefined
-      ? defaultDurationSeconds(signals)
-      : block.duration_ms / MILLISECONDS_PER_SECOND
-  if (!Number.isFinite(duration) || duration <= 0)
+export function blockDurationSeconds({
+  block,
+  signals,
+}: {
+  block: SimulationPcbTransientChannelSimulation
+  signals: SimulationPcbDriverReceiverChannel[]
+}): number {
+  let durationSeconds: number
+  if (block.duration_ms === undefined)
+    durationSeconds = defaultDurationSeconds(signals)
+  else durationSeconds = block.duration_ms / MILLISECONDS_PER_SECOND
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     throw new Error("Recording duration must be finite and positive.")
+  }
   for (const signal of signals) {
     if (signal.driver_disabled) continue
-    const start = signal.offset_ms / MILLISECONDS_PER_SECOND
-    if (!Number.isFinite(start) || start < 0)
+    const startSeconds = signal.offset_ms / MILLISECONDS_PER_SECOND
+    if (!Number.isFinite(startSeconds) || startSeconds < 0)
       throw new Error(`${signal.name}: invalid stimulus offset.`)
-    if (start >= duration)
+    if (startSeconds >= durationSeconds)
       throw new Error(
         `${signal.name}: stimulus starts after the experiment ends.`,
       )
   }
-  return duration
+  return durationSeconds
 }
 
 /** Include a quiet driver as the last probe after the receivers. */
@@ -90,10 +97,13 @@ function isBitPattern(pattern: string): boolean {
 }
 
 /** Generate only the part of the seeded PRBS needed for the requested recording. */
-export function signalBits(
-  signal: SimulationPcbDriverReceiverChannel,
-  duration: number,
-): string {
+export function signalBits({
+  signal,
+  durationSeconds,
+}: {
+  signal: SimulationPcbDriverReceiverChannel
+  durationSeconds: number
+}): string {
   const prbs = prbsPatterns.get(signal.pattern)
   const { seed, pattern } = signal
   let mask = 0
@@ -121,7 +131,8 @@ export function signalBits(
   if (!prbs) return pattern
 
   let state = seed!
-  const captureSeconds = duration - signal.offset_ms / MILLISECONDS_PER_SECOND
+  const captureSeconds =
+    durationSeconds - signal.offset_ms / MILLISECONDS_PER_SECOND
   const bitSeconds =
     MILLISECONDS_PER_SECOND / signal.bit_rate_bps / MILLISECONDS_PER_SECOND
   const intervals = captureSeconds / bitSeconds
@@ -148,11 +159,17 @@ export function signalBits(
 }
 
 /** Append the experiment and probes while lowering pin states and stimuli. */
-export function appendBlockControls(
-  circuit: CircuitJson,
-  options: ControlOptions,
-): RunControls {
-  const { id, block, signals, pins, driven, duration, rate, step } = options
+export function appendBlockControls({
+  circuit,
+  id,
+  block,
+  signals,
+  pins,
+  driven,
+  durationSeconds,
+  rate,
+  stepSeconds,
+}: ControlOptions): RunControls {
   const controls: RunControls = { states: [], stimuli: [] }
   const scope = circuit.find(
     (record) => record.type === "pcb_board",
@@ -164,9 +181,9 @@ export function appendBlockControls(
     experiment_type: "spice_transient_analysis",
     spice_engine: "pcb_spice",
     spice_options: { ...SPICE_OPTIONS },
-    end_time_ms: duration * MILLISECONDS_PER_SECOND,
+    end_time_ms: durationSeconds * MILLISECONDS_PER_SECOND,
     start_time_ms: 0,
-    time_per_step: step * MILLISECONDS_PER_SECOND,
+    time_per_step: stepSeconds * MILLISECONDS_PER_SECOND,
     subcircuit_id: scope,
   })
   for (const pin of pins.values()) {
@@ -198,7 +215,7 @@ export function appendBlockControls(
     })
   }
   for (const signal of signals) {
-    const bits = signalBits(signal, duration)
+    const bits = signalBits({ signal, durationSeconds })
     if (signal.driver_disabled) continue
     let initialState: 0 | 1 = 0
     if (bits[0] === "1") initialState = 1

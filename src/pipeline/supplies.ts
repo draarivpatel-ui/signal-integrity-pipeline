@@ -1,10 +1,9 @@
 import type { SimulationVoltageSource } from "circuit-json"
-import type {
-  CircuitJson,
-  ConnectivityMap,
-  SourceNetId,
-  SourcePortId,
-} from "../board"
+import {
+  type ConnectivityMap,
+  findConnectedNetworks,
+} from "circuit-json-to-connectivity-map"
+import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
 import { type InspectedPin, referenceVoltages } from "../buffers"
 import { type SimulationModeling, voltageSourceTerminals } from "../simulation"
 
@@ -17,6 +16,7 @@ interface ReferenceBias {
 }
 
 interface BlockSupplyOptions {
+  circuit: CircuitJson
   connectivity: ConnectivityMap
   pins: Map<SourcePortId, InspectedPin>
   retained: ReadonlySet<SourcePortId | SourceNetId>
@@ -25,65 +25,74 @@ interface BlockSupplyOptions {
 }
 
 /** Canonical connectivity-map net, or the original port/net for an isolated endpoint. */
-function netKey(
-  connectivity: ConnectivityMap,
-  id: SourcePortId | SourceNetId,
-): string {
+function netKey({
+  connectivity,
+  id,
+}: {
+  connectivity: ConnectivityMap
+  id: SourcePortId | SourceNetId
+}): string {
   return connectivity.getNetConnectedToId(id) ?? id
 }
 
+/** Retained voltage sources and all their terminal nets, including the shared reference. */
+interface RetainedSupplies {
+  sources: Set<SimulationVoltageSource>
+  sourceNets: Set<SourceNetId>
+}
+
 /** Include sources reachable from the retained nets without traversing the shared reference. */
-function retainedVoltageSources(
-  circuit: CircuitJson,
-  { connectivity, pins, retained, reference }: BlockSupplyOptions,
-): Map<SimulationVoltageSource, string[]> {
+function retainedVoltageSources({
+  circuit,
+  connectivity,
+  pins,
+  retained,
+  reference,
+}: BlockSupplyOptions): RetainedSupplies {
   const candidates = circuit
     .filter((record) => record.type === "simulation_voltage_source")
     .map((source) => {
       const terminals = voltageSourceTerminals(source)
-      return {
-        source,
-        nets: terminals.flatMap((id) =>
-          id === undefined ? [] : [netKey(connectivity, id)],
-        ),
-      }
+      const nets = terminals
+        .filter((id) => id !== undefined)
+        .map((id) => netKey({ connectivity, id }))
+      return { source, nets }
     })
-  const nets = new Set([...retained].map((id) => netKey(connectivity, id)))
+  const seeds = new Set([...retained].map((id) => netKey({ connectivity, id })))
   for (const pin of pins.values()) {
     for (const port of Object.values(pin.references)) {
-      if (port !== undefined) nets.add(netKey(connectivity, port))
+      if (port !== undefined) seeds.add(netKey({ connectivity, id: port }))
     }
   }
-  const ground = netKey(connectivity, reference)
-  nets.delete(ground)
-  const sources = new Map<SimulationVoltageSource, string[]>()
-  for (const net of nets) {
-    for (const candidate of candidates) {
-      if (!candidate.nets.includes(net) || sources.has(candidate.source))
-        continue
-      sources.set(candidate.source, candidate.nets)
-      for (const adjacent of candidate.nets) {
-        if (adjacent !== ground) nets.add(adjacent)
-      }
-    }
+  const ground = netKey({ connectivity, id: reference })
+  seeds.delete(ground)
+  const connections = candidates.map(({ nets }) =>
+    nets.filter((net) => net !== ground),
+  )
+  const groups = Object.values(findConnectedNetworks(connections))
+  const reachable = new Set(
+    groups.filter((nets) => nets.some((net) => seeds.has(net))).flat(),
+  )
+  const sources = new Set<SimulationVoltageSource>()
+  const sourceNets = new Set<SourceNetId>()
+  for (const candidate of candidates) {
+    if (!candidate.nets.some((net) => reachable.has(net))) continue
+    sources.add(candidate.source)
+    for (const net of candidate.nets) sourceNets.add(net)
   }
-  return sources
+  return { sources, sourceNets }
 }
 
 /** Retain declared sources and infer a nominal supply only for an unpowered IBIS rail. */
-export function addBlockSupplies(
-  circuit: CircuitJson,
-  options: BlockSupplyOptions,
-): void {
-  const { connectivity, pins, reference, settings } = options
-  const sources = retainedVoltageSources(circuit, options)
-  const sourceNets = new Set([...sources.values()].flat())
+export function addBlockSupplies(options: BlockSupplyOptions): void {
+  const { circuit, connectivity, pins, reference, settings } = options
+  const { sources, sourceNets } = retainedVoltageSources(options)
   for (const source of circuit.filter(
     (record) => record.type === "simulation_voltage_source",
   )) {
     if (!sources.has(source)) circuit.splice(circuit.indexOf(source), 1)
   }
-  const ground = netKey(connectivity, reference)
+  const ground = netKey({ connectivity, id: reference })
   const netVoltages = new Map<string, ReferenceBias>()
   const externalPorts = new Set<SourcePortId>()
   for (const pin of pins.values()) {
@@ -98,7 +107,7 @@ export function addBlockSupplies(
         throw new Error(
           `${pin.port}: invalid typical ${role} reference voltage.`,
         )
-      const key = netKey(connectivity, port)
+      const key = netKey({ connectivity, id: port })
       const previous = netVoltages.get(key)
       if (
         previous &&
@@ -112,21 +121,19 @@ export function addBlockSupplies(
     }
   }
   for (const port of externalPorts) {
-    const key = netKey(connectivity, port)
+    const key = netKey({ connectivity, id: port })
     if (key === ground || netVoltages.has(key) || sourceNets.has(key)) continue
     throw new Error(
       `${port}: external IBIS reference has no declared or nominal bias.`,
     )
   }
   for (const [key, { port, voltage }] of netVoltages) {
-    if (key === ground) {
-      if (Math.abs(voltage) > REFERENCE_VOLTAGE_TOLERANCE_V) {
-        throw new Error(
-          `${port}: nonzero IBIS reference shares the channel ground.`,
-        )
-      }
-      continue
+    if (key === ground && Math.abs(voltage) > REFERENCE_VOLTAGE_TOLERANCE_V) {
+      throw new Error(
+        `${port}: nonzero IBIS reference shares the channel ground.`,
+      )
     }
+    if (key === ground) continue
     if (sourceNets.has(key)) continue
     settings.supplies ??= []
     settings.supplies.push({

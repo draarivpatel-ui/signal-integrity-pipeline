@@ -1,5 +1,6 @@
 // Topology/transient unit-test source only.
 import { simulation } from "@tscircuit/core"
+import type { ResistorProps } from "@tscircuit/props"
 import type React from "react"
 import { Reference, Transceiver } from "./signal-parts"
 
@@ -17,8 +18,21 @@ export default function ({
   reversed?: boolean
   routedTermination?: boolean
 }): React.JSX.Element {
-  const positive = reversed ? "B" : "A"
-  const negative = reversed ? "A" : "B"
+  let positive = "A"
+  let negative = "B"
+  if (reversed) {
+    positive = "B"
+    negative = "A"
+  }
+  let terminationX = 5
+  let connections: ResistorProps["connections"] = {
+    pin1: ".RX > .A",
+    pin2: ".RX > .B",
+  }
+  if (routedTermination) {
+    terminationX = 7
+    connections = undefined
+  }
   const driverRef = { p: `.TX > .${positive}`, n: `.TX > .${negative}` }
   const receiverRef = { p: `.RX > .${positive}`, n: `.RX > .${negative}` }
   return (
@@ -50,10 +64,8 @@ export default function ({
       <resistor
         name="RTERM"
         resistance="120"
-        pcbX={routedTermination ? 7 : 5}
-        connections={
-          routedTermination ? undefined : { pin1: ".RX > .A", pin2: ".RX > .B" }
-        }
+        pcbX={terminationX}
+        connections={connections}
         footprint={
           <footprint>
             <smtpad

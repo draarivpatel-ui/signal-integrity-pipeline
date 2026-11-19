@@ -27,11 +27,11 @@ C_comp 1p 1p 1p
 dV/dt_r 1.98/1n 1.98/1n 1.98/1n
 dV/dt_f 1.98/1n 1.98/1n 1.98/1n
 R_load = 50
-${(["rising", "falling"] as const)
+${(["Rising", "Falling"] as const)
   .flatMap((kind) =>
     [0, 3.3].map(
       (voltage) =>
-        `[${kind === "rising" ? "Rising" : "Falling"} Waveform]\nR_fixture = 50\nV_fixture = ${voltage}\n${[
+        `[${kind} Waveform]\nR_fixture = 50\nV_fixture = ${voltage}\n${[
           [0, 0],
           [0.2, 0],
           [0.4, 0.5],
@@ -42,8 +42,9 @@ ${(["rising", "falling"] as const)
           [4, 1],
         ]
           .map(([time, fraction]) => {
-            const value =
-              voltage / 2 + 1.65 * (kind === "rising" ? fraction : 1 - fraction)
+            let amplitude = fraction
+            if (kind === "Falling") amplitude = 1 - fraction
+            const value = voltage / 2 + 1.65 * amplitude
             return `${time}n ${value} ${value} ${value}`
           })
           .join("\n")}`,

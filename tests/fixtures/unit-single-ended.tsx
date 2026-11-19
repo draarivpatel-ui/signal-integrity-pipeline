@@ -10,7 +10,15 @@ const BIT_RATE_BPS = 20e6
 const CAPTURE_BITS = 48
 
 /** Build a single-ended channel from the driver to the receiver. */
-export default function (): React.JSX.Element {
+export default function ({
+  bitRate = BIT_RATE_BPS,
+  pattern,
+  seed,
+}: {
+  bitRate?: number
+  pattern?: string
+  seed?: number
+} = {}): React.JSX.Element {
   return (
     <board
       width={16}
@@ -33,13 +41,15 @@ export default function (): React.JSX.Element {
       />
       <simulation.pcbtransientchannelsimulation
         name="SINGLE"
-        bitRate={BIT_RATE_BPS}
-        duration={CAPTURE_BITS / BIT_RATE_BPS}
+        bitRate={bitRate}
+        duration={CAPTURE_BITS / bitRate}
       >
         <simulation.pcbdriverreceiverchannel
           name="DATA"
           driverRef=".TX > .Y"
           receiverRef=".RX > .A"
+          pattern={pattern}
+          seed={seed}
         />
       </simulation.pcbtransientchannelsimulation>
     </board>

@@ -49,28 +49,41 @@ export function Inverter({
   clampNet,
   modelFile = "sn74lvc1g04.ibs",
 }: InverterProps): React.JSX.Element {
-  const pin = driver ? "4" : "2"
-  const label = driver ? "Y" : "A"
+  let pin = "2"
+  let label = "A"
+  let model = "LVC1G04_IN_33"
+  if (driver) {
+    pin = "4"
+    label = "Y"
+    model = "LVC1G04_OUT_33"
+  }
+  const pinLabels: Record<string, string> = {
+    pin2: "A",
+    pin3: "GND",
+    pin4: "Y",
+    pin5: "VCC",
+  }
+  const ibisPinNameToPortLabel: Record<string, string> = {
+    [pin]: label,
+    "3": "GND",
+    "5": "VCC",
+  }
+  const connections: Record<string, string> = { VCC: "net.VCC", GND: "net.GND" }
   const references = referenceLabels()
-  if (clampNet) references.powerClamp = "PC"
+  if (clampNet) {
+    pinLabels.pin6 = "PC"
+    ibisPinNameToPortLabel["6"] = "PC"
+    connections.PC = clampNet
+    references.powerClamp = "PC"
+  }
   return (
     <>
       <chip
         name={name}
         pcbX={x}
         pcbY={y}
-        pinLabels={{
-          pin2: "A",
-          pin3: "GND",
-          pin4: "Y",
-          pin5: "VCC",
-          ...(clampNet && { pin6: "PC" }),
-        }}
-        connections={{
-          VCC: "net.VCC",
-          GND: "net.GND",
-          ...(clampNet && { PC: clampNet }),
-        }}
+        pinLabels={pinLabels}
+        connections={connections}
         footprint={
           <footprint>
             <smtpad
@@ -124,15 +137,8 @@ export function Inverter({
         componentRef={`.${name}`}
         ibisModelAsset={asset(modelFile)}
         ibisComponentName="LVC1G04_DCK"
-        ibisPinNameToPortLabel={{
-          [pin]: label,
-          "3": "GND",
-          "5": "VCC",
-          ...(clampNet && { "6": "PC" }),
-        }}
-        ibisPinNameToModelName={{
-          [pin]: driver ? "LVC1G04_OUT_33" : "LVC1G04_IN_33",
-        }}
+        ibisPinNameToPortLabel={ibisPinNameToPortLabel}
+        ibisPinNameToModelName={{ [pin]: model }}
         ibisPinNameToReferencePortLabels={{ [pin]: references }}
       />
     </>

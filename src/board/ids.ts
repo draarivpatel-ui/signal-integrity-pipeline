@@ -5,6 +5,7 @@ import type {
   PcbSmtPad,
   PcbTrace,
   PcbVia,
+  SimulationPcbTransientChannelSimulation,
   SourceNet,
   SourcePort,
   SourceTrace,
@@ -35,3 +36,12 @@ export type PcbCopperPourId = PcbCopperPour["pcb_copper_pour_id"]
 export type CopperPadId =
   | PcbSmtPad["pcb_smtpad_id"]
   | PcbPlatedHole["pcb_plated_hole_id"]
+
+/** The identifier of a PCB transient channel simulation block in Circuit JSON. */
+export type SimulationBlockId =
+  SimulationPcbTransientChannelSimulation["simulation_pcb_transient_channel_simulation_id"]
+
+/** One single-ended port, or the positive and negative ports in that order. */
+export type SignalEndpointPortIds =
+  | [SourcePortId]
+  | [positive: SourcePortId, negative: SourcePortId]
