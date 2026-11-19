@@ -10,7 +10,6 @@ import {createNativeSolver,loadIbisSources} from '../../src/adapters'
 import {invoke} from '../../src/solver'
 import {rootScope} from '../../src/kernel'
 import type {CircuitJson} from '../../src/board'
-import {nativeDdrTimeout} from '../fixtures/native-ddr-timeout'
 
 type T={after:(fn:()=>Promise<void>|void)=>void}
 type Sandbox={root:string;tmp:string;tool:(body:string)=>string[];cwdFile:string;workdirGone:()=>Promise<void>}
@@ -65,8 +64,14 @@ test('input write failure after mkdtemp still removes the workdir',async t=>{
 
 test('spawn failure (nonexistent tool) rejects native_solver and removes the workdir',async t=>{
   const {root,tmp}=await sandbox(t)
-  const solver=createNativeSolver({tools:{fasthenry:join(root,'no-such-tool')}})
-  await assert.rejects(solver({solver:'fasthenry',files:{'in.inp':'x'},args:[],outputFiles:['Zc.mat']}),code('native_solver',/^native_solver: fasthenry: .*ENOENT/))
+  const solver=createNativeSolver({tools:{ngspice:join(root,'no-such-tool')}})
+  const result = solver({
+    solver: 'ngspice',
+    files: { 'deck.cir': 'x' },
+    args: [],
+    outputFiles: ['waveform.raw'],
+  })
+  await assert.rejects(result, code('native_solver', /^native_solver: ngspice: .*ENOENT/))
   assert.deepEqual(await readdir(tmp),[])
 })
 
@@ -79,14 +84,25 @@ test('nonzero exit rejects native_solver with logs and removes the workdir',asyn
 })
 
 test('timeout kills the tool, rejects native_timeout and removes the workdir',async t=>{
-  const {root,tool,workdirGone}=await sandbox(t)
+  const {root,tmp,tool,workdirGone}=await sandbox(t)
   const marker=join(root,'survived.txt')
-  const solver=createNativeSolver({tools:{fastercap:process.execPath},timeoutMs:200})
+  const solver=createNativeSolver({tools:{ngspice:process.execPath},timeoutMs:200})
   const started=Date.now()
-  await assert.rejects(solver({solver:'fastercap',files:{'deck.lst':'x'},args:tool(`setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'x'),1500)`),outputFiles:['out.txt']}),
-    code('native_timeout',/^native_timeout: fastercap: exceeded 200 ms process timeout; /))
+  const writeAfterTimeout = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'x'), 1500)`
+  const result = solver({
+    solver: 'ngspice',
+    files: { 'deck.cir': 'x' },
+    args: tool(writeAfterTimeout),
+    outputFiles: ['out.txt'],
+  })
+  await assert.rejects(result,
+    code('native_timeout',/^native_timeout: ngspice: exceeded 200 ms process timeout; /))
   assert.ok(Date.now()-started<1500)
-  await workdirGone()
+  await workdirGone().catch(async error => {
+    // Under concurrent load the timeout may kill Node before its cwd marker is written.
+    if (error.code !== 'ENOENT') throw error
+    assert.deepEqual(await readdir(tmp), [])
+  })
   await new Promise(done=>setTimeout(done,1600))
   await assert.rejects(stat(marker),{code:'ENOENT'})  // killed, not merely abandoned
 })
@@ -129,33 +145,4 @@ test('loadIbisSources rejects traversal and symlinks escaping baseDir, follows c
   await symlink(join(baseDir,'real.ibs'),join(baseDir,'models/link.ibs'))
   const sources=await loadIbisSources({circuitJson:declare('models/link.ibs'),baseDir})
   assert.equal(new TextDecoder().decode(sources['models/link.ibs'] as Uint8Array),'inside')
-})
-
-// Moved from tests/native-timeout.test.ts; assertions unchanged.
-let ddr: ReturnType<typeof nativeDdrTimeout> | undefined
-/** Renders the DDR timeout board once, on first use, so the lifecycle tests above do not pay for it. */
-const fixture = (): ReturnType<typeof nativeDdrTimeout> => (ddr ??= nativeDdrTimeout())
-test('native TSX prepares a three-lane DDR extraction and two eye declarations', async () => {
-  const { records, deck } = await fixture()
-  assert.equal(records.filter(r => r.type === 'simulation_eye_diagram').length, 2)
-  assert.equal((deck.match(/^\.external /gm) ?? []).length, 4)
-  assert.match(deck, /meshMm=1.5/)
-  assert.match(deck, /nhinc=5 nwinc=5/)
-})
-
-// Opt-in real FastHenry process; no solver output is mocked or accepted.
-// PCB_SPICE_FASTHENRY=/path/to/fasthenry node --import tsx --test tests/adapters/native-solver.test.ts
-// A short deadline reproduces adapter behavior without a 15-minute board run.
-test('native TSX DDR extraction reports its process deadline', {
-  skip: !process.env.PCB_SPICE_FASTHENRY,
-}, async () => {
-  const { deck } = await fixture()
-  const solve = createNativeSolver({ tools: { fasthenry: process.env.PCB_SPICE_FASTHENRY }, timeoutMs: 100 })
-  await assert.rejects(solve({ solver: 'fasthenry', args: ['-p', 'seg', 'channel.inp'],
-    files: { 'channel.inp': deck }, outputFiles: ['Zc.mat'] }), error => {
-    console.log((error as Error).message)
-    assert.equal((error as { code: string }).code, 'native_timeout')
-    assert.match((error as Error).message, /fasthenry.*100 ms/)
-    return true
-  })
 })

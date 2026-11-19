@@ -45,14 +45,49 @@ export interface CheckOptions {
   exemptions?: Exemptions
 }
 
-const SOURCE = /\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/
-const TEST = /\.test\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/
+const SOURCE_EXTENSIONS = ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx']
+const WORD_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_'
+const ASSERTIONS = ['assert', 'expect', 'rejects', 'throws', 'doesNotThrow', 'doesNotReject', 'equal', 'strictEqual',
+  'deepEqual', 'deepStrictEqual', 'match', 'ok', 'partialDeepStrictEqual']
+
+/** Checks the letters, digits and underscore that form an ASCII word. */
+const isWordCharacter = (char: string): boolean => char.length === 1 && WORD_CHARACTERS.includes(char)
+/** Whether the filename ends in a JS or TS source extension. */
+const isSourceFile = (name: string): boolean => SOURCE_EXTENSIONS.some(ext => name.endsWith(ext))
+/** Whether the filename ends in a JS or TS test extension. */
+const isTestFile = (name: string): boolean => SOURCE_EXTENSIONS.some(ext => name.endsWith(`.test${ext}`))
+
+/** Recognizes an assertion name ending at a word boundary. */
+function startsWithWord(text: string, word: string): boolean {
+  return text.startsWith(word) && !isWordCharacter(text[word.length] ?? '')
+}
+
+/** A string literal or a word from a regular expression in a test assertion. */
+type AssertionLiteral = string
+
+/** Extracts ASCII words from a test assertion's regular expression literal. */
+function collectWords(text: string, words: Set<AssertionLiteral>): void {
+  let word = ''
+  for (const char of text) {
+    if (isWordCharacter(char)) word += char
+    else if (word) {
+      words.add(word)
+      word = ''
+    }
+  }
+  if (word) words.add(word)
+}
 /** Normalizes a native path to forward slashes so reports and comparisons match on every OS. */
 const toPosix = (p: string): string => p.split(sep).join('/')
 /** Today's date as YYYY-MM-DD in UTC, the format exemption expiry dates are compared against. */
 const todayUtc = (): string => new Date().toISOString().slice(0, 10)
 /** True when the value is a real YYYY-MM-DD date string, so malformed expiry dates are caught. */
-const isoDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s))
+function isoDate(s: unknown): s is string {
+  if (typeof s !== 'string' || s.length !== 10 || s[4] !== '-' || s[7] !== '-') return false
+  const digits = `${s.slice(0, 4)}${s.slice(5, 7)}${s.slice(8)}`
+  for (const digit of digits) if (digit < '0' || digit > '9') return false
+  return !Number.isNaN(Date.parse(s))
+}
 
 /** Single source: every src/<dir>/index.ts. Tests live in the sibling tests/<dir>/. */
 export function discoverModules(src: string, tests: string = join(dirname(src), 'tests')): ModuleInfo[] {
@@ -62,12 +97,12 @@ export function discoverModules(src: string, tests: string = join(dirname(src), 
     .sort((a, b) => a.dir.localeCompare(b.dir))
 }
 
-/** Lists every file under a directory whose name matches the pattern, sorted; a missing directory yields none. */
-function walk(dir: string, keep: RegExp): string[] {
+/** Lists every file under a directory whose name passes the predicate, sorted; a missing directory yields none. */
+function walk(dir: string, keep: (name: string) => boolean): string[] {
   if (!existsSync(dir) || !statSync(dir).isDirectory()) return []
   return readdirSync(dir, { withFileTypes: true }).flatMap(d => {
     const path = join(dir, d.name)
-    return d.isDirectory() ? walk(path, keep) : keep.test(d.name) ? [path] : []
+    return d.isDirectory() ? walk(path, keep) : keep(d.name) ? [path] : []
   }).sort()
 }
 /** Reads a file and parses it into a TypeScript AST with parent links set. */
@@ -90,7 +125,7 @@ export interface DiagnosticsCall { file: string; domain?: string; codes?: string
 /** Every `diagnostics(...)` call in a module's sources, with its literal tuple parsed from the AST. */
 export function findDiagnosticsCalls(root: string): DiagnosticsCall[] {
   const calls: DiagnosticsCall[] = []
-  for (const file of walk(root, SOURCE)) visit(parse(file), n => {
+  for (const file of walk(root, isSourceFile)) visit(parse(file), n => {
     if (!ts.isCallExpression(n) || !ts.isIdentifier(n.expression) || n.expression.text !== 'diagnostics') return
     const [d, list] = n.arguments
     const call: DiagnosticsCall = { file }
@@ -105,8 +140,14 @@ export function findDiagnosticsCalls(root: string): DiagnosticsCall[] {
   return calls
 }
 
+/** Parsed exemptions and any reported file error. */
+type LoadedExemptions = {
+  value: Exemptions
+  problem?: string
+}
+
 /** Reads tools/exemptions.json, treating a missing file as no exemptions and reporting unparsable JSON as a problem. */
-function loadExemptions(path: string): { value: Exemptions; problem?: string } {
+function loadExemptions(path: string): LoadedExemptions {
   if (!existsSync(path)) return { value: {} }
   try {
     return { value: JSON.parse(readFileSync(path, 'utf8')) as Exemptions }
@@ -114,10 +155,20 @@ function loadExemptions(path: string): { value: Exemptions; problem?: string } {
   catch (e) { return { value: {}, problem: `${toPosix(path)}: ${(e as Error).message}` } }
 }
 
+/** A rule name supplied by a module waiver. */
+type WaiverRuleName = string
+
+/** Paths and module waivers still in force, plus exemption violations. */
+type ActiveExemptions = {
+  legacy: string[]
+  waivers: Map<ModuleInfo['dir'], Set<WaiverRuleName>>
+  violations: Violation[]
+}
+
 /** Validates expiry; returns the waivers that are still in force plus EX violations. */
-export function activeExemptions(ex: Exemptions, today: string = todayUtc()): { legacy: string[]; waivers: Map<string, Set<string>>; violations: Violation[] } {
+export function activeExemptions(ex: Exemptions, today: string = todayUtc()): ActiveExemptions {
   const violations: Violation[] = []
-  const waivers = new Map<string, Set<string>>()
+  const waivers = new Map<ModuleInfo['dir'], Set<WaiverRuleName>>()
   /** True when an entry's expiry is valid and not yet passed; otherwise records an EX violation. */
   const live = (expires: unknown, module: string, what: string): boolean => {
     if (!isoDate(expires)) {
@@ -134,7 +185,7 @@ export function activeExemptions(ex: Exemptions, today: string = todayUtc()): { 
   if (ex.legacy && live(ex.legacy.expires, 'src', 'legacy exemption')) legacy = (ex.legacy.paths ?? []).map(toPosix)
   for (const [dir, w] of Object.entries(ex.modules ?? {}))
     if (live(w?.expires, dir, `waiver of ${(w?.waive ?? []).join('/') || 'nothing'}`)) {
-      const bad = (w.waive ?? []).filter(r => !/^M[123]$/.test(r))
+      const bad = (w.waive ?? []).filter(r => !['M1', 'M2', 'M3'].includes(r))
       if (bad.length) violations.push({ rule: 'EX', module: dir, message: `only M1-M3 can be waived, not ${bad.join(', ')}` })
       waivers.set(dir, new Set(w.waive ?? []))
     }
@@ -150,19 +201,19 @@ const isLegacy = (rel: string, legacy: readonly string[]): boolean =>
  * naming it as a word) inside the arguments of an assertion call, or inside the iterable of a for-of
  * loop whose body makes an assertion (table-driven tests).
  */
-function assertedLiterals(file: string): Set<string> {
-  const found = new Set<string>()
+function assertedLiterals(file: string): Set<AssertionLiteral> {
+  const found = new Set<AssertionLiteral>()
   const sf = parse(file)
   /** True for calls that look like test assertions (assert.*, expect, rejects, throws and friends). */
   const isAssertion = (n: ts.Node): n is ts.CallExpression => {
     if (!ts.isCallExpression(n)) return false
     const callee = n.expression.getText(sf)
-    return /(?:^|\.)(?:assert|expect|rejects|throws|doesNotThrow|doesNotReject|equal|strictEqual|deepEqual|deepStrictEqual|match|ok|partialDeepStrictEqual)\b/.test(callee) || /^assert\b/.test(callee)
+    return callee.split('.').some(part => ASSERTIONS.some(name => startsWithWord(part, name)))
   }
   /** Records every string literal and every word in a regex literal under the given node. */
   const collect = (root: ts.Node): void => visit(root, n => {
     if (ts.isStringLiteralLike(n)) found.add(n.text)
-    else if (ts.isRegularExpressionLiteral(n)) for (const w of n.text.match(/[A-Za-z0-9_]+/g) ?? []) found.add(w)
+    else if (ts.isRegularExpressionLiteral(n)) collectWords(n.text, found)
   })
   visit(sf, n => {
     if (isAssertion(n)) n.arguments.forEach(collect)
@@ -180,7 +231,7 @@ function assertedLiterals(file: string): Set<string> {
 /** Checks one module against M1-M3, skipping rules its exemption waives. */
 export function checkModule(m: ModuleInfo, options: CheckOptions = {}): Violation[] {
   const { waivers } = activeExemptions(options.exemptions ?? {}, options.today)
-  const waived = waivers.get(m.dir) ?? new Set<string>()
+  const waived = waivers.get(m.dir) ?? new Set<WaiverRuleName>()
   const out: Violation[] = []
   /** Records a violation for this module unless that rule is waived. */
   const push = (rule: 'M1' | 'M2' | 'M3', message: string): void => {
@@ -194,7 +245,7 @@ export function checkModule(m: ModuleInfo, options: CheckOptions = {}): Violatio
     else if (c.domain !== m.dir) push('M1', `${toPosix(c.file)}: diagnostics domain '${c.domain}' must be the directory name '${m.dir}'`)
   }
 
-  const tests = walk(m.tests, TEST)
+  const tests = walk(m.tests, isTestFile)
   if (!tests.length) {
     push('M2', `${toPosix(m.tests)}/ has no *.test.* file`)
     return out
@@ -202,7 +253,7 @@ export function checkModule(m: ModuleInfo, options: CheckOptions = {}): Violatio
 
   const codes = [...new Set(calls.flatMap(c => c.codes ?? []))]
   if (codes.length) {
-    const asserted = new Set<string>()
+    const asserted = new Set<AssertionLiteral>()
     for (const t of tests) for (const s of assertedLiterals(t)) asserted.add(s)
     for (const code of codes) if (!asserted.has(code)) push('M3', `declared code '${code}' is not asserted by any test in ${toPosix(m.tests)}/`)
   }
@@ -223,10 +274,19 @@ function importsOf(file: string): ImportEdge[] {
 function resolveTarget(abs: string): string {
   return existsSync(abs) && statSync(abs).isDirectory() ? join(abs, 'index') : abs
 }
-const NODE_BUILTIN = /^(?:node:|(?:fs|child_process)(?:\/|$))/
+/** Whether the specifier names a Node built-in covered by the module rules. */
+function isNodeBuiltin(specifier: string): boolean {
+  return specifier.startsWith('node:') || ['fs', 'child_process']
+    .some(name => specifier === name || specifier.startsWith(`${name}/`))
+}
 
 /** Strip a JS/TS extension so `x.js` (specifier) and `x.ts` (file on disk) compare equal. */
-const stem = (p: string): string => p.replace(/\.(?:[cm]?[jt]s|[jt]sx)$/, '')
+function stem(p: string): string {
+  const ext = SOURCE_EXTENSIONS.find(extension => p.endsWith(extension))
+  return ext ? p.slice(0, -ext.length) : p
+}
+/** Converts the JS output path back to its TypeScript source extension. */
+const jsToTs = (p: string): string => p.endsWith('.js') ? `${p.slice(0, -3)}.ts` : p
 
 /** Checks src/ as a whole against S1-S6: ownership, import boundaries, cycles, Node built-ins, entry imports and generated unions. */
 export function checkSource(src: string, modules: ModuleInfo[], options: CheckOptions = {}): Violation[] {
@@ -253,12 +313,12 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
 
   // S2 + S4 + graph for S3
   const graph = new Map<string, Set<string>>([...names].map(n => [n, new Set<string>()]))
-  for (const file of walk(src, SOURCE)) {
+  for (const file of walk(src, isSourceFile)) {
     const owner = moduleOf(resolve(file))
     const path = rel(file)
     const legacyFile = !owner && isLegacy(path, legacy)
     for (const edge of importsOf(file)) {
-      if (NODE_BUILTIN.test(edge.specifier) && owner !== 'adapters' && !legacyFile)
+      if (isNodeBuiltin(edge.specifier) && owner !== 'adapters' && !legacyFile)
         out.push({ rule: 'S4', module: owner ?? 'src', message: `${path} imports '${edge.specifier}'; Node built-ins belong in src/adapters/` })
       if (!owner || !edge.target) continue
       const targetModule = moduleOf(edge.target)
@@ -316,7 +376,7 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
     const ok = edge.target !== undefined && (
       [...names].some(n => stem(edge.target!) === stem(resolve(src, n, 'index.ts'))) ||
       stem(edge.target) === stem(resolve(src, 'modules.generated.ts')) ||
-      isLegacy(toPosix(relative(repo, edge.target)).replace(/\.js$/, '.ts'), legacy) ||
+      isLegacy(jsToTs(toPosix(relative(repo, edge.target))), legacy) ||
       isLegacy(toPosix(relative(repo, edge.target)) + '.ts', legacy) ||
       isLegacy(toPosix(relative(repo, edge.target)), legacy))
     if (!ok) out.push({ rule: 'S5', module: 'src', message: `${rel(entry)} imports '${edge.specifier}'; only ./<module> and ./modules.generated are allowed` })
@@ -339,8 +399,14 @@ export function checkSource(src: string, modules: ModuleInfo[], options: CheckOp
   return out
 }
 
+/** The literals declared in the generated module and diagnostic code unions. */
+type GeneratedModuleLiterals = {
+  domains: Set<string>
+  codes: Set<string>
+}
+
 /** The string literals of the DomainName and DiagnosticCode unions, read from the AST. */
-export function parseModulesGenerated(text: string): { domains: Set<string>; codes: Set<string> } {
+export function parseModulesGenerated(text: string): GeneratedModuleLiterals {
   const sf = ts.createSourceFile('modules.generated.ts', text, ts.ScriptTarget.Latest, true)
   const result = { domains: new Set<string>(), codes: new Set<string>() }
   for (const s of sf.statements) if (ts.isTypeAliasDeclaration(s)) {
@@ -407,7 +473,9 @@ export function runChecks(root: string, { write = false, today = todayUtc() }: {
   return violations.map(v => ({ ...v, message: v.message.split(prefix).join('') }))
     .filter(v => {
       const key = formatViolation(v)
-      return !seen.has(key) && !!seen.add(key)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
     })
 }
 

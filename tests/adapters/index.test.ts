@@ -1,14 +1,10 @@
 // Copied from tests/node.test.ts, repointed at src/adapters. Assertions unchanged.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtemp,mkdir,writeFile,readFile,rm,symlink,stat} from 'node:fs/promises'
+import {mkdtemp,writeFile,readFile,rm,stat} from 'node:fs/promises'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
-import {createNativeSolver,loadIbisSources,writePipelineOutput} from '../../src/adapters'
-import {runPipeline} from '../../src/pipeline'
-import {generateReport} from '../../src/report'
-import type {RunSolver} from '../../src/solver'
-import {inMemoryInput,fixtureSolver} from '../fixtures/in-memory.mjs'
+import {createNativeSolver,loadIbisSources} from '../../src/adapters'
 
 /** Makes a scratch directory that is deleted when the test finishes. */
 const temporary=async(t: {after:(fn:()=>Promise<void>)=>void}): Promise<string>=>{
@@ -41,28 +37,4 @@ test('native adapter isolates requests, captures files and logs, and cleans up s
   await assert.rejects(stat(await readFile(location,'utf8')),{code:'ENOENT'})
   await assert.rejects(solver({...request,files:{'../escape':'bad'}}),/file_path/)
   assert.throws(()=>createNativeSolver({timeoutMs:0}),/native_timeout/)
-})
-test('local IBIS loading deduplicates declarations, rejects missing files and symlink escapes',async t=>{
-  const root=await temporary(t)
-  const baseDir=join(root,'project')
-  const outside=join(root,'outside.ibs')
-  await mkdir(join(baseDir,'models'),{recursive:true})
-  const input=inMemoryInput()
-  const bytes=input.ibisSources['models/test.ibs']
-  await writeFile(join(baseDir,'models/test.ibs'),bytes)
-  assert.deepEqual(await loadIbisSources({circuitJson:input.circuitJson,baseDir}),Object.assign(Object.create(null),{'models/test.ibs':bytes}))
-  await rm(join(baseDir,'models/test.ibs'))
-  await assert.rejects(loadIbisSources({circuitJson:input.circuitJson,baseDir}),{code:'ENOENT'})
-  await writeFile(outside,bytes)
-  await symlink(outside,join(baseDir,'models/test.ibs'))
-  await assert.rejects(loadIbisSources({circuitJson:input.circuitJson,baseDir}),/file_path/)
-})
-test('explicit output writes supplied artifacts plus the in-memory report without invoking solvers',async t=>{
-  const outputDir=await temporary(t)
-  const result=await runPipeline({...inMemoryInput(),runSolver:fixtureSolver as RunSolver})
-  const report=generateReport(result)
-  await writePipelineOutput({result,outputDir})
-  for(const [path,body] of Object.entries({...result.files,...report})) assert.equal(await readFile(join(outputDir,path),'utf8'),body)
-  result.files['../escape']='bad'
-  await assert.rejects(writePipelineOutput({result,outputDir}),/file_path/)
 })

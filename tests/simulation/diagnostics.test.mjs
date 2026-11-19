@@ -4,7 +4,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {Diagnostic} from '../../src/kernel/index.js'
-import {geometryFromCircuitJson} from '../../src/board/index.js'
+import {fixtureGeometry as geometryFromCircuitJson} from './fixtures.mjs'
 import * as current from '../../src/simulation/index.js'
 import {fixture} from './fixtures.mjs'
 
@@ -13,26 +13,25 @@ const impls={
 }
 const one=(cj,type,pred=()=>true)=>cj.find(e=>e.type===type&&pred(e))
 const declare=(mutate=()=>{},m=undefined)=>impl=>{
-  const {cj,m:base}=fixture()
+  const {cj,m:base,controls}=fixture()
   const modeling=m?m(base):base
-  const out=mutate(cj)??cj
-  return impl.generalDeclarations(out,impl.geometry(out,modeling),modeling)
+  const out=mutate(cj,controls.run)??cj
+  const { mappings } = impl.geometry(out, modeling)
+  return impl.generalDeclarations({
+    circuit: out,
+    mappings,
+    modeling,
+    controls,
+  })
 }
 const electrical=(mutate,m=base=>base)=>impl=>{
   const {cj,m:base}=fixture()
   mutate?.(cj)
   const modeling=m(base)
   const g=impl.geometry(cj,modeling)
-  return impl.electricalSources(cj,modeling,impl.circuitNodes(cj,g,modeling))
+  const nodes = impl.circuitNodes({ circuit: cj, mappings: g.mappings, modeling })
+  return impl.electricalSources(cj, modeling, nodes)
 }
-const deck=(extraction,models=[{source:'.subckt BUFFER P R\nRTEST P R 1000\n.ends BUFFER\n',spicePinMapping:{P:'p0',R:'g0'},name:'test'}])=>impl=>{
-  const {cj,m}=fixture()
-  const g=impl.geometry(cj,m)
-  const d=impl.generalDeclarations(cj,g,m)
-  return impl.generalSimulationSpice(d.plans[0],g,m,extraction,models,d.nodes,impl.electricalSources(cj,m,d.nodes))
-}
-const identity=[[1,0],[0,1]]
-const matrices=[{R:identity,L:identity,C:identity}]
 const square=extra=>cj=>{
   cj.push({type:'simulation_voltage_source',simulation_voltage_source_id:'sq',is_dc_source:false,terminal1_source_port_id:'v0',terminal2_source_port_id:'g0',voltage:3.3,frequency:1e6,wave_shape:'square',...extra})
 }
@@ -56,8 +55,6 @@ const MESSAGES={
  "stimulus_pattern": "stimulus_pattern: A nonempty binary string or array of numeric 0/1 bits is required",
  "stimulus_coverage": "stimulus_coverage: stimulus0: nonrepeating bits do not cover the complete run",
  "probe_reference": "probe_reference: diff: unknown signal/reference source",
- "eye_timing": "eye_timing: diff: measurement gate must fit the recorded run and contain a complete two-UI window",
- "eye_reference": "eye_reference: diff: unknown or unsupported transient experiment",
  "channel_short": "channel_short: Extracted endpoints are shorted by another ideal source trace or reference",
  "electrical_input": "electrical_input: declared supply: explicit finite value required",
  "supply_reference": "supply_reference: Voltage sources require explicit positive and negative source port/net terminals",
@@ -67,10 +64,7 @@ const MESSAGES={
  "source_capability": "source_capability: Voltage waveform sinewave is unsupported by this PCB backend",
  "passive_reference": "passive_reference: Selected passive component is missing or ambiguous",
  "passive_capability": "passive_capability: TX: expected two physical ports",
- "matrix_dimension": "matrix_dimension: Extracted channels must match every selected signal",
- "ibis_contract": "ibis_contract: Converter did not emit a SPICE component wrapper",
- "spice_options": "spice_options: Unsupported integration method",
- "probe_observation": "probe_observation: single: signal/reference is outside the declared electrical model scope"
+ "ibis_contract": "ibis_contract: Converter did not emit a SPICE component wrapper"
 }
 
 test('simulation codes and messages equal the pre-module implementation', () => {
@@ -85,16 +79,28 @@ test('simulation codes and messages equal the pre-module implementation', () => 
   ['native_declaration',declare(cj=>{cj.push({type:'source_invalid_component_property_error',property_name:'ibisModel',message:'bad ibisModel'})})],
   ['ibis_model',declare(cj=>cj.filter(e=>e.type!=='simulation_ibis_model'))],
   ['ibis_mapping',declare(cj=>{one(cj,'simulation_ibis_model').ibis_pin_name_to_source_port_id['9']='p2'})],
-  ['ibis_state',declare(cj=>{cj.push({...one(cj,'simulation_ibis_pin_state')})})],
-  ['channel_model',declare(cj=>cj.filter(e=>!(e.type==='simulation_ibis_pin_state'&&e.source_port_id==='p3')))],
-  ['stimulus_duplicate',declare(cj=>{cj.push({...one(cj,'simulation_digital_stimulus')})})],
-  ['stimulus_state',declare(cj=>{one(cj,'simulation_digital_stimulus',s=>s.source_port_id==='p1').source_port_id='p2'})],
-  ['stimulus_missing',declare(cj=>cj.filter(e=>!(e.type==='simulation_digital_stimulus'&&e.source_port_id==='p1')))],
-  ['stimulus_pattern',declare(cj=>{one(cj,'simulation_digital_stimulus').transmission_pattern.bits='012'})],
-  ['stimulus_coverage',declare(cj=>{one(cj,'simulation_digital_stimulus').transmission_pattern={transmission_type:'bits',bits:'001',repeat:false}})],
+  ['ibis_state', declare((_, run) => {
+    run.states.push({...run.states[0]})
+  })],
+  ['channel_model', declare((_, run) => {
+    run.states=run.states.filter(state=>state.source_port_id!=='p3')
+  })],
+  ['stimulus_duplicate', declare((_, run) => {
+    run.stimuli.push({...run.stimuli[0]})
+  })],
+  ['stimulus_state', declare((_, run) => {
+    run.stimuli[1].source_port_id='p2'
+  })],
+  ['stimulus_missing', declare((_, run) => {
+    run.stimuli.pop()
+  })],
+  ['stimulus_pattern', declare((_, run) => {
+    run.stimuli[0].transmission_pattern.bits='012'
+  })],
+  ['stimulus_coverage', declare((_, run) => {
+    run.stimuli[0].transmission_pattern = { transmission_type: 'bits', bits: '001', repeat: false }
+  })],
   ['probe_reference',declare(cj=>{one(cj,'simulation_voltage_probe').signal_input_source_port_id='missing'})],
-  ['eye_timing',declare(cj=>{one(cj,'simulation_eye_diagram').end_time_ms=.02})],
-  ['eye_reference',declare(cj=>{cj.push({...one(cj,'simulation_eye_diagram'),simulation_eye_diagram_id:'ghost',simulation_experiment_id:'ghost'})})],
   ['channel_short',declare(cj=>{cj.push({type:'source_trace',source_trace_id:'short',connected_source_port_ids:['p0','p2']})})],
   ['electrical_input',electrical(undefined,m=>({...m,supplies:[{...m.supplies[0],voltageV:NaN}]}))],
   ['supply_reference',electrical(cj=>{cj.push({type:'simulation_voltage_source',simulation_voltage_source_id:'dc',is_dc_source:true,voltage:1,positive_source_port_id:'v0'})})],
@@ -104,17 +110,7 @@ test('simulation codes and messages equal the pre-module implementation', () => 
   ['source_capability',electrical(square({wave_shape:'sinewave'}))],
   ['passive_reference',electrical(undefined,m=>({...m,passiveComponents:[{sourceComponentId:'missing'}]}))],
   ['passive_capability',electrical(undefined,m=>({...m,passiveComponents:[{sourceComponentId:'u0'}]}))],
-  ['matrix_dimension',deck([{R:[[1]],L:[[1]],C:[[1]]}])],
-  ['ibis_contract',deck(matrices,[{source:'* no wrapper\n',spicePinMapping:{},name:'bad'}])],
-  ['spice_options',impl=>impl.simulationSpiceOptions({method:'euler'})],
-  ['probe_observation',impl=>{
-    const {cj,m}=fixture()
-    cj.push({type:'source_port',source_port_id:'x0',source_component_id:'u0',name:'NC'})
-    one(cj,'simulation_voltage_probe',p=>p.simulation_voltage_probe_id==='single').signal_input_source_port_id='x0'
-    const g=impl.geometry(cj,m)
-    const d=impl.generalDeclarations(cj,g,m)
-    return impl.validateProbeScope(d.plans[0],g,[],d.nodes,impl.electricalSources(cj,m,d.nodes))
-  }],
+  ['ibis_contract',impl=>impl.namespaceSpice('* no wrapper\n','I0')],
   ]) {
     assert.ok(Object.hasOwn(MESSAGES, code), code)
     assert.throws(() => run(impls.current), e => {
@@ -126,11 +122,68 @@ test('simulation codes and messages equal the pre-module implementation', () => 
   }
 })
 
-test('result_schema: a schema that drops probe ids fails the result Circuit JSON', () => {
-  const {cj,m}=fixture()
-  const g=geometryFromCircuitJson(cj,m)
-  const {plans}=current.generalDeclarations(cj,g,m)
-  const run={records:[{type:'simulation_transient_voltage_graph',simulation_experiment_id:'run'}]}
-  assert.throws(()=>current.simulationResultCircuitJson(cj,plans,[run]),{code:'result_schema',message:'result_schema: Installed Circuit JSON schema discarded the result probe ID'})
-  assert.equal(current.simulationResultCircuitJson(cj,plans,[]).length,cj.length)
+
+const {circuitNodes,electricalSources}=current
+// CPU and RAM each connect to a local DQ net. Net-only traces join both to the board's DQ net.
+function splitChannelNet(circuit) {
+  for (const [id, scope] of [['dq-cpu', 'cpu'], ['dq-ram', 'ram'], ['dq-board', 'board']]) {
+    circuit.push({
+      type: 'source_net',
+      source_net_id: id,
+      name: 'DQ',
+      subcircuit_id: scope,
+      member_source_group_ids: [],
+    })
+  }
+  const traces = [
+    ['bind-cpu', ['p0'], ['dq-cpu']],
+    ['bind-ram', ['p2'], ['dq-ram']],
+    ['join-cpu', [], ['dq-cpu', 'dq-board']],
+    ['join-ram', [], ['dq-board', 'dq-ram']],
+  ]
+  for (const [id, ports, nets] of traces) {
+    circuit.push({
+      type: 'source_trace',
+      source_trace_id: id,
+      connected_source_port_ids: ports,
+      connected_source_net_ids: nets,
+    })
+  }
+}
+
+test('a channel net split into subcircuits is cut like one shared net', () => {
+  const { cj, m, g } = fixture()
+  splitChannelNet(cj)
+  const nodes = circuitNodes({ circuit: cj, mappings: g.mappings, modeling: m })
+  assert.notEqual(nodes.node('p0'), nodes.node('p2'))
+  assert.throws(() => nodes.node('dq-board'), /channel_net/)
+  const { cj: fanoutCircuit, m: fanoutModeling, g: fanoutGeometry } = fixture()
+  splitChannelNet(fanoutCircuit)
+  fanoutCircuit.push({
+    type: 'source_trace',
+    source_trace_id: 'tap',
+    connected_source_port_ids: ['p1'],
+    connected_source_net_ids: ['dq-board'],
+  })
+  const input = { circuit: fanoutCircuit, mappings: fanoutGeometry.mappings, modeling: fanoutModeling }
+  assert.throws(() => circuitNodes(input), /channel_fanout/)
+})
+
+test('orphan ideal sources fail preflight',()=>{
+  const {cj,m,g}=fixture()
+  cj.push(
+    { type: 'source_component', source_component_id: 'voltage', name: 'ORPHAN' },
+    { type: 'source_port', source_port_id: 'vspos', source_component_id: 'voltage' },
+    { type: 'source_port', source_port_id: 'vsneg', source_component_id: 'voltage' },
+    {
+      type: 'simulation_voltage_source',
+      simulation_voltage_source_id: 'voltage-source',
+      terminal1_source_port_id: 'vspos',
+      terminal2_source_port_id: 'vsneg',
+      voltage: 3.3,
+      is_dc_source: false,
+    },
+  )
+  const nodes=circuitNodes({ circuit: cj, mappings: g.mappings, modeling: m })
+  assert.throws(()=>electricalSources(cj,m,nodes),/floating_source.*ORPHAN/)
 })

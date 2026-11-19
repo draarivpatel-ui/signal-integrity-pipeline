@@ -46,12 +46,15 @@ const testFileMatchesSource = {
       duplicate: '{{source}} already has a test file ({{other}}). Keep one test file per source file.',
     },
   },
+  /** @returns {import('eslint').Rule.RuleListener} */
   create(context) {
     const root = context.cwd
     const test = relative(root, context.filename).split(sep).join('/')
-    const match = /^tests\/(.+)\.test\.(?:ts|tsx|mjs)$/.exec(test)
-    if (!match || CROSS_CUTTING.some(dir => test.startsWith(dir))) return {}
-    const base = match[1]
+    if (!test.startsWith('tests/') || CROSS_CUTTING.some(dir => test.startsWith(dir))) return {}
+    const suffix = ['.test.ts', '.test.tsx', '.test.mjs'].find(ext => test.endsWith(ext))
+    if (!suffix) return {}
+    const base = test.slice('tests/'.length, -suffix.length)
+    if (!base || ['\n', '\r', '\u2028', '\u2029'].some(char => base.includes(char))) return {}
     const expected = `src/${base}.ts`
     const expectedIndex = `src/${base}/index.ts`
     return {

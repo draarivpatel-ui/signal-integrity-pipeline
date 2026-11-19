@@ -18,7 +18,7 @@ const exec = promisify(execFile)
 export function createNativeSolver({ tools = {}, timeoutMs = 900000 }: NativeSolverOptions = {}): RunSolver {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) fail('native_timeout', 'timeoutMs must be a positive integer')
   return async request => {
-    if (!['fasthenry', 'fastercap', 'ngspice'].includes(request.solver)) fail('native_solver', 'Unknown solver')
+    if (request.solver !== 'ngspice') fail('native_solver', 'Unknown solver')
     for (const path of [...Object.keys(request.files), ...request.outputFiles]) relativeFile(path)
     const directory = await mkdtemp(join(tmpdir(), 'pcb-spice-'))
     try {
@@ -29,7 +29,7 @@ export function createNativeSolver({ tools = {}, timeoutMs = 900000 }: NativeSol
       }
       let run: { stdout: string; stderr: string }
       try {
-        run = await exec(tools[request.solver] ?? (request.solver === 'fastercap' ? 'FasterCap' : request.solver), request.args,
+        run = await exec(tools.ngspice ?? 'ngspice', request.args,
           { cwd: directory, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, OMP_NUM_THREADS: '1' } })
       } catch (error) {
         const detail = error as Error & { code?: string | number | null; killed?: boolean; signal?: string; stdout?: string; stderr?: string }

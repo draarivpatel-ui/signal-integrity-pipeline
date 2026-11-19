@@ -47,12 +47,75 @@ export class VocabularyError extends Error {
 }
 
 export const DEFAULT_THRESHOLD = 85
-const WORD = /^[a-z][a-z0-9]*$/
+/** The four line terminators recognized by JavaScript. */
+const LINE_BREAKS = ['\n', '\r', '\u2028', '\u2029']
+
+/** Checks for an ASCII lowercase letter. */
+const isLowercase = (char: string): boolean => char >= 'a' && char <= 'z'
+/** Checks for an ASCII uppercase letter. */
+const isUppercase = (char: string): boolean => char >= 'A' && char <= 'Z'
+/** Checks for an ASCII decimal digit. */
+const isDigit = (char: string): boolean => char >= '0' && char <= '9'
+/** Checks for JavaScript whitespace, including non-ASCII spaces. */
+const isSpace = (char: string): boolean => char.length === 1 && char.trim() === ''
+/** Checks the dictionary's ASCII lowercase word format. */
+function isWord(word: string): boolean {
+  if (!isLowercase(word[0] ?? '')) return false
+  for (const char of word) if (!isLowercase(char) && !isDigit(char)) return false
+  return true
+}
+
+/** Checks for digits with an optional decimal point between two digit runs. */
+function isDecimal(value: string): boolean {
+  const [whole, fraction, ...extra] = value.split('.')
+  return extra.length === 0 && whole.length > 0 && Array.from(whole).every(isDigit) &&
+    (fraction === undefined || (fraction.length > 0 && Array.from(fraction).every(isDigit)))
+}
+/** The ASCII vowels excluded when removing a doubled consonant. */
+const VOWELS = 'aeiou'
+
 const SECTIONS = ['domain', 'general', 'abbreviations', 'avoid'] as const
 type Section = typeof SECTIONS[number]
-
 /** Drops a trailing ` # comment` (a `#` preceded by whitespace) and surrounding whitespace. */
-const stripComment = (line: string): string => line.replace(/(^|\s)#.*$/, '').trim()
+function stripComment(line: string): string {
+  const lastBreak = Math.max(...LINE_BREAKS.map(char => line.lastIndexOf(char)))
+  for (let i = lastBreak + 1; i < line.length; i++) {
+    if (line[i] === '#' && (i === 0 || isSpace(line[i - 1]))) return line.slice(0, i).trim()
+  }
+  return line.trim()
+}
+/** A dictionary entry's key and optional value. */
+type DictionaryEntry = [key: string, value: string | undefined]
+/** Splits a dictionary line into its key and optional value. */
+function readEntry(body: string): DictionaryEntry | undefined {
+  const colon = body.indexOf(':')
+  if (colon < 1) return undefined
+  const key = body.slice(0, colon)
+  if (Array.from(key).some(isSpace)) return undefined
+  const rest = body.slice(colon + 1)
+  if (rest && !isSpace(rest[0])) return undefined
+  const value = rest.trimStart()
+  if (LINE_BREAKS.some(char => value.includes(char))) return undefined
+  return [key, value || undefined]
+}
+
+/** Returns the words following the dash in a list line. */
+function readList(body: string): string[] | undefined {
+  if (body[0] !== '-' || !isSpace(body[1] ?? '')) return undefined
+  const text = body.slice(1).trimStart()
+  if (!text || LINE_BREAKS.some(char => text.includes(char))) return undefined
+  const words: string[] = []
+  let word = ''
+  for (const char of text) {
+    if (!isSpace(char)) word += char
+    else if (word) {
+      words.push(word)
+      word = ''
+    }
+  }
+  if (word) words.push(word)
+  return words
+}
 
 /**
  * Parses the dictionary: a small YAML subset of `threshold: N`, the sections `domain:` and
@@ -66,7 +129,10 @@ export function parseVocabulary(text: string): Vocabulary {
   let section: Section | undefined
   /** Checks a word's spelling and that it appears only once in the whole file, then records where it was found. */
   const claim = (word: string, line: number, into: Section): void => {
-    if (!WORD.test(word)) throw new VocabularyError(line, `"${word}" is not a valid word (lowercase letters and digits, starting with a letter)`)
+    if (!isWord(word)) {
+      const description = 'lowercase letters and digits, starting with a letter'
+      throw new VocabularyError(line, `"${word}" is not a valid word (${description})`)
+    }
     const before = seen.get(word)
     if (before) {
       const where = before.section === into ? `already listed in ${into}` : `already listed in ${before.section}; a word belongs to one section`
@@ -74,21 +140,29 @@ export function parseVocabulary(text: string): Vocabulary {
     }
     seen.set(word, { line, section: into })
   }
-  const lines = text.split(/\r?\n/)
-  lines.forEach((raw, i) => {
+  const lines = text.split('\n')
+  lines.forEach((piece, i) => {
+    const raw = i < lines.length - 1 && piece.endsWith('\r') ? piece.slice(0, -1) : piece
     const line = i + 1
-    if (/^ *\t/.test(raw)) throw new VocabularyError(line, 'use spaces, not tabs, for indentation')
+    let indent = 0
+    while (raw[indent] === ' ') indent++
+    if (raw[indent] === '\t') throw new VocabularyError(line, 'use spaces, not tabs, for indentation')
     const body = stripComment(raw)
     if (!body) return
-    const indented = /^\s/.test(raw)
+    const indented = isSpace(raw[0] ?? '')
     if (!indented) {
-      const header = /^([a-z]+):(?:\s+(.*))?$/.exec(body)
-      if (!header) throw new VocabularyError(line, `expected "threshold: N" or a section header (${SECTIONS.join(', ')}), got "${body}"`)
-      const [, key, value] = header
+      const header = readEntry(body)
+      if (!header || !Array.from(header[0]).every(isLowercase)) {
+        const sectionNames = SECTIONS.join(', ')
+        throw new VocabularyError(line, `expected "threshold: N" or a section header (${sectionNames}), got "${body}"`)
+      }
+      const [key, value] = header
       if (sectionsSeen.has(key)) throw new VocabularyError(line, `"${key}" appears twice`)
       sectionsSeen.add(key)
       if (key === 'threshold') {
-        if (value === undefined || !/^\d+(?:\.\d+)?$/.test(value) || Number(value) > 100) throw new VocabularyError(line, `threshold must be a number from 0 to 100, got "${value ?? ''}"`)
+        if (value === undefined || !isDecimal(value) || Number(value) > 100) {
+          throw new VocabularyError(line, `threshold must be a number from 0 to 100, got "${value ?? ''}"`)
+        }
         vocab.threshold = Number(value)
         section = undefined
         return
@@ -100,18 +174,18 @@ export function parseVocabulary(text: string): Vocabulary {
     }
     if (!section) throw new VocabularyError(line, `indented line is not inside a section (${SECTIONS.join(', ')})`)
     if (section === 'general') {
-      const list = /^-\s+(.+)$/.exec(body)
+      const list = readList(body)
       if (!list) throw new VocabularyError(line, `general entries are lists of words: "- word word ...", got "${body}"`)
-      for (const word of list[1].split(/\s+/)) {
+      for (const word of list) {
         claim(word, line, 'general')
         vocab.general.add(word)
       }
       return
     }
-    const entry = /^([^:\s]+):(?:\s+(.*))?$/.exec(body)
+    const entry = readEntry(body)
     const need = section === 'domain' ? 'a meaning' : section === 'abbreviations' ? 'its expansion' : 'the word to use instead'
     if (!entry) throw new VocabularyError(line, `${section} entries look like "word: ${need}", got "${body}"`)
-    const [, word, value] = entry
+    const [word, value] = entry
     claim(word, line, section)
     if (!value) throw new VocabularyError(line, `"${word}" in ${section} needs ${need}`)
     vocab[section].set(word, value)
@@ -131,8 +205,6 @@ export function avoidHint(word: string, vocab: Vocabulary): string | undefined {
   return hit === undefined ? undefined : vocab.avoid.get(hit)
 }
 
-const VOWEL = /[aeiou]/
-
 /** Removes `suffix` from the word and appends `add`, when the word ends with it and a letter stays. */
 function strip(word: string, suffix: string, add: string = ''): string[] {
   return word.length > suffix.length && word.endsWith(suffix) ? [word.slice(0, -suffix.length) + add] : []
@@ -149,7 +221,7 @@ function formStems(word: string): string[] {
   for (const suffix of ['ed', 'ing', 'er']) for (const stem of strip(word, suffix)) {
     out.push(stem, stem + 'e')
     const last = stem.at(-1) ?? ''
-    if (stem.length >= 3 && last === stem.at(-2) && !VOWEL.test(last)) out.push(stem.slice(0, -1))
+    if (stem.length >= 3 && last === stem.at(-2) && !VOWELS.includes(last)) out.push(stem.slice(0, -1))
   }
   return [...out, ...strip(word, 'ly')]
 }
@@ -174,15 +246,25 @@ export function candidates(word: string): string[] {
   return [...new Set([word, ...plural, ...formStems(word), ...plural.flatMap(formStems)])]
 }
 
-/**
- * Splits an identifier into lowercase words on `_`/`$`/`#`, camelCase, PascalCase, SCREAMING_CASE and
- * digit boundaries. Acronym runs end before a capital that starts a lowercase word: IBISModel → ibis, model;
- * toJSON → to, json; parseHTTPResponse2 → parse, http, response. Digits are dropped.
- */
+/** Splits an identifier on casing, digit and separator boundaries. IBISModel becomes ibis, model. */
 export function splitWords(name: string): string[] {
-  return (name.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+/g) ?? [])
-    .filter(w => !/^[0-9]+$/.test(w))
-    .map(w => w.toLowerCase())
+  const words: string[] = []
+  let start = 0
+  while (start < name.length) {
+    let end = start
+    while (isUppercase(name[end] ?? '')) end++
+    if (isLowercase(name[end] ?? '')) {
+      if (end - start > 1) end--
+      else while (isLowercase(name[end] ?? '')) end++
+    }
+    if (end === start) {
+      start++
+      continue
+    }
+    words.push(name.slice(start, end).toLowerCase())
+    start = end
+  }
+  return words
 }
 
 /** One declared name in a file, and whether a top-level export declares it. */
@@ -207,9 +289,12 @@ function hasExport(node: ts.Node): boolean {
   return ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some(m => m.kind === ts.SyntaxKind.ExportKeyword)
 }
 
+/** The text of an exported declaration name. */
+type ExportedName = ts.Identifier["text"]
+
 /** Names that the file's top-level statements export: `export <declaration>` and local `export { name }` lists. */
-function exportedNames(sf: ts.SourceFile): Set<string> {
-  const out = new Set<string>()
+function exportedNames(sf: ts.SourceFile): Set<ExportedName> {
+  const out = new Set<ExportedName>()
   for (const s of sf.statements) {
     if (ts.isExportDeclaration(s) && !s.moduleSpecifier && s.exportClause && ts.isNamedExports(s.exportClause)) {
       for (const e of s.exportClause.elements) out.add((e.propertyName ?? e.name).text)
@@ -346,7 +431,8 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap(d => {
     const path = join(dir, d.name)
     if (d.isDirectory()) return sourceFiles(path)
-    return /\.tsx?$/.test(d.name) && !/\.generated\.tsx?$/.test(d.name) ? [path] : []
+    const extension = ['.ts', '.tsx'].find(ext => d.name.endsWith(ext))
+    return extension && !d.name.endsWith(`.generated${extension}`) ? [path] : []
   }).sort()
 }
 
@@ -404,8 +490,14 @@ export function formatReport(report: Report): string {
   return out.join('\n')
 }
 
+/** Command-line options for reporting vocabulary coverage. */
+type VocabularyArgs = {
+  json: boolean
+  root: string
+}
+
 /** Parses `[--json] [--root <dir>]`; throws on anything else. */
-export function parseArgs(args: readonly string[], defaultRoot: string): { json: boolean; root: string } {
+export function parseArgs(args: readonly string[], defaultRoot: string): VocabularyArgs {
   let json = false
   let root = defaultRoot
   for (let i = 0; i < args.length; i++) {

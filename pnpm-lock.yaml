@@ -14,9 +14,6 @@ importers:
       '@tscircuit/ibis-to-spice':
         specifier: https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/ad1ec9e640a92a4d370fc76acbbd8db245563317
         version: https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/ad1ec9e640a92a4d370fc76acbbd8db245563317
-      clipper2-ts:
-        specifier: 2.0.1-18
-        version: 2.0.1-18
       earcut:
         specifier: 3.2.4
         version: 3.2.4

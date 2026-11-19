@@ -19,7 +19,19 @@ const markdownFiles = (): string[] => {
   return files
 }
 /** The bodies of all ```mermaid fenced blocks in a Markdown string. */
-const mermaidBlocks = (md: string): string[] => [...md.matchAll(/```mermaid\n([\s\S]*?)```/g)].map(m => m[1].trim())
+function mermaidBlocks(md: string): string[] {
+  const blocks: string[] = []
+  const open = '```mermaid\n'
+  let offset = 0
+  for (let start = md.indexOf(open, offset); start !== -1; start = md.indexOf(open, offset)) {
+    const body = start + open.length
+    const end = md.indexOf('```', body)
+    if (end === -1) break
+    blocks.push(md.slice(body, end).trim())
+    offset = end + 3
+  }
+  return blocks
+}
 
 test('README keeps the required opening sections in order', () => {
   const headings = readFileSync(join(root, 'README.md'), 'utf8').split('\n').filter(l => l.startsWith('## '))
@@ -29,7 +41,11 @@ test('README keeps the required opening sections in order', () => {
 test('README general workflow has a workflow and a state machine diagram', () => {
   const md = readFileSync(join(root, 'README.md'), 'utf8')
   const section = md.slice(md.indexOf('## General workflow'), md.indexOf('\n## ', md.indexOf('## General workflow') + 1))
-  const kinds = mermaidBlocks(section).map(b => b.split(/\s/)[0])
+  const kinds = mermaidBlocks(section).map(block => {
+    let end = 0
+    while (end < block.length && block[end].trim() !== '') end++
+    return block.slice(0, end)
+  })
   assert.ok(kinds.includes('flowchart'), 'needs a flowchart (workflow)')
   assert.ok(kinds.includes('stateDiagram-v2'), 'needs a stateDiagram-v2 (state machine)')
 })
@@ -40,12 +56,21 @@ test('every Mermaid diagram is a workflow or a state machine', () => {
       assert.match(block, /^(flowchart|stateDiagram-v2)\b/, `${file}: diagram must be flowchart or stateDiagram-v2`)
 })
 
+/** Every image file under this directory, recursively; none when it does not exist. */
+const images = (dir: string): string[] => {
+  if (!existsSync(join(root, dir))) return []
+  const imageExtensions = ['.png', '.svg', '.jpg', '.jpeg', '.gif', '.webp']
+  return readdirSync(join(root, dir)).flatMap(name => {
+    const path = join(dir, name)
+    if (statSync(join(root, path)).isDirectory()) return images(path)
+    if (imageExtensions.some(ext => name.toLowerCase().endsWith(ext))) return [path]
+    return []
+  })
+}
+
 test('no diagram images in docs or markdown', () => {
   for (const file of markdownFiles())
     assert.doesNotMatch(readFileSync(join(root, file), 'utf8'), /!\[[^\]]*\]\([^)]*\.(png|svg|jpe?g|gif|webp)(\?[^)]*)?\)/i, `${file}: use a mermaid block instead of an image`)
-  /** Every image file under this directory, recursively; none when it does not exist. */
-  const images = (dir: string): string[] => !existsSync(join(root, dir)) ? [] : readdirSync(join(root, dir)).flatMap(n =>
-    statSync(join(root, dir, n)).isDirectory() ? images(join(dir, n)) : /\.(png|svg|jpe?g|gif|webp)$/i.test(n) ? [join(dir, n)] : [])
   assert.deepEqual(images('docs'), [])
 })
 

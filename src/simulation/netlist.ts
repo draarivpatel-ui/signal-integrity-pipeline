@@ -1,9 +1,8 @@
-// Was src/general-spice.ts (electrical sources, experiment netlist, probe scope). Logic and messages unchanged.
-import type { CircuitJson, Geometry } from '../board'
+// Electrical sources and SPICE namespacing for the routed deck.
+import type { CircuitJson } from '../board'
 import { selectPort } from '../board'
-import { channelSpice, type StageMatrices } from '../extraction'
 import { fail } from './diagnostics'
-import type { CircuitNodes, CompiledModel, ElectricalModel, ElectricalSources, SimulationModeling, SimulationPlan, SimulationSpiceOptions } from './types'
+import type { CircuitNodes, ElectricalSources, SimulationModeling } from './types'
 
 /** Formats a number with 17 significant digits so SPICE decks round-trip doubles exactly. */
 const num = (value: number): string => Number(value.toPrecision(17)).toString()
@@ -14,18 +13,151 @@ const finite = (input: unknown, label: string, positive: boolean = false): numbe
 }
 /** Checks an electrical input and formats it for the deck in one step. */
 const value = (input: unknown, label: string, positive: boolean = false): string => num(finite(input, label, positive))
-/** Flattens a name onto one line so it cannot break out of a SPICE comment. */
-const safeComment = (text: string): string => text.replace(/[\r\n]/g, ' ')
+
+/** The rewritten SPICE source and name of its prefixed wrapper. */
+type NamespacedSpice = {
+  source: string
+  wrapper: string
+}
 
 /**
  * Prefixes every subcircuit name in a converter library so several IBIS models can share one deck.
  * Also returns the prefixed name of the top-level wrapper to instantiate.
  */
-export function namespaceSpice(source: string, prefix: string): { source: string; wrapper: string } {
-  const names = [...source.matchAll(/^\.subckt\s+(\S+)/gmi)].map(match => match[1])
+export function namespaceSpice(source: string, prefix: string): NamespacedSpice {
+  const names: string[] = []
+  for (let offset = source.indexOf('.'); offset !== -1; offset = source.indexOf('.', offset + 1)) {
+    if (offset > 0 && !isSpiceLineBreak(source[offset - 1])) continue
+    const keywordEnd = offset + '.subckt'.length
+    if (source.slice(offset, keywordEnd).toLowerCase() !== '.subckt') continue
+    const start = skipSpiceWhitespace(source, keywordEnd)
+    const end = spiceTokenEnd(source, start)
+    if (start === keywordEnd || start === end) continue
+    names.push(source.slice(start, end))
+    offset = end - 1
+  }
   if (!names.length) fail('ibis_contract', 'Converter did not emit a SPICE component wrapper')
+
   const renamed = new Map(names.map(name => [name.toLowerCase(), `${prefix}_${name}`]))
-  return { source: source.replace(/\S+/g, token => renamed.get(token.toLowerCase()) ?? token), wrapper: `${prefix}_${names[0]}` }
+  let output = ''
+  let copied = 0
+  while (copied < source.length) {
+    const start = skipSpiceWhitespace(source, copied)
+    const end = spiceTokenEnd(source, start)
+    const token = source.slice(start, end)
+    output += `${source.slice(copied, start)}${renamed.get(token.toLowerCase()) ?? token}`
+    copied = end
+  }
+  return { source: output, wrapper: `${prefix}_${names[0]}` }
+}
+
+/** Index after the whitespace that starts at the given offset. */
+function skipSpiceWhitespace(source: string, start: number): number {
+  while (source[start]?.trim() === '') start++
+  return start
+}
+
+/** Index after the non-whitespace token that starts at the given offset. */
+function spiceTokenEnd(source: string, start: number): number {
+  while (start < source.length && source[start].trim() !== '') start++
+  return start
+}
+
+/** SPICE terminal lists end at a carriage return or line feed. */
+const SPICE_TERMINAL_LINE_ENDINGS = '\r\n'
+/** SPICE statement scanning also recognizes the Unicode line and paragraph separators. */
+const SPICE_LINE_ENDINGS = `${SPICE_TERMINAL_LINE_ENDINGS}\u2028\u2029`
+
+/** Whether the previous character starts a new SPICE statement line. */
+function isSpiceLineBreak(char: string): boolean {
+  return SPICE_LINE_ENDINGS.includes(char)
+}
+
+/** Split the trimmed terminal list, preserving an empty terminal for an empty list. */
+function splitSpicePins(source: string): string[] {
+  if (source.length === 0) return ['']
+  const pins: string[] = []
+  for (let start = 0; start < source.length;) {
+    const end = spiceTokenEnd(source, start)
+    pins.push(source.slice(start, end))
+    start = skipSpiceWhitespace(source, end)
+  }
+  return pins
+}
+
+/** Read terminals from the first placed subcircuit header with a name and terminal field. */
+function placedSubcircuitPins(source: string): string[] | undefined {
+  for (let start = source.indexOf('.'); start !== -1; start = source.indexOf('.', start + 1)) {
+    if (start > 0 && !isSpiceLineBreak(source[start - 1])) continue
+    let keywordEnd = start + 1
+    while (isSpiceWordCharacter(source[keywordEnd])) keywordEnd++
+    if (source.slice(start + 1, keywordEnd).toLowerCase() !== 'subckt') continue
+
+    const nameStart = skipSpiceWhitespace(source, keywordEnd)
+    if (nameStart === keywordEnd) continue
+    const nameEnd = spiceTokenEnd(source, nameStart)
+    if (nameEnd === source.length) continue
+
+    const pinsStart = skipSpiceWhitespace(source, nameEnd)
+    if (pinsStart === source.length) {
+      // A spaces-only terminal field can follow the required separator.
+      for (let offset = nameEnd + 1; offset < source.length; offset++) {
+        if (!SPICE_TERMINAL_LINE_ENDINGS.includes(source[offset])) return ['']
+      }
+      continue
+    }
+    let pinsEnd = pinsStart
+    while (pinsEnd < source.length && !SPICE_TERMINAL_LINE_ENDINGS.includes(source[pinsEnd])) pinsEnd++
+    return splitSpicePins(source.slice(pinsStart, pinsEnd).trim())
+  }
+  return undefined
+}
+
+/** Behavioral and controlled-source device prefixes excluded from placed passive subcircuits. */
+const UNSUPPORTED_SPICE_DEVICES = 'BESGWFTbesgwft'
+
+const unsupportedSpiceDirectives = ['include', 'lib', 'control', 'end', 'tran', 'ac', 'dc']
+
+/** Check the ASCII letters, digits and underscore used in a directive name. */
+function isSpiceWordCharacter(char: string | undefined): boolean {
+  if (char === undefined) return false
+  return (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char === '_'
+}
+
+/** Find directives and device types excluded from placed passive subcircuits. */
+function hasUnsupportedPlacedSpice(source: string): boolean {
+  for (let start = 0; start < source.length; start++) {
+    if (start > 0 && !isSpiceLineBreak(source[start - 1])) continue
+    start = skipSpiceWhitespace(source, start)
+    const first = source[start]
+    if (first && UNSUPPORTED_SPICE_DEVICES.includes(first)) return true
+    if (first !== '.') continue
+
+    let end = start + 1
+    while (isSpiceWordCharacter(source[end])) end++
+    const directive = source.slice(start + 1, end).toLowerCase()
+    if (unsupportedSpiceDirectives.includes(directive)) return true
+  }
+  return false
+}
+
+/** The two terminals on a SPICE resistor or inductor line. */
+type SpiceTerminalPair = [first: string, second: string]
+
+/** Resistor and inductor device prefixes used to find DC-connected terminals. */
+const DC_SPICE_DEVICES = 'RLrl'
+
+/** Read the terminals of a resistor or inductor line that also has a separator after the second terminal. */
+function dcSpiceTerminals(line: string): SpiceTerminalPair | undefined {
+  const deviceStart = skipSpiceWhitespace(line, 0)
+  const device = line[deviceStart]
+  if (!device || !DC_SPICE_DEVICES.includes(device)) return undefined
+  const first = skipSpiceWhitespace(line, spiceTokenEnd(line, deviceStart))
+  const firstEnd = spiceTokenEnd(line, first)
+  const second = skipSpiceWhitespace(line, firstEnd)
+  const secondEnd = spiceTokenEnd(line, second)
+  if (secondEnd === line.length) return undefined
+  return [line.slice(first, firstEnd), line.slice(second, secondEnd)]
 }
 
 /**
@@ -84,6 +216,31 @@ export function electricalSources(circuit: CircuitJson, modeling: SimulationMode
     if (components.length !== 1) fail('passive_reference', 'Selected passive component is missing or ambiguous')
     const component = components[0]
     const ports = sourcePorts.filter(e => e.source_component_id === component.source_component_id).sort((a, b) => Number(a.pin_number) - Number(b.pin_number))
+    const spiceSubcircuits = circuit.filter(record => record.type === 'simulation_spice_subcircuit')
+    const placed = spiceSubcircuits.filter(record => record.source_component_id === component.source_component_id)
+    if (placed.length) {
+      if (placed.length !== 1) fail('passive_capability', `${component.name}: placed SPICE model is ambiguous`)
+      const model = placed[0]
+      const pins = placedSubcircuitPins(model.subcircuit_source)
+      if (!pins || hasUnsupportedPlacedSpice(model.subcircuit_source)) {
+        fail('passive_capability', `${component.name}: placed SPICE model is unsupported; it cannot be discarded.`)
+      }
+      if (pins.some(pin => !model.spice_pin_to_source_port_map[pin])) {
+        fail('passive_capability', `${component.name}: placed SPICE model has unmapped terminals`)
+      }
+      const namespaced = namespaceSpice(model.subcircuit_source, `PLACED${i}`)
+      const nodesForPins = pins.map(pin => nodes.node(model.spice_pin_to_source_port_map[pin]))
+      nodesForPins.forEach(node => activeNodes.add(node))
+      passives.push(namespaced.source, `XPHYSICAL${i} ${nodesForPins.join(' ')} ${namespaced.wrapper}`)
+      // Supported passive resistor/inductor edges determine the DC rail connectivity.
+      for (const line of model.subcircuit_source.replaceAll('\r\n', '\n').split('\n')) {
+        const terminals = dcSpiceTerminals(line)
+        if (!terminals) continue
+        const [a, b] = terminals.map(pin => pins.indexOf(pin))
+        if (a >= 0 && b >= 0) dcConnections.push([nodesForPins[a], nodesForPins[b]])
+      }
+      continue
+    }
     if (ports.length !== 2) fail('passive_capability', `${component.name}: expected two physical ports`)
     const pos = nodes.node(ports[0].source_port_id)
     const neg = nodes.node(ports[1].source_port_id)
@@ -120,68 +277,4 @@ export function electricalSources(circuit: CircuitJson, modeling: SimulationMode
   }
   for (const source of sourceBindings) if (!grounded.has(source.positiveNode) || !grounded.has(source.negativeNode)) fail('floating_source', `${source.name}: ideal voltage source has no explicit DC connection to channelReference; wire its physical terminals to the modeled supply/reference ports`)
   return { lines: [...sources, ...passives], activeNodes, grounded, sourceBindings, scope: { voltageSources: sources.length, passiveComponents: passives.length, unselectedBoardComponents: 'Excluded from this explicitly selected channel experiment' } }
-}
-
-
-/** Merges an experiment's solver options over the defaults, accepting only the options and methods this backend supports. */
-export function simulationSpiceOptions(overrides: SimulationPlan['experiment']['spice_options'] | Record<string, unknown> = {}): SimulationSpiceOptions {
-  const options: SimulationSpiceOptions = { reltol: 1e-5, abstol: 1e-12, method: 'gear' }
-  for (const [key, input] of Object.entries<unknown>({ ...overrides })) {
-    if (key === 'method') {
-      if (input !== 'gear' && input !== 'trap') return fail('spice_options', 'Unsupported integration method')
-      options.method = input
-    } else {
-      if (key !== 'reltol' && key !== 'abstol' && key !== 'vntol') return fail('spice_options', `Unsupported solver option ${key}`)
-      if ((typeof input !== 'number' && typeof input !== 'string') || !Number.isFinite(Number(input)) || Number(input) <= 0) return fail('spice_options', `Invalid solver option ${key}`)
-      options[key] = Number(input)
-    }
-  }
-  return options
-}
-
-/**
- * Writes the complete ngspice deck for one experiment: rails, IBIS buffers, the extracted channel
- * and the control block that records every probe to waveform.dat.
- */
-export function generalSimulationSpice(plan: SimulationPlan, geometry: Pick<Geometry, 'mappings'>, modeling: { sections: number }, extracted: readonly StageMatrices[], models: readonly CompiledModel[], nodes: CircuitNodes, electrical: ElectricalSources): string {
-  const lines = ['Native transient: explicit physical source rails, IBIS run controls and extracted PCB channel']
-  const options = simulationSpiceOptions(plan.experiment.spice_options)
-  lines.push('.options ' + Object.entries(options).map(([key, input]) => `${key}=${input}`).join(' '), ...electrical.lines)
-  for (const [i, model] of models.entries()) {
-    const renamed = namespaceSpice(model.source, `IBIS${i}`)
-    const wrapper = model.source.match(/^\.subckt\s+\S+\s+(.+)$/mi)
-    if (!wrapper) return fail('ibis_contract', 'Converter did not emit a component wrapper')
-    const terminals = wrapper[1].trim().split(/\s+/).map(terminal => {
-      const id = model.spicePinMapping[terminal]
-      if (!id) fail('ibis_contract', `Missing returned terminal ${terminal}`)
-      return nodes.node(id)
-    })
-    lines.push(`* ${safeComment(model.name)}`, renamed.source, `XIBIS${i} ${terminals.join(' ')} ${renamed.wrapper}`)
-  }
-  if (extracted.some(stage => stage.R.length !== geometry.mappings.length)) fail('matrix_dimension', 'Extracted channels must match every selected signal')
-  const channel = [...geometry.mappings.map(mapping => nodes.node(mapping.from)), ...geometry.mappings.map(mapping => nodes.node(mapping.to))]
-  if (channel.includes('0') || new Set(channel).size !== channel.length) fail('channel_short', 'Every selected signal must have distinct driver and receiver nodes separate from the reference')
-  lines.push(channelSpice(extracted, modeling.sections), `XCHAN ${[...channel, '0'].join(' ')} CHANNEL`)
-  validateProbeScope(plan, geometry, models, nodes, electrical)
-  // IBIS behavioral sources reference internal voltage-source currents. Probe-only
-  // saves discard those branch vectors in upstream ngspice; preserve them all.
-  lines.push('.control', 'set wr_singlescale', 'set wr_vecnames', 'set numdgt=17', 'save all', `tran ${num(plan.maxStepSeconds)} ${num(plan.durationSeconds)} ${num(plan.startTimeSeconds)} ${num(plan.maxStepSeconds)}`)
-  for (const [i, probe] of plan.probes.entries()) lines.push(`let probe${i} = ${probe.signalNode === '0' ? '0' : `v(${probe.signalNode})`}-${probe.referenceNode === '0' ? '0' : `v(${probe.referenceNode})`}`)
-  lines.push(`wrdata waveform.dat ${plan.probes.map((_, i) => `probe${i}`).join(' ')}`, 'quit', '.endc', '.end', '')
-  return lines.join('\n')
-}
-
-/**
- * Checks that every IBIS reference rail has a DC path to the channel reference and that every probe
- * observes a node inside the modeled circuit, so results never measure an unconnected node.
- */
-export function validateProbeScope(plan: SimulationPlan, geometry: Pick<Geometry, 'mappings'>, models: readonly ElectricalModel[], nodes: CircuitNodes, electrical: ElectricalSources): void {
-  const active = new Set(electrical.activeNodes)
-  for (const model of models) for (const id of Object.values(model.spicePinMapping)) active.add(nodes.node(id))
-  for (const model of models) for (const pin of model.metadata?.pins ?? []) for (const [role, id] of Object.entries(pin.references ?? {})) if (!electrical.grounded.has(nodes.node(id))) fail('floating_reference', `${model.name} physical pin ${pin.physicalPin} ${role}: reference rail has no explicit source/passive DC path to channelReference`)
-  for (const mapping of geometry.mappings) {
-    active.add(nodes.node(mapping.from))
-    active.add(nodes.node(mapping.to))
-  }
-  for (const probe of plan.probes) if (!active.has(probe.signalNode) || !active.has(probe.referenceNode)) fail('probe_observation', `${probe.name}: signal/reference is outside the declared electrical model scope`)
 }
