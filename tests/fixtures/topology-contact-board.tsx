@@ -48,7 +48,7 @@ export async function inlineVia(): Promise<TopologyBoard> {
           to=".RX > .SIG"
           pcbPath={[
             ".TX > .SIG",
-            { x: 4, y: 0, via: true, fromLayer, toLayer: "bottom" },
+            { x: 4, y: 0, via: true, fromLayer: "top", toLayer: "bottom" },
             ".RX > .SIG",
           ]}
         />
