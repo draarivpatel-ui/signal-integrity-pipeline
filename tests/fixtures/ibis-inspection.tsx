@@ -109,6 +109,8 @@ type IbisOptions = {
   mapping?: string
   extraPin?: string
   modelType?: string
+  referenceOnly?: boolean
+  modelData?: string
 }
 
 /** Synthetic IBIS fixture without vendor data. */
@@ -116,7 +118,16 @@ export function inspectionIbis({
   mapping = "",
   extraPin = "",
   modelType = "Input",
+  referenceOnly = false,
+  modelData = "",
 }: IbisOptions = {}): string {
+  let references = "[Voltage Range] 1.2 1.2 1.2"
+  if (referenceOnly) {
+    references = `[Pullup Reference] 1.2 1.2 1.2
+[Pulldown Reference] 0 0 0
+[POWER Clamp Reference] 1.2 1.2 1.2
+[GND Clamp Reference] 0 0 0`
+  }
   return `[IBIS Ver] 5.0
 [File Name] device.ibs
 [File Rev] 1.0
@@ -135,8 +146,8 @@ ${mapping}
 [Model] Fast
 Model_type ${modelType}
 C_comp 1p 1p 1p
-[Voltage Range] 1.2 1.2 1.2
-
+${references}
+${modelData}
 [End]
 `
 }
@@ -199,3 +210,18 @@ export const railMapping = `[Pin Mapping] pulldown_ref pullup_ref
 1 GROUND_BUS POWER_BUS
 2 NC         POWER_BUS
 3 GROUND_BUS NC`
+
+/** Compare the measured durations in whole picoseconds. */
+export const PICOSECONDS_PER_SECOND = 1e12
+
+/** Typical 600 ps rising and 750 ps falling ramp. */
+export const ramp = `[Ramp]
+dV/dt_r 0.36/600p 0.36/600p 0.36/600p
+dV/dt_f 0.36/750p 0.36/750p 0.36/750p`
+
+/** Linear rising waveform from 0 V to 0.6 V. */
+export const waveform = `[Rising Waveform]
+R_fixture = 50
+V_fixture = 0
+0 0 NA NA
+1n 0.6 NA NA`

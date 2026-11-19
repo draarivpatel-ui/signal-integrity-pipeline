@@ -51,6 +51,8 @@ domain:
   clamp: a protection circuit that conducts when a signal crosses its reference voltage
   pulldown: the buffer path that pulls the signal toward its low reference
   pullup: the buffer path that pulls the signal toward its high reference
+  ramp: the loaded voltage change and duration between 20% and 80% of an IBIS edge
+  swing: the voltage difference between the start and end of an edge
   typical: the nominal vendor corner for a model value or waveform
   shunt: an electrical branch across two conductor or reference nodes
   simplify: reduce curve tessellation while bounding geometric displacement

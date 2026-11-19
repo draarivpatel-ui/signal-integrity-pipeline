@@ -5,6 +5,7 @@ import {
   type IbisDocument,
   type IbisPackagePin,
   type IbisRange,
+  ibisNumber,
   parseIbis,
 } from "@tscircuit/ibis-to-spice"
 import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
@@ -25,6 +26,8 @@ export interface InspectedPin {
   document: IbisDocument
   /** Selected IBIS buffer model for the physical pin. */
   buffer: IbisBuffer
+  /** Raw IBIS file text. */
+  text: string
   /** Source ports of the separate IBIS reference rails. */
   references: ReferencePorts
 }
@@ -238,6 +241,7 @@ export function inspectPins({
         ...binding,
         document,
         buffer: document.getBuffer(name),
+        text,
         references: referenceRails(binding),
       })
     }
@@ -268,4 +272,134 @@ export function pinCapabilities(pin: InspectedPin): PinCapabilities {
         `${pin.port}: unsupported IBIS model capability ${pin.buffer.type}`,
       )
   }
+}
+
+/** Read the typical [Ramp] ratios for this model (IBIS 7.2 §6.1). */
+function* rampRatioTokens(pin: InspectedPin): Generator<string> {
+  // The pinned parser accepts [Ramp] but exposes only the waveform data.
+  let selected = false
+  let inRamp = false
+  for (const raw of pin.text.split("\n")) {
+    const line = raw.split("|", 1)[0].trim()
+    if (line.startsWith("[")) {
+      const end = line.indexOf("]")
+      const keyword = line
+        .slice(1, end)
+        .trim()
+        .toLowerCase()
+        .replaceAll("_", " ")
+      if (keyword === "model") {
+        if (selected) return
+        selected = line.slice(end + 1).trim() === pin.buffer.name
+      }
+      if (
+        selected &&
+        ["component", "model selector", "define package model", "end"].includes(
+          keyword,
+        )
+      )
+        return
+      inRamp = selected && keyword === "ramp"
+      continue
+    }
+    if (!inRamp) continue
+    const [key, value] = line
+      .replaceAll("\t", " ")
+      .replaceAll("=", " ")
+      .split(" ")
+      .filter(Boolean)
+    const tag = key?.toLowerCase()
+    if (value && (tag === "dv/dt_r" || tag === "dv/dt_f")) yield value
+  }
+}
+/** Time and typical voltage at one point on an IBIS waveform. */
+type WaveformSample = readonly [timeSeconds: number, voltage: number]
+
+/** First interpolated crossing of a measured edge voltage, in seconds. */
+function edgeCrossingSeconds({
+  samples,
+  target,
+}: {
+  samples: readonly WaveformSample[]
+  target: number
+}): number | undefined {
+  for (let i = 1; i < samples.length; i++) {
+    const [startSeconds, startVoltage] = samples[i - 1]
+    const [endSeconds, endVoltage] = samples[i]
+    const crossesTarget = (startVoltage - target) * (endVoltage - target) <= 0
+    if (!crossesTarget || startVoltage === endVoltage) continue
+
+    const voltageChange = endVoltage - startVoltage
+    const elapsedSeconds = endSeconds - startSeconds
+    const crossingSeconds =
+      startSeconds + ((target - startVoltage) * elapsedSeconds) / voltageChange
+    if (Number.isNaN(crossingSeconds)) return undefined
+    return crossingSeconds
+  }
+  return undefined
+}
+
+/** Measure an edge from 10% to 90% of its voltage swing. */
+const EDGE_START_FRACTION = 0.1
+const EDGE_END_FRACTION = 0.9
+/** For a linear edge, 10–90% spans 80% of the swing and the IBIS ramp spans 20–80% (60%). */
+const RAMP_TO_EDGE_DURATION = 4 / 3
+/** A swing smaller than one microvolt is too flat to measure an edge. */
+const FLAT_WAVEFORM_TOLERANCE_VOLTS = 1e-6
+
+/** An interpolated crossing requires at least two points. */
+const MIN_EDGE_SAMPLES = 2
+
+/** Fastest measured 10–90% output edge at the typical corner, or the [Ramp] dV/dt. */
+export function edgeSeconds(pin: InspectedPin): number {
+  const durationsSeconds: number[] = []
+  for (const waveform of pin.buffer.waveforms) {
+    const samples: WaveformSample[] = []
+    for (const [timeSeconds, typicalVoltage] of waveform.data) {
+      if (typicalVoltage === null) continue
+      samples.push([timeSeconds, typicalVoltage])
+    }
+    if (samples.length < MIN_EDGE_SAMPLES) continue
+    const [, firstVoltage] = samples[0]
+    const [, lastVoltage] = samples[samples.length - 1]
+    const swing = lastVoltage - firstVoltage
+    if (Math.abs(swing) < FLAT_WAVEFORM_TOLERANCE_VOLTS) continue
+
+    const startSeconds = edgeCrossingSeconds({
+      samples,
+      target: firstVoltage + swing * EDGE_START_FRACTION,
+    })
+    const endSeconds = edgeCrossingSeconds({
+      samples,
+      target: firstVoltage + swing * EDGE_END_FRACTION,
+    })
+    if (
+      startSeconds === undefined ||
+      endSeconds === undefined ||
+      endSeconds <= startSeconds
+    )
+      continue
+    durationsSeconds.push(endSeconds - startSeconds)
+  }
+  if (durationsSeconds.length) return Math.min(...durationsSeconds)
+
+  // IBIS 7.2 §6.1 requires [Ramp] for drivers and makes waveforms optional.
+  for (const token of rampRatioTokens(pin)) {
+    const [voltageToken, timeToken] = token.split("/")
+    if (!voltageToken || !timeToken) continue
+    const voltage = ibisNumber(voltageToken)
+    const rampSeconds = ibisNumber(timeToken)
+    if (
+      voltage === null ||
+      voltage <= 0 ||
+      rampSeconds === null ||
+      rampSeconds <= 0
+    )
+      continue
+    const durationSeconds = rampSeconds * RAMP_TO_EDGE_DURATION
+    if (Number.isFinite(durationSeconds)) durationsSeconds.push(durationSeconds)
+  }
+  if (!durationsSeconds.length)
+    throw new Error(`${pin.port}: IBIS edge rate missing at the typical corner`)
+  return Math.min(...durationsSeconds)
 }
