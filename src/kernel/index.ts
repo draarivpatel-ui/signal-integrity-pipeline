@@ -4,18 +4,23 @@
  * hashing. No domain knowledge.
  * Imports: nothing in src/ except ../modules.generated (types only).
  */
-export { Diagnostic, diagnostics, type DiagnosticSubject, type DiagnosticInit } from './diagnostic'
+
 export {
   type Artifact,
+  ArtifactLedger,
   type ArtifactPath,
   type ArtifactScope,
-  type FileMap,
-  type Produced,
-  ArtifactLedger,
-  rootScope,
   artifactPath,
+  type FileMap,
   jsonBody,
-} from './artifacts'
-export { type SafeId, safeId } from './ids'
-export { sha256 } from './hash'
-
+  type Produced,
+  rootScope,
+} from "./artifacts"
+export {
+  Diagnostic,
+  type DiagnosticInit,
+  type DiagnosticSubject,
+  diagnostics,
+} from "./diagnostic"
+export { sha256 } from "./hash"
+export { type SafeId, safeId } from "./ids"

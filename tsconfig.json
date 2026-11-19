@@ -6,9 +6,7 @@
     "target": "ES2023",
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "strict": true,
     "skipLibCheck": true,
     "allowJs": true,
@@ -17,8 +15,5 @@
     "outDir": "dist",
     "declaration": true
   },
-  "include": [
-    "src/**/*.mjs",
-    "src/**/*.ts"
-  ]
+  "include": ["src/**/*.mjs", "src/**/*.ts"]
 }

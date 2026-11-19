@@ -21,3 +21,9 @@ stateDiagram-v2
   Complete --> [*]
   Failed --> [*]
 ```
+
+## Development validation
+
+Install dependencies with `bun install --frozen-lockfile`, then run `bun test`.
+Optional checks use `test.skipIf` and known failures still execute through `test.failing`.
+Run `bun run test:package` to verify the packed package in Node.

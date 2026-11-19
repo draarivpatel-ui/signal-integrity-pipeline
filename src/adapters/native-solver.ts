@@ -1,11 +1,18 @@
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { tmpdir } from 'node:os'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-import type { RunSolver, Solver } from '../solver'
-import { fail } from './diagnostics'
-import { contained, relativeFile } from './paths'
+import { execFile } from "node:child_process"
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
+import { promisify } from "node:util"
+import type { RunSolver, Solver } from "../solver"
+import { fail } from "./diagnostics"
+import { contained, relativeFile } from "./paths"
 
 export interface NativeSolverOptions {
   tools?: Partial<Record<Solver, string>>
@@ -29,12 +36,13 @@ export function createNativeSolver({
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }: NativeSolverOptions = {}): RunSolver {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
-    fail('native_timeout', 'timeoutMs must be a positive integer')
+    fail("native_timeout", "timeoutMs must be a positive integer")
   }
-  return async request => {
-    if (request.solver !== 'ngspice') fail('native_solver', 'Unknown solver')
-    for (const path of [...Object.keys(request.files), ...request.outputFiles]) relativeFile(path)
-    const directory = await mkdtemp(join(tmpdir(), 'pcb-spice-'))
+  return async (request) => {
+    if (request.solver !== "ngspice") fail("native_solver", "Unknown solver")
+    for (const path of [...Object.keys(request.files), ...request.outputFiles])
+      relativeFile(path)
+    const directory = await mkdtemp(join(tmpdir(), "pcb-spice-"))
     try {
       for (const [path, body] of Object.entries(request.files)) {
         const target = join(directory, path)
@@ -46,13 +54,12 @@ export function createNativeSolver({
         stderr: string
       }
       try {
-        run = await exec(tools.ngspice ?? 'ngspice', request.args,
-          {
-            cwd: directory,
-            timeout: timeoutMs,
-            maxBuffer: OUTPUT_BUFFER_BYTES,
-            env: { ...process.env, OMP_NUM_THREADS: '1' },
-          })
+        run = await exec(tools.ngspice ?? "ngspice", request.args, {
+          cwd: directory,
+          timeout: timeoutMs,
+          maxBuffer: OUTPUT_BUFFER_BYTES,
+          env: { ...process.env, OMP_NUM_THREADS: "1" },
+        })
       } catch (error) {
         const detail = error as Error & {
           code?: string | number | null
@@ -63,26 +70,31 @@ export function createNativeSolver({
         }
         // execFile's timeout kills with SIGTERM and no exit code. External
         // signals are not marked killed; maxBuffer errors have a string code.
-        const timedOut = detail.killed && detail.signal === 'SIGTERM' && detail.code === null
-        const output = `${detail.stdout ?? ''}\n${detail.stderr ?? ''}`
+        const timedOut =
+          detail.killed && detail.signal === "SIGTERM" && detail.code === null
+        const output = `${detail.stdout ?? ""}\n${detail.stderr ?? ""}`
         if (timedOut) {
           const timeout = `exceeded ${timeoutMs} ms process timeout; ${detail.message}`
-          fail('native_timeout', `${request.solver}: ${timeout}\n${output}`)
+          fail("native_timeout", `${request.solver}: ${timeout}\n${output}`)
         }
-        fail('native_solver', `${request.solver}: ${detail.message}\n${output}`)
+        fail("native_solver", `${request.solver}: ${detail.message}\n${output}`)
       }
       const files: Record<string, string> = Object.create(null)
       const root = await realpath(directory)
       for (const path of request.outputFiles) {
         try {
-          files[path] = await readFile(contained({ root, path: await realpath(join(directory, path)) }), 'utf8')
-        }
-        catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+          files[path] = await readFile(
+            contained({ root, path: await realpath(join(directory, path)) }),
+            "utf8",
+          )
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
           // The pipeline validates required outputs and solver diagnostics.
         }
       }
       return { ...run, files }
-    } finally { await rm(directory, { recursive: true, force: true }) }
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   }
 }

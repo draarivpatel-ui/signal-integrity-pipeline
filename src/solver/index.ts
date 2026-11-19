@@ -5,9 +5,9 @@
  * Does NOT own: interpreting solver output (simulation does that).
  * Imports: kernel.
  */
-import { diagnostics, type ArtifactScope, type Produced } from '../kernel'
+import { type ArtifactScope, diagnostics, type Produced } from "../kernel"
 
-export type Solver = 'ngspice'
+export type Solver = "ngspice"
 export interface SolverRequest {
   solver: Solver
   /** Paths relative to the solver's isolated working directory. */
@@ -41,7 +41,11 @@ export interface AcceptedRun<O extends string = string> {
   readonly logPaths: readonly string[]
 }
 
-const fail = diagnostics('solver', ['solver_result', 'native_solver', 'native_output'] as const)
+const fail = diagnostics("solver", [
+  "solver_result",
+  "native_solver",
+  "native_output",
+] as const)
 
 /**
  * The only way any module runs a solver. Copies the request (callee can't mutate ours),
@@ -49,7 +53,11 @@ const fail = diagnostics('solver', ['solver_result', 'native_solver', 'native_ou
  *   <scope>/<input files>, <scope>/<outputs>, <solver>.stdout.log, <solver>.stderr.log, <solver>.request.json
  * On rejection it throws before recording anything, exactly like the pre-module executeSolver.
  */
-export async function invoke<const O extends string>({ context, scope, request }: {
+export async function invoke<const O extends string>({
+  context,
+  scope,
+  request,
+}: {
   context: SolverContext
   scope: ArtifactScope
   request: SolverRequest & { outputFiles: readonly O[] }
@@ -63,23 +71,33 @@ export async function invoke<const O extends string>({ context, scope, request }
   })
   if (
     !result ||
-    typeof result.stdout !== 'string' ||
-    typeof result.stderr !== 'string' ||
+    typeof result.stdout !== "string" ||
+    typeof result.stderr !== "string" ||
     !result.files ||
-    typeof result.files !== 'object'
+    typeof result.files !== "object"
   )
-    fail('solver_result', `${request.solver}: expected stdout, stderr and files`)
+    fail(
+      "solver_result",
+      `${request.solver}: expected stdout, stderr and files`,
+    )
   if (result.exitCode !== undefined && result.exitCode !== 0)
-    fail('native_solver', `${request.solver}: exited ${result.exitCode}\n${result.stdout}\n${result.stderr}`)
+    fail(
+      "native_solver",
+      `${request.solver}: exited ${result.exitCode}\n${result.stdout}\n${result.stderr}`,
+    )
   for (const file of request.outputFiles) {
-    if (!Object.hasOwn(result.files, file) || typeof result.files[file] !== 'string') {
-      fail('native_output', `${request.solver}: missing ${file}`)
+    if (
+      !Object.hasOwn(result.files, file) ||
+      typeof result.files[file] !== "string"
+    ) {
+      fail("native_output", `${request.solver}: missing ${file}`)
     }
   }
   const merged: Record<string, string> = { ...supplied, ...result.files }
   const artifacts = []
   for (const [path, body] of Object.entries(merged)) {
-    if (typeof body !== 'string') fail('solver_result', `${request.solver}: ${path} must be a string`)
+    if (typeof body !== "string")
+      fail("solver_result", `${request.solver}: ${path} must be a string`)
     artifacts.push(scope.text(path, body))
   }
   const logs = [
@@ -87,13 +105,15 @@ export async function invoke<const O extends string>({ context, scope, request }
     scope.text(`${request.solver}.stderr.log`, result.stderr),
   ]
   artifacts.push(...logs, scope.json(`${request.solver}.request.json`, request))
-  const outputs = Object.fromEntries(request.outputFiles.map(file => [file, result.files[file]])) as Record<O, string>
+  const outputs = Object.fromEntries(
+    request.outputFiles.map((file) => [file, result.files[file]]),
+  ) as Record<O, string>
   const value: AcceptedRun<O> = {
     stdout: result.stdout,
     stderr: result.stderr,
     outputs,
     files: merged,
-    logPaths: logs.map(artifact => artifact.path),
+    logPaths: logs.map((artifact) => artifact.path),
   }
   return { value, artifacts }
 }

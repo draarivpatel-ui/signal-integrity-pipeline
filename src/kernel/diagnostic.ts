@@ -1,8 +1,17 @@
-import type { DiagnosticCode, DomainName } from '../modules.generated'
+import type { DiagnosticCode, DomainName } from "../modules.generated"
 
 /** What the diagnostic is about, so messages (#51, #52) can name records, not just say "failed". */
 export interface DiagnosticSubject {
-  kind: 'record' | 'lane' | 'cell' | 'experiment' | 'probe' | 'model' | 'artifact' | 'option' | 'solver'
+  kind:
+    | "record"
+    | "lane"
+    | "cell"
+    | "experiment"
+    | "probe"
+    | "model"
+    | "artifact"
+    | "option"
+    | "solver"
   id: string
 }
 export interface DiagnosticInit {
@@ -25,9 +34,14 @@ export class Diagnostic extends Error {
   readonly subjects: readonly DiagnosticSubject[]
   readonly artifacts: readonly string[]
   readonly hint?: string
-  constructor(domain: DomainName, code: DiagnosticCode, text: string, init: DiagnosticInit = {}) {
+  constructor(
+    domain: DomainName,
+    code: DiagnosticCode,
+    text: string,
+    init: DiagnosticInit = {},
+  ) {
     super(`${code}: ${text}`)
-    this.name = 'Diagnostic'
+    this.name = "Diagnostic"
     this.domain = domain
     this.code = code
     this.subjects = init.subjects ?? []
@@ -41,8 +55,17 @@ export class Diagnostic extends Error {
  * (or index.ts for tiny modules); scripts/check-modules.ts parses the literal tuple to build
  * the global DiagnosticCode union in modules.generated.ts. A code not in the tuple is a type error.
  */
-export function diagnostics<const D extends DomainName, const C extends readonly string[]>(domain: D, codes: C):
-  (code: C[number] & DiagnosticCode, text: string, init?: DiagnosticInit) => never {
+export function diagnostics<
+  const D extends DomainName,
+  const C extends readonly string[],
+>(
+  domain: D,
+  codes: C,
+): (
+  code: C[number] & DiagnosticCode,
+  text: string,
+  init?: DiagnosticInit,
+) => never {
   void codes
   return (code, text, init) => {
     throw new Diagnostic(domain, code, text, init)

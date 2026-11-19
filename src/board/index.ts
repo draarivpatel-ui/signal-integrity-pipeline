@@ -4,34 +4,39 @@
  * the declared board geometry and its routed sections.
  * Imports: kernel.
  */
-export type { CircuitJson, SimulationExperiment, SimulationIbisModel } from './schema'
-export { recordSchema, validateCircuitRecords } from './schema'
+
 export {
-  type BoardStackup,
-  type CopperLayer,
-  type DielectricLayer,
-  stackupFromCircuitJson,
-  defaultCopperConductivitySm,
-} from './stackup'
-export { subcircuitTree, type SubcircuitTree } from './subcircuit'
-export {
+  type ConnectivityMap,
   getSourcePortConnectivityMapFromCircuitJson,
   passiveBridges,
   sourceConnections,
   sourceNetMembers,
-  type ConnectivityMap,
-} from './connectivity'
-export type { SourceNetId, SourcePortId } from './ids'
+} from "./connectivity"
+export { polygonContains } from "./geometry/polygon"
+export { resolveRouteVias, selectPort } from "./geometry/ports"
 export type {
-  PortSelector,
-  LaneModeling,
-  SourcePort,
-  PcbTrace,
-  RoutePoint,
-  RoutedPoint,
-  LaneMapping,
   CopperPoint,
   CopperPolygon,
-} from './geometry/types'
-export { selectPort, resolveRouteVias } from './geometry/ports'
-export { polygonContains } from './geometry/polygon'
+  LaneMapping,
+  LaneModeling,
+  PcbTrace,
+  PortSelector,
+  RoutedPoint,
+  RoutePoint,
+  SourcePort,
+} from "./geometry/types"
+export type { SourceNetId, SourcePortId } from "./ids"
+export type {
+  CircuitJson,
+  SimulationExperiment,
+  SimulationIbisModel,
+} from "./schema"
+export { recordSchema, validateCircuitRecords } from "./schema"
+export {
+  type BoardStackup,
+  type CopperLayer,
+  type DielectricLayer,
+  defaultCopperConductivitySm,
+  stackupFromCircuitJson,
+} from "./stackup"
+export { type SubcircuitTree, subcircuitTree } from "./subcircuit"
