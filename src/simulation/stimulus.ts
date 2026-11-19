@@ -5,7 +5,10 @@ import { fail, type SimulationCode } from './diagnostics'
 const MAX_TRANSMITTED_BITS = 65536
 
 /** Public. Normalizes a transmission pattern to a '0'/'1' string (<= 65536 bits). */
-export function transmittedBits(value: unknown, code: SimulationCode = 'stimulus_pattern'): string {
+export function transmittedBits({ value, code = 'stimulus_pattern' }: {
+  value: unknown
+  code?: SimulationCode
+}): string {
   if ((Array.isArray(value) || typeof value === 'string') && value.length > MAX_TRANSMITTED_BITS)
     fail(code, 'Transmission patterns must contain at most 65536 bits')
   if (Array.isArray(value) && value.length && Array.from(value).every(bit => bit === 0 || bit === 1)) {

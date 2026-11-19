@@ -20,8 +20,10 @@ import type {
 } from './types'
 
 /** Fails 'converter_version' unless the pinned upstream general converter is installed. Today's first IBIS check. */
-export function assertConverter(): void {
-  if (typeof converter.convertIbisModelToSpice !== 'function') fail(
+export function assertConverter({ convertIbisModelToSpice }: {
+  convertIbisModelToSpice?: unknown
+} = converter): void {
+  if (typeof convertIbisModelToSpice !== 'function') fail(
     'converter_version',
     'Install the pinned upstream general IBIS converter',
   )

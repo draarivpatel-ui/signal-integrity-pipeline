@@ -45,3 +45,11 @@ test('model loading rejects HTML, ZIP, invalid UTF-8 and oversized data',()=>{
       /IBIS|plain|ZIP|UTF|HTML|encoded|expected/i,
     )
 })
+
+test('a ZIP source raises an IBIS asset diagnostic', () => {
+  const zipSignature = 'PK\x03\x04'
+  assert.throws(
+    () => loadModelSource({ model: model(asset), sources: { [asset.project_relative_path]: zipSignature } }),
+    { code: 'ibis_asset' },
+  )
+})

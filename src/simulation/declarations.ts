@@ -349,7 +349,7 @@ export function generalDeclarations({ circuit, mappings, modeling, controls }: C
       ...stimulus,
       transmission_pattern: {
         ...stimulus.transmission_pattern,
-        bits: transmittedBits(stimulus.transmission_pattern?.bits),
+        bits: transmittedBits({ value: stimulus.transmission_pattern?.bits }),
       },
     }))
     const stateIds=new Set<string>()
