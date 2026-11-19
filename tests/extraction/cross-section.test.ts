@@ -319,16 +319,50 @@ test("electrostatic extraction checks resolution", () => {
 // ---- Golden known-answer checks. Expected values and tolerances are fixed from the
 // cited physics before the solver runs; a failing check is reported, never loosened.
 // CODATA 2018 constants, defined independently of the solver.
+/** Relative permittivity of the vacuum-only fixture. */
+const VACUUM_RELATIVE_PERMITTIVITY = 1
+/** The default Cohn comparison accepts 1% mesh error for C and Z0. */
+const COHN_DEFAULT_TOLERANCE = 0.01
+/** The finer 24-panel mesh accepts 0.5% capacitance error. */
+const COHN_FINE_TOLERANCE = 0.005
+/** The Cohn refinement comparison has a 0.02% thickness-bias floor. */
+const COHN_REFINEMENT_FLOOR = 2e-4
+/** The 20:1 strip should lie within 3% of the parallel-plate limit. */
+const PARALLEL_PLATE_TOLERANCE = 0.03
+/** Allow only roundoff in the exact homogeneous L C identity. */
+const HOMOGENEOUS_IDENTITY_TOLERANCE = 1e-9
+/** Allow only floating-point error in the exact DC resistance check. */
+const DC_RESISTANCE_TOLERANCE = 1e-12
+/** The independent Wheeler derivative should agree within 1%. */
+const WHEELER_TOLERANCE = 0.01
+/** The Richardson extrapolation should be within 2% of the wide-strip limit. */
+const WIDE_STRIP_TOLERANCE = 0.02
+/** Allow 10% against Pozar's attenuation curve fit. */
+const POZAR_TOLERANCE = 0.1
+
+/** Vacuum permittivity in farads per metre. */
 const epsilon0 = 8.8541878128e-12
+/** Vacuum permeability in henries per metre. */
 const mu0 = 1.25663706212e-6
+/** Copper conductivity in siemens per metre for the reference checks. */
 const copper = 5.8e7
 
 /**
  * One strip of width w and thickness t centred between planes at z = 0 and b (mm), filled with one lossless
  * dielectric.
  */
-function centred(w: number, b: number, t: number, er = 1): CrossSection {
-  return {
+function centred({
+  w,
+  b,
+  t,
+  er = VACUUM_RELATIVE_PERMITTIVITY,
+}: {
+  w: number
+  b: number
+  t: number
+  er?: number
+}): CrossSection {
+  const section: CrossSection = {
     conductors: [
       {
         id: "s",
@@ -339,18 +373,19 @@ function centred(w: number, b: number, t: number, er = 1): CrossSection {
       },
     ],
     planes: [{ zMm: 0 }, { zMm: b }],
-    dielectrics:
-      er > 1
-        ? [
-            {
-              zMm: 0,
-              thicknessMm: b,
-              er,
-              lossTangent: 0,
-            },
-          ]
-        : [],
+    dielectrics: [],
   }
+  if (er > 1) {
+    section.dielectrics = [
+      {
+        zMm: 0,
+        thicknessMm: b,
+        er,
+        lossTangent: 0,
+      },
+    ]
+  }
+  return section
 }
 
 /** Small Gauss–Jordan inverse, independent of the solver's factorization. */
@@ -361,23 +396,20 @@ function invert(matrix: Matrix): Matrix {
     ...row.map((_, j) => Number(i === j)),
   ])
   for (let k = 0; k < n; k++) {
-    const pivot = a
-      .slice(k)
-      .reduce(
-        (best, row, i) =>
-          Math.abs(row[k]) > Math.abs(a[best][k]) ? k + i : best,
-        k,
-      )
+    const pivot = a.slice(k).reduce((best, row, i) => {
+      if (Math.abs(row[k]) > Math.abs(a[best][k])) return k + i
+      return best
+    }, k)
     const swap = a[k]
     a[k] = a[pivot]
     a[pivot] = swap
     const scale = a[k][k]
     a[k] = a[k].map((value) => value / scale)
-    for (let i = 0; i < n; i++)
-      if (i !== k) {
-        const factor = a[i][k]
-        a[i] = a[i].map((value, j) => value - factor * a[k][j])
-      }
+    for (let i = 0; i < n; i++) {
+      if (i === k) continue
+      const factor = a[i][k]
+      a[i] = a[i].map((value, j) => value - factor * a[k][j])
+    }
   }
   return a.map((row) => row.slice(n))
 }
@@ -387,12 +419,19 @@ const surface = (conductivity: number): number =>
   Math.sqrt((Math.PI * mu0) / conductivity)
 
 /** Solver C error against Cohn's exact zero-thickness stripline, per panels-per-edge count (t/b = 5e-4, er = 4). */
-function cohnErrors(ratio: number, panels: number[]): Map<number, number> {
-  const exact = stripline(ratio, 1, 4)
+function cohnErrors({
+  ratio,
+  panels,
+}: {
+  ratio: number
+  panels: number[]
+}): Map<number, number> {
+  const exact = stripline({ w: ratio, b: 1, er: 4 })
   return new Map(
     panels.map((count) => {
-      const achieved = solveSectionCapacitance(centred(ratio, 1, 5e-4, 4), {
-        panelsPerEdge: count,
+      const achieved = solveSectionCapacitance({
+        section: centred({ w: ratio, b: 1, t: 5e-4, er: 4 }),
+        options: { panelsPerEdge: count },
       })
       return [count, Math.abs(achieved[0][0] / exact.capacitance - 1)]
     }),
@@ -407,9 +446,11 @@ test("golden stage 3: Cohn exact stripline C and Z0 over w/b", () => {
   const rows: Record<string, number>[] = []
   const failures: string[] = []
   for (const ratio of [0.25, 0.5, 1, 2, 4]) {
-    const exact = stripline(ratio, 1, 4)
-    const errors = cohnErrors(ratio, [6, 8, 12, 16, 24])
-    const line = solveCrossSection(centred(ratio, 1, 5e-4, 4))
+    const exact = stripline({ w: ratio, b: 1, er: 4 })
+    const errors = cohnErrors({ ratio, panels: [6, 8, 12, 16, 24] })
+    const line = solveCrossSection({
+      section: centred({ w: ratio, b: 1, t: 5e-4, er: 4 }),
+    })
     const zError = Math.abs(
       Math.sqrt(line.L[0][0] / line.C[0][0]) / exact.z - 1,
     )
@@ -424,14 +465,16 @@ test("golden stage 3: Cohn exact stripline C and Z0 over w/b", () => {
         ]),
       ),
     })
-    if (!(errors.get(12)! <= 0.01))
+    if (!(errors.get(12)! <= COHN_DEFAULT_TOLERANCE)) {
       failures.push(`w/b ${ratio}: C error ${errors.get(12)} at 12 panels > 1%`)
-    if (!(zError <= 0.01))
+    }
+    if (!(zError <= COHN_DEFAULT_TOLERANCE))
       failures.push(`w/b ${ratio}: Z0 error ${zError} > 1%`)
-    if (!(errors.get(24)! <= 0.005))
+    if (!(errors.get(24)! <= COHN_FINE_TOLERANCE)) {
       failures.push(
         `w/b ${ratio}: C error ${errors.get(24)} at 24 panels > 0.5%`,
       )
+    }
   }
   console.table(rows)
   assert.deepEqual(failures, [])
@@ -443,33 +486,40 @@ test("golden stage 3: Cohn stripline error shrinks from 6 to 24 panels per edge"
   // before this run: at t/b = 1e-5 the bias scales (t ln(1/t)) to ~0.007%, so the 24-panel error must not exceed
   // the 6-panel error unless both are under a 0.02% floor.
   const failures = [0.25, 0.5, 1, 2, 4].flatMap((ratio) => {
-    const exact = stripline(ratio, 1, 4).capacitance
+    const exact = stripline({ w: ratio, b: 1, er: 4 }).capacitance
     const [coarse, fine] = [6, 24].map((count) => {
-      const capacitance = solveSectionCapacitance(centred(ratio, 1, 1e-5, 4), {
-        panelsPerEdge: count,
+      const section = centred({ w: ratio, b: 1, t: 1e-5, er: 4 })
+      const capacitance = solveSectionCapacitance({
+        section,
+        options: { panelsPerEdge: count },
       })[0][0]
       return Math.abs(capacitance / exact - 1)
     })
     console.log(
       `w/b ${ratio}: |C/C_cohn - 1| = ${(100 * coarse).toFixed(4)}% (6) -> ${(100 * fine).toFixed(4)}% (24)`,
     )
-    return fine <= Math.max(coarse, 2e-4)
-      ? []
-      : [`w/b ${ratio}: ${coarse} (6) -> ${fine} (24)`]
+    if (fine <= Math.max(coarse, COHN_REFINEMENT_FLOOR)) return []
+    return [`w/b ${ratio}: ${coarse} (6) -> ${fine} (24)`]
   })
   assert.deepEqual(failures, [])
 })
 
-/** Solver C / parallel-plate C and Cohn's exact ratio for a strip of width ratio*b (b = 1 mm, t = 5e-4 mm, er 4). */
-function parallelPlate(ratio: number): {
+/** Solved and exact capacitance normalized by ideal parallel-plate capacitance. */
+interface ParallelPlateRatios {
   solved: number
   exact: number
-} {
+}
+
+/** Solver C / parallel-plate C and Cohn's exact ratio for a strip of width ratio*b (b = 1 mm, t = 5e-4 mm, er 4). */
+function parallelPlate(ratio: number): ParallelPlateRatios {
+  const capacitance = solveSectionCapacitance({
+    section: centred({ w: ratio, b: 1, t: 5e-4, er: 4 }),
+  })[0][0]
   return {
-    solved:
-      solveSectionCapacitance(centred(ratio, 1, 5e-4, 4))[0][0] /
-      ((4 * epsilon0 * 4 * ratio) / (1 - 5e-4)),
-    exact: stripline(ratio, 1, 4).capacitance / (4 * epsilon0 * 4 * ratio),
+    solved: capacitance / ((4 * epsilon0 * 4 * ratio) / (1 - 5e-4)),
+    exact:
+      stripline({ w: ratio, b: 1, er: 4 }).capacitance /
+      (4 * epsilon0 * 4 * ratio),
   }
 }
 
@@ -484,7 +534,9 @@ test("golden stage 3: parallel-plate trend C/C_pp -> 1 for w/b = 2, 5, 10", () =
   }))
   console.table(rows)
   assert.ok(
-    rows.every((row) => Math.abs(row.solved / row.exact - 1) <= 0.01),
+    rows.every(
+      (row) => Math.abs(row.solved / row.exact - 1) <= COHN_DEFAULT_TOLERANCE,
+    ),
     "tracks Cohn within 1%",
   )
   assert.ok(
@@ -495,8 +547,9 @@ test("golden stage 3: parallel-plate trend C/C_pp -> 1 for w/b = 2, 5, 10", () =
 
 test("golden stage 3: parallel-plate limit at w/b = 20", () => {
   const wide = parallelPlate(20)
+  const relativeError = Math.abs(wide.solved / wide.exact - 1)
   assert.ok(
-    Math.abs(wide.solved / wide.exact - 1) <= 0.01,
+    relativeError <= COHN_DEFAULT_TOLERANCE,
     `tracks Cohn within 1%: ${wide.solved} vs ${wide.exact}`,
   )
   assert.ok(
@@ -504,7 +557,7 @@ test("golden stage 3: parallel-plate limit at w/b = 20", () => {
     "decreases monotonically from w/b = 10",
   )
   assert.ok(
-    Math.abs(wide.solved - 1) <= 0.03,
+    Math.abs(wide.solved - 1) <= PARALLEL_PLATE_TOLERANCE,
     `within 3% of C_pp: ${wide.solved}`,
   )
 })
@@ -558,7 +611,7 @@ test("golden stage 3: homogeneous dielectric gives L C = mu0 eps0 er I for coupl
   ]
   const failures: string[] = []
   for (const { label, er, section } of cases) {
-    const line = solveCrossSection(section)
+    const line = solveCrossSection({ section })
     const target = mu0 * epsilon0 * er
     const product = line.L.map((row) =>
       line.C[0].map((_, j) =>
@@ -566,7 +619,10 @@ test("golden stage 3: homogeneous dielectric gives L C = mu0 eps0 er I for coupl
       ),
     )
     const relativeErrors = product.flatMap((row, i) =>
-      row.map((value, j) => Math.abs(value - (i === j ? target : 0)) / target),
+      row.map((value, j) => {
+        if (i === j) return Math.abs(value - target) / target
+        return Math.abs(value) / target
+      }),
     )
     const worst = Math.max(...relativeErrors)
     const speedRatio = (
@@ -579,7 +635,8 @@ test("golden stage 3: homogeneous dielectric gives L C = mu0 eps0 er I for coupl
     console.log(
       `${label}: ${energy}; modal velocity / (c/sqrt(er)) = ${speedRatio}`,
     )
-    if (!(worst <= 1e-9)) failures.push(`${label}: ${worst}`)
+    if (!(worst <= HOMOGENEOUS_IDENTITY_TOLERANCE))
+      failures.push(`${label}: ${worst}`)
   }
   assert.deepEqual(failures, [])
 })
@@ -615,7 +672,7 @@ test("golden stage 3: DC resistance R = rho l / A", () => {
       },
     ],
   }
-  const line = solveCrossSection(section)
+  const line = solveCrossSection({ section })
   const expected = section.conductors.map((c) => {
     const conductivity = c.conductivitySm ?? copper
     return 1 / (conductivity * c.widthMm * 1e-3 * c.thicknessMm * 1e-3)
@@ -623,8 +680,9 @@ test("golden stage 3: DC resistance R = rho l / A", () => {
   const failures: string[] = []
   for (const [i, value] of expected.entries()) {
     const resistance = line.dcResistance[i][i]
-    if (!(Math.abs(resistance / value - 1) <= 1e-12))
+    if (!(Math.abs(resistance / value - 1) <= DC_RESISTANCE_TOLERANCE)) {
       failures.push(`R_dc ${i}: ${resistance} vs ${value}`)
+    }
   }
   if (line.dcResistance[0][1] !== 0 || line.dcResistance[1][0] !== 0) {
     failures.push("ideal planes must not couple DC resistance")
@@ -635,6 +693,34 @@ test("golden stage 3: DC resistance R = rho l / A", () => {
 // High-frequency conductor loss. Wheeler, "Formulas for the skin effect", Proc. IRE 30 (1942) 412–424:
 // R = (Rs/mu0) dL/dn with every wall receded by n, Rs = sqrt(pi f mu0/sigma) = rho/delta. Each check has its own
 // a-priori tolerance, stated beside it.
+/** Vacuum L = mu0 eps0 C0^-1 with every copper wall receded by n mm. */
+function recededInductance({
+  section,
+  offsetMm,
+}: {
+  section: CrossSection
+  offsetMm: number
+}): Matrix {
+  return invert(
+    solveSectionCapacitance({
+      section: {
+        dielectrics: [],
+        planes: section.planes.map((p) => {
+          if (p.zMm < section.conductors[0].zMm)
+            return { zMm: p.zMm - offsetMm }
+          return { zMm: p.zMm + offsetMm }
+        }),
+        conductors: section.conductors.map((c) => ({
+          ...c,
+          zMm: c.zMm + offsetMm,
+          widthMm: c.widthMm - 2 * offsetMm,
+          thicknessMm: c.thicknessMm - 2 * offsetMm,
+        })),
+      },
+    }),
+  ).map((row) => row.map((value) => mu0 * epsilon0 * value))
+}
+
 test("golden stage 3: skin resistance equals Wheeler's rule recomputed independently", () => {
   // (b) Wheeler's rule recomputed here: own recession (planes move away, strips shrink), own step 5e-4 mm vs the
   // solver's ~1.75e-4 mm, from the solver's vacuum L = mu0 eps0 C0^-1. Within 1%: both are central differences of
@@ -658,30 +744,15 @@ test("golden stage 3: skin resistance equals Wheeler's rule recomputed independe
     ],
   }
   const failures: string[] = []
+  const stripline = centred({ w: 1, b: 1, t: 0.035 })
   for (const [label, section] of [
-    ["stripline w/b 1", centred(1, 1, 0.035)],
+    ["stripline w/b 1", stripline],
     ["microstrip pair", pair],
   ] as const) {
     const step = 5e-4
-    /** Vacuum L = mu0 eps0 C0^-1 with every copper wall receded by n mm. */
-    const receded = (n: number): Matrix =>
-      invert(
-        solveSectionCapacitance({
-          dielectrics: [],
-          planes: section.planes.map((p) => ({
-            zMm: p.zMm < section.conductors[0].zMm ? p.zMm - n : p.zMm + n,
-          })),
-          conductors: section.conductors.map((c) => ({
-            ...c,
-            zMm: c.zMm + n,
-            widthMm: c.widthMm - 2 * n,
-            thicknessMm: c.thicknessMm - 2 * n,
-          })),
-        }),
-      ).map((row) => row.map((value) => mu0 * epsilon0 * value))
-    const plus = receded(step)
-    const minus = receded(-step)
-    const solved = solveCrossSection(section).skinResistance
+    const plus = recededInductance({ section, offsetMm: step })
+    const minus = recededInductance({ section, offsetMm: -step })
+    const solved = solveCrossSection({ section }).skinResistance
     const deviations = solved.flatMap((row, i) =>
       row.map((value, j) => {
         const derivative =
@@ -694,7 +765,7 @@ test("golden stage 3: skin resistance equals Wheeler's rule recomputed independe
     console.log(
       `${label}: worst |R_wheeler / R_solver - 1| = ${worst.toExponential(3)}`,
     )
-    if (!(worst <= 0.01)) failures.push(`${label}: ${worst}`)
+    if (!(worst <= WHEELER_TOLERANCE)) failures.push(`${label}: ${worst}`)
   }
   assert.deepEqual(failures, [])
 })
@@ -706,13 +777,15 @@ test("golden stage 3: wide stripline skin resistance approaches Rs/w", () => {
   // at the default and at 24 panels/edge.
   for (const panels of [12, 24]) {
     const [r20, r40] = [20, 40].map((w) => {
-      const line = solveCrossSection(centred(w, 1, 0.035), {
-        panelsPerEdge: panels,
+      const line = solveCrossSection({
+        section: centred({ w, b: 1, t: 0.035 }),
+        options: { panelsPerEdge: panels },
       })
       return (line.skinResistance[0][0] * w * 1e-3) / surface(copper)
     })
+    const relativeError = Math.abs(2 * r40 - r20 - 1)
     assert.ok(
-      Math.abs(2 * r40 - r20 - 1) <= 0.02 && r20 > r40 && r40 > 1,
+      relativeError <= WIDE_STRIP_TOLERANCE && r20 > r40 && r40 > 1,
       `${panels} panels: r20 ${r20}, r40 ${r40}`,
     )
   }
@@ -724,19 +797,21 @@ test("golden stage 3: stripline conductor attenuation agrees with Pozar's Wheele
   // side's own Z0. Converting Pozar's alpha_c to R with his Z0 (65.4 ohm at w/b 1, against 61.3 ohm for this
   // t/b = 0.035 strip) biased R by (Z0 ratio)^2, about 12%.
   for (const ratio of [0.5, 1, 2]) {
-    const line = solveCrossSection(centred(ratio, 1, 0.035))
+    const line = solveCrossSection({
+      section: centred({ w: ratio, b: 1, t: 0.035 }),
+    })
     const solved =
       line.skinResistance[0][0] / (2 * Math.sqrt(line.L[0][0] / line.C[0][0]))
-    const pozar = pozarStriplineAttenuation(
-      ratio * 1e-3,
-      1e-3,
-      0.035e-3,
-      1,
-      surface(copper),
-    )
+    const pozar = pozarStriplineAttenuation({
+      w: ratio * 1e-3,
+      b: 1e-3,
+      t: 0.035e-3,
+      er: 1,
+      surfaceResistance: surface(copper),
+    })
     console.log(`w/b ${ratio}: solver/Pozar alpha_c = ${solved / pozar}`)
     assert.ok(
-      Math.abs(solved / pozar - 1) <= 0.1,
+      Math.abs(solved / pozar - 1) <= POZAR_TOLERANCE,
       `w/b ${ratio}: solver/Pozar ${solved / pozar}`,
     )
   }
@@ -754,15 +829,18 @@ test("golden invariants: extracted L, C0, C are SPD with |k| < 1, C is Maxwell, 
     ...(["microstrip", "stripline", "mask"] as const).flatMap((kind) =>
       [1, 2, 12].map((count) => ({
         label: `${kind} ${count}`,
-        section: sectionFixture(kind, count),
+        section: sectionFixture({ kind, count }),
       })),
     ),
-    { label: "centred stripline w/b 1", section: centred(1, 1, 0.035, 4) },
+    {
+      label: "centred stripline w/b 1",
+      section: centred({ w: 1, b: 1, t: 0.035, er: 4 }),
+    },
   ]
   const rows: Record<string, number | string>[] = []
   const failures: string[] = []
   for (const { label, section } of sections) {
-    const line = solveCrossSection(section)
+    const line = solveCrossSection({ section })
     let minimum = Infinity
     let coupling = 0
     for (const [name, matrix] of [
@@ -781,8 +859,11 @@ test("golden invariants: extracted L, C0, C are SPD with |k| < 1, C is Maxwell, 
     }
     for (const name of ["C", "C0"] as const) {
       const facts = maxwellFacts(line[name])
-      const offDiagonalLimit = section.conductors.length > 1 ? 0 : 1
-      if (!isGroundedMaxwell(facts, offDiagonalLimit)) {
+      let offDiagonalLimit = 1
+      if (section.conductors.length > 1) offDiagonalLimit = 0
+      if (
+        !isGroundedMaxwell({ facts, strictOffDiagonalLimit: offDiagonalLimit })
+      ) {
         failures.push(`${label} ${name} Maxwell: ${JSON.stringify(facts)}`)
       }
     }
@@ -795,8 +876,8 @@ test("golden invariants: extracted L, C0, C are SPD with |k| < 1, C is Maxwell, 
       "dielectricLoss",
     ] as const) {
       const facts = energyFacts(line[name])
-      if (!hasNonnegativeLoss(line[name], facts))
-        failures.push(`${label} ${name}: ${JSON.stringify(facts)}`)
+      if (hasNonnegativeLoss({ matrix: line[name], facts })) continue
+      failures.push(`${label} ${name}: ${JSON.stringify(facts)}`)
     }
     rows.push({
       section: label,

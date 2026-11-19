@@ -1,4 +1,4 @@
-import { test } from "bun:test"
+import { setDefaultTimeout, test } from "bun:test"
 import assert from "node:assert/strict"
 import { Circuit, simulation } from "@tscircuit/core"
 import {
@@ -27,8 +27,10 @@ import {
   ngspiceAvailable,
   runGoldenDeck,
   valueAt,
-  vendorText,
 } from "../support/golden-checks"
+import { vendorAvailable, vendorText } from "../support/vendor-models"
+
+setDefaultTimeout(150_000)
 
 // Original two-fixture CMOS model: the edge finishes at 0.8 ns, but the
 // acquisition includes a flat tail to 4 ns. No vendor data is copied here.
@@ -537,7 +539,7 @@ test.skipIf(!process.env.SI_TEST_SWITCHING_NGSPICE)(
   },
 )
 
-// ---- Golden check against the vendor's own data (docs/golden-checks.md). Each [Rising/Falling Waveform] table was
+// ---- Golden check against the vendor's own data. Each [Rising/Falling Waveform] table was
 // measured or simulated by the vendor into its stated fixture; the converter derives its switching coefficients from
 // exactly these tables (two per edge), so replaying the converted die buffer into the same fixture must reproduce them.
 // Declared metric and tolerance, fixed before any replay: max |V_sim - V_table| over the table's own time points
@@ -609,22 +611,20 @@ const replays = [
   },
 ] as const
 
-const replayRequired =
-  "Set SI_NATIVE_TESTS=1 and IBIS_MODEL_DIR for bounded sequential native checks"
-const fixtureReplayOptions = {
-  skip: process.env.SI_NATIVE_TESTS !== "1" && replayRequired,
-}
 /** Allow 2% of the swing error and a 10 ps shift in the half-height crossing. */
 const REPLAY_SWING_ERROR = 0.02
 const REPLAY_CROSSING_ERROR_SECONDS = 10e-12
 
 const fixtureReplay = `golden stage 4: vendor DDR3 buffers replayed into their own IBIS fixtures ${"reproduce the vendor waveforms"}`
-test(fixtureReplay, fixtureReplayOptions, async (context) => {
-  if (!ngspiceAvailable()) return context.skip("ngspice is not on PATH")
+const replayFiles = [...new Set(replays.map((replay) => replay.file))]
+const skipReplay =
+  process.env.SI_NATIVE_TESTS !== "1" ||
+  !ngspiceAvailable() ||
+  !replayFiles.every(vendorAvailable)
+test.skipIf(skipReplay)(fixtureReplay, async () => {
   const texts = new Map<string, string>()
   for (const file of new Set(replays.map((replay) => replay.file))) {
-    const text = await vendorText(context, file)
-    if (!text) return
+    const text = await vendorText(file)
     texts.set(file, text)
   }
   const documents = new Map<string, IbisDocument>(
@@ -658,7 +658,8 @@ test(fixtureReplay, fixtureReplayOptions, async (context) => {
       table: [number, number][]
     }[] = []
     for (const edge of ["rising", "falling"] as const) {
-      const initialState = edge === "rising" ? 0 : 1
+      let initialState: 0 | 1 = 1
+      if (edge === "rising") initialState = 0
       const converted = convertSwitching({
         bytes: new TextEncoder().encode(text),
         input: {
@@ -745,13 +746,13 @@ test(fixtureReplay, fixtureReplayOptions, async (context) => {
       const last = instance.table.at(-1)![1]
       const swing = Math.abs(last - first)
       const differences = instance.table.map(([time, value]) =>
-        Math.abs(valueAt(rows, k + 1, time) - value),
+        Math.abs(valueAt({ rows, column: k + 1, timeSeconds: time }) - value),
       )
       const error = Math.max(...differences) / swing
       const tableRows = instance.table.map(([time, value]) => [time, value])
       const shift =
-        crossingTime(rows, k + 1, (first + last) / 2) -
-        crossingTime(tableRows, 1, (first + last) / 2)
+        crossingTime({ rows, column: k + 1, level: (first + last) / 2 }) -
+        crossingTime({ rows: tableRows, column: 1, level: (first + last) / 2 })
       records.push({
         model: replay.model,
         edge: instance.edge,

@@ -159,7 +159,10 @@ test("golden invariants: every routed TSX section has SPD L/C with |k| < 1, Maxw
   // the largest.
   const { circuitJson, scope } = await routedCopper()
   const copper = new RouteFieldsSolver({
-    geometry: segmentRoutes(circuitJson, scope),
+    geometry: segmentRoutes({
+      circuit: circuitJson,
+      scope,
+    }),
     artifactPrefix: "golden",
   })
   copper.solve()
@@ -196,7 +199,7 @@ test("golden invariants: every routed TSX section has SPD L/C with |k| < 1, Maxw
         failures.push(`${label} ${name}: ${JSON.stringify(facts)}`)
     }
     const maxwell = maxwellFacts(line.C.map((row) => [...row]))
-    if (!isGroundedMaxwell(maxwell))
+    if (!isGroundedMaxwell({ facts: maxwell }))
       failures.push(`${label} Maxwell: ${JSON.stringify(maxwell)}`)
     const lossMatrices = [
       ["R_dc", line.dcResistance],
@@ -205,7 +208,7 @@ test("golden invariants: every routed TSX section has SPD L/C with |k| < 1, Maxw
     ] as const
     for (const [name, matrix] of lossMatrices) {
       const facts = energyFacts(matrix.map((row) => [...row]))
-      if (!hasNonnegativeLoss(matrix, facts))
+      if (!hasNonnegativeLoss({ matrix, facts }))
         failures.push(`${label} ${name}: ${JSON.stringify(facts)}`)
     }
     rows.push({
