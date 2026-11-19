@@ -15,7 +15,7 @@ import { loadModelSource } from "./source"
 import type { IbisSources } from "./types"
 
 /** The selected IBIS model, pin binding and rails for one source port. */
-export interface InspectedPin {
+export type InspectedPin = {
   /** Circuit JSON source port bound to this pin. */
   port: SourcePortId
   /** Physical pin name in the IBIS component. */
