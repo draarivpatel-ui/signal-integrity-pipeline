@@ -98,6 +98,10 @@ Clarity beats brevity. More lines are fine when they are easier to read.
   - a `### New concepts` section for every idea a reviewer meets for the first time (e.g. CopperScope, the passive bridge), with 1–3 sentences on what it is, why it's needed and where it's used;
   - a line saying so when behaviour changes, e.g. internally connected pins now joining nets.
 - Every layer of a stack must pass typecheck, lint, build and its own tests on its own.
+- **Never rewrite a pushed PR's history.** PRs are squash-merged, so the commits inside a PR are its review record: they show how each change, including an agent's, was made.
+  - Fixes are new commits. Don't amend, squash, rebase or force-push them.
+  - To update a stack, merge the branch below into each PR above it, bottom to top (`git merge <branch below>`). After a lower PR is squash-merged, merge `main` into the next PR.
+  - The only exception is a restructure the maintainer asks for explicitly, such as reordering, splitting or reviving PRs. Its description then says the history was rewritten.
 
 ## Private data (never commit)
 
