@@ -32,7 +32,13 @@ This is the only agent rules file. Do not add CLAUDE.md, GEMINI.md, .cursorrules
 Clarity beats brevity. More lines are fine when they are easier to read.
 
 ### Functions
-- **At most 2 parameters.** More inputs go in one named object: `fn({ circuit, rails, seed })`. This covers functions, methods, named arrows and constructors. Inline callbacks (`xs.map(x => …)`) are exempt.
+- **Use one named object for multiple inputs.** Any named function, method, named arrow or constructor that would take more
+  than one parameter takes a single named object with an inline or named type. For example, call
+  `sourceNetMembers({ connectivity, seed })`.
+  - Inline callbacks may use positional parameters, as in `xs.map((x, i) => …)`.
+  - Keep signatures required by an interface, such as library callbacks. React components already receive a props object.
+  - A pure arithmetic helper with two interchangeable operands may take them positionally, as in `times(a, b)`
+    for complex multiplication.
 - **Early returns and `continue`** instead of nested `if`/`else`. No value ternaries that hide a branch. Write the `if` out.
 - **Top-level functions.** No nested closures or helpers defined inside other functions. The only exception is a factory whose job is to return a function.
 - **No conditional spreads** (`...(x ? { a } : {})`). Build the object, then set the field in an `if`.
@@ -42,7 +48,13 @@ Clarity beats brevity. More lines are fine when they are easier to read.
   ```ts
   /** The two pins of a series resistor, capacitor or inductor, treated as wired together for a signal. */
   export type PassiveBridge = [pinA: SourcePortId, pinB: SourcePortId]
-  export function passiveBridges(circuit: CircuitJson, excluded: ReadonlySet<SourcePortId>): PassiveBridge[]
+  export function passiveBridges({
+    circuit,
+    excluded,
+  }: {
+    circuit: CircuitJson
+    excluded: ReadonlySet<SourcePortId>
+  }): PassiveBridge[]
   ```
 - **Reuse existing types before inventing one.** Check, in this order: `circuit-json`, `circuit-json-to-connectivity-map`, then `@tscircuit/props` / `@tscircuit/core`.
   - Derive ids from records: `SourcePort['source_port_id']`, not `string`.
@@ -67,7 +79,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 
 ## Tests
 
-- Reproductions and fixtures are **TSX source rendered through core**, not hand-written Circuit JSON (`tests/support/signal-parts.tsx`, `signal-render.tsx`).
+- Reproductions and fixtures are **TSX source rendered through core**, not hand-written Circuit JSON (see `tests/fixtures/native-channel.tsx`).
 - Keep tests simple: one behaviour per `test()`, a short name saying what is checked, no clever helpers.
 - For routed pipeline refactors that claim "no behaviour change", prove it before merge:
   - golden checks unchanged (27 pass, 2 TODO, 2 n/a; vendor waveform records identical);
