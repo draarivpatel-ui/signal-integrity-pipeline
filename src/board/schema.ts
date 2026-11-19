@@ -3,14 +3,7 @@ import type { z } from 'zod'
 import * as base from 'circuit-json'
 import type { CircuitJson } from 'circuit-json'
 import { fail } from './diagnostics'
-
-export type {
-  CircuitJson,
-  SimulationExperiment,
-  SimulationIbisModel,
-  SimulationIbisPinState,
-  SimulationDigitalStimulus,
-} from 'circuit-json'
+export type { CircuitJson, SimulationExperiment, SimulationIbisModel } from 'circuit-json'
 
 /** Picks the circuit-json schema by record type, or by ftype for source components. */
 export function recordSchema(record: {
@@ -21,16 +14,6 @@ export function recordSchema(record: {
   if (record.type === 'source_component') schemaName = `source_${record.ftype}`
   return base[schemaName as keyof typeof base] as z.ZodTypeAny | undefined
 }
-/** Parses one Circuit JSON record with its registered schema, throwing a plain Error for missing or unknown types. */
-export function parseRecord(record: unknown): CircuitJson[number] {
-  if (!record || typeof record !== 'object' || !('type' in record) || typeof record.type !== 'string') {
-    throw new Error('Circuit record requires a type')
-  }
-  const schema = recordSchema(record as { type: string })
-  if (!schema) throw new Error(`Unknown Circuit JSON record: ${record.type}`)
-  return schema.parse(record)
-}
-
 /** Select the registered record schema directly, avoiding a union diagnostic
  * containing hundreds of unrelated alternatives. Validation never edits input. */
 export function validateCircuitRecords(records: unknown): void {
