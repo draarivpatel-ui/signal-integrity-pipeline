@@ -137,6 +137,18 @@ function registerOutlineContacts({
 /** A route point that can be an end of a wire. Through-pad copper comes from the pad record. */
 type WireEnd = Exclude<PcbTraceRoutePoint, { route_type: "through_pad" }>
 
+/** Read a via's approached layer or the wire layer at a route point. */
+function routeLayer({
+  point,
+  side,
+}: {
+  point: WireEnd
+  side: "from_layer" | "to_layer"
+}): LayerRef {
+  if (point.route_type === "via") return point[side]
+  return point.layer
+}
+
 /** Build one wire, reading taper widths from the route point that supplies the wire. */
 function routeWire({
   start,
@@ -145,13 +157,13 @@ function routeWire({
   start: WireEnd
   end: WireEnd
 }): CopperWire | undefined {
-  const layer = start.route_type === "via" ? start.to_layer : start.layer
-  const endLayer = end.route_type === "via" ? end.from_layer : end.layer
-  if (layer !== endLayer) return
+  const layer = routeLayer({ point: start, side: "to_layer" })
+  if (layer !== routeLayer({ point: end, side: "from_layer" })) return
   const first = pointKey({ point: start, layer })
   const last = pointKey({ point: end, layer })
   if (first === last) return
-  const wire = start.route_type === "wire" ? start : end
+  let wire = start
+  if (wire.route_type === "via") wire = end
   if (wire.route_type === "via") return
   const { start_width = wire.width, end_width = start_width } = wire
   const origin = new PlanarPoint(start.x, start.y)
@@ -231,7 +243,7 @@ function copperRegions({
 }): CopperRegion[] {
   const selectedPorts = new Map(ports.map((port) => [port.pcb_port_id, port]))
   const selectedTraces = new Set(traces.map((trace) => trace.pcb_trace_id))
-  const rotations = new Map(
+  const rotations = new Map<string | undefined, number>(
     circuit
       .filter((record) => record.type === "pcb_component")
       .map((record) => [record.pcb_component_id, record.rotation]),
@@ -267,10 +279,7 @@ function copperRegions({
       })
       continue
     }
-    const rotation =
-      record.pcb_component_id === undefined
-        ? undefined
-        : rotations.get(record.pcb_component_id)
+    const rotation = rotations.get(record.pcb_component_id)
     const outline = getPlatedHolePolygon(record, rotation)
     for (const layer of record.layers)
       regions.push({ layer, outline, key: record.pcb_plated_hole_id })
@@ -355,10 +364,13 @@ export function buildRoutedCopper({
   const terminals: CopperTerminals = new Map()
   for (const port of ports) {
     const keys = port.layers.map((layer) => pointKey({ point: port, layer }))
-    const existing = terminals.get(port.source_port_id)
-    if (existing) existing.push(...keys)
-    else terminals.set(port.source_port_id, keys)
     for (const key of keys) groups.push([key])
+    const existing = terminals.get(port.source_port_id)
+    if (!existing) {
+      terminals.set(port.source_port_id, keys)
+      continue
+    }
+    existing.push(...keys)
   }
   for (const keys of routes) {
     for (const key of keys) groups.push([key])

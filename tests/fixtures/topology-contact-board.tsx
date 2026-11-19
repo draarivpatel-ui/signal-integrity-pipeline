@@ -193,3 +193,87 @@ export async function midSegmentPads(): Promise<TopologyBoard> {
     ),
   })
 }
+
+/** An unselected plated pad occupies the gap between the top and bottom signal stubs. */
+export async function unrelatedPlatedHole(): Promise<TopologyBoard> {
+  return topologyBoard({
+    children: (
+      <>
+        <SignalPin name="TX" x={-4} />
+        <SignalPin name="RX" x={4} layer="bottom" />
+        <net name="SIGNAL" />
+        <chip
+          name="UNRELATED"
+          pinLabels={{ pin1: "SIG" }}
+          footprint={
+            <footprint>
+              <platedhole
+                portHints={["pin1"]}
+                shape="circle"
+                holeDiameter={0.2}
+                outerDiameter={0.45}
+              />
+            </footprint>
+          }
+        />
+        <trace
+          from=".TX > .SIG"
+          to="net.SIGNAL"
+          pcbPath={[".TX > .SIG", { x: 3.9, y: 0 }]}
+        />
+        <trace
+          from=".RX > .SIG"
+          to="net.SIGNAL"
+          pcbPath={[".RX > .SIG", { x: -3.9, y: 0 }]}
+        />
+      </>
+    ),
+  })
+}
+
+/** Two ideal passives share the driver terminal on a board with no routed signal traces. */
+export async function unroutedPassiveBranch(): Promise<TopologyBoard> {
+  const footprint = (
+    <footprint>
+      <smtpad
+        portHints={["pin1"]}
+        pcbX={0}
+        pcbY={0}
+        width={0.4}
+        height={0.4}
+        shape="rect"
+      />
+      <smtpad
+        portHints={["pin2"]}
+        pcbX={1}
+        pcbY={0}
+        width={0.4}
+        height={0.4}
+        shape="rect"
+      />
+    </footprint>
+  )
+  return topologyBoard({
+    children: (
+      <>
+        <SignalPin name="TX" x={0} />
+        <SignalPin name="RX" x={4} />
+        <resistor
+          name="ONE"
+          resistance="33"
+          pcbRotation={90}
+          footprint={footprint}
+        />
+        <resistor
+          name="TWO"
+          resistance="33"
+          pcbRotation={-90}
+          footprint={footprint}
+        />
+        <trace from=".TX > .SIG" to=".ONE > .pin1" />
+        <trace from=".TX > .SIG" to=".TWO > .pin1" />
+        <trace from=".ONE > .pin2" to=".RX > .SIG" />
+      </>
+    ),
+  })
+}
