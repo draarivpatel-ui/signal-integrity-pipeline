@@ -58,6 +58,7 @@ export interface RoutedBindings {
   electricalLines: string[]
   models: RouteBuffer[]
 }
+/** Scoped geometry, field results and electrical bindings for a routed deck. */
 export interface RouteNetworkInput {
   blockId: string
   name: string
@@ -69,6 +70,7 @@ export interface RouteNetworkInput {
   warnings: string[]
   artifactPrefix: string
 }
+/** Executable SPICE input and evidence for one routed transient. */
 export interface RoutedDeck {
   blockId: string
   name: string

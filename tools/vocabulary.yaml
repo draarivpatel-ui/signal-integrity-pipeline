@@ -28,6 +28,10 @@ domain:
   sine: the trigonometric measure used here to compare route directions
   longitudinal: along a route or trace
   transverse: across a route or trace
+  dispersion: frequency-dependent wave travel that can distort a signal edge
+  filament: an ideal thin current path used to estimate mutual inductance
+  modal: describing an electrical mode or the factor that represents its stored energy
+  post: a vertical conductor between a terminal and a route or reference plane
   control: pin enable state or drive timing for a simulation
   transient: a circuit simulation that follows voltage and current through time
   startup: the time a switching channel needs to settle after its stimulus starts
