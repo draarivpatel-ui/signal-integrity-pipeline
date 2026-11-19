@@ -6,7 +6,7 @@
       "name": "@tscircuit/signal-integrity-pipeline",
       "dependencies": {
         "@noble/hashes": "1.8.0",
-        "@tscircuit/ibis-to-spice": "https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/3dfa3cacd9c10756d1a6d2193e1d39d7552809aa",
+        "@tscircuit/ibis-to-spice": "https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/17eed8a96aee0689fd731992a7472f1b6d5b1075",
         "circuit-json-to-connectivity-map": "0.0.35",
         "format-si-unit": "0.0.12",
         "zod": "3.25.76",
@@ -224,7 +224,7 @@
 
     "@tscircuit/footprinter": ["@tscircuit/footprinter@0.0.451", "", { "dependencies": { "@tscircuit/mm": "0.0.8", "zod": "3.25.76" }, "peerDependencies": { "circuit-json": "0.0.552" } }, "sha512-Rpafg5M3Ovp/WrnNxMu5K2CJcWaK7TS3YFkbHULh6c/4nZbl8amTG7qUg9RmQ8iMiDN+XloP/jyyrbkjK+in3A=="],
 
-    "@tscircuit/ibis-to-spice": ["@tscircuit/ibis-to-spice@https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/3dfa3cacd9c10756d1a6d2193e1d39d7552809aa", { "dependencies": { "@noble/hashes": "1.8.0", "fflate": "0.8.2" }, "bin": { "ibis-to-spice": "cli.mjs" } }, "sha512-vJ0vrfB6bSRCkera8OuHLot5aJiJOA7ZdmNnQjPGEXX1Hee+NMmTHoFN/hHZWOzoLLUcya/rm5Eo/8IXe1xpdA=="],
+    "@tscircuit/ibis-to-spice": ["@tscircuit/ibis-to-spice@https://api.github.com/repos/tscircuit/ibis-to-spice/tarball/17eed8a96aee0689fd731992a7472f1b6d5b1075", { "dependencies": { "@noble/hashes": "1.8.0", "fflate": "0.8.2" }, "bin": { "ibis-to-spice": "cli.mjs" } }, "sha512-RKExKBk4rlQZGxbI5nETNalhJtXyPTWwEkOzU07YNxafOHTAYAXS04w3HV5zINMbR9lwg1cX9a/IsiOVsyt5Pw=="],
 
     "@tscircuit/image-utils": ["@tscircuit/image-utils@0.0.10", "", { "dependencies": { "@flatten-js/core": "1.6.14", "color-diff": "1.4.0", "fast-png": "8.0.0", "svg-path-commander": "2.3.3", "transformation-matrix": "2.16.1" } }, "sha512-2ivIRhGTnMy7a0q6fm2bk/f6cv6ZVwnF7fav+ceXPkTJYOSnzijFVtN696veyCXuiU1/Ck1QiosvWwcgeBPstw=="],
 
