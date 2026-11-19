@@ -11,8 +11,8 @@ export const MILLISECONDS_PER_SECOND = 1000
 
 /**
  * Returns the default capture duration in seconds for a nonempty channel block.
- * Quiet-only blocks use the slowest channel rate. The stimulus builder in #99
- * holds constant drivers at their initial level from t=0.
+ * Quiet-only blocks use the slowest channel rate. Constant drivers hold their
+ * level from t=0, so their offsets are ignored.
  */
 export function defaultDurationSeconds(
   channels: SimulationPcbDriverReceiverChannel[],
