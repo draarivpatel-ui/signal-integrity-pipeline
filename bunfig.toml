@@ -1,2 +1,6 @@
 [test]
 root = "./tests"
+
+[install]
+# Keep new resolutions at least 24 hours behind publication.
+minimumReleaseAge = 86400

@@ -4,7 +4,7 @@ import * as root from '../../src'
 import * as node from '../../src/adapters'
 
 // The routed compiler/execution entry points and the public board/stimulus helpers.
-// (Type-only exports are pinned by `pnpm typecheck` of the consumer tests, not here.)
+// (Type-only exports are pinned by `bun run typecheck` of the consumer tests, not here.)
 const ROOT = ['stackupFromCircuitJson', 'transmittedBits']
 const NODE = ['createNativeSolver', 'loadIbisSources']
 

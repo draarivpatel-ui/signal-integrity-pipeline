@@ -24,6 +24,6 @@ stateDiagram-v2
 
 ## Development validation
 
-Install dependencies with `pnpm install --frozen-lockfile`, then run `bun test`.
+Install dependencies with `bun install --frozen-lockfile`, then run `bun test`.
 Optional checks use `test.skipIf` and known failures still execute through `test.failing`.
 Run `bun run test:package` to verify the packed package in Node.

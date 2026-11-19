@@ -1,5 +1,5 @@
 # The project's shared language: the words names in src/ are built from.
-# Checked by `pnpm check:vocabulary` (scripts/check-vocabulary.ts), which reports how many names use
+# Checked by `bun run check:vocabulary` (scripts/check-vocabulary.ts), which reports how many names use
 # only these words and lists the unknown ones. The target is deliberately below 100%: an unknown word
 # is a question for a person ("add it here, or rename the code?"), not an error.
 #

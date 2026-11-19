@@ -21,7 +21,7 @@ This is the only agent rules file. Do not add CLAUDE.md, GEMINI.md, .cursorrules
 
 ## Code
 
-- Install dependencies with `pnpm install --frozen-lockfile`.
+- Install dependencies with `bun install --frozen-lockfile`.
 - `bun run lint && bun run check:modules && bun run check:vocabulary && bun run typecheck && bun test` must pass before a PR is ready.
 - Relative imports have no extension: `from './stages'`, and `from '../board'` for another module (enforced by `tests/tooling/imports.test.ts`). The build adds `.js` back in `dist/`.
 - Module rules, verification and migration notes: `docs/ARCHITECTURE.md`.

@@ -28,12 +28,11 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.25.0
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
       - run: npm install --global pver@0.0.43
-      - run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun test
       - run: bun run test:package
@@ -58,7 +57,7 @@ jobs:
             echo "Tag $TAG does not match package.json version $VERSION" >&2
             exit 1
           fi
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           # Pack into an empty directory and upload whatever npm produced, so the
           # asset name always follows the package name in package.json.
           PACK_DIR="$RUNNER_TEMP/pack"

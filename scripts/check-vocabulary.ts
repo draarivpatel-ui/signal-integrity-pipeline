@@ -1,6 +1,6 @@
 /* eslint-disable local/max-file-lines -- The CLI keeps dictionary parsing and scoring together. */
 /**
- * pnpm check:vocabulary [--json] [--root <dir>]
+ * bun run check:vocabulary [--json] [--root <dir>]
  * Measures how many of the names declared in src/ are built only from words in tools/vocabulary.yaml.
  * It is not meant to reach 100%: it lists unknown words so a person decides "add to the dictionary" or "rename".
  *

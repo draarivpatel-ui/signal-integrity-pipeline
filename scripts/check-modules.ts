@@ -1,6 +1,6 @@
 /* eslint-disable local/max-file-lines -- The module checks share AST parsing, diagnostics and reporting. */
 /**
- * pnpm check:modules [--write]
+ * bun run check:modules [--write]
  * The module list is the filesystem. Nothing here enumerates modules by name.
  *
  * A module is a directory src/<dir>/ containing index.ts.

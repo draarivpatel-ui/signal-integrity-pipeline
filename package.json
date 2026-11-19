@@ -13,7 +13,6 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.25.0",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -70,6 +69,7 @@
     "circuit-json": ">=0.0.552",
     "react": "^19.0.0"
   },
+  "trustedDependencies": ["esbuild"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "peerDependenciesMeta": {
