@@ -12,7 +12,7 @@ import {
   sourceConnections,
   validateCircuitRecords,
 } from "../board"
-import { edgeSeconds, type IbisSources } from "../buffers"
+import { edgeDurationSeconds, type IbisSources } from "../buffers"
 import {
   type Produced,
   rootScope,
@@ -232,7 +232,7 @@ function planRoutedBlock({
     endpointPorts(signal.driver),
   )
   const driverRiseSeconds = driverPorts.map((id) =>
-    edgeSeconds(block.pins.get(id)!),
+    edgeDurationSeconds(block.pins.get(id)!),
   )
   const options: RoutedCompileOptions = {
     riseSeconds: Math.min(...driverRiseSeconds),
