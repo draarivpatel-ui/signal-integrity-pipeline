@@ -89,27 +89,7 @@
       "file": "sn74lvc8t245.ibs",
       "fileBytes": 330359,
       "component": "LVC8T245_PW",
-      "signalPins": {
-        "3": {
-          "signal": "A1",
-          "model": "LVC8T245_IO_33",
-          "modelType": "I/O",
-          "selector": "LVC8T245_IO"
-        },
-        "21": {
-          "signal": "B1",
-          "model": "LVC8T245_IO_33",
-          "modelType": "I/O",
-          "selector": "LVC8T245_IO"
-        }
-      },
-      "supplyPins": {
-        "1": "VCCA",
-        "11": "GND",
-        "23": "VCCB"
-      },
-      "supplyV": 3.3,
-      "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed"
+      "licenseStatus": "Manufacturer copyright. Vendor file kept local."
     },
     "am335x": {
       "vendor": "Texas Instruments",
@@ -124,20 +104,7 @@
       "file": "sprm552c.ibs",
       "fileBytes": 64048707,
       "component": "am335x_zcz",
-      "signalPins": {
-        "M3": {
-          "signal": "DDR_D0",
-          "model": "Model_257",
-          "modelType": "3-state",
-          "selector": "Selector_11"
-        }
-      },
-      "supplyPins": {
-        "A1": "VSS",
-        "E5": "VDDS_DDR"
-      },
-      "supplyV": 1.5,
-      "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed"
+      "licenseStatus": "Manufacturer copyright. Vendor file kept local."
     },
     "ddr3": {
       "vendor": "Winbond",
@@ -150,20 +117,7 @@
       "file": "W631GG6MB-12.ibs",
       "fileBytes": 341552,
       "component": "W631GG6MB-12",
-      "signalPins": {
-        "E3": {
-          "signal": "DQL0",
-          "model": "ODT_off",
-          "modelType": "Input",
-          "selector": "DQ"
-        }
-      },
-      "supplyPins": {
-        "A1": "VDDQ",
-        "B1": "VSSQ"
-      },
-      "supplyV": 1.5,
-      "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed"
+      "licenseStatus": "Manufacturer copyright. Vendor file kept local."
     },
     "fifo": {
       "vendor": "Texas Instruments",
@@ -178,24 +132,7 @@
       "file": "sn74v245.ibs",
       "fileBytes": 19492,
       "component": "SN74V245",
-      "signalPins": {
-        "1": {
-          "signal": "A",
-          "model": "UI088",
-          "modelType": "Input"
-        },
-        "50": {
-          "signal": "Y",
-          "model": "OPH83",
-          "modelType": "3-state"
-        }
-      },
-      "supplyPins": {
-        "49": "VCC",
-        "51": "GND"
-      },
-      "supplyV": 3.3,
-      "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed"
+      "licenseStatus": "Manufacturer copyright. Vendor file kept local."
     }
   }
 }
