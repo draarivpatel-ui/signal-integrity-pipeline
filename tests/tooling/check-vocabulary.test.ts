@@ -44,7 +44,10 @@ function repo(t: { after(fn: () => void): void }, files: Record<string, string>)
 }
 
 /** The names a snippet declares, as `name` or `name*` when exported. */
-const names = (text: string, file: string = 'a.ts'): string[] => collectNames(file, text).map(
+const names = ({ text, file = 'a.ts' }: {
+  text: string
+  file?: string
+}): string[] => collectNames({ file, text }).map(
   n => n.exported ? `${n.name}*` : n.name,
 )
 
@@ -165,7 +168,7 @@ type Pair = { left: number; right: number; [key: string]: number }
 enum Mode { FastMode }
 const named = function innerName() {}
 `
-  assert.deepEqual(names(text).sort(), [
+  assert.deepEqual(names({ text }).sort(), [
     'Board',
     'FastMode',
     'Mode',
@@ -208,7 +211,7 @@ const __ = 3
 for (const [i, entry] of [[1, 2]].entries()) void [i, entry]
 export { options as renamedOptions }
 `
-  assert.deepEqual(names(text), ['options*', 'Wire', 'entry'])
+  assert.deepEqual(names({ text }), ['options*', 'Wire', 'entry'])
 })
 
 test('collectNames: exported marks top-level exported declarations and local export lists', () => {
@@ -223,7 +226,7 @@ function local(): void { const publicThing = 1 }
 export { listed }
 export { reexported } from './other'
 `
-  assert.deepEqual(names(text), [
+  assert.deepEqual(names({ text }), [
     'publicThing*',
     'innerArg',
     'firstPart*',
@@ -239,8 +242,8 @@ export { reexported } from './other'
 
 test('collectNames: .tsx files parse JSX', () => {
   assert.deepEqual(names(
-    'export const LanePanel = ({ laneCount }: { laneCount: number }) => <div title="lanes">{laneCount}</div>\n',
-    'a.tsx',
+    { text: 'export const LanePanel = ({ laneCount }: { laneCount: number }) => <div title="lanes">{laneCount}</div>\n',
+    file: 'a.tsx' },
   ), ['LanePanel*', 'laneCount'])
 })
 
@@ -253,7 +256,7 @@ test('scoreNames: dedupe per module, exported names weigh 2, overall is weighted
     { module: 'solver', name: 'laneCount', exported: false },
     { module: 'solver', name: 'meshGrid', exported: true },
   ]
-  const r = scoreNames(entries, vocab())
+  const r = scoreNames({ entries, vocab: vocab() })
   assert.equal(r.names, 5, 'laneCount once per module')
   assert.deepEqual(r.modules.map(m => [m.module, m.names, Number(m.score.toFixed(2)), m.belowTarget]), [
     ['board', 3, 75, true], // (2 + 1) / (2 + 1 + 1)
@@ -270,11 +273,11 @@ test('scoreNames: threshold decides pass/fail; modules below target are flagged 
     { module: 'alpha', name: 'buildIndex', exported: true },
     { module: 'beta', name: 'meshCount', exported: false },
   ]
-  const at = scoreNames(entries, vocab(6 / 7 * 100))
+  const at = scoreNames({ entries, vocab: vocab(6 / 7 * 100) })
   assert.equal(at.pass, true, 'a score equal to the threshold passes')
   assert.deepEqual(at.modules.map(m => m.belowTarget), [false, true])
-  assert.equal(scoreNames(entries, vocab(90)).pass, false)
-  assert.deepEqual(scoreNames([], vocab()), {
+  assert.equal(scoreNames({ entries, vocab: vocab(90) }).pass, false)
+  assert.deepEqual(scoreNames({ entries: [], vocab: vocab() }), {
     threshold: 85,
     score: 100,
     names: 0,
@@ -293,14 +296,14 @@ test('scoreNames: unknown words ranked by distinct names, then alphabetically, w
     ...['zeta', 'alphaZeta'].map(name => ({ module: 'board', name, exported: false })),
     { module: 'board', name: 'beta', exported: false },
   ]
-  const r = scoreNames(entries, vocab())
+  const r = scoreNames({ entries, vocab: vocab() })
   assert.deepEqual(r.unknown.map(u => `${u.word} ${u.names}`), [
     'mesh 3', 'zeta 2', 'alpha 1', 'beta 1', 'ground 1', 'meshes 1', 'polygon 1', 'sensor 1', 'sensors 1',
   ], 'meshPolygon counts once although two modules declare it')
   assert.deepEqual(r.unknown[0].examples, ['meshMm', 'groundMesh', 'meshPolygon'], 'shortest names first, at most 3')
   assert.equal(r.unknown.find(u => u.word === 'sensors')?.avoid, 'probe')
   assert.equal(r.unknownWords, 9)
-  assert.equal(scoreNames(entries, vocab(), 2).unknown.length, 2, 'the list is capped')
+  assert.equal(scoreNames({ entries, vocab: vocab(), limit: 2 }).unknown.length, 2, 'the list is capped')
 
   const text = formatReport(r)
   assert.match(text, /^Vocabulary: 0\.0% of 10 names follow the dictionary \(target 85%\) ✗$/m)
@@ -352,6 +355,6 @@ test('CLI: exit codes, --json and invalid dictionaries', t => {
   assert.equal(invalid.status, 1)
   assert.match(invalid.stderr, /tools\/vocabulary\.yaml: line 2: "Bad" is not a valid word/)
 
-  assert.throws(() => parseArgs(['--nope'], '.'), /unknown argument "--nope"/)
-  assert.deepEqual(parseArgs(['--json', '--root', 'x'], '.'), { json: true, root: 'x' })
+  assert.throws(() => parseArgs({ args: ['--nope'], defaultRoot: '.' }), /unknown argument "--nope"/)
+  assert.deepEqual(parseArgs({ args: ['--json', '--root', 'x'], defaultRoot: '.' }), { json: true, root: 'x' })
 })

@@ -36,7 +36,10 @@ test('diagnostics keeps the `${code}: ${text}` message and records the domain', 
 })
 
 test('safeId and sha256 match the pre-module behaviour', () => {
-  assert.equal(safeId('exp_1-a', 'id'), 'exp_1-a')
-  assert.throws(() => safeId('a b', 'id'), /simulation_id: Serialized simulation IDs must be safe stable identifiers/)
+  assert.equal(safeId({ raw: 'exp_1-a', field: 'id' }), 'exp_1-a')
+  assert.throws(
+    () => safeId({ raw: 'a b', field: 'id' }),
+    /simulation_id: Serialized simulation IDs must be safe stable identifiers/,
+  )
   assert.equal(sha256('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
 })

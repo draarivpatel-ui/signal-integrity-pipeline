@@ -9,6 +9,15 @@ const NULL_CHARACTER = '\0'
 /** ASCII characters that can continue a word after an HTML tag name. */
 const WORD_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_'
 
+/** HTML tag used to identify assets served as HTML instead of model data. */
+const HTML_OPENING_TAG = '<html'
+
+/** ZIP archive headers begin with the ASCII characters P and K. */
+const ZIP_SIGNATURE = [0x50, 0x4b]
+
+/** Limit the size of a supplied IBIS asset to 64 MiB. */
+const MAX_IBIS_BYTES = 64 * 1024 * 1024
+
 /** Portable relative paths used by the explicit Node adapter as well as file maps. */
 export function relativeFile(path: string): string {
   const invalidPath = !path ||
@@ -28,8 +37,8 @@ function containsHtmlOpening(text: string): boolean {
     if (rest === rest.trimStart()) return false
     opening = `<${rest.trimStart()}`
   }
-  if (opening.slice(0, 5).toLowerCase() !== '<html') return false
-  const next = opening[5] ?? ''
+  if (opening.slice(0, HTML_OPENING_TAG.length).toLowerCase() !== HTML_OPENING_TAG) return false
+  const next = opening[HTML_OPENING_TAG.length] ?? ''
   return next === '' || !WORD_CHARACTERS.includes(next)
 }
 
@@ -37,7 +46,10 @@ function containsHtmlOpening(text: string): boolean {
  * Admits the caller-supplied IBIS bytes for one model: checks the path, size, format and UTF-8 text,
  * then records the SHA-256 evidence. Nothing is ever downloaded from the declared URL.
  */
-export function loadModelSource(model: ModelSourceRequest, sources: IbisSources): LoadedModelSource {
+export function loadModelSource({ model, sources }: {
+  model: ModelSourceRequest
+  sources: IbisSources
+}): LoadedModelSource {
   const asset = model.ibis_model_asset
   const path = relativeFile(asset.project_relative_path)
   if (!sources || !Object.hasOwn(sources, path)) fail(
@@ -49,11 +61,14 @@ export function loadModelSource(model: ModelSourceRequest, sources: IbisSources)
     'ibis_asset',
     `${path}: expected a string or Uint8Array`,
   )
-  const bytes = typeof source === 'string' ? new TextEncoder().encode(source) : source
-  if (bytes.length > 64 * 1024 * 1024) fail('ibis_asset', 'IBIS asset exceeds 64 MiB')
-  // ZIP archive headers begin with the ASCII characters P and K.
-  const zipSignature = [0x50, 0x4b]
-  if (zipSignature.every((byte, index) => bytes[index] === byte)) {
+  let bytes: Uint8Array
+  if (typeof source === 'string') {
+    bytes = new TextEncoder().encode(source)
+  } else {
+    bytes = source
+  }
+  if (bytes.length > MAX_IBIS_BYTES) fail('ibis_asset', 'IBIS asset exceeds 64 MiB')
+  if (ZIP_SIGNATURE.every((byte, index) => bytes[index] === byte)) {
     fail('ibis_asset', 'IBIS asset must be a plain .ibs file; extract ZIP archives explicitly')
   }
   const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)

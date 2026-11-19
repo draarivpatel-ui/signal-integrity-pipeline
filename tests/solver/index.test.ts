@@ -16,33 +16,33 @@ const request = {
 }
 
 test('accepted run records inputs, outputs, logs and request under the scope', async () => {
-  const { value, artifacts } = await invoke(ctx({
-    stdout: 'o',
-    stderr: 'e',
-    files: { 'waveform.dat': 'w' },
-  }), rootScope('simulation').child('experiments', 'x'), request)
+  const { value, artifacts } = await invoke({
+    context: ctx({ stdout: 'o', stderr: 'e', files: { 'waveform.dat': 'w' } }),
+    scope: rootScope('simulation').child('experiments', 'x'),
+    request,
+  })
   assert.equal(value.outputs['waveform.dat'], 'w')
   assert.deepEqual(artifacts.map(a => a.path), ['experiments/x/simulation.cir', 'experiments/x/waveform.dat',
     'experiments/x/ngspice.stdout.log', 'experiments/x/ngspice.stderr.log', 'experiments/x/ngspice.request.json'])
 })
 
-test('protocol failures keep today\'s codes and messages', async () => {
-  const s = rootScope('simulation')
+const scope = rootScope('simulation')
+
+test('rejects a malformed solver result', async () => {
   await assert.rejects(
-    invoke(ctx({ stdout: 1 }), s, request),
+    invoke({ context: ctx({ stdout: 1 }), scope, request }),
     /solver_result: ngspice: expected stdout, stderr and files/,
   )
-  await assert.rejects(invoke(ctx({
-    stdout: 'o',
-    stderr: 'e',
-    files: {},
-    exitCode: 2,
-  }), s, request), /native_solver: ngspice: exited 2\no\ne/)
-  await assert.rejects(invoke(ctx({
-    stdout: 'o',
-    stderr: 'e',
-    files: {},
-  }), s, request), /native_output: ngspice: missing waveform.dat/)
+})
+
+test('rejects a solver failure', async () => {
+  const context = ctx({ stdout: 'o', stderr: 'e', files: {}, exitCode: 2 })
+  await assert.rejects(invoke({ context, scope, request }), /native_solver: ngspice: exited 2\no\ne/)
+})
+
+test('rejects a missing output file', async () => {
+  const context = ctx({ stdout: 'o', stderr: 'e', files: {} })
+  await assert.rejects(invoke({ context, scope, request }), /native_output: ngspice: missing waveform.dat/)
 })
 
 test('the callee cannot mutate the caller\'s request', async () => {
@@ -52,7 +52,7 @@ test('the callee cannot mutate the caller\'s request', async () => {
     r.args.push('x')
     return { stdout: '', stderr: '', files: { 'waveform.dat': '' } }
   }
-  await invoke({ runSolver, progress: () => {} }, rootScope('simulation'), request)
+  await invoke({ context: { runSolver, progress: () => {} }, scope: rootScope('simulation'), request })
   assert.equal(request.files['simulation.cir'], 'deck')
   assert.deepEqual(request.args, ['-b'])
 })

@@ -60,7 +60,7 @@ function repo(t: { after(fn: () => void): void }, overrides: Record<string, stri
   return root
 }
 /** Runs every module check on a temp repo with a fixed date, so expiry results are deterministic. */
-const check = (root: string, today: string = TODAY): Violation[] => runChecks(root, { today })
+const check = (root: string, today: string = TODAY): Violation[] => runChecks({ root, today })
 /** Just the rule ids of the violations, for order-sensitive comparisons. */
 const rules = (vs: Violation[]): Violation['rule'][] => vs.map(v => v.rule)
 /** The violations as the script prints them. */
@@ -342,7 +342,7 @@ await assert.rejects(p(), { code: 'alpha_new' })
       '(DomainName +alpha; DiagnosticCode +alpha_new); run check:modules --write'
     }`,
   ])
-  assert.deepEqual(lines(runChecks(root, { today: TODAY, write: true })), [])
+  assert.deepEqual(lines(runChecks({ root, today: TODAY, write: true })), [])
   const written = readFileSync(join(root, 'src/modules.generated.ts'), 'utf8')
   assert.equal(
     written,
@@ -372,7 +372,7 @@ test('module discovery is the filesystem: adding a directory with index.ts adds 
 
 test('S6: generated diagnostic unions wrap at 120 characters without dropping members', () => {
   const codes = Array.from({ length: 6 }, (_, index) => `diagnostic_with_a_long_name_${index}`)
-  const output = renderModulesGenerated([], new Map([['module', codes]]))
+  const output = renderModulesGenerated({ modules: [], codes: new Map([['module', codes]]) })
   assert.ok(output.split('\n').every(line => line.length <= 120))
   assert.deepEqual([...parseModulesGenerated(output).codes], codes)
 })

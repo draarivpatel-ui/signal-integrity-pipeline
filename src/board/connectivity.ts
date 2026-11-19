@@ -12,7 +12,7 @@ export { getSourcePortConnectivityMapFromCircuitJson, type ConnectivityMap } fro
 export function sourceNetMembers({ connectivity, seed }: {
   connectivity: ConnectivityMap
   seed: SourcePortId | SourceNetId
-}): Set<SourcePortId | SourceNetId> {
+}): SourceNetMembers {
   const netId = connectivity.getNetConnectedToId(seed)
   if (netId === undefined) return new Set([seed])
   return new Set([seed, ...connectivity.getIdsConnectedToNet(netId)])
@@ -20,6 +20,9 @@ export function sourceNetMembers({ connectivity, seed }: {
 
 /** Ids the board wires together through a trace or a part's internally connected pins. */
 export type SourceConnectionGroup = Array<SourcePortId | SourceNetId>
+
+/** Source port and net identifiers on one electrical net. */
+export type SourceNetMembers = Set<SourcePortId | SourceNetId>
 
 /** Collect source connectivity groups in the same order as the library's source map. */
 export function sourceConnections(circuit: CircuitJson): SourceConnectionGroup[] {
@@ -45,8 +48,11 @@ export function passiveBridges({ circuit, excluded }: {
   for (const port of circuit) {
     if (port.type !== 'source_port' || port.source_component_id === undefined) continue
     const pins = ports.get(port.source_component_id)
-    if (pins) pins.push(port.source_port_id)
-    else ports.set(port.source_component_id, [port.source_port_id])
+    if (!pins) {
+      ports.set(port.source_component_id, [port.source_port_id])
+      continue
+    }
+    pins.push(port.source_port_id)
   }
   const passiveTypes = ['simple_resistor', 'simple_capacitor', 'simple_inductor']
   const connections: PassiveBridge[] = []

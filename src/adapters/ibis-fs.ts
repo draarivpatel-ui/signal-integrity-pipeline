@@ -11,11 +11,12 @@ export async function loadIbisSources({ circuitJson, baseDir }: {
 }): Promise<IbisSources> {
   const root = await realpath(baseDir)
   const sources: IbisSources = Object.create(null)
-  for (const record of circuitJson) if (record.type === 'simulation_ibis_model') {
+  for (const record of circuitJson) {
+    if (record.type !== 'simulation_ibis_model') continue
     const path = relativeFile(record.ibis_model_asset.project_relative_path)
     if (Object.hasOwn(sources, path)) continue
     const target = await realpath(resolve(root, path))
-    sources[path] = await readFile(contained(root, target))
+    sources[path] = await readFile(contained({ root, path: target }))
   }
   return sources
 }

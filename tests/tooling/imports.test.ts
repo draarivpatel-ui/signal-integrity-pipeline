@@ -16,7 +16,7 @@ const tsFiles = (dir: string): string[] => readdirSync(join(root, dir)).flatMap(
 
 test('relative TypeScript imports carry no .js/.ts extension', () => {
   const bad = ['src', 'tests', 'scripts', 'examples'].flatMap(tsFiles).flatMap(file =>
-    [...relativeSpecifiers(readFileSync(join(root, file), 'utf8'), true)]
+    [...relativeSpecifiers({ source: readFileSync(join(root, file), 'utf8'), checkExtensions: true })]
       .map(specifier => `${relative(root, join(root, file))}: '${specifier.path}'`))
   assert.deepEqual(bad, [])
 })

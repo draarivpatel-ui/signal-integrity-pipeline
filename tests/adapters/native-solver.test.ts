@@ -165,9 +165,10 @@ test('missing requested output is omitted (solver.invoke rejects native_output) 
   assert.deepEqual(Object.keys(result.files),[])  // only requested outputs are read; extra.dat is not
   await workdirGone()
   await assert.rejects(invoke({
-    runSolver:solver,
-    progress:()=>{},
-  },rootScope('simulation'),request),code('native_output',/ngspice: missing waveform.dat/))
+    context: { runSolver: solver, progress: () => {} },
+    scope: rootScope('simulation'),
+    request,
+  }), code('native_output', /ngspice: missing waveform.dat/))
   await workdirGone()
 })
 

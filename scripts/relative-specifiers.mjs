@@ -1,5 +1,6 @@
 // The import checks and dist rewrite look for relative strings after `from` or `import`.
 const sourceExtensions = ['.js', '.ts', '.tsx']
+const importKeywords = ['from', 'import']
 
 /**
  * A relative import path and its source offsets.
@@ -11,14 +12,14 @@ const sourceExtensions = ['.js', '.ts', '.tsx']
 
 /**
  * Finds relative specifiers, with their offsets in the source text.
+ * @param {{ source: string, checkExtensions?: boolean }} options
  * @returns {Generator<RelativeSpecifier, void, unknown>}
  */
-export function* relativeSpecifiers(source, checkExtensions = false) {
+export function* relativeSpecifiers({ source, checkExtensions = false }) {
   for (let start = 0; start < source.length; start++) {
-    let quoteAt
-    if (source.startsWith('from', start)) quoteAt = start + 4
-    else if (source.startsWith('import', start)) quoteAt = start + 6
-    else continue
+    const keyword = importKeywords.find(candidate => source.startsWith(candidate, start))
+    if (!keyword) continue
+    let quoteAt = start + keyword.length
 
     while (source[quoteAt]?.trim() === '') quoteAt++
     if (source[quoteAt] === '(') quoteAt++
@@ -39,9 +40,8 @@ export function* relativeSpecifiers(source, checkExtensions = false) {
     if (close !== "'" && close !== '"') continue
 
     const path = source.slice(pathStart, end)
-    if (checkExtensions) {
-      if (!hasSlash || !sourceExtensions.some(ext => path.endsWith(ext))) continue
-    } else if (close !== quote) continue
+    if (checkExtensions && (!hasSlash || !sourceExtensions.some(ext => path.endsWith(ext)))) continue
+    if (!checkExtensions && close !== quote) continue
 
     yield { path, start: pathStart, end }
     start = end

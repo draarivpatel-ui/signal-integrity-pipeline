@@ -10,7 +10,10 @@ function isSafeId(id: string): boolean {
   return true
 }
 /** Boundary parse. Inside the library every id that reaches a path or netlist is a SafeId. */
-export function safeId(raw: unknown, field: string): SafeId {
+export function safeId({ raw, field }: {
+  raw: unknown
+  field: string
+}): SafeId {
   void field // message kept byte-identical to the pre-module pipeline
   if (typeof raw !== 'string' || !isSafeId(raw))
     fail('simulation_id', 'Serialized simulation IDs must be safe stable identifiers')

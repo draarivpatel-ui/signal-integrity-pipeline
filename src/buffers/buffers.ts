@@ -12,6 +12,7 @@ import type {
   AssemblyEntry,
   BufferModeling,
   CompiledBuffer,
+  CompiledBuffersByPlan,
   IbisSources,
   LoadedModelSource,
   ModelRunDefinition,
@@ -19,8 +20,10 @@ import type {
 } from './types'
 
 /** Fails 'converter_version' unless the pinned upstream general converter is installed. Today's first IBIS check. */
-export function assertConverter(): void {
-  if (typeof converter.convertIbisModelToSpice !== 'function') fail(
+export function assertConverter({ convertIbisModelToSpice }: {
+  convertIbisModelToSpice?: unknown
+} = converter): void {
+  if (typeof convertIbisModelToSpice !== 'function') fail(
     'converter_version',
     'Install the pinned upstream general IBIS converter',
   )
@@ -31,12 +34,12 @@ export function assertConverter(): void {
  * declaration order. Artifacts (under `scope`, the output root): inputs/ibis/<pipelineId>.ibs and
  * vendor-sources.json, byte-identical to today.
  */
-export function admitBuffers(
-  models: readonly ModelSourceRequest[],
-  ibisSources: IbisSources,
-  modeling: BufferModeling,
-  scope: ArtifactScope,
-): Produced<AdmittedBuffers> {
+export function admitBuffers({ models, ibisSources, modeling, scope }: {
+  models: readonly ModelSourceRequest[]
+  ibisSources: IbisSources
+  modeling: BufferModeling
+  scope: ArtifactScope
+}): Produced<AdmittedBuffers> {
   const expectedHashes: unknown = modeling.ibisModelAssetSha256
   const isHashMap = expectedHashes !== null && typeof expectedHashes === 'object' && !Array.isArray(expectedHashes)
   if (expectedHashes !== undefined && !isHashMap) {
@@ -57,7 +60,7 @@ export function admitBuffers(
       }
       expected = pinned
     }
-    const source = loadModelSource(model, ibisSources)
+    const source = loadModelSource({ model, sources: ibisSources })
     if (expected !== undefined && source.evidence.sourceSha256 !== expected.toLowerCase()) fail(
       'vendor_hash',
       `${path}: IBIS asset bytes differ from modeling.ibisModelAssetSha256`,
@@ -81,14 +84,17 @@ export function admitBuffers(
 export function compileBuffers<M extends {
   pipelineId: string
   ibis_component_name: string
-}, P extends { readonly models: readonly M[] }>(
-  admitted: AdmittedBuffers,
-  plans: readonly P[],
-  define: (model: M, plan: P) => ModelRunDefinition,
-): CompiledBuffer[][] {
-  return plans.map(plan => plan.models.map(model => {
+}, P extends { readonly models: readonly M[] }>({ admitted, plans, define }: {
+  admitted: AdmittedBuffers
+  plans: readonly P[]
+  define: (input: {
+    model: M
+    plan: P
+  }) => ModelRunDefinition
+}): CompiledBuffersByPlan {
+  return plans.map(plan => plan.models.map((model): CompiledBuffer => {
     const index = admitted.models.findIndex(selected => selected.pipelineId === model.pipelineId)
-    const input = define(model, plan)
+    const input = define({ model, plan })
     const source = admitted.sources[index]
     input.definition.source = { file: source.evidence.ibsFile, sha256: source.evidence.sourceSha256 }
     const result = converter.convertIbisModelToSpice(source.bytes, input.definition, input.run)
@@ -103,7 +109,10 @@ export function compileBuffers<M extends {
 }
 
 /** One experiment's assembly evidence. Artifact: native-ibis-assembly.json under `experiment` (experiments/<id>). */
-export function ibisAssembly(models: readonly CompiledBuffer[], experiment: ArtifactScope): Produced<AssemblyEntry[]> {
+export function ibisAssembly({ models, experiment }: {
+  models: readonly CompiledBuffer[]
+  experiment: ArtifactScope
+}): Produced<AssemblyEntry[]> {
   const assembly: AssemblyEntry[] = models.map(model => ({
     simulationIbisModelId: model.pipelineId,
     definition: model.input.definition,
