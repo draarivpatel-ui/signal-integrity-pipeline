@@ -9,7 +9,10 @@ type SourceComponentId = SourceComponentBase['source_component_id']
 export { getSourcePortConnectivityMapFromCircuitJson, type ConnectivityMap } from 'circuit-json-to-connectivity-map'
 
 /** Resolve the seed's electrical net, including an isolated seed. */
-export function sourceNetMembers(connectivity: ConnectivityMap, seed: SourcePortId | SourceNetId): Set<SourcePortId | SourceNetId> {
+export function sourceNetMembers({ connectivity, seed }: {
+  connectivity: ConnectivityMap
+  seed: SourcePortId | SourceNetId
+}): Set<SourcePortId | SourceNetId> {
   const netId = connectivity.getNetConnectedToId(seed)
   if (netId === undefined) return new Set([seed])
   return new Set([seed, ...connectivity.getIdsConnectedToNet(netId)])
@@ -34,7 +37,10 @@ export function sourceConnections(circuit: CircuitJson): SourceConnectionGroup[]
 export type PassiveBridge = [pinA: SourcePortId, pinB: SourcePortId]
 
 /** Find two-terminal resistors, capacitors and inductors with neither pin excluded. */
-export function passiveBridges(circuit: CircuitJson, excluded: ReadonlySet<SourcePortId>): PassiveBridge[] {
+export function passiveBridges({ circuit, excluded }: {
+  circuit: CircuitJson
+  excluded: ReadonlySet<SourcePortId>
+}): PassiveBridge[] {
   const ports = new Map<SourceComponentId, SourcePortId[]>()
   for (const port of circuit) {
     if (port.type !== 'source_port' || port.source_component_id === undefined) continue
