@@ -75,6 +75,127 @@
       "supplyV": 3.3,
       "licenseStatus": "Manufacturer explicitly prohibits unauthorized redistribution; fetched locally, not redistributed",
       "selectedModelEvidence": "3.3-V output has two rising and two falling resistive fixtures, R_fixture=50 Ohm, V_fixture=0/VDD. No Polarity keyword: the example drives output buffer state directly, and does not simulate inverter core logic."
+    },
+    "levelShifter": {
+      "vendor": "Texas Instruments",
+      "part": "SN74LVC8T245",
+      "productUrl": "https://www.ti.com/product/SN74LVC8T245",
+      "datasheetUrl": "https://www.ti.com/lit/ds/symlink/sn74lvc8t245.pdf",
+      "url": "https://www.ti.com/lit/zip/scem494",
+      "archivePath": "sn74lvc8t245.ibs",
+      "archiveSha256": "17967e03a94ef2f4685da8c19b2628dc6e922f44225e9eb3e49b186ea04b5fb2",
+      "archiveBytes": 57647,
+      "sha256": "4c7338f1151320599ef9ce5481a9f16d6ba6ca31e4eceb810ecb3f594dffd855",
+      "file": "sn74lvc8t245.ibs",
+      "fileBytes": 330359,
+      "component": "LVC8T245_PW",
+      "signalPins": {
+        "3": {
+          "signal": "A1",
+          "model": "LVC8T245_IO_33",
+          "modelType": "I/O",
+          "selector": "LVC8T245_IO"
+        },
+        "21": {
+          "signal": "B1",
+          "model": "LVC8T245_IO_33",
+          "modelType": "I/O",
+          "selector": "LVC8T245_IO"
+        }
+      },
+      "supplyPins": {
+        "1": "VCCA",
+        "11": "GND",
+        "23": "VCCB"
+      },
+      "supplyV": 3.3,
+      "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed"
+    },
+    "am335x": {
+      "vendor": "Texas Instruments",
+      "part": "AM335x ZCZ",
+      "productUrl": "https://www.ti.com/product/AM3358",
+      "datasheetUrl": "https://www.ti.com/lit/ds/symlink/am3358.pdf",
+      "url": "https://www.ti.com/lit/zip/sprm552",
+      "archivePath": "sprm552c.ibs",
+      "archiveSha256": "f99cb588a07b2d77d4c52a3189933c8175467d8829b94d118173943b286990aa",
+      "archiveBytes": 22242733,
+      "sha256": "23011a68eb8ff35562615b5b108edcb9f017c5e61f4f68e32f35c5fb88f163be",
+      "file": "sprm552c.ibs",
+      "fileBytes": 64048707,
+      "component": "am335x_zcz",
+      "signalPins": {
+        "M3": {
+          "signal": "DDR_D0",
+          "model": "Model_257",
+          "modelType": "3-state",
+          "selector": "Selector_11"
+        }
+      },
+      "supplyPins": {
+        "A1": "VSS",
+        "E5": "VDDS_DDR"
+      },
+      "supplyV": 1.5,
+      "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed"
+    },
+    "ddr3": {
+      "vendor": "Winbond",
+      "part": "W631GG6MB-12",
+      "url": "https://www.winbond.com/resource-files/w631gg6mb_ibis.zip",
+      "archivePath": "W631GG6MB-12.ibs",
+      "archiveSha256": "7d58de6c5cfaef3cff5f8f157c1b73f1e55b876a0f0659c194b764add50851e7",
+      "archiveBytes": 703089,
+      "sha256": "f2c0f36e24be68fd95a05f34ca4ab875ac5145f1956c5696e9a60b0d8a03e859",
+      "file": "W631GG6MB-12.ibs",
+      "fileBytes": 341552,
+      "component": "W631GG6MB-12",
+      "signalPins": {
+        "E3": {
+          "signal": "DQL0",
+          "model": "ODT_off",
+          "modelType": "Input",
+          "selector": "DQ"
+        }
+      },
+      "supplyPins": {
+        "A1": "VDDQ",
+        "B1": "VSSQ"
+      },
+      "supplyV": 1.5,
+      "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed"
+    },
+    "fifo": {
+      "vendor": "Texas Instruments",
+      "part": "SN74V245",
+      "productUrl": "https://www.ti.com/product/SN74V245",
+      "datasheetUrl": "https://www.ti.com/lit/ds/symlink/sn74v245.pdf",
+      "url": "https://www.ti.com/lit/zip/sdfm013",
+      "archivePath": "sn74v245.ibs",
+      "archiveSha256": "1fc60cf4c43d195a26dbe29a8cef47beb19b2deac257ceb96d851653774e4703",
+      "archiveBytes": 4286,
+      "sha256": "96d95e57a76e79218319828c8362075fd87c2da5e1210de36644ad35ed21052d",
+      "file": "sn74v245.ibs",
+      "fileBytes": 19492,
+      "component": "SN74V245",
+      "signalPins": {
+        "1": {
+          "signal": "A",
+          "model": "UI088",
+          "modelType": "Input"
+        },
+        "50": {
+          "signal": "Y",
+          "model": "OPH83",
+          "modelType": "3-state"
+        }
+      },
+      "supplyPins": {
+        "49": "VCC",
+        "51": "GND"
+      },
+      "supplyV": 3.3,
+      "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed"
     }
   }
 }
