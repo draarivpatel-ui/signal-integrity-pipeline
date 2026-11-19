@@ -719,7 +719,7 @@ test("the default capture accepts a quiet driver whose offset is past the end", 
     sources: inverterSources,
   })
   const [plan] = generalDeclarations(declarationInput(prepared)).plans
-  assert.equal(plan.durationSeconds, 32 / 20e6)
+  assert.equal(plan.durationSeconds, 1 / 20e6)
 })
 
 test("a constant driver with an in-range offset starts at zero", async () => {
@@ -805,7 +805,7 @@ test("explicit duration converts to ms and automatic duration stays absent", asy
   assert.equal(
     prepareBlocks({ circuit: automatic, sources: inverterSources })[0]
       .durationSeconds,
-    144 / 20e6,
+    127 / 20e6,
   )
 
   const explicit = await renderSignals({ tree: <Board duration={1e-9} /> })
@@ -820,11 +820,11 @@ test("explicit duration converts to ms and automatic duration stays absent", asy
   )
 })
 
-test("numeric TSX offsets are seconds, with startup added before the finite capture", async () => {
+test("numeric TSX offsets are seconds and precede one pattern period", async () => {
   const circuit = await renderSignals({ tree: <Board offset={0.5} /> })
   const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
   assert.equal(prepared.signals[0].offset_ms, 500)
-  assert.ok(Math.abs(prepared.durationSeconds - (0.5 + 144 / 20e6)) < 1e-15)
+  assert.ok(Math.abs(prepared.durationSeconds - (0.5 + 127 / 20e6)) < 1e-15)
 })
 
 test("source signal names use Unicode code point order", () => {

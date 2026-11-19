@@ -11,7 +11,10 @@ import {
 } from "../board"
 import { type InspectedPin, pinCapabilities } from "../buffers"
 import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
-import { defaultDurationSeconds, MILLISECONDS_PER_SECOND } from "./timing"
+import { defaultDurationSeconds, prbsPatterns } from "./timing"
+
+/** Milliseconds in one second. */
+const MILLISECONDS_PER_SECOND = 1000
 
 /** Round bit intervals with the same floating-point tolerance as the IBIS converter. */
 const INTERVAL_ROUNDING_ULPS = 8
@@ -22,13 +25,6 @@ const SPICE_OPTIONS: NonNullable<SimulationExperiment["spice_options"]> = {
   abstol: 1e-12,
   vntol: 1e-8,
 }
-
-/** Shift-register widths and feedback taps for each pseudo-random binary sequence (PRBS). */
-const prbsPatterns = new Map([
-  ["prbs7", { width: 7, tap: 6 }],
-  ["prbs15", { width: 15, tap: 14 }],
-  ["prbs31", { width: 31, tap: 28 }],
-])
 
 interface ControlOptions {
   circuit: CircuitJson
@@ -143,7 +139,7 @@ export function signalBits({
   )
   if (!Number.isFinite(count) || count > MAX_STIMULUS_BITS) {
     throw new Error(
-      `Signal "${signal.name}": ${pattern} patterns must contain at most ${MAX_STIMULUS_BITS} bits.`,
+      `Signal "${signal.name}": ${pattern} patterns must contain at most ${MAX_STIMULUS_BITS} bits. Lower the bit rate or set duration to a shorter recording.`,
     )
   }
   const { width, tap } = prbs
