@@ -21,7 +21,7 @@ import {
   inspectPins,
   pinCapabilities,
 } from "../buffers"
-import { safeId } from "../kernel"
+import { Diagnostic, safeId } from "../kernel"
 import { type RunControls, voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import {
@@ -129,7 +129,7 @@ export function routedLanes({
         trace.display_name ??
         trace.source_trace_id
       rejections.push(
-        `Signal "${name}": branched routed graphs are not implemented yet.`,
+        `Signal "${name}": branched routes are not supported yet.`,
       )
       continue
     }
@@ -597,11 +597,11 @@ function prepareBlock({
   const selectedPins = inspectPins({ circuit, sources, ports: endpointIds })
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const rails = collectRailIds({ circuit, connectivity, pins: selectedPins })
-  const signalConnectivity = signalTopology({ circuit, rails })
+  const routedTopology = signalTopology({ circuit, rails })
   const { driven, topology, edgeTimesSeconds } = indexBlockSignals({
     signals,
     pins: selectedPins,
-    signalConnectivity,
+    signalConnectivity: routedTopology.connectivity,
   })
   const reference = selectedPins.get([...driven.keys()].sort()[0])!.references
     .pulldown
@@ -625,9 +625,8 @@ function prepareBlock({
   }
   validateSignalGraph({
     circuit,
-    signalConnectivity,
+    topology: routedTopology,
     signals,
-    rails,
     allowUnroutedTraces: block.allow_unrouted_traces,
   })
   const edgeTimeSeconds = Math.min(...edgeTimesSeconds)
@@ -665,7 +664,10 @@ function prepareBlock({
     rails,
   })
   if (rejections.length)
-    throw Object.assign(new Error(rejections[0]), { rejections, copperScope })
+    throw Object.assign(
+      new Diagnostic("pipeline", "channel_fanout", rejections[0]),
+      { rejections, copperScope },
+    )
   validateRoutedDrivers({ block, signals, lanes })
   // Stable physical endpoint identities order the matrix; route coordinates set coupling.
   lanes.sort((a, b) => a.from.sourcePortId!.localeCompare(b.from.sourcePortId!))
