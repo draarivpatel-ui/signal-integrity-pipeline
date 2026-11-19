@@ -1,40 +1,106 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RoutedPipelineSolver } from "../../src/pipeline"
-import { RouteNetworkSolver } from "../../src/simulation"
+import React from "react"
+import { createNativeSolver } from "../../src/adapters"
+import {
+  RoutedPipelineSolver,
+  type RoutedStageSolver,
+} from "../../src/pipeline"
+import {
+  type RoutedDeck,
+  type RouteNetworkInput,
+  RouteNetworkSolver,
+} from "../../src/simulation"
+import { routedRequest } from "../../src/simulation/route-transient"
+import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
+import Single from "../fixtures/unit-single-ended"
+import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
 import { vendorAvailable } from "../support/vendor-models"
 
-test("network owns real ladder node samples, complete probe evidence and the executable deck", async (context) => {
-  const input = await routedProblem(context)
-  if (!input) return
-  const port = {
+/** The network stage produces one routed deck per admitted block. */
+type NetworkStage = RoutedStageSolver<RouteNetworkInput, RoutedDeck>
+
+let testNetwork: NetworkStage | undefined
+
+/** Assemble the network from the rendered fixture and the local vendor model. */
+async function routedNetwork(): Promise<NetworkStage> {
+  if (testNetwork) return testNetwork
+  const input = await routedProblem()
+  const solverContext = {
     progress: (): void => undefined,
     runSolver: async (): Promise<never> => {
       throw new Error("network test must not run ngspice")
     },
   }
-  const root = new RoutedPipelineSolver(input, port)
+  const root = new RoutedPipelineSolver({ input, context: solverContext })
   root.solveUntilStage("RouteTransientSolver")
-  const network = root.getSolver(RouteNetworkSolver.name)!
-  const output = root.stageOutput("RouteNetworkSolver").value[0]
-  assert.ok(network.iterations >= 3)
-  assert.ok(output.evidence.cells)
-  assert.ok(output.evidence.maximum_cell_delay_s)
-  assert.ok(output.deck.includes("RBIAS"))
-  // klu_refactor reuses the first transient pivots; the zero-diagonal skin multiport rows need KLU tol 0.1.
-  assert.match(output.deck, /^\.options klu .* pivrel=0\.1$/m)
-  assert.equal(
-    output.probes.length,
-    3,
-    "two receivers and the existing rail monitor",
-  )
-  assert.ok(
-    (output.evidence.warnings as string[]).some((warning) =>
-      warning.includes("candidate channel experiment"),
-    ),
-  )
-})
+  const network = root.getSolver<NetworkStage>(RouteNetworkSolver.name)!
+  testNetwork = network
+  return network
+}
+
+test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
+  "steps through ladder runs",
+  async () => {
+    const network = await routedNetwork()
+    assert.ok(network.iterations >= 3)
+  },
+)
+
+test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
+  "records ladder statistics",
+  async () => {
+    const network = await routedNetwork()
+    const output = network.getOutput().value[0]
+    assert.ok(output.evidence.cells)
+    assert.ok(output.evidence.maximum_cell_delay_s)
+  },
+)
+
+test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
+  "anchors floating copper",
+  async () => {
+    const network = await routedNetwork()
+    assert.ok(network.getOutput().value[0].deck.includes("RBIAS"))
+  },
+)
+
+test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
+  "sets the KLU pivot tolerance",
+  async () => {
+    const network = await routedNetwork()
+    const output = network.getOutput().value[0]
+    // klu_refactor reuses the first transient pivots; the zero-diagonal skin multiport rows need KLU tol 0.1.
+    assert.match(output.deck, /^\.options klu .* pivrel=0\.1$/m)
+  },
+)
+
+test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
+  "keeps all planned probes",
+  async () => {
+    const network = await routedNetwork()
+    const output = network.getOutput().value[0]
+    assert.equal(
+      output.probes.length,
+      3,
+      "two receivers and the existing rail monitor",
+    )
+  },
+)
+
+test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
+  "records the scope of candidate evidence",
+  async () => {
+    const network = await routedNetwork()
+    const output = network.getOutput().value[0]
+    assert.ok(
+      (output.evidence.warnings as string[]).some((warning) =>
+        warning.includes("candidate channel experiment"),
+      ),
+    )
+  },
+)
 
 /** One unit interval is 2 ns at this rate. */
 const QUIET_BIT_RATE_BPS = 500e6
@@ -68,13 +134,10 @@ async function assertConstantHighCapture({
   const solve = createNativeSolver({
     tools: { ngspice: process.env.NGSPICE_BIN },
   })
-  const root = new RoutedPipelineSolver(
-    { circuitJson, ibisSources },
-    {
-      progress: (): void => undefined,
-      runSolver: solve,
-    },
-  )
+  const root = new RoutedPipelineSolver({
+    input: { circuitJson, ibisSources },
+    context: { progress: (): void => undefined, runSolver: solve },
+  })
   root.solveUntilStage("RouteTransientSolver")
   const compiled = root.stageOutput("RouteNetworkSolver").value[0]
   const driver = circuitJson.find(

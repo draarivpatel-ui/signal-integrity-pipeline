@@ -59,19 +59,22 @@ export function prepareBlocks({
 }
 
 /** Gets the first block's bindings through the same IBIS decoding path as the public solver. */
-export function admittedBindings(
-  circuitJson: CircuitJson,
-  ibisSources: IbisSources,
-): Omit<RouteBindingsInput, "scope"> {
-  const root = new RoutedPipelineSolver(
-    { circuitJson, ibisSources },
-    {
+export function admittedBindings({
+  circuitJson,
+  ibisSources,
+}: {
+  circuitJson: CircuitJson
+  ibisSources: IbisSources
+}): Omit<RouteBindingsInput, "scope"> {
+  const root = new RoutedPipelineSolver({
+    input: { circuitJson, ibisSources },
+    context: {
       runSolver: async () => {
         throw new Error("admission needs no native solver")
       },
       progress: () => undefined,
     },
-  )
+  })
   root.solveUntilStage("RouteSectionsSolver")
   return root.stageOutput("RoutedAdmissionSolver").value[0].bindings
 }
