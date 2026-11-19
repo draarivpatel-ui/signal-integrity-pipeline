@@ -170,3 +170,26 @@ export async function rotatedPlatedHole(): Promise<TopologyBoard> {
     ),
   })
 }
+
+/** Two receiver pads land in the middle of one wire, in reverse declaration order. */
+export async function midSegmentPads(): Promise<TopologyBoard> {
+  return topologyBoard({
+    receiverRef: [".RX > .SIG", ".EARLY > .SIG"],
+    children: (
+      <>
+        <SignalPin name="TX" x={-4} />
+        <SignalPin name="RX" x={2} y={0.23} />
+        <SignalPin name="EARLY" x={-1} y={-0.23} />
+        <net name="SIGNAL" />
+        <trace
+          width={0.1}
+          from=".TX > .SIG"
+          to="net.SIGNAL"
+          pcbPath={[".TX > .SIG", { x: 8, y: 0 }]}
+        />
+        <trace from=".RX > .SIG" to="net.SIGNAL" />
+        <trace from=".EARLY > .SIG" to="net.SIGNAL" />
+      </>
+    ),
+  })
+}
