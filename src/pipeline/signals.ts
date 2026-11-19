@@ -21,7 +21,7 @@ import {
   inspectPins,
   pinCapabilities,
 } from "../buffers"
-import { safeId } from "../kernel"
+import { Diagnostic, safeId } from "../kernel"
 import { type RunControls, voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import {
@@ -129,7 +129,7 @@ export function routedLanes({
         trace.display_name ??
         trace.source_trace_id
       rejections.push(
-        `Signal "${name}": branched routed graphs are not implemented yet.`,
+        `Signal "${name}": branched routes are not supported yet.`,
       )
       continue
     }
@@ -665,7 +665,10 @@ function prepareBlock({
     rails,
   })
   if (rejections.length)
-    throw Object.assign(new Error(rejections[0]), { rejections, copperScope })
+    throw Object.assign(
+      new Diagnostic("pipeline", "channel_fanout", rejections[0]),
+      { rejections, copperScope },
+    )
   validateRoutedDrivers({ block, signals, lanes })
   // Stable physical endpoint identities order the matrix; route coordinates set coupling.
   lanes.sort((a, b) => a.from.sourcePortId!.localeCompare(b.from.sourcePortId!))
