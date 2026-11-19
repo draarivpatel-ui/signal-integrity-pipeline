@@ -36,8 +36,10 @@
     "test:package": "node --import tsx scripts/test-package.mjs",
     "check:modules": "bun scripts/check-modules.ts",
     "check:vocabulary": "bun scripts/check-vocabulary.ts",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome check . && eslint .",
+    "lint:fix": "biome check --write . && eslint . --fix"
   },
   "dependencies": {
     "@noble/hashes": "1.8.0",
@@ -47,6 +49,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.0.0",
     "@tscircuit/core": "0.0.2409",
     "@tscircuit/props": "0.0.735",
     "@types/bun": "1.4.4",

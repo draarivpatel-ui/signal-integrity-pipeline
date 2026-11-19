@@ -4,6 +4,7 @@
  * per-route section lines and coupling (RouteFieldsSolver), and the matrix checks they need.
  * Imports: kernel, board.
  */
-export type { Matrix } from './linalg'
-export { validateMatrix, type MatrixCheck } from './checks'
-export { sum, transpose, multiply, symmetrize } from './linalg'
+
+export { type MatrixCheck, validateMatrix } from "./checks"
+export type { Matrix } from "./linalg"
+export { multiply, sum, symmetrize, transpose } from "./linalg"

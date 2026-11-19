@@ -3,18 +3,23 @@ import type {
   IbisConversionMetadata,
   IbisModelDefinition,
   IbisRunConfig,
-} from '@tscircuit/ibis-to-spice'
-import type { SimulationIbisModel } from '../board'
+} from "@tscircuit/ibis-to-spice"
+import type { SimulationIbisModel } from "../board"
 
 export type IbisSources = Record<string, Uint8Array | string>
 /**
  * buffers' slice of the public `PipelineModeling`. Validated by admitBuffers: project-relative path ->
  * 64-hex SHA-256.
  */
-export interface BufferModeling { ibisModelAssetSha256?: Record<string, string> }
+export interface BufferModeling {
+  ibisModelAssetSha256?: Record<string, string>
+}
 
 /** What loading needs from a declared model (today's `Pick<SimulationIbisModel,'ibis_model_asset'> & {pipelineId}`). */
-export type ModelSourceRequest = Pick<SimulationIbisModel, 'ibis_model_asset'> & { pipelineId: string }
+export type ModelSourceRequest = Pick<
+  SimulationIbisModel,
+  "ibis_model_asset"
+> & { pipelineId: string }
 /** Converter input for one model in one experiment (was declarations.ts ModelRunDefinition). */
 export interface ModelRunDefinition {
   definition: IbisModelDefinition
@@ -24,8 +29,8 @@ export interface ModelRunDefinition {
 /** One `vendor-sources.json` entry. Key order is serialized. */
 export interface SourceEvidence {
   simulationIbisModelId: string
-  ibisModelAsset: SimulationIbisModel['ibis_model_asset']
-  resolvedFrom: 'provided'
+  ibisModelAsset: SimulationIbisModel["ibis_model_asset"]
+  resolvedFrom: "provided"
   ibsFile: string
   sourceSha256: string
   rawSourceFile: string

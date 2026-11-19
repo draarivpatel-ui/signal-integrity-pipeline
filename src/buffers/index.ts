@@ -10,16 +10,22 @@
  * The `<id>.lib` bytes are CompiledBuffer.source; simulation hands them to ngspice (solver records them).
  * Imports: kernel, board (types). (Was: model-source.ts, IBIS parts of general-pipeline.ts.)
  */
+
+export {
+  admitBuffers,
+  assertConverter,
+  compileBuffers,
+  ibisAssembly,
+} from "./buffers"
+export { loadModelSource, relativeFile } from "./source"
 export type {
-  IbisSources,
-  BufferModeling,
-  ModelSourceRequest,
-  ModelRunDefinition,
-  SourceEvidence,
-  LoadedModelSource,
   AdmittedBuffers,
-  CompiledBuffer,
   AssemblyEntry,
-} from './types'
-export { relativeFile, loadModelSource } from './source'
-export { assertConverter, admitBuffers, compileBuffers, ibisAssembly } from './buffers'
+  BufferModeling,
+  CompiledBuffer,
+  IbisSources,
+  LoadedModelSource,
+  ModelRunDefinition,
+  ModelSourceRequest,
+  SourceEvidence,
+} from "./types"

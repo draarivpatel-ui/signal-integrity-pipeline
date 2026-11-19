@@ -1,6 +1,13 @@
 // Declaration and plan shapes the routed bindings and deck consume.
-import type { PortSelector, SimulationExperiment, SimulationIbisModel, SourceNetId, SourcePortId } from '../board'
-import type { SourcePort } from 'circuit-json'
+
+import type { SourcePort } from "circuit-json"
+import type {
+  PortSelector,
+  SimulationExperiment,
+  SimulationIbisModel,
+  SourceNetId,
+  SourcePortId,
+} from "../board"
 
 /** simulation's slice of the flat public `Modeling`. (`channelReference` is shared with board's slice.) */
 export interface SimulationModeling {
@@ -50,7 +57,7 @@ export interface RunControls {
     initial_state: 0 | 1
     inverted?: boolean
     transmission_pattern: {
-      transmission_type: 'bits'
+      transmission_type: "bits"
       bits: string
       repeat: boolean
     }

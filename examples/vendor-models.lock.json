@@ -36,11 +36,7 @@
         "positive": "6",
         "negative": "7",
         "thresholdV": 0.2,
-        "delaysSeconds": [
-          0,
-          0,
-          0
-        ]
+        "delaysSeconds": [0, 0, 0]
       },
       "licenseStatus": "Manufacturer copyright; fetched locally, not redistributed",
       "selectedModelEvidence": "Both bus models have two rising and two falling resistive fixtures, R_fixture=27 Ohm, V_fixture=0/VDD. Both specify Non-Inverting polarity; explicit B stimulus owns complement."
