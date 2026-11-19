@@ -19,7 +19,6 @@ export {
 } from "./buffers"
 export type { InspectedPin } from "./inspect"
 export {
-  edgeSeconds,
   inspectPins,
   pinCapabilities,
   referenceVoltages,
