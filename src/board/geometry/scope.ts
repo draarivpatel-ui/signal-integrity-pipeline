@@ -119,9 +119,9 @@ function traceMembers({
 
 /** Copper layer names in top-to-bottom order. */
 function copperLayers(board: PcbBoard): LayerRef[] {
-  const [top, bottom, ...inner] = all_layers
-  if (board.num_layers === 1) return [top]
-  return [top, ...inner.slice(0, board.num_layers - 2), bottom]
+  const layers = all_layers.slice(0, board.num_layers)
+  layers.push(...layers.splice(1, 1))
+  return layers
 }
 
 /** Attach a planar bound to the span of copper layers occupied by the feature. */
@@ -331,6 +331,8 @@ function retainPassiveBridges({
  * within the caller's admission cap in XY. Signal nets are retained in full.
  * The selected set covers the entire channel, including both sides of series passives.
  * Return and supply traces stay local. Reference barrels remain eligible board-wide.
+ * Copper without a net association is ignored, including unlinked vias, traces
+ * without a source trace and pours without a source net.
  * The cap is not an electromagnetic error bound.
  */
 export function channelCopperScope({
