@@ -6,7 +6,7 @@ import {
   type IbisRunConfig,
 } from "@tscircuit/ibis-to-spice"
 import type { IbisPinReferences } from "@tscircuit/props"
-import { Fragment, type JSX } from "react"
+import type { JSX } from "react"
 import {
   edgeDurationSeconds,
   type IbisSources,
@@ -17,8 +17,8 @@ import {
   referenceVoltages,
 } from "../../src/buffers"
 import { defaultDurationSeconds } from "../../src/pipeline/timing"
+import { InspectionChip, PICOSECONDS_PER_SECOND } from "./ibis-inspection"
 import { loadVendorModel, type VendorModel } from "./vendor-models"
-import { PICOSECONDS_PER_SECOND } from "./ibis-inspection"
 
 /** Vendor pin assignments to bind to one chip instance in the TSX. */
 type Endpoint = {
@@ -36,17 +36,17 @@ type PinEvidence = Endpoint & {
   model: string
   voltage: number
 } & (
-  | {
-      capabilities: PinCapabilities & { drive: true }
-      edgePicoseconds: number
-      rampOnly?: boolean
-    }
-  | {
-      capabilities: PinCapabilities & { drive: false }
-      edgePicoseconds?: never
-      rampOnly?: never
-    }
-)
+    | {
+        capabilities: PinCapabilities & { drive: true }
+        edgePicoseconds: number
+        rampOnly?: boolean
+      }
+    | {
+        capabilities: PinCapabilities & { drive: false }
+        edgePicoseconds?: never
+        rampOnly?: never
+      }
+  )
 
 const DRIVER = ".TX > .SIGNAL"
 const RECEIVER = ".RX > .SIGNAL"
@@ -91,41 +91,22 @@ function VendorChip({
   let modelSelections: Record<string, string> | undefined
   if (modelChoice) modelSelections = { [pin]: modelChoice }
   return (
-    <>
-      <chip
-        name={name}
-        pcbX={pcbX}
-        pinLabels={pinLabels}
-        footprint={
-          <footprint>
-            {Object.keys(pinLabels).map((pad, index) => (
-              <Fragment key={pad}>
-                <smtpad
-                  portHints={[pad]}
-                  pcbX={0}
-                  pcbY={-index}
-                  width={0.3}
-                  height={0.3}
-                  shape="rect"
-                />
-              </Fragment>
-            ))}
-          </footprint>
-        }
-      />
-      <simulation.ibismodel
-        componentRef={`.${name}`}
-        ibisModelAsset={{
+    <InspectionChip
+      name={name}
+      pcbX={pcbX}
+      pinLabels={pinLabels}
+      ibisModel={{
+        ibisModelAsset: {
           project_relative_path: device.file,
           url: device.url,
           mimetype: "text/plain",
-        }}
-        ibisComponentName={device.component}
-        ibisPinNameToPortLabel={pinPorts}
-        ibisPinNameToReferencePortLabels={referenceLabels}
-        ibisPinNameToModelName={modelSelections}
-      />
-    </>
+        },
+        ibisComponentName: device.component,
+        ibisPinNameToPortLabel: pinPorts,
+        ibisPinNameToReferencePortLabels: referenceLabels,
+        ibisPinNameToModelName: modelSelections,
+      }}
+    />
   )
 }
 
