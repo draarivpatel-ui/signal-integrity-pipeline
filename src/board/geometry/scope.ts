@@ -8,7 +8,6 @@ import {
   all_layers,
   type LayerRef,
   type PcbBoard,
-  type PcbComponent,
   type PcbPlatedHole,
   type PcbSmtPad,
   type PcbTrace,
@@ -239,11 +238,9 @@ function viaBox({
 function padBox({
   pad,
   layers,
-  rotations,
 }: {
   pad: Pad
   layers: readonly LayerRef[]
-  rotations: ReadonlyMap<PcbComponent["pcb_component_id"], number>
 }): CopperBox {
   if (pad.type === "pcb_smtpad")
     return copperBox({
@@ -251,10 +248,7 @@ function padBox({
       names: [pad.layer],
       layers,
     })
-  let rotation: number | undefined
-  if (pad.pcb_component_id !== undefined)
-    rotation = rotations.get(pad.pcb_component_id)
-  const xy = getPlatedHolePolygon(pad, rotation).box
+  const xy = getPlatedHolePolygon(pad).box
   return copperBox({ xy, names: pad.layers, layers })
 }
 
@@ -373,11 +367,6 @@ export function channelCopperScope({
     traces.map((trace) => [trace.pcb_trace_id, trace.source_trace_id]),
   )
   const associations = { sources, traceSources }
-  const rotations = new Map(
-    circuit
-      .filter((record) => record.type === "pcb_component")
-      .map((record) => [record.pcb_component_id, record.rotation]),
-  )
   const boxes = new Map(traces.map((trace) => traceBoxes({ trace, layers })))
   const railIds = new Set([...rails, ...reference])
   const signalPours = pours.flatMap((pour): ScopedPour[] => {
@@ -401,7 +390,7 @@ export function channelCopperScope({
   for (const pad of pads) {
     const sourcePort = pad.pcb_port_id && ports.get(pad.pcb_port_id)
     if (!sourcePort || !selected.has(sourcePort)) continue
-    seeds.push(padBox({ pad, layers, rotations }))
+    seeds.push(padBox({ pad, layers }))
   }
   for (const via of vias) {
     if (!viaMembers({ via, associations }).some((id) => selected.has(id)))
@@ -450,7 +439,7 @@ export function channelCopperScope({
     if (
       !port ||
       railIds.has(port) ||
-      !isNearby({ candidate: padBox({ pad, layers, rotations }), proximity })
+      !isNearby({ candidate: padBox({ pad, layers }), proximity })
     )
       continue
     retain({ ids: [port], copper: retainedCopper })
