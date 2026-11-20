@@ -100,15 +100,8 @@
       "component": "am335x_zcz",
       "supplyV": 1.5,
       "selectedModels": {
-        "lowerByteWrite": [
-          "Model_257",
-          "Model_579",
-          "Model_771"
-        ],
-        "addrCmd": [
-          "Model_352",
-          "Model_343"
-        ]
+        "lowerByteWrite": ["Model_257", "Model_579", "Model_771"],
+        "addrCmd": ["Model_352", "Model_343"]
       },
       "licenseStatus": "Manufacturer copyright; supplied locally, not redistributed",
       "packageModel": "am335x_zcz",
@@ -123,12 +116,8 @@
       "component": "W631GG6MB-12",
       "supplyV": 1.5,
       "selectedModels": {
-        "lowerByteWrite": [
-          "ODT_off"
-        ],
-        "addrCmd": [
-          "CMD"
-        ]
+        "lowerByteWrite": ["ODT_off"],
+        "addrCmd": ["CMD"]
       },
       "licenseStatus": "Manufacturer copyright; supplied locally, not redistributed"
     }
