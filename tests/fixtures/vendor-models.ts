@@ -6,7 +6,7 @@ import lock from "../../examples/vendor-models.lock.json"
 
 const modelDir = process.env.IBIS_MODEL_DIR
 
-export const hasVendorModels = Boolean(modelDir)
+export const hasVendorModels = modelDir !== undefined && modelDir !== ""
 export const vendorModels = lock.models
 export type VendorModel = (typeof vendorModels)[keyof typeof vendorModels]
 

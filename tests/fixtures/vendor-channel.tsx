@@ -17,7 +17,7 @@ import {
   referenceVoltages,
 } from "../../src/buffers"
 import { defaultDurationSeconds } from "../../src/pipeline/timing"
-import { loadVendorModel, type VendorModel } from "../support/vendor-models"
+import { loadVendorModel, type VendorModel } from "./vendor-models"
 import { PICOSECONDS_PER_SECOND } from "./ibis-inspection"
 
 /** Vendor pin assignments to bind to one chip instance in the TSX. */
