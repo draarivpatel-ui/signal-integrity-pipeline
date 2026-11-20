@@ -1,4 +1,5 @@
 import type { RouteSlice, RouteWire, RouteXY, SectionGeometry } from "../board"
+import { hypotenuse } from "../kernel"
 import { sectionInverse } from "./cross-section-matrix"
 import type { CrossSection, CrossSectionResult } from "./cross-section-types"
 import { multiply, transpose } from "./linalg"
@@ -194,7 +195,7 @@ export function closestRoutePoints({
         Math.min(1, projection / (dx * dx + dy * dy)),
       )
       const near: RouteXY = [start[0] + fraction * dx, start[1] + fraction * dy]
-      const distance = Math.hypot(point[0] - near[0], point[1] - near[1])
+      const distance = hypotenuse(point[0] - near[0], point[1] - near[1])
       if (reverse) return { first: near, second: point, distance }
       return { first: point, second: near, distance }
     })

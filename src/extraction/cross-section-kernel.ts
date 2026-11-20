@@ -1,3 +1,9 @@
+import atan from "@stdlib/math-base-special-atan"
+import log from "@stdlib/math-base-special-ln"
+import log1p from "@stdlib/math-base-special-log1p"
+import sin from "@stdlib/math-base-special-sin"
+import sinh from "@stdlib/math-base-special-sinh"
+import { hypotenuse } from "../kernel"
 import type { SectionPanel } from "./cross-section-types"
 
 /** Four-point Gauss–Legendre nodes and weights on the interval [-1, 1]. */
@@ -31,17 +37,17 @@ const SELF_LOG_INTEGRAL = 1.5
 /** Antiderivative of log distance, including points on a source panel. */
 function primitive({ x, y }: { x: number; y: number }): number {
   let correction = 0
-  if (y) correction = Math.abs(y) * Math.atan(x / Math.abs(y))
-  return x * Math.log(Math.hypot(x, y) || 1) - x + correction
+  if (y) correction = Math.abs(y) * atan(x / Math.abs(y))
+  return x * log(hypotenuse(x, y) || 1) - x + correction
 }
 
 /** Second antiderivative of log distance, for exact Galerkin integration of parallel panels. */
 function secondPrimitive({ x, y }: { x: number; y: number }): number {
-  const r = Math.hypot(x, y)
+  const r = hypotenuse(x, y)
   let logarithm = 0
   let correction = 0
-  if (r) logarithm = 0.5 * (x * x - y * y) * Math.log(r)
-  if (y) correction = Math.abs(y) * x * Math.atan(x / Math.abs(y))
+  if (r) logarithm = 0.5 * (x * x - y * y) * log(r)
+  if (y) correction = Math.abs(y) * x * atan(x / Math.abs(y))
   return logarithm - 0.75 * x * x + correction
 }
 
@@ -50,8 +56,7 @@ function secondNormal({ x, y }: { x: number; y: number }): number {
   if (!y) return 0
   return (
     Math.sign(y) *
-    (x * Math.atan(x / Math.abs(y)) -
-      Math.abs(y) * (Math.log(Math.hypot(x, y)) + 0.5))
+    (x * atan(x / Math.abs(y)) - Math.abs(y) * (log(hypotenuse(x, y)) + 0.5))
   )
 }
 
@@ -105,7 +110,7 @@ function freeKernel({
   if (
     parallel &&
     comparable &&
-    Math.hypot(dx, dz) < MAX_PARALLEL_SEPARATION * longer
+    hypotenuse(dx, dz) < MAX_PARALLEL_SEPARATION * longer
   ) {
     const u = dx * b.tx + dz * tz
     const v = -dx * tz + dz * b.tx
@@ -141,13 +146,11 @@ function freeKernel({
       result += (potential * weight) / 2
       continue
     }
-    const along =
-      Math.log(Math.hypot(u + h, v) / Math.hypot(u - h, v)) / b.length
+    const along = log(hypotenuse(u + h, v) / hypotenuse(u - h, v)) / b.length
     let across = 0
     const separation = Math.abs(v)
     if (!(separation < COPLANAR_TOLERANCE)) {
-      const angle =
-        Math.atan((u + h) / separation) - Math.atan((u - h) / separation)
+      const angle = atan((u + h) / separation) - atan((u - h) / separation)
       across = (Math.sign(v) * angle) / b.length
     }
     const field = (tz * along + b.tx * across) / (2 * Math.PI)
@@ -164,7 +167,7 @@ function directKernel({
 }: PanelPair & { normal: boolean }): number {
   if (a !== b) return freeKernel({ a, b, normal })
   if (normal) return 0
-  return (-Math.log(a.length) + SELF_LOG_INTEGRAL) / (2 * Math.PI)
+  return (-log(a.length) + SELF_LOG_INTEGRAL) / (2 * Math.PI)
 }
 
 /** Grounded half-space or exact two-plane Green function; no meshed planes or vertical truncation.
@@ -192,7 +195,7 @@ export function sectionKernel({
   const horizontalGap = Math.abs(a.x - b.x) - (a.length + b.length) / 2
   if (horizontalGap > MAX_SEPARATION_IN_PLANE_HEIGHTS * height) return 0
   const near =
-    Math.hypot(a.x - b.x, a.z - b.z) <
+    hypotenuse(a.x - b.x, a.z - b.z) <
     NEAR_PANEL_LENGTHS * (a.length + b.length)
   let result = 0
   if (near) result = self
@@ -206,26 +209,22 @@ export function sectionKernel({
       const u = (Math.PI * dx) / height
       const v = (Math.PI * dz) / height
       const s = (Math.PI * (za + zb)) / height
-      const denominator = 2 * (Math.sinh(u / 2) ** 2 + Math.sin(v / 2) ** 2)
+      const denominator = 2 * (sinh(u / 2) ** 2 + sin(v / 2) ** 2)
       const difference =
-        2 *
-        Math.sin((Math.PI * za) / height) *
-        Math.sin((Math.PI * zb) / height)
+        2 * sin((Math.PI * za) / height) * sin((Math.PI * zb) / height)
       const numerator = denominator + difference
       const coincident = dx === 0 && dz === 0
       if (normal) {
-        let field =
-          (Math.sin(v) / denominator - Math.sin(s) / numerator) / (4 * height)
+        let field = (sin(v) / denominator - sin(s) / numerator) / (4 * height)
         if (near) field -= dz / (2 * Math.PI * (dx * dx + dz * dz))
-        if (coincident) field = -Math.sin(s) / (4 * height * numerator)
+        if (coincident) field = -sin(s) / (4 * height * numerator)
         result += (wa * wb * field) / 4
         continue
       }
-      let potential = Math.log1p(difference / denominator) / (4 * Math.PI)
-      if (near) potential -= -Math.log(Math.hypot(dx, dz)) / (2 * Math.PI)
+      let potential = log1p(difference / denominator) / (4 * Math.PI)
+      if (near) potential -= -log(hypotenuse(dx, dz)) / (2 * Math.PI)
       if (coincident)
-        potential =
-          Math.log(numerator * 2 * (height / Math.PI) ** 2) / (4 * Math.PI)
+        potential = log(numerator * 2 * (height / Math.PI) ** 2) / (4 * Math.PI)
       result += (wa * wb * potential) / 4
     }
   }
