@@ -1,3 +1,4 @@
+import { hypotenuse } from "../kernel"
 import type { RouteWire, RouteXY } from "./route-sections"
 
 /** Treat near-vertical segments as vertical when choosing the canonical direction. */
@@ -28,7 +29,7 @@ export function chordDistance({
       ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / (dx * dx + dy * dy),
     ),
   )
-  return Math.hypot(point[0] - a[0] - t * dx, point[1] - a[1] - t * dy)
+  return hypotenuse(point[0] - a[0] - t * dx, point[1] - a[1] - t * dy)
 }
 
 /** The wire's canonical direction and signed longitudinal and transverse coordinates. */
@@ -96,7 +97,7 @@ function simplifyRun({
     simplifyRun({ start: farthest, end, run })
     return
   }
-  const length = Math.hypot(b[0] - a[0], b[1] - a[1])
+  const length = hypotenuse(b[0] - a[0], b[1] - a[1])
   if (length < MIN_CHORD_LENGTH_MM) return
   output.push({
     ...seed,
@@ -136,7 +137,7 @@ export function simplifyRouteWires({
         wire.width !== seed.width
       )
         break
-      const gap = Math.hypot(
+      const gap = hypotenuse(
         wire.a[0] - previous.b[0],
         wire.a[1] - previous.b[1],
       )
