@@ -1,7 +1,14 @@
+import assert from "node:assert/strict"
 import type { TraceProps } from "@tscircuit/props"
 import type { LayerRef } from "circuit-json"
 import type React from "react"
-import type { CircuitJson } from "../../src/board"
+import {
+  type CircuitJson,
+  type CopperScope,
+  channelCopperScope,
+  getSourcePortConnectivityMapFromCircuitJson,
+  sourceNetMembers,
+} from "../../src/board"
 import { renderCoreSignals } from "../support/core-render"
 
 /** Size in millimetres of each square test pad. */
@@ -218,4 +225,84 @@ export async function viaApproach(explicitWire: boolean): Promise<CircuitJson> {
       />
     </board>,
   )
+}
+
+/** Scope and retained trace names for the neighboring-copper board. */
+interface ScopeNeighbors {
+  scope: CopperScope
+  retained: string[]
+}
+
+type CoreRenderError = Error & { circuitJson: CircuitJson }
+
+/** Render and select the channel on the neighboring-copper board. */
+export async function scopeNeighbors(): Promise<ScopeNeighbors> {
+  const circuit = await renderCoreSignals(<ScopeNeighborsBoard />).catch(
+    (error: CoreRenderError) => {
+      const errors = error.circuitJson.filter((record) =>
+        record.type.endsWith("_error"),
+      )
+      assert.deepEqual(
+        errors.map((record) => record.type),
+        ["pcb_port_not_connected_error"],
+      )
+      return error.circuitJson
+    },
+  )
+  const sourceTraces = circuit.filter(
+    (record) => record.type === "source_trace",
+  )
+  const selected = sourceTraces.find(
+    (trace) => trace.name === "SELECTED_route",
+  )!
+  const ground = circuit
+    .filter((record) => record.type === "source_net")
+    .find((net) => net.name === "GND")!
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
+  const scope = channelCopperScope({
+    circuit,
+    connectivity,
+    selected: sourceNetMembers({
+      connectivity,
+      seed: selected.connected_source_port_ids[0],
+    }),
+    reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
+  })
+  const traces = circuit.filter((record) => record.type === "pcb_trace")
+  const retained = traces
+    .filter((trace) => scope.pcbTraceIds.includes(trace.pcb_trace_id))
+    .map((trace) => {
+      const source = sourceTraces.find(
+        (source) => source.source_trace_id === trace.source_trace_id,
+      )!
+      return source.name!.replace("_route", "")
+    })
+  return { scope, retained }
+}
+
+/** Select the rendered net named SELECTED without a reference net. */
+export function scopeFor({
+  circuit,
+  distanceMm,
+}: {
+  circuit: CircuitJson
+  distanceMm?: number
+}): CopperScope {
+  const source = circuit.find(
+    (record) =>
+      record.type === "source_trace" && record.name === "SELECTED_route",
+  )
+  assert(source?.type === "source_trace")
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
+  const selected = sourceNetMembers({
+    connectivity,
+    seed: source.connected_source_port_ids[0],
+  })
+  return channelCopperScope({
+    circuit,
+    connectivity,
+    selected,
+    reference: new Set(),
+    distanceMm,
+  })
 }
