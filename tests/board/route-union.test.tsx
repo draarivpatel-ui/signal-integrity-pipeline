@@ -99,6 +99,8 @@ function touchingRailScope(circuit: CircuitJson): CopperScope {
     connectivity,
     selected: sourceNetMembers({ connectivity, seed: rail.source_net_id }),
     reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
+    rails: new Set(),
+    distanceMm: 1,
   })
 }
 
