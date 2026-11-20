@@ -1,5 +1,5 @@
 import { Circuit, simulation } from "@tscircuit/core"
-import React, { Fragment } from "react"
+import { Fragment } from "react"
 import type { SimulationPcbDriverReceiverChannel } from "../../src/board"
 
 const DEVICE_ASSET = {
