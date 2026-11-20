@@ -1,3 +1,4 @@
+import { hypotenuse } from "../kernel"
 import {
   type ConnectivityMap,
   getSourcePortConnectivityMapFromCircuitJson,
@@ -140,7 +141,7 @@ function unionCluster({
   )
   const lateralJoins = joins.filter((join) => {
     return (
-      Math.hypot(join.from[0] - join.to[0], join.from[1] - join.to[1]) >
+      hypotenuse(join.from[0] - join.to[0], join.from[1] - join.to[1]) >
       UNION_TOLERANCE_MM
     )
   })
