@@ -66,7 +66,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 ### Expressions
 - **No `!!`.** Write the comparison: `signal.driver_disabled === true`.
 - **No regular expressions in source** (`src/`, `scripts/`, `site/`, `pages/`, `examples/`). Use `startsWith`, `includes`, `indexOf`, `slice` and `split(' ')`, a `for` loop over characters, or a small named helper like `isDigit(char)`. Tests may use a regex only inside an assertion (`assert.match(message, /…/)`).
-- **Name magic numbers** as constants with a one-line reason (`const STARTUP_SETTLE_BITS = 16`).
+- **Name magic numbers** as constants with a one-line reason (`const PANELS_PER_EDGE = 8` for mesh resolution).
 
 ### Reuse and size
 - **Prefer existing libraries.** Net membership comes from `circuit-json-to-connectivity-map`, so don't write another connectivity walk. Build its map with `new ConnectivityMap(findConnectedNetworks(groups))`, not `addConnections`: in 0.0.35, `addConnections` can overwrite an existing net id.
