@@ -13,7 +13,7 @@ test.skipIf(!hasVendorModels)(
       groundPin: "5",
       model: "a_b_p",
       // Model_type 1228 and [Pullup Reference] / [POWER Clamp Reference] 1254–1256.
-      capabilities: { drive: true, receive: true, disable: true },
+      capabilities: { drive: true, receive: true, disable: true } as const,
       voltage: 3.3,
       // [Rising Waveform] 1826, crossings at rows 1851–1852 and 1911–1912.
       edgePicoseconds: 592_294,
