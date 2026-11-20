@@ -30,9 +30,9 @@ import {
   transientDurationSeconds,
   voltageNames,
 } from "../fixtures/routed-deck"
+import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
-import { vendorAvailable } from "../support/vendor-models"
 
 const pinnedDeck =
   "TSX two-trace deck pins coupled skin loss and transient vectors"

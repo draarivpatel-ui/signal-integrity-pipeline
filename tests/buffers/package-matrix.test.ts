@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { selectPackageModel } from "../../src/buffers/package-matrix"
 import type { PackageModel } from "../../src/buffers/package-model"
-import { vendorAvailable, vendorText } from "../support/vendor-models"
+import { vendorAvailable, vendorText } from "../fixtures/vendor-models"
 
 const model: PackageModel = {
   name: "fixture",

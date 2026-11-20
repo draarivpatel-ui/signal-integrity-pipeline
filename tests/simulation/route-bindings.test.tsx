@@ -10,8 +10,8 @@ import {
   RouteBindingsSolver,
   type RoutedBindings,
 } from "../../src/simulation"
+import { vendorAvailable } from "../fixtures/vendor-models"
 import { routedProblem } from "../support/routed-fixture"
-import { vendorAvailable } from "../support/vendor-models"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
