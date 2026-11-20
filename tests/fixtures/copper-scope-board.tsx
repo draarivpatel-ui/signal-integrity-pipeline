@@ -1,12 +1,13 @@
 import assert from "node:assert/strict"
 import type { TraceProps } from "@tscircuit/props"
-import type { LayerRef } from "circuit-json"
+import type { LayerRef, PcbTrace } from "circuit-json"
 import type React from "react"
 import {
   type CircuitJson,
   type CopperScope,
   channelCopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
+  type SourceNetId,
   sourceNetMembers,
 } from "../../src/board"
 import { renderCoreSignals } from "../support/core-render"
@@ -20,6 +21,8 @@ const ACCESS_BARREL_X_MM = 7
 interface WireProps {
   name: string
   y: number
+  x?: number
+  width?: number
   layer?: LayerRef
   startPad?: React.JSX.Element
   extent?: number
@@ -29,6 +32,8 @@ interface WireProps {
 export function Wire({
   name,
   y,
+  x = 0,
+  width = 0.1,
   layer = "top",
   extent = 8,
   startPad,
@@ -59,6 +64,7 @@ export function Wire({
     <>
       <chip
         name={name}
+        pcbX={x}
         pcbY={y}
         layer={padLayer}
         pinLabels={{ pin1: "A", pin2: "B" }}
@@ -89,7 +95,7 @@ export function Wire({
         name={`${name}_route`}
         from={from}
         to={to}
-        width={0.1}
+        width={width}
         pcbPath={pcbPath}
       />
     </>
@@ -150,10 +156,20 @@ export function ScopeNeighborsBoard(): React.JSX.Element {
 }
 
 /** Render the same via approach with or without a redundant top-layer route point. */
-export async function viaApproach(explicitWire: boolean): Promise<CircuitJson> {
+export async function viaApproach({
+  explicitWire,
+  selectedLayer = "bottom",
+  exitToLeft = false,
+}: {
+  explicitWire: boolean
+  selectedLayer?: LayerRef
+  exitToLeft?: boolean
+}): Promise<CircuitJson> {
   const from = ".FAN > .A"
   const to = ".FAN > .B"
   const entry = { x: 7, y: 0 }
+  let startX = -8
+  if (exitToLeft) startX = 8
   const via = {
     ...entry,
     via: true,
@@ -171,7 +187,7 @@ export async function viaApproach(explicitWire: boolean): Promise<CircuitJson> {
       routeRemaining={false}
       schematicDisabled
     >
-      <Wire name="SELECTED" y={0} extent={3} layer="bottom" />
+      <Wire name="SELECTED" y={0} extent={3} layer={selectedLayer} />
       <chip
         name="FAN"
         pcbY={0.6}
@@ -180,7 +196,7 @@ export async function viaApproach(explicitWire: boolean): Promise<CircuitJson> {
           <footprint>
             <smtpad
               portHints={["pin1"]}
-              pcbX={-8}
+              pcbX={startX}
               pcbY={0}
               width={0.3}
               height={0.3}
@@ -188,7 +204,7 @@ export async function viaApproach(explicitWire: boolean): Promise<CircuitJson> {
             />
             <smtpad
               portHints={["pin2"]}
-              pcbX={8}
+              pcbX={-startX}
               pcbY={0}
               width={0.3}
               height={0.3}
@@ -216,22 +232,24 @@ interface ScopeNeighbors {
   retained: string[]
 }
 
-type CoreRenderError = Error & { circuitJson: CircuitJson }
+/** Render copper with an intentionally unrouted logical connection. */
+export async function renderScopeBoard(
+  board: React.ReactElement,
+): Promise<CircuitJson> {
+  return renderCoreSignals(board).catch((error: unknown) => {
+    assert(error instanceof Error && "circuitJson" in error)
+    const circuit = error.circuitJson as CircuitJson
+    const errors = circuit.filter((record) => record.type.endsWith("_error"))
+    assert(errors.length > 0)
+    for (const record of errors)
+      assert.equal(record.type, "pcb_port_not_connected_error")
+    return circuit
+  })
+}
 
 /** Render and select the channel on the neighboring-copper board. */
 export async function scopeNeighbors(): Promise<ScopeNeighbors> {
-  const circuit = await renderCoreSignals(<ScopeNeighborsBoard />).catch(
-    (error: CoreRenderError) => {
-      const errors = error.circuitJson.filter((record) =>
-        record.type.endsWith("_error"),
-      )
-      assert.deepEqual(
-        errors.map((record) => record.type),
-        ["pcb_port_not_connected_error"],
-      )
-      return error.circuitJson
-    },
-  )
+  const circuit = await renderScopeBoard(<ScopeNeighborsBoard />)
   const sourceTraces = circuit.filter(
     (record) => record.type === "source_trace",
   )
@@ -265,30 +283,91 @@ export async function scopeNeighbors(): Promise<ScopeNeighbors> {
   return { circuit, scope, retained }
 }
 
-/** Select the rendered net named SELECTED without a reference net. */
+/** Find a named source net on the rendered board. */
+export function scopeNet({
+  circuit,
+  name,
+}: {
+  circuit: CircuitJson
+  name: string
+}): SourceNetId {
+  const net = circuit.find(
+    (record) => record.type === "source_net" && record.name === name,
+  )
+  assert(net?.type === "source_net", name)
+  return net.source_net_id
+}
+
+/** Find a PCB trace whose named source trace was supplied by Wire. */
+export function scopeTrace({
+  circuit,
+  name,
+}: {
+  circuit: CircuitJson
+  name: string
+}): PcbTrace {
+  const source = circuit.find(
+    (record) =>
+      record.type === "source_trace" && record.name === `${name}_route`,
+  )
+  assert(source?.type === "source_trace", name)
+  const trace = circuit.find(
+    (record) =>
+      record.type === "pcb_trace" &&
+      record.source_trace_id === source.source_trace_id,
+  )
+  assert(trace?.type === "pcb_trace", name)
+  return trace
+}
+
+/** Scope the default SELECTED wire or a named logical net on the rendered board. */
 export function scopeFor({
   circuit,
   distanceMm = 1,
+  selectedNet,
+  referenceNet,
+  railNets = [],
 }: {
   circuit: CircuitJson
   distanceMm?: number
+  selectedNet?: string
+  referenceNet?: string
+  railNets?: string[]
 }): CopperScope {
-  const source = circuit.find(
-    (record) =>
-      record.type === "source_trace" && record.name === "SELECTED_route",
-  )
-  assert(source?.type === "source_trace")
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const selected = sourceNetMembers({
-    connectivity,
-    seed: source.connected_source_port_ids[0],
-  })
+  let seed: SourceNetId
+  if (selectedNet !== undefined) {
+    seed = scopeNet({ circuit, name: selectedNet })
+  } else {
+    const source = circuit.find(
+      (record) =>
+        record.type === "source_trace" && record.name === "SELECTED_route",
+    )
+    assert(source?.type === "source_trace")
+    seed = source.connected_source_port_ids[0]
+  }
+  const selected = sourceNetMembers({ connectivity, seed })
+  let reference = new Set<SourceNetId>()
+  if (referenceNet !== undefined) {
+    reference = sourceNetMembers({
+      connectivity,
+      seed: scopeNet({ circuit, name: referenceNet }),
+    })
+  }
+  const rails = new Set<SourceNetId>()
+  for (const name of railNets) {
+    const members = sourceNetMembers({
+      connectivity,
+      seed: scopeNet({ circuit, name }),
+    })
+    for (const id of members) rails.add(id)
+  }
   return channelCopperScope({
     circuit,
     connectivity,
     selected,
-    reference: new Set(),
-    rails: new Set(),
+    reference,
+    rails,
     distanceMm,
   })
 }

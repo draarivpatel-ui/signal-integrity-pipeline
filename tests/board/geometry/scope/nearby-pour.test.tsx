@@ -1,11 +1,18 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { pcb_copper_pour } from "circuit-json"
 import { scopeFor, Wire } from "../../../fixtures/copper-scope-board"
 import { renderCoreSignals } from "../../../support/core-render"
 
 test("a nearby non-reference pour retains its distant routed net", async () => {
   const circuit = await renderCoreSignals(
-    <board width={18} height={18} routeRemaining={false} schematicDisabled>
+    <board
+      width={18}
+      height={18}
+      layers={4}
+      routeRemaining={false}
+      schematicDisabled
+    >
       <Wire name="SELECTED" y={0} extent={3} />
       <Wire name="DISTANT" y={5} extent={3} />
       <trace from=".DISTANT > .A" to="net.NEIGHBOR" />
@@ -48,4 +55,13 @@ test("a nearby non-reference pour retains its distant routed net", async () => {
   assert(route?.type === "pcb_trace")
   const result = scopeFor({ circuit })
   assert(result.pcbTraceIds.includes(route.pcb_trace_id))
+
+  // Move the rendered pours two stack indices below the channel.
+  const deeper = circuit.map((record) => {
+    if (record.type !== "pcb_copper_pour") return record
+    return pcb_copper_pour.parse({ ...record, layer: "inner2" })
+  })
+  assert(
+    !scopeFor({ circuit: deeper }).pcbTraceIds.includes(route.pcb_trace_id),
+  )
 })
