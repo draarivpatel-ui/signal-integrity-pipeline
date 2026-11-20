@@ -30,6 +30,7 @@
   ],
   "scripts": {
     "test": "bun test",
+    "fetch:vendor-models": "bun scripts/fetch-vendor-models.ts",
     "typecheck": "tsc --noEmit && tsc -p tests/tsconfig.json && tsc -p examples/tsconfig.json --noEmit && tsc -p site/tsconfig.json",
     "build": "node scripts/clean-dist.mjs && tsc && node scripts/fix-dist-imports.mjs && node scripts/bundle.mjs",
     "prepack": "npm run build",
