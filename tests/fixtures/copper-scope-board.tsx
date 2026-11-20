@@ -25,7 +25,7 @@ interface WireProps {
   extent?: number
 }
 
-/** World-mm paths with inner-layer access barrels beyond the selected endpoints. */
+/** Route at board y, with chip-relative access barrels beyond the selected endpoints. */
 export function Wire({
   name,
   y,
@@ -35,8 +35,8 @@ export function Wire({
 }: WireProps): React.JSX.Element {
   const from = `.${name} > .A`
   const to = `.${name} > .B`
-  const left = { x: -ACCESS_BARREL_X_MM, y }
-  const right = { x: ACCESS_BARREL_X_MM, y }
+  const left = { x: -ACCESS_BARREL_X_MM, y: 0 }
+  const right = { x: ACCESS_BARREL_X_MM, y: 0 }
   const pcbPath: NonNullable<TraceProps["pcbPath"]> = [from]
   if (layer !== "top" && layer !== "bottom") {
     pcbPath.push(left, {
@@ -153,7 +153,7 @@ export function ScopeNeighborsBoard(): React.JSX.Element {
 export async function viaApproach(explicitWire: boolean): Promise<CircuitJson> {
   const from = ".FAN > .A"
   const to = ".FAN > .B"
-  const entry = { x: 7, y: 0.6 }
+  const entry = { x: 7, y: 0 }
   const via = {
     ...entry,
     via: true,
