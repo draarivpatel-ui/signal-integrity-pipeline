@@ -153,7 +153,7 @@ export class RouteSectionsSolver extends BaseSolver {
    */
   override visualize(): GraphicsObject {
     const circuit = this.input.circuitJson
-    const view = routeView({ circuit, scope: this.scope })
+    const view = routeView({ circuit, scope: this.input.scope })
     const drawing = routeCanvas(view)
     const wires = (this.geometry?.wires ?? []).filter((wire) =>
       view.traces.has(wire.trace),
