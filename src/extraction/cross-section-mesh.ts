@@ -1,3 +1,4 @@
+import { hypotenuse } from "../kernel"
 import {
   type CrossSection,
   copperConductivity,
@@ -161,7 +162,7 @@ function addSectionEdge({
   const { count, result } = mesh
   const dx = x2 - x1
   const dz = z2 - z1
-  const length = Math.hypot(dx, dz)
+  const length = hypotenuse(dx, dz)
   let steps = Math.max(
     count,
     Math.ceil((count * length) / (FACE_LENGTH_IN_PLANE_DISTANCES * reach)),
