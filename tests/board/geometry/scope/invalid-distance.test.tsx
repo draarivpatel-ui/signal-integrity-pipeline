@@ -11,8 +11,9 @@ test("scope rejects invalid lateral distances", async () => {
   )
   for (const distanceMm of [NaN, Infinity, -Infinity, -1]) {
     assert.throws(() => scopeFor({ circuit, distanceMm }), {
-      name: "RangeError",
-      message: "Copper scope distance must be finite and non-negative",
+      code: "simulation_scope",
+      message:
+        "simulation_scope: Copper scope distance must be finite and non-negative",
     })
   }
 })

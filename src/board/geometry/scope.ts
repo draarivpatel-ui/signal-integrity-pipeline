@@ -11,12 +11,12 @@ import type {
 } from "circuit-json"
 import {
   type ConnectivityMap,
-  getSourcePortConnectivityMapFromCircuitJson,
   type PassiveBridge,
   passiveBridges,
   type SourceConnectionGroup,
   sourceNetMembers,
 } from "../connectivity"
+import { fail } from "../diagnostics"
 import type {
   CopperPadId,
   PcbCopperPourId,
@@ -35,10 +35,7 @@ const DEGREES_PER_HALF_TURN = 180
 /** The bulge is the tangent of one quarter of a signed circular arc's sweep. */
 const ARC_SWEEP_QUARTERS = 4
 
-/** Lateral search radius in millimetres when the caller supplies no admission cap. */
-const DEFAULT_SCOPE_DISTANCE_MM = 1
-
-/** A board without a layer count has only the top and bottom layers. */
+/** Number of outer copper layers, top and bottom. */
 const OUTER_LAYER_COUNT = 2
 
 /** Copper can be retained one layer above or below the selected copper. */
@@ -110,11 +107,11 @@ interface RetainedCopper {
 
 interface CopperScopeOptions {
   circuit: CircuitJson
-  connectivity?: ConnectivityMap
-  selected: Set<SourcePortId | SourceNetId>
-  reference: Set<SourcePortId | SourceNetId>
-  rails?: Set<SourcePortId | SourceNetId>
-  distanceMm?: number
+  connectivity: ConnectivityMap
+  selected: ReadonlySet<SourcePortId | SourceNetId>
+  reference: ReadonlySet<SourcePortId | SourceNetId>
+  rails: ReadonlySet<SourcePortId | SourceNetId>
+  distanceMm: number
 }
 
 /** Ports and nets associated with routing stay independent of spatial proximity. */
@@ -399,27 +396,25 @@ function scopeApproximation({
  * Board-world XY in mm (+X right, +Y top); layers ordered top to bottom.
  * Conservative segment bounding boxes retain copper on the same/adjacent layers
  * within the caller's admission cap in XY. Entire electrically connected nets are retained.
- * Routed admission uses 32 mm unless the caller narrows it, before its solved pair screen.
  * The cap is not an electromagnetic error bound.
  */
 export function channelCopperScope({
   circuit,
-  connectivity: suppliedConnectivity,
+  connectivity,
   selected,
   reference,
-  rails = new Set(),
-  distanceMm = DEFAULT_SCOPE_DISTANCE_MM,
+  rails,
+  distanceMm,
 }: CopperScopeOptions): CopperScope {
   if (!Number.isFinite(distanceMm) || distanceMm < 0) {
-    throw new RangeError(
+    fail(
+      "simulation_scope",
       "Copper scope distance must be finite and non-negative",
     )
   }
-  const connectivity =
-    suppliedConnectivity ?? getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const count =
-    circuit.find((record) => record.type === "pcb_board")?.num_layers ??
-    OUTER_LAYER_COUNT
+  const count = circuit.find(
+    (record) => record.type === "pcb_board",
+  )!.num_layers
   const innerLayers = Array.from(
     { length: count - OUTER_LAYER_COUNT },
     (_, index) => `inner${index + 1}`,
@@ -472,8 +467,8 @@ export function channelCopperScope({
     (trace) => boxes.get(trace.pcb_trace_id)!,
   )
   for (const pad of pads) {
-    if (!pad.pcb_port_id || !selected.has(ports.get(pad.pcb_port_id) ?? ""))
-      continue
+    const sourcePort = pad.pcb_port_id && ports.get(pad.pcb_port_id)
+    if (!sourcePort || !selected.has(sourcePort)) continue
     seeds.push(padBox({ pad, layers }))
   }
   for (const via of vias) {

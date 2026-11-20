@@ -267,6 +267,8 @@ export async function scopeNeighbors(): Promise<ScopeNeighbors> {
       seed: selected.connected_source_port_ids[0],
     }),
     reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
+    rails: new Set(),
+    distanceMm: 1,
   })
   const traces = circuit.filter((record) => record.type === "pcb_trace")
   const retained = traces
@@ -283,7 +285,7 @@ export async function scopeNeighbors(): Promise<ScopeNeighbors> {
 /** Select the rendered net named SELECTED without a reference net. */
 export function scopeFor({
   circuit,
-  distanceMm,
+  distanceMm = 1,
 }: {
   circuit: CircuitJson
   distanceMm?: number
@@ -303,6 +305,7 @@ export function scopeFor({
     connectivity,
     selected,
     reference: new Set(),
+    rails: new Set(),
     distanceMm,
   })
 }
