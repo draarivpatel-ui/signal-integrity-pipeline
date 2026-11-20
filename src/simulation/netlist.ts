@@ -1,3 +1,4 @@
+/* eslint-disable local/max-file-lines -- SPICE source generation and its shared deck namespacing stay together. */
 // Electrical sources and SPICE namespacing for the routed deck.
 import type { SimulationVoltageSource } from "circuit-json"
 import type { CircuitJson, SourceNetId, SourcePortId } from "../board"

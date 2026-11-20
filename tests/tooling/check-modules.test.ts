@@ -1,3 +1,4 @@
+/* eslint-disable local/max-file-lines -- Module rule cases share one temporary repository harness. */
 import { afterEach, test } from "bun:test"
 import assert from "node:assert/strict"
 import {
