@@ -1,3 +1,4 @@
+import { hypotenuse } from "../kernel"
 import { sectionField } from "./cross-section-field"
 import { sectionInverse, sectionPassive } from "./cross-section-matrix"
 import { sectionRegions, validateSection } from "./cross-section-mesh"
@@ -156,7 +157,7 @@ function recessionStep({
         a.zMm - b.zMm - b.thicknessMm,
         b.zMm - a.zMm - a.thicknessMm,
       )
-      return Math.hypot(horizontal, vertical)
+      return hypotenuse(horizontal, vertical)
     }),
   )
   const conductorSpans = region.conductors.flatMap((c) => {
