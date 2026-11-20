@@ -3,7 +3,7 @@ import { verifyVendorChannel } from "../fixtures/vendor-channel"
 import { hasVendorModels, vendorModels } from "../fixtures/vendor-models"
 
 test.skipIf(!hasVendorModels)(
-  "AM335x DDR_D0 drives W631GG6MB DQL0 with the selected 1.5 V models",
+  "DDR3 channel resolves the selected 1.5 V AM335x and W631GG6MB models",
   async () => {
     await verifyVendorChannel({
       driver: {
