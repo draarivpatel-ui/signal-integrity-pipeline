@@ -1,8 +1,6 @@
 import type {
   PcbCopperPour,
-  PcbPlatedHole,
   PcbPort,
-  PcbSmtPad,
   PcbTrace,
   PcbVia,
   SimulationPcbTransientChannelSimulation,
@@ -31,11 +29,6 @@ export type PcbViaId = PcbVia["pcb_via_id"]
 
 /** The identifier of a PCB copper pour in Circuit JSON. */
 export type PcbCopperPourId = PcbCopperPour["pcb_copper_pour_id"]
-
-/** The identifier of a surface-mount pad or plated hole in Circuit JSON. */
-export type CopperPadId =
-  | PcbSmtPad["pcb_smtpad_id"]
-  | PcbPlatedHole["pcb_plated_hole_id"]
 
 /** The identifier of a PCB transient channel simulation block in Circuit JSON. */
 export type SimulationBlockId =
