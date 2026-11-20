@@ -14,9 +14,6 @@ async function sectionInput(): Promise<RouteSectionsInput> {
     circuitJson,
     scope,
     requiredSourcePortIds: [],
-    referenceSourcePortId: circuitJson.find(
-      (record) => record.type === "source_net",
-    )!.source_net_id,
     artifactPrefix: "test",
   }
 }

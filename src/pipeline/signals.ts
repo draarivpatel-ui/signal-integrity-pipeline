@@ -516,7 +516,7 @@ function loadNodes({
   pins: PreparedBlock["pins"]
 }): LoadNodeIds {
   const scoped = new Set(copperScope.pcbTraceIds)
-  const railTraces = new Set(copperScope.nonReferenceRailTraceIds)
+  const railTraces = new Set(copperScope.railTraceIds)
   const routed = new Set(
     circuit
       .filter((record) => record.type === "pcb_trace")
