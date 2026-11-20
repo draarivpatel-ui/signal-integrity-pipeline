@@ -14,9 +14,9 @@ import {
 import { routedRequest } from "../../src/simulation/route-transient"
 import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
 import Single from "../fixtures/unit-single-ended"
+import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
-import { vendorAvailable } from "../support/vendor-models"
 
 /** The network stage produces one routed deck per admitted block. */
 type NetworkStage = RoutedStageSolver<RouteNetworkInput, RoutedDeck>

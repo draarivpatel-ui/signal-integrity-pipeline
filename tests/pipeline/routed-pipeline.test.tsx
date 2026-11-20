@@ -28,9 +28,9 @@ import {
   voltageNames,
 } from "../fixtures/routed-deck"
 import { routedVisualFixture } from "../fixtures/routed-visual"
+import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
-import { vendorAvailable } from "../support/vendor-models"
 
 const vendorModelSkip =
   !process.env.IBIS_MODEL_DIR &&

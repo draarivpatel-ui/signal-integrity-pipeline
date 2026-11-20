@@ -11,10 +11,9 @@ import { circuitNodes } from "../../src/simulation"
 import { AdmissionChannel } from "../fixtures/admission-channel"
 import { routedVisualIbis } from "../fixtures/routed-visual-fixture"
 import { renderSignals } from "../fixtures/signal-render"
+import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
-
-import { vendorAvailable } from "../support/vendor-models"
 
 const skipVendorModel = !vendorAvailable("sn74lvc1g04.ibs")
 
