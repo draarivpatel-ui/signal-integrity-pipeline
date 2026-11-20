@@ -51,6 +51,6 @@ test("a rotated plated pad reaches a bottom-layer channel on a four-layer board"
     (record) =>
       record.type === "pcb_port" && record.pcb_port_id === pad.pcb_port_id,
   )
-  assert(port)
+  assert(port?.type === "pcb_port")
   assert(scopeFor({ circuit }).retainedSourceIds.includes(port.source_port_id))
 })
