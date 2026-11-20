@@ -144,7 +144,7 @@ function copperBox({
 /** A tapered wire can reach either of its specified edge widths. */
 function wireRadius(point: RoutedPoint): number {
   if (point.route_type === "via") return 0
-  const widths = [point.width, point.start_width, point.end_width]
+  const widths = [point.width, point.end_width]
   return Math.max(...widths.filter((width) => width !== undefined)) / 2
 }
 
@@ -176,7 +176,7 @@ function segmentBox({
   return copperBox({ xy, names, layers })
 }
 
-/** Bound supported wire segments. The physical via records supply barrel bounds. */
+/** Bound wire segments. Through-pad primitives are outside the routed solver’s geometry. */
 function traceBoxes({
   trace,
   layers,
@@ -186,7 +186,8 @@ function traceBoxes({
 }): TraceBoxes {
   const boxes = trace.route.slice(1).flatMap((end, index) => {
     const start = trace.route[index]
-    if (!("x" in start) || !("x" in end)) return []
+    if (start.route_type === "through_pad" || end.route_type === "through_pad")
+      return []
     return [segmentBox({ start, end, layers })]
   })
   return [trace.pcb_trace_id, boxes]
