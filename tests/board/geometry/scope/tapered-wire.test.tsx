@@ -32,7 +32,10 @@ test("a tapered wire is admitted when its widest copper reaches the scope", asyn
       }
     }),
   })
-  const records = circuit.map((record) => (record === trace ? tapered : record))
+  const records = circuit.map((record) => {
+    if (record === trace) return tapered
+    return record
+  })
   assert(
     scopeFor({ circuit: records }).pcbTraceIds.includes(trace.pcb_trace_id),
   )
