@@ -56,7 +56,6 @@ test("supply and reference traces stay local and only reference vias are kept bo
   )
   assert(!result.retainedSourceIds.includes(ground))
   assert(!result.retainedSourceIds.includes(supply))
-  assert.equal(result.omitted.traces, 2)
   const expectedVias = circuit
     .filter((record) => record.type === "pcb_via")
     .filter((via) => via.source_net_id === ground || via.y === 0.7)

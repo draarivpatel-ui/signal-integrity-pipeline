@@ -34,16 +34,17 @@ test("a nearby via barrel with explicit drill limits retains its otherwise dista
   assert.equal(shallow.pcbTraceIds.length, 1)
 
   // The TSX via supplies connected layers. Add the independent drill limits in Circuit JSON.
-  const barrel = pcb_via.parse({
-    ...via,
-    topmost_drill_layer: "top",
-    bottommost_drill_layer: "bottom",
-  })
-  const records = circuit.map((record) => {
-    if (record === via) return barrel
-    return record
-  })
-  const deep = scopeFor({ circuit: records })
-  assert.deepEqual(deep.pcbViaIds, [via.pcb_via_id])
-  assert.equal(deep.pcbTraceIds.length, 2)
+  for (const limits of [
+    { topmost_drill_layer: "top", bottommost_drill_layer: "bottom" },
+    { bottommost_drill_layer: "inner2" },
+  ]) {
+    const barrel = pcb_via.parse({ ...via, ...limits })
+    const records = circuit.map((record) => {
+      if (record === via) return barrel
+      return record
+    })
+    const deep = scopeFor({ circuit: records })
+    assert.deepEqual(deep.pcbViaIds, [via.pcb_via_id])
+    assert.equal(deep.pcbTraceIds.length, 2)
+  }
 })
