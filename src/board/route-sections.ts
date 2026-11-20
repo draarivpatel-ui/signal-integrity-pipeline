@@ -1,4 +1,5 @@
 import type { PcbPort } from "circuit-json"
+import { hypotenuse } from "../kernel"
 import { polygonContains } from "./geometry/polygon"
 import { resolveRouteVias } from "./geometry/ports"
 import type { CopperScope } from "./geometry/scope"
@@ -131,7 +132,7 @@ export function routePosition({
 
 /** Check whether two physical contact positions coincide within the route tolerance. */
 function sameContact(a: RouteXY, b: RouteXY): boolean {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]) < CONTACT_TOLERANCE_MM
+  return hypotenuse(a[0] - b[0], a[1] - b[1]) < CONTACT_TOLERANCE_MM
 }
 
 /** Port contact requires the same layer as well as the same position. */
@@ -255,7 +256,7 @@ export function routeReferences({
       const aboveSignal = layer.zMinMm > signal.zMaxMm
       let verticalGap = layer.zMaxMm - signal.zMinMm
       if (aboveSignal) verticalGap = layer.zMinMm - signal.zMaxMm
-      const distance = Math.hypot(verticalGap, gap)
+      const distance = hypotenuse(verticalGap, gap)
       let z = signal.zMinMm - distance
       if (aboveSignal) z = signal.zMaxMm + distance
       return {
@@ -337,7 +338,7 @@ function appendRoute({
       throw new Error(
         `${trace.pcb_trace_id}: layer changes require explicit vias`,
       )
-    const length = Math.hypot(b.x - a.x, b.y - a.y)
+    const length = hypotenuse(b.x - a.x, b.y - a.y)
     if (length < MIN_WIRE_LENGTH_MM) continue
     if (b.start_width !== undefined || b.end_width !== undefined) {
       throw new Error(
