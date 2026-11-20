@@ -34,11 +34,19 @@ type Endpoint = {
 /** Expectations read from the vendor [Pin], [Model] and edge data. */
 type PinEvidence = Endpoint & {
   model: string
-  capabilities: PinCapabilities
   voltage: number
-  edgePicoseconds?: number
-  rampOnly?: boolean
-}
+} & (
+  | {
+      capabilities: PinCapabilities & { drive: true }
+      edgePicoseconds: number
+      rampOnly?: boolean
+    }
+  | {
+      capabilities: PinCapabilities & { drive: false }
+      edgePicoseconds?: never
+      rampOnly?: never
+    }
+)
 
 const DRIVER = ".TX > .SIGNAL"
 const RECEIVER = ".RX > .SIGNAL"
@@ -159,13 +167,12 @@ function verifyPin({
   })
 
   if (expected.rampOnly) assert.equal(pin.buffer.waveforms.length, 0)
-  if (expected.edgePicoseconds !== undefined) {
+  if (expected.capabilities.drive) {
     assert.equal(
       Math.round(edgeDurationSeconds(pin) * PICOSECONDS_PER_SECOND),
       expected.edgePicoseconds,
     )
-  }
-  if (!expected.capabilities.drive) {
+  } else {
     assert.throws(() => edgeDurationSeconds(pin), {
       code: "ibis_edge_not_driving",
     })
