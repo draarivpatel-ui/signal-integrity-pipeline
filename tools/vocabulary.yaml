@@ -137,6 +137,7 @@ domain:
   pulldown: the buffer path that pulls the signal toward its low reference
   pullup: the buffer path that pulls the signal toward its high reference
   rail: a power or ground supply connection
+  ramp: the loaded voltage change and duration between 20% and 80% of an IBIS edge
   recede: move a conducting wall away from the field region
   receiver: the chip input that takes in a signal
   recession: displacement of conducting walls away from the field for Wheeler loss
@@ -172,6 +173,7 @@ domain:
   stub: the unused part of a via beyond the layer where the signal leaves it
   subcircuit: a nested group of components on the board; in SPICE, a reusable circuit block
   subject: the thing a diagnostic points at, such as a cell, port or experiment
+  swing: the voltage difference between the start and end of an edge
   switching: the time-dependent activation of a buffer's pullup and pulldown currents
   tail: the inactive end of a measured transition after settling
   tangent: dielectric dissipation factor or direction along a boundary panel

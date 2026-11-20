@@ -25,6 +25,8 @@ const RAISED = [
   "ibis_asset_missing",
   "ibis_capability_unsupported",
   "ibis_component_missing",
+  "ibis_edge_duration_missing",
+  "ibis_edge_not_driving",
   "ibis_contract",
   "ibis_mapping",
   "ibis_model",
