@@ -12,13 +12,13 @@ import {
 import { convertPackaged } from "../../src/buffers/package"
 import { splitWords, subcircuitHeader } from "../../src/buffers/text"
 import { Board, source } from "../fixtures/coupled-package"
+import { vendorAvailable, vendorText } from "../fixtures/vendor-models"
 import {
   energyFacts,
   isGroundedMaxwell,
   isPositiveDefinite,
   maxwellFacts,
 } from "../support/golden-checks"
-import { vendorAvailable, vendorText } from "../support/vendor-models"
 
 setDefaultTimeout(150_000)
 

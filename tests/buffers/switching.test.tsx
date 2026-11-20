@@ -22,13 +22,13 @@ import {
   subcircuitHeader,
 } from "../../src/buffers/text"
 import { sha256 } from "../../src/kernel"
+import { vendorAvailable, vendorText } from "../fixtures/vendor-models"
 import {
   crossingTime,
   ngspiceAvailable,
   runGoldenDeck,
   valueAt,
 } from "../support/golden-checks"
-import { vendorAvailable, vendorText } from "../support/vendor-models"
 
 setDefaultTimeout(150_000)
 
