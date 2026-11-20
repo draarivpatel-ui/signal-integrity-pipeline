@@ -74,8 +74,8 @@ export function InspectionChip({
               <React.Fragment key={pin}>
                 <smtpad
                   portHints={[pin]}
-                  pcbX={index}
-                  pcbY={0}
+                  pcbX={0}
+                  pcbY={-index}
                   width={INSPECTION_PAD_SIZE_MM}
                   height={INSPECTION_PAD_SIZE_MM}
                   shape="rect"
