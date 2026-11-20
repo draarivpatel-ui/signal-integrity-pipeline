@@ -20,10 +20,10 @@ test.skipIf(!path || !models)(modelSelection, async () => {
     ).length,
     10,
   )
-  assert.equal(
-    circuit.filter((record) => record.type === "pcb_trace").length,
-    651,
-  )
+  const boardTraceCount = circuit.filter(
+    (record) => record.type === "pcb_trace",
+  ).length
+  assert.equal(boardTraceCount, 651)
   assert.equal(
     circuit.filter((record) => record.type === "pcb_via").length,
     1210,
@@ -46,7 +46,9 @@ test.skipIf(!path || !models)(modelSelection, async () => {
     ),
   )
   assert.equal(write.settings.copperScope.selectedPcbTraceIds.length, 11)
-  assert.ok(write.settings.copperScope.omitted.traces > 400)
+  assert.ok(
+    boardTraceCount - write.settings.copperScope.pcbTraceIds.length > 400,
+  )
   assert.ok(
     write.settings.copperScope.pcbTraceIds.length > 11,
     "physically relevant neighbours must stay",
