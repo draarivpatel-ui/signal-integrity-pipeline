@@ -238,6 +238,10 @@ export async function verifyVendorChannel({
   )
   await board.renderUntilSettled()
   const circuit = board.getCircuitJson()
+  assert.deepEqual(
+    circuit.filter((record) => record.type.endsWith("_error")),
+    [],
+  )
   const channels = circuit.filter(
     (record) => record.type === "simulation_pcb_driver_receiver_channel",
   )
