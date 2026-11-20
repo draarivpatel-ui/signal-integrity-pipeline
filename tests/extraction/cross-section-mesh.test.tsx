@@ -177,6 +177,8 @@ test("coalesces aligned conductor projections", async () => {
     connectivity,
     selected,
     reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
+    rails: new Set(),
+    distanceMm: 1,
   })
   const geometry = segmentRoutes({ circuit, scope })
   const slice = geometry.slices.find(

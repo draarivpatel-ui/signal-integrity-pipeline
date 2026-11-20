@@ -1,9 +1,5 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import { type Produced, rootScope, snapshot } from "../kernel"
-import {
-  getSourcePortConnectivityMapFromCircuitJson,
-  sourceNetMembers,
-} from "./connectivity"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId } from "./ids"
 import {
@@ -18,7 +14,6 @@ export interface RouteSectionsInput {
   circuitJson: CircuitJson
   scope: CopperScope
   requiredSourcePortIds: SourcePortId[]
-  referenceSourcePortId: SourcePortId
   artifactPrefix: string
 }
 /** Completed route geometry and its outer soldermask thickness when declared. */
@@ -33,50 +28,20 @@ export interface RoutedSections {
 export class RouteSectionsSolver extends BaseSolver {
   private steps?: Generator<SectionGeometry, SectionGeometry>
   private output?: Produced<RoutedSections>
-  private scope: CopperScope
-  /** Capture source values and correct the owned AC rail scope. */
+  /** Capture the board and its prepared copper scope. */
   constructor(private readonly input: RouteSectionsInput) {
     super()
-    const connectivity = getSourcePortConnectivityMapFromCircuitJson(
-      input.circuitJson,
-    )
-    const ground = sourceNetMembers({
-      connectivity,
-      seed: input.referenceSourcePortId,
-    })
-    const sourceTraces = input.circuitJson.filter(
-      (record) => record.type === "source_trace",
-    )
-    const railTraces = sourceTraces.filter((trace) => {
-      const connected = [
-        ...trace.connected_source_port_ids,
-        ...(trace.connected_source_net_ids ?? []),
-      ]
-      return connected.some((id) => ground.has(id))
-    })
-    const railSourceIds = railTraces.map((trace) => trace.source_trace_id)
-    const railPcbIds = input.circuitJson
-      .filter((record) => record.type === "pcb_trace")
-      .filter((trace) => railSourceIds.includes(trace.source_trace_id!))
-      .map((trace) => trace.pcb_trace_id)
-    this.scope = {
-      ...input.scope,
-      nonReferenceRailTraceIds: [
-        ...input.scope.nonReferenceRailTraceIds,
-        ...railPcbIds,
-      ],
-    }
   }
   /** Each yield has performed one route's segmentation; the final pass slices actual references. */
   override _step(): void {
     this.steps ??= routeSectionSteps({
       circuit: this.input.circuitJson,
-      scope: this.scope,
+      scope: this.input.scope,
     })
     const result = this.steps.next()
     const geometry = result.value
     this.stats = {
-      routes: Math.min(this.iterations, this.scope.pcbTraceIds.length),
+      routes: Math.min(this.iterations, this.input.scope.pcbTraceIds.length),
       wires: geometry.wires.length,
       slices: geometry.slices.length,
     }
@@ -103,7 +68,7 @@ export class RouteSectionsSolver extends BaseSolver {
         port.layers.some((layer) =>
           routeContactFrame({
             geometry,
-            scope: this.scope,
+            scope: this.input.scope,
             layer,
             point: [port.x, port.y],
           }),
@@ -117,7 +82,7 @@ export class RouteSectionsSolver extends BaseSolver {
 
     const value = snapshot<RoutedSections>({
       circuitJson,
-      scope: this.scope,
+      scope: this.input.scope,
       geometry,
       maskThicknessMm: masks[0]?.thickness ?? null,
     })

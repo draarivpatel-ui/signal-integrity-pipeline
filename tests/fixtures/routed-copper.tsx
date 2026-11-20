@@ -83,6 +83,7 @@ export async function routedCopper(): Promise<RoutedCopper> {
     }),
     reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
     distanceMm: 1,
+    rails: new Set(),
   })
   return { circuitJson, scope }
 }
