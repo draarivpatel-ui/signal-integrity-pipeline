@@ -36,11 +36,6 @@ import type { RoutedPoint } from "./types"
 /** Copper can be retained one layer above or below the selected copper. */
 const ADJACENT_LAYER_OFFSET = 1
 
-/** Counts used to report the scope's effect on routed copper. */
-interface OmittedCopper {
-  traces: number
-}
-
 /** Copper and electrical nets kept by the channel proximity screen. */
 export interface CopperScope {
   lateralDistanceMm: number
@@ -48,7 +43,6 @@ export interface CopperScope {
   pcbTraceIds: PcbTraceId[]
   pcbViaIds: PcbViaId[]
   railTraceIds: PcbTraceId[]
-  omitted: OmittedCopper
   retainedSourceIds: SourceConnectionGroup
 }
 
@@ -469,7 +463,6 @@ export function channelCopperScope({
     pcbTraceIds: keptTraces.map((trace) => trace.pcb_trace_id),
     pcbViaIds: keptVias.map((via) => via.pcb_via_id),
     railTraceIds: [...railTraceIds],
-    omitted: { traces: traces.length - keptTraces.length },
     retainedSourceIds: [...retained],
   }
 }
