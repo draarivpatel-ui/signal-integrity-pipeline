@@ -43,7 +43,7 @@ test("artifact paths reject traversal, absolute and empty segments", () => {
     )
 })
 
-test("diagnostics keeps the `${code}: ${text}` message and records the domain", () => {
+test("diagnostics formats the code and text and records the domain", () => {
   const fail = diagnostics("board", ["stackup"] as const)
   assert.throws(
     () => fail("stackup", "bad"),
