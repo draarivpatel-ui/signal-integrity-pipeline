@@ -135,7 +135,12 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
   const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
   const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
   assert.equal(block.settings.lanes.length, 1)
-  assert.equal(block.settings.copperScope?.omitted.traces, 2)
+  const retained = new Set(block.settings.copperScope.pcbTraceIds)
+  const excluded = circuit.filter(
+    (record) =>
+      record.type === "pcb_trace" && !retained.has(record.pcb_trace_id),
+  )
+  assert.equal(excluded.length, 2)
   const near = prepareBlocks({
     circuit: await renderSignals({ tree: <Board neighbour /> }),
     sources,
