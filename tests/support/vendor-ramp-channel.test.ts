@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import { verifyVendorChannel } from "../fixtures/vendor-channel"
-import { hasVendorModels, vendorModels } from "./vendor-models"
+import { hasVendorModels, vendorModels } from "../fixtures/vendor-models"
 
 test.skipIf(!hasVendorModels)(
   "SN74V245 uses the typical ramp when the file has no waveform tables",
