@@ -41,9 +41,10 @@ test("through-hole barrels reach layers beyond their connected copper", async ()
     )
     // Core omits the per-via flag. Add it to test an explicit through-hole on a blind-via board.
     const throughHole = pcb_via.parse({ ...via, through_hole: true })
-    const records = circuit.map((record) =>
-      record === via ? throughHole : record,
-    )
+    const records = circuit.map((record) => {
+      if (record === via) return throughHole
+      return record
+    })
     const scope = scopeFor({ circuit: records })
     assert(scope.pcbTraceIds.includes(neighbor))
     assert.deepEqual(scope.pcbViaIds, [via.pcb_via_id])
