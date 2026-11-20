@@ -18,8 +18,6 @@ import {
 } from "../connectivity"
 import { fail } from "../diagnostics"
 import type {
-  CopperPadId,
-  PcbCopperPourId,
   PcbPortId,
   PcbTraceId,
   PcbViaId,
@@ -41,25 +39,20 @@ const OUTER_LAYER_COUNT = 2
 /** Copper can be retained one layer above or below the selected copper. */
 const ADJACENT_LAYER_OFFSET = 1
 
-/** Retained and omitted copper after screening around the selected channel. */
+/** Counts used to report the scope's effect on routed copper. */
+interface OmittedCopper {
+  traces: number
+}
+
+/** Copper and electrical nets kept by the channel proximity screen. */
 export interface CopperScope {
   lateralDistanceMm: number
   selectedPcbTraceIds: PcbTraceId[]
   pcbTraceIds: PcbTraceId[]
   pcbViaIds: PcbViaId[]
-  pcbCopperPourIds: PcbCopperPourId[]
-  nearbyPadIds: CopperPadId[]
-  openPadIds: CopperPadId[]
-  padOnlySourcePortIds: SourcePortId[]
   nonReferenceRailTraceIds: PcbTraceId[]
-  nearbyNonReferencePourIds: PcbCopperPourId[]
-  unassociatedCopper: string[]
-  omitted: {
-    traces: number
-    vias: number
-    pours: number
-  }
-  approximation: string
+  omitted: OmittedCopper
+  retainedSourceIds: SourceConnectionGroup
 }
 
 /** Bounds in board millimetres and the inclusive span of occupied layer indices. */
@@ -102,7 +95,6 @@ interface CopperProximity {
 interface RetainedCopper {
   connectivity: ConnectivityMap
   retained: Set<SourcePortId | SourceNetId>
-  unassociatedCopper: string[]
 }
 
 interface CopperScopeOptions {
@@ -304,12 +296,6 @@ function arcExtrema({
   })
 }
 
-/** The physical copper record ID for either supported pad type. */
-function padId(pad: Pad): CopperPadId {
-  if (pad.type === "pcb_smtpad") return pad.pcb_smtpad_id
-  return pad.pcb_plated_hole_id
-}
-
 /** Euclidean distance between bounding boxes is a lower bound on copper distance. */
 function isNearby({
   candidate,
@@ -334,15 +320,12 @@ function isNearby({
 /** Retain the entire electrical net, with all branches and endpoint terminations. */
 function retain({
   ids,
-  label,
   copper,
 }: {
   ids: SourceConnectionGroup
-  label: string
   copper: RetainedCopper
 }): void {
-  const { connectivity, retained, unassociatedCopper } = copper
-  if (!ids.length) unassociatedCopper.push(label)
+  const { connectivity, retained } = copper
   for (const id of ids) {
     if (retained.has(id)) continue
     for (const connected of sourceNetMembers({ connectivity, seed: id }))
@@ -365,31 +348,11 @@ function retainPassiveBridges({
       if (!pins.some((pin) => copper.retained.has(pin))) continue
       for (const pin of pins) {
         if (copper.retained.has(pin)) continue
-        retain({ ids: [pin], label: pin, copper })
+        retain({ ids: [pin], copper })
         changed = true
       }
     }
   }
-}
-
-/** Describe what the proximity screen retains and what the routed-wire model omits. */
-function scopeApproximation({
-  distanceMm,
-  openPads,
-}: {
-  distanceMm: number
-  openPads: number
-}): string {
-  return [
-    `Coupling scope: whole nets with copper within ${distanceMm} mm XY bounding-box distance on the same/adjacent`,
-    "copper layers of selected routes, pads or physical barrels; all connected reference pours retained.",
-    "More distant nets and nonadjacent-layer coupling omitted; no field-error bound.",
-    "Non-selected modelled pins use existing quiet/terminated states; unsupported neighbours fail explicitly.",
-    "Pads select nets but their arbitrary shape is omitted by the routed-wire approximation, except return contacts;",
-    "connected pad-only neighbours fail explicitly.",
-    `${openPads} unmapped or electrically unconnected pad bodies omitted with the existing open unused-lead`,
-    "approximation (no die loads or switching).",
-  ].join(" ")
 }
 
 /**
@@ -478,8 +441,7 @@ export function channelCopperScope({
   }
   const proximity = { seeds, distanceMm }
   const retained = new Set(selected)
-  const unassociatedCopper: string[] = []
-  const retainedCopper = { connectivity, retained, unassociatedCopper }
+  const retainedCopper = { connectivity, retained }
   for (const trace of traces) {
     if (
       !boxes
@@ -488,45 +450,30 @@ export function channelCopperScope({
     )
       continue
     const ids = traceMembers({ id: trace.source_trace_id, sources })
-    retain({
-      ids,
-      label: `trace ${trace.pcb_trace_id}`,
-      copper: retainedCopper,
-    })
+    retain({ ids, copper: retainedCopper })
   }
   for (const via of vias) {
     if (!isNearby({ candidate: viaBox({ via, layers }), proximity })) continue
     const ids = viaMembers({ via, associations })
-    retain({ ids, label: `via ${via.pcb_via_id}`, copper: retainedCopper })
+    retain({ ids, copper: retainedCopper })
   }
-  const nearbyPads = pads.filter((pad) =>
-    isNearby({ candidate: padBox({ pad, layers }), proximity }),
-  )
-  for (const pad of nearbyPads) {
-    const portId = pad.pcb_port_id
-    if (!portId || !ports.has(portId)) continue
-    retain({ ids: [ports.get(portId)!], label: portId, copper: retainedCopper })
+  for (const pad of pads) {
+    const port = pad.pcb_port_id && ports.get(pad.pcb_port_id)
+    if (!port || !isNearby({ candidate: padBox({ pad, layers }), proximity }))
+      continue
+    retain({ ids: [port], copper: retainedCopper })
   }
-  const nearbyPours = new Set(
-    pours.filter((pour) => {
-      if (pour.shape !== "brep") return false
-      const { vertices } = pour.brep_shape.outer_ring
-      const points = vertices.flatMap((start, i) => {
-        const end = vertices[(i + 1) % vertices.length]
-        return [start, ...arcExtrema({ start, end })]
-      })
-      const box = copperBox({ points, names: [pour.layer], layers })
-      return isNearby({ candidate: box, proximity })
-    }),
-  )
-  for (const pour of nearbyPours) {
+  for (const pour of pours) {
     const id = pour.source_net_id
-    if (!id || reference.has(id)) continue
-    retain({
-      ids: [id],
-      label: `pour ${pour.pcb_copper_pour_id}`,
-      copper: retainedCopper,
+    if (!id || reference.has(id) || pour.shape !== "brep") continue
+    const { vertices } = pour.brep_shape.outer_ring
+    const points = vertices.flatMap((start, i) => {
+      const end = vertices[(i + 1) % vertices.length]
+      return [start, ...arcExtrema({ start, end })]
     })
+    const box = copperBox({ points, names: [pour.layer], layers })
+    if (isNearby({ candidate: box, proximity }))
+      retain({ ids: [id], copper: retainedCopper })
   }
   const bridges = passiveBridges({
     circuit,
@@ -543,36 +490,6 @@ export function channelCopperScope({
       (id) => retained.has(id) || reference.has(id),
     )
   })
-  const keptPours = pours.filter((pour) => {
-    if (pour.shape !== "brep") return true // Unsupported shapes cannot disappear by scoping.
-    const id = pour.source_net_id
-    return (
-      nearbyPours.has(pour) ||
-      (id !== undefined && (reference.has(id) || retained.has(id)))
-    )
-  })
-  const padOnlySourcePortIds = new Set<SourcePortId>()
-  const openPadIds: CopperPadId[] = []
-  for (const pad of nearbyPads) {
-    const port = pad.pcb_port_id && ports.get(pad.pcb_port_id)
-    if (!port) {
-      openPadIds.push(padId(pad))
-      continue
-    }
-    if (selected.has(port) || rails.has(port) || reference.has(port)) continue
-    const net = sourceNetMembers({ connectivity, seed: port })
-    const hasTrace = keptTraces.some((trace) => {
-      return traceMembers({ id: trace.source_trace_id, sources }).some((id) =>
-        net.has(id),
-      )
-    })
-    if (hasTrace) continue
-    if (net.size > 1) {
-      padOnlySourcePortIds.add(port)
-      continue
-    }
-    openPadIds.push(padId(pad))
-  }
   const nonReferenceRailTraces = keptTraces.filter((trace) => {
     const members = traceMembers({ id: trace.source_trace_id, sources })
     return (
@@ -580,34 +497,15 @@ export function channelCopperScope({
       !members.some((id) => reference.has(id))
     )
   })
-  const nonReferencePours = keptPours.filter((pour) => {
-    if (pour.source_net_id && reference.has(pour.source_net_id)) return false
-    return pour.shape !== "brep" || nearbyPours.has(pour)
-  })
   return {
     lateralDistanceMm: distanceMm,
     selectedPcbTraceIds: selectedTraces.map((trace) => trace.pcb_trace_id),
     pcbTraceIds: keptTraces.map((trace) => trace.pcb_trace_id),
     pcbViaIds: keptVias.map((via) => via.pcb_via_id),
-    pcbCopperPourIds: keptPours.map((pour) => pour.pcb_copper_pour_id),
-    nearbyPadIds: nearbyPads.map(padId),
-    padOnlySourcePortIds: [...padOnlySourcePortIds],
-    openPadIds,
     nonReferenceRailTraceIds: nonReferenceRailTraces.map(
       (trace) => trace.pcb_trace_id,
     ),
-    nearbyNonReferencePourIds: nonReferencePours.map(
-      (pour) => pour.pcb_copper_pour_id,
-    ),
-    unassociatedCopper,
-    omitted: {
-      traces: traces.length - keptTraces.length,
-      vias: vias.length - keptVias.length,
-      pours: pours.length - keptPours.length,
-    },
-    approximation: scopeApproximation({
-      distanceMm,
-      openPads: openPadIds.length,
-    }),
+    omitted: { traces: traces.length - keptTraces.length },
+    retainedSourceIds: [...retained],
   }
 }

@@ -1,16 +1,15 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { pcb_copper_pour } from "circuit-json"
-import type { CopperScope } from "../../../../src/board"
 import { scopeFor, Wire } from "../../../fixtures/copper-scope-board"
 import { renderCoreSignals } from "../../../support/core-render"
 
 test("a pour arc approaching the channel is retained even when its vertices are distant", async () => {
   const outline = [
-    { x: -2, y: 1.5 },
-    { x: -2, y: 3 },
-    { x: 2, y: 3 },
-    { x: 2, y: 1.5 },
+    { x: 4.5, y: 2 },
+    { x: 6, y: 2 },
+    { x: 6, y: -2 },
+    { x: 4.5, y: -2 },
   ]
   const circuit = await renderCoreSignals(
     <board width={18} height={18} routeRemaining={false} schematicDisabled>
@@ -26,7 +25,9 @@ test("a pour arc approaching the channel is retained even when its vertices are 
   )
   const pour = circuit.find((record) => record.type === "pcb_copper_pour")
   assert(pour?.shape === "brep")
-  assert.deepEqual(scopeFor({ circuit }).pcbCopperPourIds, [])
+  const net = pour.source_net_id
+  assert(net)
+  assert(!scopeFor({ circuit }).retainedSourceIds.includes(net))
 
   // Add curved-edge metadata that the TSX pour outline does not accept yet.
   for (const bulge of [0.375, -0.375]) {
@@ -40,8 +41,6 @@ test("a pour arc approaching the channel is retained even when its vertices are 
       return record
     })
     const result = scopeFor({ circuit: records })
-    const expected: CopperScope["pcbCopperPourIds"] = []
-    if (bulge < 0) expected.push(pour.pcb_copper_pour_id)
-    assert.deepEqual(result.pcbCopperPourIds, expected)
+    assert.equal(result.retainedSourceIds.includes(net), bulge < 0)
   }
 })

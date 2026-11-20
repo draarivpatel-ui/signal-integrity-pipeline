@@ -126,24 +126,6 @@ export function ScopeNeighborsBoard(): React.JSX.Element {
           </footprint>
         }
       />
-      <chip
-        name="OPEN_PAD"
-        pcbX={2}
-        pcbY={-0.8}
-        pinLabels={{ pin1: "A" }}
-        footprint={
-          <footprint>
-            <smtpad
-              portHints={["pin1"]}
-              pcbX={0}
-              pcbY={0}
-              width={PAD_SIZE_MM}
-              height={PAD_SIZE_MM}
-              shape="rect"
-            />
-          </footprint>
-        }
-      />
       <trace from=".PAD_ONLY > .A" to="net.FLOATING" />
       <Wire name="SELECTED" y={0} extent={5} />
       <Wire name="SAME" y={1.05} />
@@ -229,6 +211,7 @@ export async function viaApproach(explicitWire: boolean): Promise<CircuitJson> {
 
 /** Scope and retained trace names for the neighboring-copper board. */
 interface ScopeNeighbors {
+  circuit: CircuitJson
   scope: CopperScope
   retained: string[]
 }
@@ -279,7 +262,7 @@ export async function scopeNeighbors(): Promise<ScopeNeighbors> {
       )!
       return source.name!.replace("_route", "")
     })
-  return { scope, retained }
+  return { circuit, scope, retained }
 }
 
 /** Select the rendered net named SELECTED without a reference net. */

@@ -34,7 +34,15 @@ test("polygonal plated pads use their board position when testing proximity", as
       />
     </board>,
   )
-  const pad = circuit.find((record) => record.type === "pcb_plated_hole")
-  assert(pad)
-  assert(!scopeFor({ circuit }).nearbyPadIds.includes(pad.pcb_plated_hole_id))
+  const component = circuit.find(
+    (record) => record.type === "source_component" && record.name === "DISTANT",
+  )
+  assert(component?.type === "source_component")
+  const port = circuit.find(
+    (record) =>
+      record.type === "source_port" &&
+      record.source_component_id === component.source_component_id,
+  )
+  assert(port?.type === "source_port")
+  assert(!scopeFor({ circuit }).retainedSourceIds.includes(port.source_port_id))
 })

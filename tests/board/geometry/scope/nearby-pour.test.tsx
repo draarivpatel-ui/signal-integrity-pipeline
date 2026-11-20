@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { scopeFor, Wire } from "../../../fixtures/copper-scope-board"
 import { renderCoreSignals } from "../../../support/core-render"
 
-test("a nearby non-reference pour retains its routed net and distant copper", async () => {
+test("a nearby non-reference pour retains its distant routed net", async () => {
   const circuit = await renderCoreSignals(
     <board width={18} height={18} routeRemaining={false} schematicDisabled>
       <Wire name="SELECTED" y={0} extent={3} />
@@ -47,7 +47,5 @@ test("a nearby non-reference pour retains its routed net and distant copper", as
   )
   assert(route?.type === "pcb_trace")
   const result = scopeFor({ circuit })
-  assert.equal(result.nearbyNonReferencePourIds.length, 1)
   assert(result.pcbTraceIds.includes(route.pcb_trace_id))
-  assert.equal(result.pcbCopperPourIds.length, 2)
 })
