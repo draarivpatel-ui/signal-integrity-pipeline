@@ -42,9 +42,10 @@ test("rectangular and polygonal pours admit a net only within the lateral cap", 
       }),
     ]
     for (const variant of variants) {
-      const records: CircuitJson = circuit.map((record) =>
-        record === pour ? variant : record,
-      )
+      const records: CircuitJson = circuit.map((record) => {
+        if (record === pour) return variant
+        return record
+      })
       assert.equal(
         scopeFor({ circuit: records }).pcbTraceIds.includes(linked),
         y === 1,
