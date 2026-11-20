@@ -30,6 +30,9 @@ test("an explicit top drill limit preserves the connected inner layer of a blind
   )
   assert(via?.type === "pcb_via")
   const limited = pcb_via.parse({ ...via, topmost_drill_layer: "top" })
-  const records = circuit.map((record) => (record === via ? limited : record))
+  const records = circuit.map((record) => {
+    if (record === via) return limited
+    return record
+  })
   assert(scopeFor({ circuit: records }).pcbViaIds.includes(via.pcb_via_id))
 })

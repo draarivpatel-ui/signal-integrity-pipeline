@@ -160,10 +160,14 @@ export async function viaApproach({
   explicitWire,
   selectedLayer = "bottom",
   exitToLeft = false,
+  neighborY = 0.6,
+  width = 0.1,
 }: {
   explicitWire: boolean
   selectedLayer?: LayerRef
   exitToLeft?: boolean
+  neighborY?: number
+  width?: number
 }): Promise<CircuitJson> {
   const from = ".FAN > .A"
   const to = ".FAN > .B"
@@ -190,7 +194,7 @@ export async function viaApproach({
       <Wire name="SELECTED" y={0} extent={3} layer={selectedLayer} />
       <chip
         name="FAN"
-        pcbY={0.6}
+        pcbY={neighborY}
         pinLabels={{ pin1: "A", pin2: "B" }}
         footprint={
           <footprint>
@@ -218,7 +222,7 @@ export async function viaApproach({
         name="FAN_route"
         from={from}
         to={to}
-        width={0.1}
+        width={width}
         pcbPath={pcbPath}
       />
     </board>,

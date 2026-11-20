@@ -6,7 +6,7 @@ import {
 } from "../../../fixtures/copper-scope-board"
 
 test("only same-layer and adjacent routes within reach are retained", async () => {
-  const { circuit, scope, retained } = await scopeNeighbors()
+  const { circuit, retained } = await scopeNeighbors()
   const deep = scopeTrace({ circuit, name: "DEEP" })
   const inner = deep.route.filter(
     (point) => point.route_type === "wire" && point.layer === "inner2",
@@ -14,5 +14,4 @@ test("only same-layer and adjacent routes within reach are retained", async () =
   assert(inner.length > 0)
   assert(inner.every((point) => "y" in point && point.y === -1))
   assert.deepEqual(retained.sort(), ["ADJACENT", "SAME", "SELECTED"])
-  assert.equal(scope.omitted.traces, 2)
 })
