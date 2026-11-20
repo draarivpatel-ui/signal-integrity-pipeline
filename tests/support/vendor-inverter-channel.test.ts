@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import { verifyVendorChannel } from "../fixtures/vendor-channel"
-import { hasVendorModels, vendorModels } from "./vendor-models"
+import { hasVendorModels, vendorModels } from "../fixtures/vendor-models"
 
 test.skipIf(!hasVendorModels)(
   "SN74LVC1G04 selects input and output models and skips NC and rails",
