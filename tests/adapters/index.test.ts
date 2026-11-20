@@ -4,7 +4,7 @@ import assert from "node:assert/strict"
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createNativeSolver, loadIbisSources } from "../../src/adapters"
+import { createNativeSolver } from "../../src/adapters"
 
 const temporaryRoots: string[] = []
 afterEach(async () => {

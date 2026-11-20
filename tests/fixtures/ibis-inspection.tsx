@@ -4,7 +4,10 @@ import {
   convertIbisModelToSpice,
   type IbisReferencePorts,
 } from "@tscircuit/ibis-to-spice"
-import type { IbisPinReferences } from "@tscircuit/props"
+import type {
+  IbisPinReferences,
+  SimulationIbisModelProps,
+} from "@tscircuit/props"
 import React from "react"
 import type { CircuitJson, SimulationIbisModel } from "../../src/board"
 import {
@@ -14,7 +17,13 @@ import {
 } from "../../src/buffers"
 
 export const deviceAsset = "device.ibs"
-const pinLabels = { pin1: "DQ", pin2: "VDD", pin3: "VSS", pin4: "VCLAMP" }
+const fixturePinLabels = {
+  pin1: "DQ",
+  pin2: "VDD",
+  pin3: "VSS",
+  pin4: "VCLAMP",
+}
+const INSPECTION_PAD_SIZE_MM = 0.3
 
 type BoardOptions = {
   extraPin?: boolean
@@ -38,8 +47,51 @@ type ChipOptions = Omit<BoardOptions, "extraChip" | "extraChipAsset"> & {
   asset: string
 }
 
-/** Make one chip and its Circuit JSON IBIS declaration. */
-function InspectionChip({
+/** The footprint and model declaration for one inspection chip. */
+type InspectionChipProps = {
+  name: string
+  pcbX?: number
+  pinLabels: Record<string, string>
+  ibisModel: Omit<SimulationIbisModelProps, "componentRef">
+}
+
+/** Render a chip and its Circuit JSON IBIS declaration. */
+export function InspectionChip({
+  name,
+  pcbX,
+  pinLabels,
+  ibisModel,
+}: InspectionChipProps): React.JSX.Element {
+  return (
+    <>
+      <chip
+        name={name}
+        pcbX={pcbX}
+        pinLabels={pinLabels}
+        footprint={
+          <footprint>
+            {Object.keys(pinLabels).map((pin, index) => (
+              <React.Fragment key={pin}>
+                <smtpad
+                  portHints={[pin]}
+                  pcbX={0}
+                  pcbY={-index}
+                  width={INSPECTION_PAD_SIZE_MM}
+                  height={INSPECTION_PAD_SIZE_MM}
+                  shape="rect"
+                />
+              </React.Fragment>
+            ))}
+          </footprint>
+        }
+      />
+      <simulation.ibismodel componentRef={`.${name}`} {...ibisModel} />
+    </>
+  )
+}
+
+/** Configure the chip and IBIS declaration for a synthetic inspection case. */
+function FixtureChip({
   name,
   asset,
   extraPin,
@@ -63,40 +115,21 @@ function InspectionChip({
   let ibisPinNameToModelName: Record<number, string> | undefined
   if (modelChoice) ibisPinNameToModelName = { 1: modelChoice }
   return (
-    <>
-      <chip
-        name={name}
-        pinLabels={pinLabels}
-        footprint={
-          <footprint>
-            {Object.keys(pinLabels).map((pin, index) => (
-              <React.Fragment key={pin}>
-                <smtpad
-                  portHints={[pin]}
-                  pcbX={index}
-                  pcbY={0}
-                  width={0.3}
-                  height={0.3}
-                  shape="rect"
-                />
-              </React.Fragment>
-            ))}
-          </footprint>
-        }
-      />
-      <simulation.ibismodel
-        componentRef={`.${name}`}
-        ibisModelAsset={{
+    <InspectionChip
+      name={name}
+      pinLabels={fixturePinLabels}
+      ibisModel={{
+        ibisModelAsset: {
           project_relative_path: asset,
           url: `https://example.com/${asset}`,
           mimetype: "text/plain",
-        }}
-        ibisComponentName={componentName}
-        ibisPinNameToModelName={ibisPinNameToModelName}
-        ibisPinNameToPortLabel={ibisPinNameToPortLabel}
-        ibisPinNameToReferencePortLabels={ibisPinNameToReferencePortLabels}
-      />
-    </>
+        },
+        ibisComponentName: componentName,
+        ibisPinNameToModelName,
+        ibisPinNameToPortLabel,
+        ibisPinNameToReferencePortLabels,
+      }}
+    />
   )
 }
 
@@ -108,8 +141,8 @@ export async function ibisInspectionBoard(
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
   circuit.add(
     <board width={10} height={10} schematicDisabled routeRemaining={false}>
-      <InspectionChip name="U1" asset={deviceAsset} {...chipOptions} />
-      {extraChip && <InspectionChip name="U2" asset={extraChipAsset} />}
+      <FixtureChip name="U1" asset={deviceAsset} {...chipOptions} />
+      {extraChip && <FixtureChip name="U2" asset={extraChipAsset} />}
     </board>,
   )
   await circuit.renderUntilSettled()

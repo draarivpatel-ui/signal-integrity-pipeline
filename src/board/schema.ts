@@ -1,6 +1,5 @@
 // Circuit JSON record admission (was schema.ts + circuit-schema.mjs). Validation never edits input.
 
-import type { CircuitJson } from "circuit-json"
 import * as base from "circuit-json"
 import type { z } from "zod"
 import { fail } from "./diagnostics"
@@ -18,6 +17,7 @@ export function recordSchema(record: {
 }): z.ZodTypeAny | undefined {
   let schemaName = record.type
   if (record.type === "source_component") schemaName = `source_${record.ftype}`
+  // biome-ignore lint/performance/noDynamicNamespaceImportAccess: Record types select their registered schema at runtime.
   return base[schemaName as keyof typeof base] as z.ZodTypeAny | undefined
 }
 /** Select the registered record schema directly, avoiding a union diagnostic
