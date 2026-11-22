@@ -10,10 +10,12 @@ export function AdmissionChannel({
   route,
   allowUnroutedTraces = true,
   namedNets = false,
+  short,
 }: {
   route: Route
   allowUnroutedTraces?: boolean
   namedNets?: boolean
+  short?: "resistor" | "channel"
 }): React.JSX.Element {
   const driver = ".TX > .Y"
   const receiver = ".RX > .A"
@@ -77,6 +79,8 @@ export function AdmissionChannel({
           />
         </>
       )}
+      {short === "resistor" && <trace from={seriesInput} to={seriesOutput} />}
+      {short === "channel" && <trace from={driver} to={receiver} />}
       {namedNets && (
         <>
           <trace from={driver} to="net.DRIVER" />

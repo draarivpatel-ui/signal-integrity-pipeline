@@ -6,8 +6,10 @@ import { Inverter, Reference } from "./signal-parts"
 /** Two modeled inputs on one straight signal with a routed or ideal final leg. */
 export function AdmissionDaisyChain({
   routeFinalLeg,
+  namedNet = false,
 }: {
   routeFinalLeg: boolean
+  namedNet?: boolean
 }): React.JSX.Element {
   const driver = ".TX > .Y"
   const middleReceiver = ".MID > .A"
@@ -44,6 +46,10 @@ export function AdmissionDaisyChain({
         width={0.2}
         pcbPath={finalPcbPath}
       />
+      {namedNet &&
+        [driver, middleReceiver, finalReceiver].map((port) => (
+          <trace key={port} from={port} to="net.DATA" />
+        ))}
       <simulation.pcbtransientchannelsimulation
         name="DAISY"
         bitRate="20Mbps"
