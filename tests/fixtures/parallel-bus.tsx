@@ -70,14 +70,15 @@ function BusPart({
         footprint={
           <footprint>
             {padPositions.map(({ pin, y }) => (
-              <smtpad
-                key={pin}
-                portHints={[`pin${pin}`]}
-                pcbY={y}
-                width={0.25}
-                height={0.25}
-                shape="rect"
-              />
+              <Fragment key={pin}>
+                <smtpad
+                  portHints={[`pin${pin}`]}
+                  pcbY={y}
+                  width={0.25}
+                  height={0.25}
+                  shape="rect"
+                />
+              </Fragment>
             ))}
           </footprint>
         }
