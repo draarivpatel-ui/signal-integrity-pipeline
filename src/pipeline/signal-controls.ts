@@ -1,5 +1,6 @@
 import {
   type CircuitJson,
+  circuitJsonDb,
   isQuiet,
   type SignalEndpoint,
   type SignalEndpointPortIds,
@@ -12,7 +13,6 @@ import {
 import { type InspectedPin, pinCapabilities } from "../buffers"
 import { Diagnostic } from "../kernel"
 import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
-import { circuitJsonDb } from "./circuit-json-db"
 import { defaultDurationSeconds, prbsPatterns } from "./timing"
 
 /** Milliseconds in one second. */

@@ -1,6 +1,6 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbPort } from "circuit-json"
-import { hypotenuse } from "../kernel"
+import { hypotenuse, type Snapshot } from "../kernel"
+import { circuitJsonDb } from "./circuit-json-db"
 import { polygonContains } from "./geometry/polygon"
 import { resolveRouteVias } from "./geometry/ports"
 import type { CopperScope } from "./geometry/scope"
@@ -22,7 +22,7 @@ import {
   simplifyRouteWires,
 } from "./route-simplify"
 import { unionRouteWires } from "./route-union"
-import type { CircuitJson, LayerRef } from "./schema"
+import type { CircuitJsonSnapshot, LayerRef } from "./schema"
 import { type BoardStackup, stackupFromCircuitJson } from "./stackup"
 
 /** Millimeter tolerance for matching ports, wire ends, via contacts and lateral joins. */
@@ -157,7 +157,7 @@ export function routeContactFrame({
   point,
 }: {
   geometry: SectionGeometry
-  scope: CopperScope
+  scope: Snapshot<CopperScope>
   layer: LayerRef
   point: RouteXY
 }): RouteWire | undefined {
@@ -321,7 +321,7 @@ function traceSections({
   trace,
 }: {
   firstWireId: number
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   trace: PcbTrace
 }): TraceSections {
   const viaContacts: ViaContact[] = []
@@ -380,7 +380,7 @@ function sliceParallelRoutes({
   scope,
 }: {
   geometry: SectionGeometry
-  scope: CopperScope
+  scope: Snapshot<CopperScope>
 }): RouteSlice[] {
   const slices: RouteSlice[] = []
   const groups = new Map<WireDirectionKey, RouteWire[]>()
@@ -439,8 +439,8 @@ function sliceParallelRoutes({
 
 /** Board circuit and the copper to sweep into longitudinal sections. */
 interface RouteSectionOptions {
-  circuit: CircuitJson
-  scope: CopperScope
+  circuit: CircuitJsonSnapshot
+  scope: Snapshot<CopperScope>
 }
 
 /** Sweep exact parallel directions, partitioning at route ends, widths, layers and actual pour holes. */
@@ -456,7 +456,7 @@ export function* routeSectionSteps({
     pours: [],
     warnings: [],
   }
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   geometry.pours = db.pcb_copper_pour.list().flatMap((pour): RoutePour[] => {
     if (pour.shape !== "brep")
       throw new Error(
@@ -539,7 +539,7 @@ export function* routeSectionSteps({
 
 /** One candidate slice and the scope used to retain it. */
 interface SliceRegionOptions extends RouteSlice {
-  scope: CopperScope
+  scope: Snapshot<CopperScope>
 }
 
 /** Split a region at lateral gaps and keep groups with at least one signal wire. */

@@ -1,7 +1,6 @@
 /* eslint-disable local/max-file-lines -- Experiment declaration checks share Circuit JSON and IBIS plan types. */
 // Experiment declarations (circuitNodes, generalDeclarations, modelRunDefinition).
 
-import { cju } from "@tscircuit/circuit-json-util"
 import type {
   IbisModelDefinition,
   IbisReferencePorts,
@@ -13,14 +12,22 @@ import type {
   SourceTrace,
 } from "circuit-json"
 import type {
-  CircuitJson,
+  CircuitJsonSnapshot,
   LaneMapping,
   SourceNetId,
   SourcePortId,
 } from "../board"
-import { selectPort, subcircuitTree } from "../board"
+import { circuitJsonDb, selectPort, subcircuitTree } from "../board"
 import type { ModelRunDefinition } from "../buffers"
+import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
+import {
+  type ChannelEndpoints,
+  channelEndpoints,
+  validateNamedNetCuts,
+  validateRoutedNodes,
+} from "./routed-nodes"
+import type { IdealRoutedJunction, RoutedTraceCut } from "./routed-types"
 import { transmittedBits } from "./stimulus"
 import type {
   CircuitNodes,
@@ -74,10 +81,11 @@ const exactly = <T>({ items, label }: { items: T[]; label: string }): T => {
 }
 
 interface CircuitNodesInput {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   mappings: readonly LaneMapping[]
-  routedTraceCuts?: readonly LaneMapping[]
-  modeling: SimulationModeling
+  routedTraceCuts?: readonly RoutedTraceCut[]
+  idealRoutedJunctions?: readonly IdealRoutedJunction[]
+  modeling: Snapshot<SimulationModeling>
 }
 
 /** An identifier that can be used as an electrical node. */
@@ -180,6 +188,7 @@ export function circuitNodes({
   circuit,
   mappings,
   routedTraceCuts,
+  idealRoutedJunctions,
   modeling,
 }: CircuitNodesInput): CircuitNodes {
   const parents: SourceParents = new Map()
@@ -189,17 +198,23 @@ export function circuitNodes({
     if (element.type === "source_net" && element.source_net_id)
       parents.set(element.source_net_id, element.source_net_id)
   }
-  const traceCuts = routedTraceCuts ?? mappings
+  // Legacy callers use receiver mappings for both logical paths and electrical cuts.
+  const traceCuts = channelEndpoints({
+    mappings: routedTraceCuts ? [] : mappings,
+    routedTraceCuts,
+  })
   const channelTraces = new Set(
-    traceCuts.flatMap(
-      (mapping) => mapping.sourceTraceIds ?? [mapping.sourceTraceId],
-    ),
+    routedTraceCuts
+      ? routedTraceCuts.map(({ sourceTraceId }) => sourceTraceId)
+      : mappings.flatMap(
+          ({ sourceTraceIds, sourceTraceId }) =>
+            sourceTraceIds ?? [sourceTraceId],
+        ),
   )
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const traces = db.source_trace.list()
   const nets = db.source_net.list()
-  // A two-terminal channel can have redundant one-port-to-net declarations
-  // from component connections at both ends. Cut only that unambiguous case.
+  // A linear routed path can carry redundant one-port declarations of the same net.
   const splitNets = new Set<SourceNetId>()
   // Subcircuits scope net records: one logical net crossing subcircuits is
   // several records joined by net-only traces. Treat each such group as one net.
@@ -218,51 +233,55 @@ export function circuitNodes({
       )
     }
   }
-  for (const mapping of traceCuts) {
+  const cutsByNet = new Map<SourceNetId, ChannelEndpoints[]>()
+  for (const cut of traceCuts) {
     const from = portNetBindings({
-      port: mapping.from,
+      port: cut.fromSourcePortId,
       traces,
       channelTraces,
       netGroup,
     })
     const to = portNetBindings({
-      port: mapping.to,
+      port: cut.toSourcePortId,
       traces,
       channelTraces,
       netGroup,
     })
     for (const group of from) {
       if (!to.has(group)) continue
-      const ids = new Set(
-        nets
-          .map((net) => net.source_net_id)
-          .filter((id) => netGroupRoot({ netGroup, id }) === group),
-      )
-      if (nets.some((net) => ids.has(net.source_net_id) && net.is_ground))
-        fail("channel_short", `${mapping.port}: channel is bound to ground`)
-      const attached = traces.filter((t) =>
-        t.connected_source_net_ids?.some((id) => ids.has(id)),
-      )
-      const hasAdditionalBindings = attached.some((trace) => {
-        const nets = trace.connected_source_net_ids!
-        return (
-          nets.some((id) => !ids.has(id)) ||
-          (trace.connected_source_port_ids.length > 0 && nets.length !== 1)
-        )
-      })
-      if (hasAdditionalBindings)
-        fail(
-          "channel_net",
-          `${mapping.port}: shared channel net has additional net bindings; select explicit endpoints`,
-        )
-      const members = attached.flatMap((t) => t.connected_source_port_ids)
-      if (members.some((id) => id !== mapping.from && id !== mapping.to))
-        fail(
-          "channel_fanout",
-          `${mapping.port}: shared channel net has additional ports; bind loads to an explicit endpoint`,
-        )
-      for (const id of ids) splitNets.add(id)
+      const cuts = cutsByNet.get(group) ?? []
+      cutsByNet.set(group, [...cuts, cut])
     }
+  }
+  for (const [group, cuts] of cutsByNet) {
+    const label = cuts[0].label
+    const ids = new Set(
+      nets
+        .map((net) => net.source_net_id)
+        .filter((id) => netGroupRoot({ netGroup, id }) === group),
+    )
+    if (nets.some((net) => ids.has(net.source_net_id) && net.is_ground))
+      fail("channel_short", `${label}: channel is bound to ground`)
+    const attached = traces.filter((t) =>
+      t.connected_source_net_ids?.some((id) => ids.has(id)),
+    )
+    const hasAdditionalBindings = attached.some((trace) => {
+      const nets = trace.connected_source_net_ids!
+      return (
+        nets.some((id) => !ids.has(id)) ||
+        (trace.connected_source_port_ids.length > 0 && nets.length !== 1)
+      )
+    })
+    if (hasAdditionalBindings)
+      fail(
+        "channel_net",
+        `${label}: shared channel net has additional net bindings; select explicit endpoints`,
+      )
+    validateNamedNetCuts({
+      cuts,
+      members: attached.flatMap((trace) => trace.connected_source_port_ids),
+    })
+    for (const id of ids) splitNets.add(id)
   }
   for (const trace of traces) {
     if (channelTraces.has(trace.source_trace_id)) continue
@@ -291,44 +310,18 @@ export function circuitNodes({
   const node = createCircuitNodeLookup({ parents, splitNets, groundRoot })
   const ids = [...parents.keys()].filter((id) => !splitNets.has(id))
   for (const id of ids) node(id)
-  validateRoutedNodes({ mappings, routedTraceCuts, node })
+  validateRoutedNodes({
+    mappings,
+    routedTraceCuts,
+    idealRoutedJunctions,
+    node,
+    db,
+  })
   return {
     node,
     groundSourcePortId: ground,
     mapping: Object.fromEntries(ids.map((id) => [id, node(id)])),
   }
-}
-
-/** Reject grounded or bypassed copper while allowing ideal connections between routed segments. */
-function validateRoutedNodes({
-  mappings,
-  routedTraceCuts,
-  node,
-}: Pick<CircuitNodesInput, "mappings" | "routedTraceCuts"> &
-  Pick<CircuitNodes, "node">): void {
-  if (routedTraceCuts) {
-    for (const { from, to } of routedTraceCuts) {
-      const fromNode = node(from)
-      const toNode = node(to)
-      if (fromNode === toNode || fromNode === "0" || toNode === "0")
-        fail(
-          "channel_short",
-          "Extracted endpoints are shorted by another ideal source trace or reference",
-        )
-    }
-    return
-  }
-  const endpoints = new Set(mappings.flatMap(({ from, to }) => [from, to]))
-  const endpointNodes = [...endpoints].map(node)
-  if (
-    mappings.some(({ from, to }) => from === to) ||
-    endpointNodes.includes("0") ||
-    new Set(endpointNodes).size !== endpoints.size
-  )
-    fail(
-      "channel_short",
-      "Extracted endpoints are shorted by another ideal source trace or reference",
-    )
 }
 
 /** Finds a modeled component's subcircuit through its groups, or returns null at board level. */
@@ -370,10 +363,11 @@ export function generalDeclarations({
   circuit,
   mappings,
   routedTraceCuts,
+  idealRoutedJunctions,
   modeling,
   controls,
 }: CircuitNodesInput & {
-  controls: Record<string, RunControls>
+  controls: Snapshot<Record<string, RunControls>>
 }): Declarations {
   const referencedTypes = [
     "simulation_experiment",
@@ -395,7 +389,7 @@ export function generalDeclarations({
       seen.add(id)
     }
   }
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const errors = db.source_invalid_component_property_error
     .list()
     .filter((e) =>
@@ -417,7 +411,21 @@ export function generalDeclarations({
   }))
   if (!models.length)
     fail("ibis_model", "At least one serialized native IBIS model required")
-  const nodes = circuitNodes({ circuit, mappings, routedTraceCuts, modeling })
+  const nodes = circuitNodes({
+    circuit,
+    mappings,
+    routedTraceCuts,
+    idealRoutedJunctions,
+    modeling,
+  })
+  const endpoints = new Map<SourcePortId, string>()
+  for (const { fromSourcePortId, toSourcePortId, label } of channelEndpoints({
+    mappings,
+    routedTraceCuts,
+  })) {
+    if (!endpoints.has(fromSourcePortId)) endpoints.set(fromSourcePortId, label)
+    if (!endpoints.has(toSourcePortId)) endpoints.set(toSourcePortId, label)
+  }
   const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
   const sourceNets = new Set(
     db.source_net.list().map((net) => net.source_net_id),
@@ -516,24 +524,19 @@ export function generalDeclarations({
           "simulation_scope",
           `${experiment.name}: no models in its explicit subcircuit scope`,
         )
-      for (const mapping of mappings) {
-        for (const endpoint of [mapping.from, mapping.to]) {
-          const port = ports.get(endpoint)
-          if (!port)
-            fail(
-              "ibis_mapping",
-              `${mapping.port}: missing channel endpoint ${endpoint}`,
-            )
-          const inner = componentScope({
-            id: port.source_component_id,
-            components,
-            groups,
-          })
-          if (!subcircuits.within({ inner, outer: scope })) {
-            const advice = "separate channel configurations are required"
-            const detail = `this explicit PCB channel belongs to another scope; ${advice}`
-            fail("simulation_scope", `${experiment.name}: ${detail}`)
-          }
+      for (const [endpoint, label] of endpoints) {
+        const port = ports.get(endpoint)
+        if (!port)
+          fail("ibis_mapping", `${label}: missing channel endpoint ${endpoint}`)
+        const inner = componentScope({
+          id: port.source_component_id,
+          components,
+          groups,
+        })
+        if (!subcircuits.within({ inner, outer: scope })) {
+          const advice = "separate channel configurations are required"
+          const detail = `this explicit PCB channel belongs to another scope; ${advice}`
+          fail("simulation_scope", `${experiment.name}: ${detail}`)
         }
       }
       const durationSeconds = secondsFromMilliseconds({
@@ -558,7 +561,7 @@ export function generalDeclarations({
           "simulation_timing",
           `${experiment.name}: recording must have positive duration and a smaller maximum timestep`,
         )
-      let runControls: RunControls = { states: [], stimuli: [] }
+      let runControls: Snapshot<RunControls> = { states: [], stimuli: [] }
       if (Object.hasOwn(controls, id)) runControls = controls[id]
       const { states, stimuli: controlsForRun } = runControls
       const stimuli = controlsForRun.map((stimulus) => ({
@@ -606,29 +609,35 @@ export function generalDeclarations({
         "simple_capacitor",
         "simple_inductor",
       ]
-      for (const mapping of mappings) {
-        for (const endpoint of [mapping.from, mapping.to]) {
-          const modeledPorts = scopedModels.flatMap((model) =>
-            Object.values(model.ibis_pin_name_to_source_port_id),
+      const modelsByPort = new Map<SourcePortId, number>()
+      for (const model of scopedModels) {
+        for (const port of Object.values(model.ibis_pin_name_to_source_port_id))
+          modelsByPort.set(port, (modelsByPort.get(port) ?? 0) + 1)
+      }
+      for (const [endpoint, label] of endpoints) {
+        const bindingCount = modelsByPort.get(endpoint) ?? 0
+        if (bindingCount === 1 && stateIds.has(endpoint)) continue
+        if (bindingCount === 0) {
+          const sourceComponentId = ports.get(endpoint)?.source_component_id
+          const isPassive = components.some(
+            (component) =>
+              component.source_component_id === sourceComponentId &&
+              passiveTypes.includes(component.ftype),
           )
-          const bindings = modeledPorts.filter((port) => port === endpoint)
-          if (bindings.length === 1 && stateIds.has(endpoint)) continue
-          if (bindings.length === 0) {
-            const componentId = ports.get(endpoint)?.source_component_id
-            const isPassive = components.some(
-              (component) =>
-                component.source_component_id === componentId &&
-                passiveTypes.includes(component.ftype),
-            )
-            if (isPassive) continue
-          }
-          const requirement =
-            "requires exactly one modeled physical pin and an explicit run state"
-          fail(
-            "channel_model",
-            `${experiment.name} ${mapping.port}: endpoint ${endpoint} ${requirement}`,
+          if (
+            isPassive ||
+            db.simulation_spice_subcircuit.getWhere({
+              source_component_id: sourceComponentId,
+            })
           )
+            continue
         }
+        const requirement =
+          "requires exactly one modeled physical pin and an explicit run state"
+        fail(
+          "channel_model",
+          `${experiment.name} ${label}: endpoint ${endpoint} ${requirement}`,
+        )
       }
       for (const stimulus of stimuli) {
         if (stimulusIds.has(stimulus.source_port_id))
@@ -754,7 +763,7 @@ export function generalDeclarations({
         startTimeSeconds,
         maxStepSeconds,
         experiment,
-        states,
+        states: states.map((state) => ({ ...state })),
         stimuli,
         probes,
         models: scopedModels,

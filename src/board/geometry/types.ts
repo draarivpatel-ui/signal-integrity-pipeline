@@ -32,13 +32,13 @@ export interface LaneModeling {
 /** A trace route point on a wire or via. */
 export type RoutedPoint = PcbTraceRoutePointWire | PcbTraceRoutePointVia
 
-/** One driver-to-receiver physical signal; `sourceTraceIds` lists every trace cut out of ideal connectivity. */
+/** One driver-to-receiver path; `sourceTraceIds` lists its routed traces in path order. */
 export interface LaneMapping {
-  port: string
-  sourceTraceId: SourceTrace["source_trace_id"]
-  from: SourcePortId
-  to: SourcePortId
-  sourceTraceIds?: SourceTrace["source_trace_id"][]
+  readonly port: string
+  readonly sourceTraceId: SourceTrace["source_trace_id"]
+  readonly from: SourcePortId
+  readonly to: SourcePortId
+  readonly sourceTraceIds?: readonly SourceTrace["source_trace_id"][]
 }
 
 /** Copper outlines in mm. */
