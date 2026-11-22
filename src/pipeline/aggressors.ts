@@ -13,7 +13,7 @@ import { prbsPatterns } from "./timing"
 // The pinned Circuit JSON schema predates these fields: https://github.com/tscircuit/circuit-json/pull/1042
 const aggressorDeclaration = z.object({
   aggressor_pattern: z.string().min(1).optional(),
-  aggressors_disabled: z.boolean().optional(),
+  aggressor_disabled: z.boolean().optional(),
 })
 
 /** An enabled pattern or a disabled output for each drive-capable pin outside the selected endpoints. */
@@ -50,7 +50,7 @@ export function planAggressors({
     .sort((a, b) => a.port.localeCompare(b.port, "en"))
   if (aggressorPins.length === 0) return aggressors
 
-  const { aggressor_pattern: pattern, aggressors_disabled: disabled } =
+  const { aggressor_pattern: pattern, aggressor_disabled: disabled } =
     aggressorDeclaration.parse(channelSimulation)
   const db = circuitJsonDb(circuit)
   if (disabled) {
@@ -68,7 +68,7 @@ export function planAggressors({
   if (pattern === undefined) {
     const names = aggressorPins.map((pin) => aggressorName({ db, pin }))
     throw new Error(
-      `Aggressors ${names.join(", ")} need a declared state. Set aggressorPattern or aggressorsDisabled.`,
+      `Aggressors ${names.join(", ")} need a declared state. Set aggressorPattern or aggressorDisabled.`,
     )
   }
   const prbs = prbsPatterns.get(pattern)

@@ -8,7 +8,7 @@ import {
 
 test("a disabled aggressor has no stimulus even if a pattern is set", async () => {
   const { state, stimulus } = await parallelBusAggressorControls({
-    tree: <ParallelBus aggressorsDisabled aggressorPattern="clock" />,
+    tree: <ParallelBus aggressorDisabled aggressorPattern="clock" />,
     sources: threeStateParallelBusSources,
   })
   assert.equal(state?.is_output, true)

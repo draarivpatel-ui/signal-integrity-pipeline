@@ -56,7 +56,7 @@ If the copper scope retains any output-capable pins outside the selected
 channel endpoints, those pins are aggressors. Declare their state on the simulation. Use `aggressorPattern="0"`
 or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
 `"prbs7"` to switch at the simulation bit rate from time zero.
-`aggressorsDisabled` takes precedence and requires every aggressor
+`aggressorDisabled` takes precedence and requires every aggressor
 model to support high impedance. The selected channels (victims) keep their
 own `pattern` and `driverDisabled` settings. TSX authors need a core release that
 emits the aggressor fields.

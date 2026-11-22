@@ -10,6 +10,6 @@ test("admission requires a state for retained aggressors", async () => {
   const circuit = await renderSignals({ tree: <ParallelBus /> })
   assert.throws(
     () => prepareChannelSimulations({ circuit, sources: parallelBusSources }),
-    /TX[.]DQ1.*aggressorPattern.*aggressorsDisabled/,
+    /TX[.]DQ1.*aggressorPattern.*aggressorDisabled/,
   )
 })

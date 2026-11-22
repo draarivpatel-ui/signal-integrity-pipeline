@@ -8,7 +8,7 @@ import {
 test("an aggressor's output model must support the declared disabled state", async () => {
   await assert.rejects(
     parallelBusAggressorControls({
-      tree: <ParallelBus aggressorsDisabled />,
+      tree: <ParallelBus aggressorDisabled />,
     }),
     /TX[.]DQ1.*LVC1G04_OUT_33.*has no disabled state/,
   )

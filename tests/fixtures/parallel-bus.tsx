@@ -120,13 +120,13 @@ export function ParallelBus({
   driverDisabled,
   driverBitRate,
   aggressorPattern,
-  aggressorsDisabled,
+  aggressorDisabled,
 }: {
   neighbourPattern?: "1"
   driverDisabled?: boolean
   driverBitRate?: string
   aggressorPattern?: string
-  aggressorsDisabled?: boolean
+  aggressorDisabled?: boolean
 }): React.JSX.Element {
   return (
     <board
@@ -155,7 +155,7 @@ export function ParallelBus({
       <FixtureChannelSimulation
         bitRate="20Mbps"
         aggressorPattern={aggressorPattern}
-        aggressorsDisabled={aggressorsDisabled}
+        aggressorDisabled={aggressorDisabled}
       >
         <simulation.pcbdriverreceiverchannel
           name="DQ0"

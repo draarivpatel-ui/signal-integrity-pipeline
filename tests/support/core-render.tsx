@@ -6,7 +6,7 @@ import type { CircuitJson } from "../../src/board"
 /** New simulation props exercised against the pipeline's pinned renderer. */
 interface AggressorProps {
   aggressorPattern?: string
-  aggressorsDisabled?: boolean
+  aggressorDisabled?: boolean
 }
 
 /** Aggressor declarations in the fixture, indexed by simulation name. */
@@ -17,13 +17,13 @@ const aggressorDeclarations = createContext<FixtureDeclarations | null>(null)
 /** Render the simulation with pinned core and capture its aggressor declaration. */
 export function FixtureChannelSimulation({
   aggressorPattern,
-  aggressorsDisabled,
+  aggressorDisabled,
   ...props
 }: PcbTransientChannelSimulationProps & AggressorProps): ReactElement {
   const declarations = useContext(aggressorDeclarations)
-  if (aggressorPattern !== undefined || aggressorsDisabled !== undefined) {
+  if (aggressorPattern !== undefined || aggressorDisabled !== undefined) {
     if (!declarations) throw new Error("Render fixtures with renderCoreSignals")
-    declarations.set(props.name, { aggressorPattern, aggressorsDisabled })
+    declarations.set(props.name, { aggressorPattern, aggressorDisabled })
   }
   return <simulation.pcbtransientchannelsimulation {...props} />
 }
@@ -44,9 +44,9 @@ function withFixtureDeclarations({
       Object.assign(record, {
         aggressor_pattern: props.aggressorPattern,
       })
-    if (props.aggressorsDisabled !== undefined)
+    if (props.aggressorDisabled !== undefined)
       Object.assign(record, {
-        aggressors_disabled: props.aggressorsDisabled,
+        aggressor_disabled: props.aggressorDisabled,
       })
   }
   return records
