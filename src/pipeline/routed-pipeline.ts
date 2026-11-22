@@ -66,7 +66,7 @@ export const routedStages = [
       p.stageOutput("RouteSectionsSolver").value.map((sections, i) => ({
         geometry: sections.geometry,
         circuitJson: sections.circuitJson,
-        scope: sections.scope,
+        scope: sections.copperScope,
         maskThicknessMm: sections.maskThicknessMm,
         materials: p.stageOutput("RoutedAdmissionSolver").value[i].bindings
           .options.materials,
@@ -244,7 +244,7 @@ export class RoutedPipelineSolver extends BasePipelineSolver<RoutedAdmissionInpu
     }
     if (solver) return solver.visualize()
     // A stage that cannot be built yet shows the selected copper and its unrolled lengths in neutral grey.
-    const scope = plans?.[0]?.sections.scope
+    const scope = plans?.[0]?.sections.copperScope
     let drawing = routeBoardDrawing({
       circuit,
       scope,
