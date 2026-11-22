@@ -15,5 +15,5 @@ test("a via without a net is ignored within reach of the channel", async () => {
   assert.equal(vias[0].source_net_id, undefined)
   assert.equal(vias[0].source_trace_id, undefined)
   assert.equal(vias[0].pcb_trace_id, undefined)
-  assert.deepEqual(scopeFor({ circuit }).retainedPcbViaIds, [])
+  assert.deepEqual(scopeFor({ circuit }).extractedPcbViaIds, [])
 })
