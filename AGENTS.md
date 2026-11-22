@@ -35,7 +35,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 ### Functions
 - **Use one named object for multiple inputs.** Any named function, method, named arrow or constructor that would take more
   than one parameter takes a single named object with an inline or named type. For example, call
-  `sourceNetMembers({ connectivity, seed })`.
+  `sourceNetMembers({ connectivity, memberId })`.
   - Inline callbacks may use positional parameters, as in `xs.map((x, i) => …)`.
   - Keep signatures required by an interface, such as library callbacks. React components already receive a props object.
   - A pure arithmetic helper with two interchangeable operands may take them positionally, as in `times(a, b)`
