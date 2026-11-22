@@ -10,12 +10,12 @@ import {
 } from "./route-sections"
 import type { CircuitJson } from "./schema"
 
-/** The board, selected copper and required ports passed to route sectioning. */
+/** The board, copper scope and required ports passed to route sectioning. */
 export interface RouteSectionsInput {
-  circuitJson: CircuitJson
-  scope: CopperScope
-  requiredSourcePortIds: SourcePortId[]
-  artifactPrefix: string
+  readonly circuitJson: CircuitJson
+  readonly copperScope: CopperScope
+  readonly requiredSourcePortIds: readonly SourcePortId[]
+  readonly artifactPrefix: string
 }
 /** Completed route geometry and its outer soldermask thickness when declared. */
 export interface RoutedSections {
@@ -37,14 +37,14 @@ export class RouteSectionsSolver extends BaseSolver {
   override _step(): void {
     this.steps ??= routeSectionSteps({
       circuit: this.input.circuitJson,
-      scope: this.input.scope,
+      scope: this.input.copperScope,
     })
     const result = this.steps.next()
     const geometry = result.value
     this.stats = {
       routes: Math.min(
         this.iterations,
-        this.input.scope.extractedPcbTraceIds.length,
+        this.input.copperScope.extractedPcbTraceIds.length,
       ),
       wires: geometry.wires.length,
       slices: geometry.slices.length,
@@ -69,7 +69,7 @@ export class RouteSectionsSolver extends BaseSolver {
         port.layers.some((layer) =>
           routeContactFrame({
             geometry,
-            scope: this.input.scope,
+            scope: this.input.copperScope,
             layer,
             point: [port.x, port.y],
           }),
@@ -83,7 +83,7 @@ export class RouteSectionsSolver extends BaseSolver {
 
     const value = snapshot<RoutedSections>({
       circuitJson,
-      scope: this.input.scope,
+      scope: this.input.copperScope,
       geometry,
       maskThicknessMm: masks[0]?.thickness ?? null,
     })
