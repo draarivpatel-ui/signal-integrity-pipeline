@@ -1,6 +1,7 @@
 /* eslint-disable local/max-file-lines -- Experiment declaration checks share Circuit JSON and IBIS plan types. */
 // Experiment declarations (circuitNodes, generalDeclarations, modelRunDefinition).
 
+import { cju } from "@tscircuit/circuit-json-util"
 import type {
   IbisModelDefinition,
   IbisReferencePorts,
@@ -199,8 +200,9 @@ export function circuitNodes({
       (mapping) => mapping.sourceTraceIds ?? [mapping.sourceTraceId],
     ),
   )
-  const traces = circuit.filter((e) => e.type === "source_trace")
-  const nets = circuit.filter((e) => e.type === "source_net")
+  const db = cju([...circuit])
+  const traces = db.source_trace.list()
+  const nets = db.source_net.list()
   // A two-terminal channel can have redundant one-port-to-net declarations
   // from component connections at both ends. Cut only that unambiguous case.
   const splitNets = new Set<SourceNetId>()
@@ -360,9 +362,10 @@ export function generalDeclarations({
     "source_net",
     "source_component",
   ]
+  // Validate identifiers before cju initializes its identifier counters.
   for (const type of referencedTypes) {
     const seen = new Set<string>()
-    for (const record of circuit.filter((e) => e.type === type)) {
+    for (const record of circuit.filter((record) => record.type === type)) {
       const id: unknown = Reflect.get(record, `${type}_id`)
       if (typeof id !== "string" || !id)
         fail("simulation_reference", `${type}: nonempty identifier required`)
@@ -371,8 +374,9 @@ export function generalDeclarations({
       seen.add(id)
     }
   }
-  const errors = circuit
-    .filter((e) => e.type === "source_invalid_component_property_error")
+  const db = cju([...circuit])
+  const errors = db.source_invalid_component_property_error
+    .list()
     .filter((e) =>
       [
         "ibisModel",
@@ -386,26 +390,21 @@ export function generalDeclarations({
     )
   if (errors.length)
     fail("native_declaration", errors.map((e) => e.message).join("; "))
-  const models = circuit
-    .filter((e) => e.type === "simulation_ibis_model")
-    .map((model, i) => ({
-      ...model,
-      pipelineId: model.simulation_ibis_model_id ?? `model-${i}`,
-    }))
+  const models = db.simulation_ibis_model.list().map((model, i) => ({
+    ...model,
+    pipelineId: model.simulation_ibis_model_id ?? `model-${i}`,
+  }))
   if (!models.length)
     fail("ibis_model", "At least one serialized native IBIS model required")
   const nodes = circuitNodes({ circuit, mappings, modeling })
-  const ports = new Map(
-    circuit
-      .filter((e) => e.type === "source_port")
-      .map((e) => [e.source_port_id, e]),
+  const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
+  const sourceNets = new Set(
+    db.source_net.list().map((net) => net.source_net_id),
   )
   const groups = new Map(
-    circuit
-      .filter((e) => e.type === "source_group")
-      .map((e) => [e.source_group_id, e]),
+    db.source_group.list().map((e) => [e.source_group_id, e]),
   )
-  const components = circuit.filter((e) => e.type === "source_component")
+  const components = db.source_component.list()
   const subcircuits = subcircuitTree(circuit)
   for (const model of models) {
     const sourceComponent = exactly({
@@ -439,9 +438,7 @@ export function generalDeclarations({
           `${sourceComponent.name}: physical pin mapping points outside its chip`,
         )
   }
-  const declaredExperiments = circuit.filter(
-    (e) => e.type === "simulation_experiment",
-  )
+  const declaredExperiments = db.simulation_experiment.list()
   const experiments = declaredExperiments.filter(
     (experiment) => experiment.spice_engine === "pcb_spice",
   )
@@ -457,11 +454,9 @@ export function generalDeclarations({
     experiments.some(
       (experiment) => experiment.experiment_type !== "spice_transient_analysis",
     ) ||
-    circuit.some(
-      (e) =>
-        e.type === "simulation_parameter_sweep" &&
-        pcbExperimentIds.has(e.simulation_experiment_id),
-    )
+    db.simulation_parameter_sweep
+      .list()
+      .some((record) => pcbExperimentIds.has(record.simulation_experiment_id))
   )
     fail(
       "simulation_capability",
@@ -685,8 +680,8 @@ export function generalDeclarations({
           )
         }
       }
-      const probes = circuit
-        .filter((e) => e.type === "simulation_voltage_probe")
+      const probes = db.simulation_voltage_probe
+        .list()
         .filter((e) =>
           subcircuits.within({ inner: e.subcircuit_id, outer: scope }),
         )
@@ -699,15 +694,8 @@ export function generalDeclarations({
             probe.reference_input_source_net_id
           if (!signal)
             fail("probe_reference", `${probe.name}: signal port/net required`)
-          for (const source of [signal, reference].filter(Boolean)) {
-            const exists = circuit.some(
-              (record) =>
-                (record.type === "source_port" &&
-                  record.source_port_id === source) ||
-                (record.type === "source_net" &&
-                  record.source_net_id === source),
-            )
-            if (!exists)
+          for (const source of [signal, reference]) {
+            if (source && !ports.has(source) && !sourceNets.has(source))
               fail(
                 "probe_reference",
                 `${probe.name}: unknown signal/reference source`,
