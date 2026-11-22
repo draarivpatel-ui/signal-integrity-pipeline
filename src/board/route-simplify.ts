@@ -68,11 +68,10 @@ interface WireRun {
   points: RouteXY[]
   seed: RouteWire
   toleranceMm: number
-  output: RouteWire[]
 }
 
 /** Recursive chord acceptance bounds every original vertex, preserving width/layer/via boundaries. */
-function simplifyRun({
+function* simplifyRun({
   start,
   end,
   run,
@@ -80,8 +79,8 @@ function simplifyRun({
   start: number
   end: number
   run: WireRun
-}): void {
-  const { points, seed, toleranceMm, output } = run
+}): Generator<RouteWire> {
+  const { points, seed, toleranceMm } = run
   const a = points[start]
   const b = points[end]
   let farthest = -1
@@ -93,19 +92,18 @@ function simplifyRun({
     farthest = i
   }
   if (farthest >= 0) {
-    simplifyRun({ start, end: farthest, run })
-    simplifyRun({ start: farthest, end, run })
+    yield* simplifyRun({ start, end: farthest, run })
+    yield* simplifyRun({ start: farthest, end, run })
     return
   }
   const length = hypotenuse(b[0] - a[0], b[1] - a[1])
   if (length < MIN_CHORD_LENGTH_MM) return
-  output.push({
+  yield {
     ...seed,
-    id: output.length,
     a,
     b,
     ...projectRouteWire({ a, b, length }),
-  })
+  }
 }
 
 /** Simplified wires and the total route lengths before and after simplification. */
@@ -146,8 +144,13 @@ export function simplifyRouteWires({
       index++
     }
     const points = [seed.a, ...run.map((wire) => wire.b)]
-    const wireRun: WireRun = { points, seed, toleranceMm, output }
-    simplifyRun({ start: 0, end: points.length - 1, run: wireRun })
+    const wireRun: WireRun = { points, seed, toleranceMm }
+    for (const wire of simplifyRun({
+      start: 0,
+      end: points.length - 1,
+      run: wireRun,
+    }))
+      output.push({ ...wire, id: output.length })
   }
   return {
     wires: output,
