@@ -34,5 +34,7 @@ test("an explicit top drill limit preserves the connected inner layer of a blind
     if (record === via) return limited
     return record
   })
-  assert(scopeFor({ circuit: records }).pcbViaIds.includes(via.pcb_via_id))
+  assert(
+    scopeFor({ circuit: records }).retainedPcbViaIds.includes(via.pcb_via_id),
+  )
 })

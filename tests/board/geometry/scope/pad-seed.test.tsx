@@ -32,7 +32,7 @@ test("a selected pad seeds proximity without a selected trace", async () => {
   )
   const result = scopeFor({ circuit, selectedNet: "CHANNEL" })
   assert.deepEqual(result.selectedPcbTraceIds, [])
-  assert.deepEqual(result.pcbTraceIds, [
+  assert.deepEqual(result.retainedPcbTraceIds, [
     scopeTrace({ circuit, name: "NEAR" }).pcb_trace_id,
   ])
 })
