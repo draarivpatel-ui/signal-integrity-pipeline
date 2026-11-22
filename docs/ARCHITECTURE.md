@@ -3,7 +3,7 @@
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
 Declare transient channels in Circuit JSON. Signal preparation validates endpoint topology, selected IBIS capabilities,
 timing and pseudo-random binary sequence (PRBS) patterns.
-RoutedAdmissionSolver lowers each declared block into immutable inputs for route sections and buffer binding.
+RoutedAdmissionSolver lowers each declared channel simulation into immutable inputs for route sections and buffer binding.
 
 ```mermaid
 flowchart LR
