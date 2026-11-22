@@ -27,7 +27,7 @@ test("the upper drill stub of a buried via reaches a top-layer channel", async (
   const via = circuit.find((record) => record.type === "pcb_via")
   assert(via)
   assert.deepEqual(via.layers, ["inner2", "bottom"])
-  assert.deepEqual(scopeFor({ circuit }).retainedPcbViaIds, [])
+  assert.deepEqual(scopeFor({ circuit }).extractedPcbViaIds, [])
 
   // Core emits the connected layers. The drill can extend above them.
   const barrel = pcb_via.parse({ ...via, topmost_drill_layer: "inner1" })
@@ -35,7 +35,7 @@ test("the upper drill stub of a buried via reaches a top-layer channel", async (
     if (record === via) return barrel
     return record
   })
-  assert.deepEqual(scopeFor({ circuit: records }).retainedPcbViaIds, [
+  assert.deepEqual(scopeFor({ circuit: records }).extractedPcbViaIds, [
     via.pcb_via_id,
   ])
 })
