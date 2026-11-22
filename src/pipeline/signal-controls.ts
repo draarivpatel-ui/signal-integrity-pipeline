@@ -27,7 +27,17 @@ const SPICE_OPTIONS: NonNullable<SimulationExperiment["spice_options"]> = {
   vntol: 1e-8,
 }
 
-interface ControlOptions {
+/** Set the maximum transient step relative to the shortest bit. */
+const STEPS_PER_BIT = 100
+
+/** Set the maximum transient step relative to the fastest edge. */
+const STEPS_PER_EDGE = 20
+
+/** Ensure the maximum step is strictly shorter than the recording. */
+const MIN_STEPS_PER_RECORDING = 2
+
+/** Circuit, inspected pins and timing used to lower a channel experiment. */
+export interface ChannelSimulationControlOptions {
   circuit: CircuitJson
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
   channelSimulation: SimulationPcbTransientChannelSimulation
@@ -43,6 +53,34 @@ interface ControlOptions {
 export function endpointPorts(endpoint: SignalEndpoint): SignalEndpointPortIds {
   if ("source_port_id" in endpoint) return [endpoint.source_port_id]
   return [endpoint.p_source_port_id, endpoint.n_source_port_id]
+}
+
+/** Fastest bit rate and maximum transient step for the recording. */
+interface SignalTiming {
+  rate: number
+  stepSeconds: number
+}
+
+/** Limit the step by the shortest bit, fastest edge and recording duration. */
+export function signalTiming({
+  driverReceiverChannels,
+  durationSeconds,
+  edgeTimesSeconds,
+}: {
+  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  durationSeconds: number
+  edgeTimesSeconds: number[]
+}): SignalTiming {
+  const edgeTimeSeconds = Math.min(...edgeTimesSeconds)
+  const rate = Math.max(
+    ...driverReceiverChannels.map((signal) => signal.bit_rate_bps),
+  )
+  const stepSeconds = Math.min(
+    1 / rate / STEPS_PER_BIT,
+    edgeTimeSeconds / STEPS_PER_EDGE,
+    durationSeconds / MIN_STEPS_PER_RECORDING,
+  )
+  return { rate, stepSeconds }
 }
 
 /** Choose the capture duration in seconds and check coverage of enabled stimuli. */
@@ -171,7 +209,7 @@ export function withChannelSimulationControls({
   durationSeconds,
   rate,
   stepSeconds,
-}: ControlOptions): ChannelSimulationControls {
+}: ChannelSimulationControlOptions): ChannelSimulationControls {
   const controls: RunControls = { states: [], stimuli: [] }
   const scope = cju([...circuit]).pcb_board.getWhere({})?.subcircuit_id
   const records: CircuitJson = []
