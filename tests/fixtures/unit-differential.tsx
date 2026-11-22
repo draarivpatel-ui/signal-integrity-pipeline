@@ -16,11 +16,13 @@ export default function ({
   routedTermination = false,
   short,
   seriesPositive = false,
+  internalShort = false,
 }: {
   reversed?: boolean
   routedTermination?: boolean
   short?: "TX" | "RX" | "RTERM"
   seriesPositive?: boolean
+  internalShort?: boolean
 }): JSX.Element {
   let positive = "A"
   let negative = "B"
@@ -39,6 +41,8 @@ export default function ({
   }
   const driverRef = { p: `.TX > .${positive}`, n: `.TX > .${negative}` }
   const receiverRef = { p: `.RX > .${positive}`, n: `.RX > .${negative}` }
+  const receiverInternalTies = []
+  if (internalShort) receiverInternalTies.push(["pin6", "pin7"])
   return (
     <board
       width={20}
@@ -51,7 +55,11 @@ export default function ({
       isViaInPadAllowed
     >
       <Transceiver name="TX" x={-5} />
-      <Transceiver name="RX" x={5} />
+      <Transceiver
+        name="RX"
+        x={5}
+        internallyConnectedPins={receiverInternalTies}
+      />
       <Reference />
       {seriesPositive ? (
         <DualTerminatedPositiveLeg />
