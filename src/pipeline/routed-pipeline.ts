@@ -66,7 +66,7 @@ export const routedStages = [
       p.stageOutput("RouteSectionsSolver").value.map((sections, i) => ({
         geometry: sections.geometry,
         circuitJson: sections.circuitJson,
-        scope: sections.copperScope,
+        scope: sections.scope,
         maskThicknessMm: sections.maskThicknessMm,
         materials: p.stageOutput("RoutedAdmissionSolver").value[i].bindings
           .options.materials,
