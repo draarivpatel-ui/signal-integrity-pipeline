@@ -1,6 +1,12 @@
-import type { CircuitJson, LaneMapping } from "../board"
+import type {
+  CircuitJsonSnapshot,
+  LaneMapping,
+  SourcePortId,
+  SourceTraceId,
+} from "../board"
 import type { IbisSources } from "../buffers"
 import type { RouteMaterials } from "../extraction"
+import type { Snapshot } from "../kernel"
 import type { RunControls, SimulationModeling } from "./types"
 
 /** Timing and mesh settings shared by the routed simulation stages. */
@@ -11,13 +17,27 @@ export interface RoutedCompileOptions {
   readonly stepSeconds: number
   readonly materials?: RouteMaterials
 }
+/** One physical conductor removed from ideal connectivity for routed extraction. */
+export interface RoutedTraceCut {
+  readonly sourceTraceId: SourceTraceId
+  readonly fromSourcePortId: SourcePortId
+  readonly toSourcePortId: SourcePortId
+}
+
+/** Distinct contacts connected by an explicit ideal segment between routed cuts. */
+export interface IdealRoutedJunction {
+  readonly fromSourcePortId: SourcePortId
+  readonly toSourcePortId: SourcePortId
+}
+
 /** Board, receiver paths and physical trace cuts for routed IBIS binding. */
 export interface RouteBindingsInput {
-  readonly circuitJson: CircuitJson
+  readonly circuitJson: CircuitJsonSnapshot
   readonly mappings: readonly LaneMapping[]
-  readonly routedTraceCuts: readonly LaneMapping[]
-  readonly modeling: Readonly<SimulationModeling>
-  readonly controls: Readonly<Record<string, RunControls>>
+  readonly routedTraceCuts: readonly RoutedTraceCut[]
+  readonly idealRoutedJunctions: readonly IdealRoutedJunction[]
+  readonly modeling: Snapshot<SimulationModeling>
+  readonly controls: Snapshot<Record<string, RunControls>>
   readonly ibisSources: Readonly<IbisSources>
   readonly options: RoutedCompileOptions
   readonly artifactPrefix: string

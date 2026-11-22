@@ -7,7 +7,7 @@ import { loadVendorModel, vendorModels } from "./vendor-models"
 export const inverterModelPath = "models/sn74lvc1g04.ibs"
 
 /** Load the locked vendor bytes and the board used in routed pipeline tests. */
-export async function routedProblem({
+export async function routedAdmissionInput({
   props = {},
 }: {
   props?: React.ComponentProps<typeof TwoTraceBoard>
