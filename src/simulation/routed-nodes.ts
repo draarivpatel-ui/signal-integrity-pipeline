@@ -1,6 +1,5 @@
-import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
-import type { LaneMapping, SourcePortId } from "../board"
+import type { CircuitJsonDb, LaneMapping, SourcePortId } from "../board"
 import { fail } from "./diagnostics"
 import type { IdealRoutedJunction, RoutedTraceCut } from "./routed-types"
 import type { CircuitNodes } from "./types"
@@ -97,7 +96,7 @@ export function validateRoutedNodes({
   routedTraceCuts?: readonly RoutedTraceCut[]
   idealRoutedJunctions?: readonly IdealRoutedJunction[]
   node: CircuitNodes["node"]
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
 }): void {
   for (const { from, to } of mappings) requireDistinctNodes({ node, from, to })
   let endpoints = new Set(mappings.flatMap(({ from, to }) => [from, to]))
