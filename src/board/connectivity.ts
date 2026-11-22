@@ -11,17 +11,17 @@ export {
   getSourcePortConnectivityMapFromCircuitJson,
 } from "circuit-json-to-connectivity-map"
 
-/** Resolve the seed's electrical net, including an isolated seed. */
+/** Return the electrical net members, including the given ID even when isolated. */
 export function sourceNetMembers({
   connectivity,
-  seed,
+  memberId,
 }: {
   connectivity: ConnectivityMap
-  seed: SourcePortId | SourceNetId
+  memberId: SourcePortId | SourceNetId
 }): SourceNetMembers {
-  const netId = connectivity.getNetConnectedToId(seed)
-  if (netId === undefined) return new Set([seed])
-  return new Set([seed, ...connectivity.getIdsConnectedToNet(netId)])
+  const netId = connectivity.getNetConnectedToId(memberId)
+  if (netId === undefined) return new Set([memberId])
+  return new Set([memberId, ...connectivity.getIdsConnectedToNet(netId)])
 }
 
 /** Ids the board wires together through a trace or a part's internally connected pins. */

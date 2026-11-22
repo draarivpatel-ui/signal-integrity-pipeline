@@ -97,9 +97,15 @@ function touchingRailScope(circuit: CircuitJson): CopperScope {
   return channelCopperScope({
     circuit,
     connectivity,
-    selected: sourceNetMembers({ connectivity, seed: rail.source_net_id }),
-    reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
-    rails: new Set(),
+    channelSourceIds: sourceNetMembers({
+      connectivity,
+      memberId: rail.source_net_id,
+    }),
+    referenceSourceIds: sourceNetMembers({
+      connectivity,
+      memberId: ground.source_net_id,
+    }),
+    railSourceIds: new Set(),
     distanceMm: 1,
   })
 }
