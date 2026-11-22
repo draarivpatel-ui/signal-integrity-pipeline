@@ -6,32 +6,20 @@ import type {
   IbisReferencePorts,
   IbisRunConfig,
 } from "@tscircuit/ibis-to-spice"
-import type {
-  SourceComponentBase,
-  SourceGroup,
-  SourceTrace,
-} from "circuit-json"
-import type {
-  CircuitJsonSnapshot,
-  LaneMapping,
-  SourceNetId,
-  SourcePortId,
-  SourceTraceId,
-} from "../board"
-import { circuitJsonDb, selectPort, subcircuitTree } from "../board"
+import type { SourceComponentBase, SourceGroup } from "circuit-json"
+import type { SourcePortId } from "../board"
+import { circuitJsonDb, subcircuitTree } from "../board"
 import type { ModelRunDefinition } from "../buffers"
 import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
+import { placedSubcircuitPins } from "./netlist"
 import {
-  type ChannelEndpoints,
   channelEndpoints,
-  validateNamedNetCuts,
-  validateRoutedNodes,
+  circuitNodes,
+  type CircuitNodesInput,
 } from "./routed-nodes"
-import type { IdealRoutedJunction, RoutedTraceCut } from "./routed-types"
 import { transmittedBits } from "./stimulus"
 import type {
-  CircuitNodes,
   Declarations,
   PipelineIbisModel,
   RunControls,
@@ -81,254 +69,6 @@ const exactly = <T>({ items, label }: { items: T[]; label: string }): T => {
   return items[0]
 }
 
-interface CircuitNodesInput {
-  circuit: CircuitJsonSnapshot
-  mappings: readonly LaneMapping[]
-  routedTraceCuts?: readonly RoutedTraceCut[]
-  idealRoutedJunctions?: readonly IdealRoutedJunction[]
-  additionalSourceTraceIds?: readonly SourceTraceId[]
-  modeling: Snapshot<SimulationModeling>
-}
-
-/** An identifier that can be used as an electrical node. */
-type SourceNodeId = SourcePortId | SourceNetId
-
-/** Representatives used to join source ports and nets before SPICE nodes are numbered. */
-type SourceParents = Map<SourceNodeId, SourceNodeId>
-
-/** Finds the representative of an existing port or net. */
-function sourceRoot({
-  parents,
-  id,
-}: {
-  parents: ReadonlyMap<SourceNodeId, SourceNodeId>
-  id: SourceNodeId
-}): SourceNodeId {
-  let current = id
-  for (;;) {
-    const parent = parents.get(current)
-    if (parent === undefined)
-      fail("simulation_reference", `Unknown source port/net ${current}`)
-    if (parent === current) return current
-    current = parent
-  }
-}
-
-/** A net record's representative after joining net-only traces across subcircuits. */
-function netGroupRoot({
-  netGroup,
-  id,
-}: {
-  netGroup: ReadonlyMap<SourceNetId, SourceNetId>
-  id: SourceNetId
-}): SourceNetId {
-  let current = id
-  for (;;) {
-    const parent = netGroup.get(current)
-    if (parent === undefined || parent === current) return current
-    current = parent
-  }
-}
-
-/** Logical source nets attached to a physical port by single-port traces. */
-type PortNetBindings = Set<SourceNetId>
-
-/** Lists logical nets for a port, excluding traces that belong to the extracted channel. */
-function portNetBindings({
-  port,
-  traces,
-  channelTraces,
-  netGroup,
-}: {
-  port: SourcePortId
-  traces: readonly SourceTrace[]
-  channelTraces: ReadonlySet<SourceTrace["source_trace_id"]>
-  netGroup: ReadonlyMap<SourceNetId, SourceNetId>
-}): PortNetBindings {
-  const bindings = traces.filter(
-    (trace) =>
-      !channelTraces.has(trace.source_trace_id) &&
-      trace.connected_source_port_ids.length === 1 &&
-      trace.connected_source_port_ids[0] === port,
-  )
-  return new Set(
-    bindings
-      .flatMap((trace) => trace.connected_source_net_ids ?? [])
-      .map((id) => netGroupRoot({ netGroup, id })),
-  )
-}
-
-/** Names the SPICE node for a port or net ('0' for the reference), rejecting split channel nets. */
-function createCircuitNodeLookup({
-  parents,
-  splitNets,
-  groundRoot,
-}: {
-  parents: ReadonlyMap<SourceNodeId, SourceNodeId>
-  splitNets: ReadonlySet<SourceNetId>
-  groundRoot: SourceNodeId
-}): CircuitNodes["node"] {
-  const names = new Map([[groundRoot, "0"]])
-  return (id) => {
-    if (splitNets.has(id))
-      fail(
-        "channel_net",
-        `${id}: extracted channel spans distinct endpoint nodes; select a physical port instead of the net`,
-      )
-    const root = sourceRoot({ parents, id })
-    const name = names.get(root) ?? `n${names.size}`
-    names.set(root, name)
-    return name
-  }
-}
-
-/**
- * Resolve electrical connectivity while leaving extracted PCB channel endpoints distinct.
- * The order in which roots are registered also sets the SPICE node numbering.
- */
-export function circuitNodes({
-  circuit,
-  mappings,
-  routedTraceCuts,
-  idealRoutedJunctions,
-  additionalSourceTraceIds,
-  modeling,
-}: CircuitNodesInput): CircuitNodes {
-  const parents: SourceParents = new Map()
-  for (const element of circuit) {
-    if (element.type === "source_port" && element.source_port_id)
-      parents.set(element.source_port_id, element.source_port_id)
-    if (element.type === "source_net" && element.source_net_id)
-      parents.set(element.source_net_id, element.source_net_id)
-  }
-  // Legacy callers use receiver mappings for both logical paths and electrical cuts.
-  const traceCuts = channelEndpoints({
-    mappings: routedTraceCuts ? [] : mappings,
-    routedTraceCuts,
-  })
-  const channelTraces = new Set(
-    routedTraceCuts
-      ? routedTraceCuts.map(({ sourceTraceId }) => sourceTraceId)
-      : mappings.flatMap(
-          ({ sourceTraceIds, sourceTraceId }) =>
-            sourceTraceIds ?? [sourceTraceId],
-        ),
-  )
-  for (const sourceTraceId of additionalSourceTraceIds ?? [])
-    channelTraces.add(sourceTraceId)
-  const db = circuitJsonDb(circuit)
-  const traces = db.source_trace.list()
-  const nets = db.source_net.list()
-  // A linear routed path can carry redundant one-port declarations of the same net.
-  const splitNets = new Set<SourceNetId>()
-  // Subcircuits scope net records: one logical net crossing subcircuits is
-  // several records joined by net-only traces. Treat each such group as one net.
-  const netGroup = new Map<SourceNetId, SourceNetId>()
-  for (const trace of traces) {
-    if (
-      channelTraces.has(trace.source_trace_id) ||
-      trace.connected_source_port_ids.length
-    )
-      continue
-    const [first, ...rest] = trace.connected_source_net_ids ?? []
-    for (const id of rest) {
-      netGroup.set(
-        netGroupRoot({ netGroup, id }),
-        netGroupRoot({ netGroup, id: first }),
-      )
-    }
-  }
-  const cutsByNet = new Map<SourceNetId, ChannelEndpoints[]>()
-  for (const cut of traceCuts) {
-    const from = portNetBindings({
-      port: cut.fromSourcePortId,
-      traces,
-      channelTraces,
-      netGroup,
-    })
-    const to = portNetBindings({
-      port: cut.toSourcePortId,
-      traces,
-      channelTraces,
-      netGroup,
-    })
-    for (const group of from) {
-      if (!to.has(group)) continue
-      const cuts = cutsByNet.get(group) ?? []
-      cutsByNet.set(group, [...cuts, cut])
-    }
-  }
-  for (const [group, cuts] of cutsByNet) {
-    const label = cuts[0].label
-    const ids = new Set(
-      nets
-        .map((net) => net.source_net_id)
-        .filter((id) => netGroupRoot({ netGroup, id }) === group),
-    )
-    if (nets.some((net) => ids.has(net.source_net_id) && net.is_ground))
-      fail("channel_short", `${label}: channel is bound to ground`)
-    const attached = traces.filter((t) =>
-      t.connected_source_net_ids?.some((id) => ids.has(id)),
-    )
-    const hasAdditionalBindings = attached.some((trace) => {
-      const nets = trace.connected_source_net_ids!
-      return (
-        nets.some((id) => !ids.has(id)) ||
-        (trace.connected_source_port_ids.length > 0 && nets.length !== 1)
-      )
-    })
-    if (hasAdditionalBindings)
-      fail(
-        "channel_net",
-        `${label}: shared channel net has additional net bindings; select explicit endpoints`,
-      )
-    validateNamedNetCuts({
-      cuts,
-      members: attached.flatMap((trace) => trace.connected_source_port_ids),
-    })
-    for (const id of ids) splitNets.add(id)
-  }
-  for (const trace of traces) {
-    if (channelTraces.has(trace.source_trace_id)) continue
-    // Keep all explicit port-to-port paths, including genuine ideal bypasses.
-    const connected = [
-      ...(trace.connected_source_port_ids ?? []),
-      ...(trace.connected_source_net_ids ?? []).filter(
-        (id) => !splitNets.has(id),
-      ),
-    ]
-    for (const id of connected) {
-      if (id && !parents.has(id)) parents.set(id, id)
-    }
-    for (const id of connected.slice(1)) {
-      parents.set(
-        sourceRoot({ parents, id }),
-        sourceRoot({ parents, id: connected[0] }),
-      )
-    }
-  }
-  const ground = selectPort({
-    circuit,
-    selector: modeling.channelReference,
-  }).source_port_id
-  const groundRoot = sourceRoot({ parents, id: ground })
-  const node = createCircuitNodeLookup({ parents, splitNets, groundRoot })
-  const ids = [...parents.keys()].filter((id) => !splitNets.has(id))
-  for (const id of ids) node(id)
-  validateRoutedNodes({
-    mappings,
-    routedTraceCuts,
-    idealRoutedJunctions,
-    node,
-    db,
-  })
-  return {
-    node,
-    groundSourcePortId: ground,
-    mapping: Object.fromEntries(ids.map((id) => [id, node(id)])),
-  }
-}
-
 /** Finds a modeled component's subcircuit through its groups, or returns null at board level. */
 function componentScope({
   id,
@@ -336,7 +76,7 @@ function componentScope({
   groups,
 }: {
   id: SourceComponentBase["source_component_id"] | undefined
-  components: readonly SourceComponentBase[]
+  components: readonly Snapshot<SourceComponentBase>[]
   groups: ReadonlyMap<SourceGroup["source_group_id"], SourceGroup>
 }): NonNullable<SourceComponentBase["subcircuit_id"]> | null {
   const component = components.find(
@@ -368,7 +108,6 @@ export function generalDeclarations({
   circuit,
   mappings,
   routedTraceCuts,
-  idealRoutedJunctions,
   additionalSourceTraceIds,
   modeling,
   controls,
@@ -421,7 +160,6 @@ export function generalDeclarations({
     circuit,
     mappings,
     routedTraceCuts,
-    idealRoutedJunctions,
     additionalSourceTraceIds,
     modeling,
   })
@@ -631,13 +369,18 @@ export function generalDeclarations({
               component.source_component_id === sourceComponentId &&
               passiveTypes.includes(component.ftype),
           )
-          if (
-            isPassive ||
-            db.simulation_spice_subcircuit.getWhere({
-              source_component_id: sourceComponentId,
-            })
-          )
-            continue
+          const placed = db.simulation_spice_subcircuit.getWhere({
+            source_component_id: sourceComponentId,
+          })
+          if (placed) {
+            const terminals = placedSubcircuitPins(placed.subcircuit_source)
+            if (
+              terminals?.some(
+                (pin) => placed.spice_pin_to_source_port_map[pin] === endpoint,
+              )
+            )
+              continue
+          } else if (isPassive) continue
         }
         const requirement =
           "requires exactly one modeled physical pin and an explicit run state"

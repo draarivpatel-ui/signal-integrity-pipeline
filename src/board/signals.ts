@@ -3,6 +3,7 @@ import type {
   SimulationPcbDriverReceiverChannel,
   SimulationPcbTransientChannelSimulation,
 } from "circuit-json"
+import type { Snapshot } from "../kernel"
 
 export type {
   SignalEndpoint,
@@ -20,7 +21,9 @@ function isConstantBitPattern(pattern: string): boolean {
 }
 
 /** Returns whether a channel has a disabled driver or a constant literal bit pattern. */
-export function isQuiet(channel: SimulationPcbDriverReceiverChannel): boolean {
+export function isQuiet(
+  channel: Snapshot<SimulationPcbDriverReceiverChannel>,
+): boolean {
   return (
     channel.driver_disabled === true || isConstantBitPattern(channel.pattern)
   )

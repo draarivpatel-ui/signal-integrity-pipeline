@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { selectPort } from "../../../src/board"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { AdmissionDaisyChain } from "../../fixtures/admission-daisy-chain"
@@ -20,11 +21,17 @@ test("an ideal wire can join successive cuts on one partial receiver path", asyn
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [junction] = bindings.idealRoutedJunctions
-  assert.ok(junction)
+  const middlePort = selectPort({
+    circuit: circuitJson,
+    selector: { component: "MID", port: "A" },
+  })
+  const junctionPort = selectPort({
+    circuit: circuitJson,
+    selector: { component: "JOIN", port: "A" },
+  })
   const { node } = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
-  const middleNode = node(junction.fromSourcePortId)
-  assert.equal(middleNode, node(junction.toSourcePortId))
+  const middleNode = node(middlePort.source_port_id)
+  assert.equal(middleNode, node(junctionPort.source_port_id))
   assert.equal(bindings.mappings[1]?.sourceTraceIds?.length, 2)
   expectAdmissionPcbSnapshot({
     circuitJson,
