@@ -267,15 +267,15 @@ export async function scopeNeighbors(): Promise<ScopeNeighbors> {
   const scope = channelCopperScope({
     circuit,
     connectivity,
-    selected: sourceNetMembers({
+    channelSourceIds: sourceNetMembers({
       connectivity,
       memberId: selected.connected_source_port_ids[0],
     }),
-    reference: sourceNetMembers({
+    referenceSourceIds: sourceNetMembers({
       connectivity,
       memberId: ground.source_net_id,
     }),
-    rails: new Set(),
+    railSourceIds: new Set(),
     distanceMm: 1,
   })
   const traces = circuit.filter((record) => record.type === "pcb_trace")
@@ -353,28 +353,28 @@ export function scopeFor({
     assert(source?.type === "source_trace")
     memberId = source.connected_source_port_ids[0]
   }
-  const selected = sourceNetMembers({ connectivity, memberId })
-  let reference = new Set<SourceNetId>()
+  const channelSourceIds = sourceNetMembers({ connectivity, memberId })
+  let referenceSourceIds = new Set<SourceNetId>()
   if (referenceNet !== undefined) {
-    reference = sourceNetMembers({
+    referenceSourceIds = sourceNetMembers({
       connectivity,
       memberId: scopeNet({ circuit, name: referenceNet }),
     })
   }
-  const rails = new Set<SourceNetId>()
+  const railSourceIds = new Set<SourceNetId>()
   for (const name of railNets) {
     const members = sourceNetMembers({
       connectivity,
       memberId: scopeNet({ circuit, name }),
     })
-    for (const id of members) rails.add(id)
+    for (const id of members) railSourceIds.add(id)
   }
   return channelCopperScope({
     circuit,
     connectivity,
-    selected,
-    reference,
-    rails,
+    channelSourceIds,
+    referenceSourceIds,
+    railSourceIds,
     distanceMm,
   })
 }

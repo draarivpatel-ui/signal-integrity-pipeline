@@ -33,9 +33,9 @@ test("a routed source trace can be selected by an explicit source net ID", async
   const result = channelCopperScope({
     circuit: records,
     connectivity: new ConnectivityMap({}),
-    selected: new Set([net]),
-    reference: new Set(),
-    rails: new Set(),
+    channelSourceIds: new Set([net]),
+    referenceSourceIds: new Set(),
+    railSourceIds: new Set(),
     distanceMm: 0.5,
   })
   assert.deepEqual(result.channelPcbTraceIds, [trace.pcb_trace_id])
