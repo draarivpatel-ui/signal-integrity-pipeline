@@ -31,7 +31,7 @@ test("a selected-net pour seeds a neighbor beyond the selected wire's reach", as
   assert(pour)
   const neighbor = scopeTrace({ circuit, name: "NEAR_POUR" }).pcb_trace_id
   assert(
-    scopeFor({ circuit, selectedNet: "CHANNEL" }).pcbTraceIds.includes(
+    scopeFor({ circuit, selectedNet: "CHANNEL" }).retainedPcbTraceIds.includes(
       neighbor,
     ),
   )
@@ -39,6 +39,6 @@ test("a selected-net pour seeds a neighbor beyond the selected wire's reach", as
     !scopeFor({
       circuit: circuit.filter((record) => record !== pour),
       selectedNet: "CHANNEL",
-    }).pcbTraceIds.includes(neighbor),
+    }).retainedPcbTraceIds.includes(neighbor),
   )
 })

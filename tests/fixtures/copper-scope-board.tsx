@@ -277,7 +277,7 @@ export async function scopeNeighbors(): Promise<ScopeNeighbors> {
   })
   const traces = circuit.filter((record) => record.type === "pcb_trace")
   const retained = traces
-    .filter((trace) => scope.pcbTraceIds.includes(trace.pcb_trace_id))
+    .filter((trace) => scope.retainedPcbTraceIds.includes(trace.pcb_trace_id))
     .map((trace) => {
       const source = sourceTraces.find(
         (source) => source.source_trace_id === trace.source_trace_id,
