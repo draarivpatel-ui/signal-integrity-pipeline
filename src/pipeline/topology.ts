@@ -1,10 +1,11 @@
+import type { Snapshot } from "../kernel"
 import type { PcbPort, PcbTrace, SourceTrace } from "circuit-json"
 import {
   ConnectivityMap,
   findConnectedNetworks,
 } from "circuit-json-to-connectivity-map"
 import {
-  type CircuitJson,
+  type CircuitJsonSnapshot,
   type CircuitJsonDb,
   circuitJsonDb,
   type PassiveBridge,
@@ -25,7 +26,6 @@ import {
 
 /** The source grouping and the series connections permitted for the channel simulation's rails. */
 interface SignalTopology {
-  sourceConnectionGroups: ReturnType<typeof sourceConnections>
   connectivity: ConnectivityMap
   bridges: PassiveBridge[]
   rails: ReadonlySet<SourcePortId | SourceNetId>
@@ -55,8 +55,8 @@ type PortNames = Record<SourcePortId, string>
 interface SelectedCopper {
   selected: ReadonlySet<SourcePortId | SourceNetId>
   traceIds: ReadonlySet<SourceTrace["source_trace_id"]>
-  traces: PcbTrace[]
-  ports: PcbPort[]
+  traces: readonly Snapshot<PcbTrace>[]
+  ports: readonly Snapshot<PcbPort>[]
 }
 
 /** A driver starts a routed path with at most one physical edge. */
@@ -69,7 +69,7 @@ export function signalTopology({
   circuit,
   rails,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   rails: ReadonlySet<SourcePortId | SourceNetId>
 }): SignalTopology {
   const bridges = passiveBridges({ circuit, excluded: rails })
@@ -77,12 +77,12 @@ export function signalTopology({
   const connectivity = new ConnectivityMap(
     findConnectedNetworks([...sourceConnectionGroups, ...bridges]),
   )
-  return { connectivity, bridges, rails, sourceConnectionGroups }
+  return { connectivity, bridges, rails }
 }
 
 /** Keep endpoint ports in positive-to-negative order for differential channels. */
 function endpointPorts(
-  endpoint: SimulationPcbDriverReceiverChannel["driver"],
+  endpoint: Snapshot<SimulationPcbDriverReceiverChannel>["driver"],
 ): EndpointPorts {
   if ("source_port_id" in endpoint) return [endpoint.source_port_id]
   return [endpoint.p_source_port_id, endpoint.n_source_port_id]
@@ -96,7 +96,7 @@ function selectCopper({
 }: {
   db: CircuitJsonDb
   topology: SignalTopology
-  driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
 }): SelectedCopper {
   const { connectivity, rails } = topology
   const selected = new Set(
@@ -161,7 +161,7 @@ function differentialLegs({
   terminals,
   nets,
 }: {
-  driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
   terminals: CopperTerminals
   nets: CopperNets
 }): DifferentialCopper[] {
@@ -264,7 +264,7 @@ function checkSignalRoutes({
   names,
   allowUnroutedTraces,
 }: {
-  driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
   graph: CopperGraph
   terminals: CopperTerminals
   routed: ReadonlySet<CopperPointKey>
@@ -321,9 +321,9 @@ export function validateSignalGraph({
   driverReceiverChannels,
   allowUnroutedTraces,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   topology: SignalTopology
-  driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
   allowUnroutedTraces: boolean
 }): void {
   const db = circuitJsonDb(circuit)
