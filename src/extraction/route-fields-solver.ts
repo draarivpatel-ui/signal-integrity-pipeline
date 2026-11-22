@@ -274,7 +274,7 @@ export class RouteFieldsSolver extends BaseSolver {
   override visualize(): GraphicsObject {
     const { geometry, circuitJson, scope } = this.input
     const selected = new Set(
-      scope?.selectedPcbTraceIds ?? geometry.wires.map((wire) => wire.trace),
+      scope?.channelPcbTraceIds ?? geometry.wires.map((wire) => wire.trace),
     )
     let best: ExtractedRouteSlice | undefined
     if (this.solved)
