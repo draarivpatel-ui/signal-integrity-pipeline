@@ -1,8 +1,8 @@
 # Signal-integrity pipeline architecture
 
 `RoutedPipelineSolver` is the public entry. It consumes Circuit JSON source records
-from RFC #28. `pipeline/signals.ts` (`prepareBlockById`) groups blocks and derives
-private settings and native declarations, one block per admission step. The lowered
+from RFC #28. `pipeline/signals.ts` (`prepareChannelSimulationById`) groups channel simulations and derives
+private settings and native declarations, one channel simulation per admission step. The lowered
 transient records are private and never appear in the input Circuit JSON.
 
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
@@ -19,21 +19,21 @@ RouteTransientSolver invokes ngspice through the injected solver port and publis
 
 ```mermaid
 flowchart LR
-  source["Circuit JSON SI records"] --> admit["pipeline: independent block admission<br/>buffers: package admission, unlisted-pin hierarchy and passivity"]
+  source["Circuit JSON SI records"] --> admit["pipeline: independent channel simulation admission<br/>buffers: package admission, unlisted-pin hierarchy and passivity"]
   admit --> sections["board: copper scope, straight sections and reference planes"]
   sections --> fields["extraction: quasi-TEM cross-sections, pair screen and causal loss"]
   admit --> bindings["buffers + simulation: vendor models, pin packages, ideal die rails, probes and sources"]
   fields --> network["simulation: coupled ladders, via and oblique corrections, one deck"]
   bindings --> network
-  network --> transient["simulation: one native ngspice transient per block"]
+  network --> transient["simulation: one native ngspice transient per channel simulation"]
   transient --> output["pipeline: captures and the sealed artifact ledger"]
-  admit -->|"no SI blocks"| output
+  admit -->|"no channel simulations"| output
 ```
 
 Module boundaries remain enforced by `check:modules`: modules import one another
 through their index, never internals; imports are acyclic; only adapters import
 Node facilities. Domain modules return owned artifacts. The pipeline ledger
-rejects path collisions and seals files in sorted order. Blocks have separate
+rejects path collisions and seals files in sorted order. Channel simulations have separate
 artifact prefixes.
 
 `board` owns physical admission, the copper scope, route sections and board drawings;
@@ -46,7 +46,7 @@ native runs. `adapters` supplies explicit filesystem/process IO.
 `buffers/package-model.ts` parses local IBIS package definitions;
 `package-matrix.ts` validates the complete matrices and reduces unused floating
 pins; `coupled-package.ts` emits the coupled lumped pi circuit. Admission runs
-during block admission, before extraction. Assembly records selected matrices,
+during channel simulation admission, before extraction. Assembly records selected matrices,
 original self terms, unused pins, merged rail associations and the termination policy.
 Unlisted pins follow the IBIS scalar hierarchy or implicit merged rail bus rules.
 Core only checks declaration/model bindings, capabilities and routing. The converter still
@@ -66,7 +66,7 @@ Core#5286 emits JLC preset plating (0.018 mm), preserving explicit imported stac
 quasi-TEM numerical interface. It consumes rectangles, infinite solid references,
 and dielectric/mask slabs and returns per-unit-length C/C0/L and frequency-dependent
 R/G. `RouteFieldsSolver` consumes it. The routed root folds the ledger once
-all block stages complete.
+all channel simulation stages complete.
 
 ```mermaid
 flowchart LR
@@ -104,10 +104,10 @@ flowchart LR
 ## Inspectable routed compiler
 
 Stage classes live with their domain knowledge. Root admission calls
-`prepareBlockById` once per SI block. Each admitted
-block is passed through the same six static top-level stages. The entire
+`prepareChannelSimulationById` once per channel simulation. Each admitted
+channel simulation is passed through the same six static top-level stages. The entire
 `pipelineDef` exists before admission starts; no step creates stages at runtime.
-`RoutedStageSolver` steps each domain algorithm across all admitted blocks in
+`RoutedStageSolver` steps each domain algorithm across all admitted channel simulations in
 order, one domain item per step, and publishes an immutable array in admission
 order. It is a `BaseSolver`, with no nested pipeline or child debugger rows.
 The single `routedStages` tuple supplies the debugger order, tests, artifact
@@ -126,12 +126,12 @@ Regenerate with `bun scripts/document-routed-stages.ts`.
 
 ```mermaid
 flowchart LR
-  s0["RoutedAdmissionSolver<br/>Admit one SI block per step"]
-  s1["RouteSectionsSolver<br/>All admitted blocks, one item per step"]
-  s2["RouteFieldsSolver<br/>All admitted blocks, one item per step"]
-  s3["RouteBindingsSolver<br/>All admitted blocks, one item per step"]
-  s4["RouteNetworkSolver<br/>All admitted blocks, one item per step"]
-  s5["RouteTransientSolver<br/>All admitted blocks, one item per step"]
+  s0["RoutedAdmissionSolver<br/>Admit one channel simulation per step"]
+  s1["RouteSectionsSolver<br/>All admitted channel simulations, one item per step"]
+  s2["RouteFieldsSolver<br/>All admitted channel simulations, one item per step"]
+  s3["RouteBindingsSolver<br/>All admitted channel simulations, one item per step"]
+  s4["RouteNetworkSolver<br/>All admitted channel simulations, one item per step"]
+  s5["RouteTransientSolver<br/>All admitted channel simulations, one item per step"]
   s0 --> s1
   s1 --> s2
   s2 --> s3
@@ -143,11 +143,11 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
   [*] --> RoutedAdmissionSolver
-  RoutedAdmissionSolver --> RouteSectionsSolver: all blocks completed
-  RouteSectionsSolver --> RouteFieldsSolver: all blocks completed
-  RouteFieldsSolver --> RouteBindingsSolver: all blocks completed
-  RouteBindingsSolver --> RouteNetworkSolver: all blocks completed
-  RouteNetworkSolver --> RouteTransientSolver: all blocks completed
+  RoutedAdmissionSolver --> RouteSectionsSolver: all channel simulations completed
+  RouteSectionsSolver --> RouteFieldsSolver: all channel simulations completed
+  RouteFieldsSolver --> RouteBindingsSolver: all channel simulations completed
+  RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
+  RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
   RoutedAdmissionSolver --> failed
   RouteSectionsSolver --> failed
