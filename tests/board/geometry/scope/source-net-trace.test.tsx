@@ -12,26 +12,15 @@ import { renderCoreSignals } from "../../../support/core-render"
 test("a routed source trace can be selected by an explicit source net ID", async () => {
   const circuit = await renderCoreSignals(
     <board width={20} height={18} routeRemaining={false} schematicDisabled>
-      <Wire name="CHANNEL" y={0} extent={3} />
+      <Wire name="CHANNEL" y={0} extent={3} net="net.SIGNAL" />
       <Wire name="FAR" y={5} extent={3} />
       <trace from=".FAR > .A" to="net.SIGNAL" />
-      <trace name="NET_LINK" from=".CHANNEL > .A" to="net.SIGNAL" />
     </board>,
   )
   const trace = scopeTrace({ circuit, name: "CHANNEL" })
   const net = scopeNet({ circuit, name: "SIGNAL" })
-  const source = circuit.find(
-    (record) => record.type === "source_trace" && record.name === "NET_LINK",
-  )
-  assert(source?.type === "source_trace")
-  assert(source.connected_source_net_ids?.includes(net))
-  // A route can reference the trace that declares its net instead of the point-to-point trace.
-  const records = circuit.map((record) => {
-    if (record !== trace) return record
-    return { ...trace, source_trace_id: source.source_trace_id }
-  })
   const result = channelCopperScope({
-    circuit: records,
+    circuit,
     connectivity: new ConnectivityMap({}),
     channelSourceIds: new Set([net]),
     referenceSourceIds: new Set(),
@@ -47,6 +36,7 @@ test("a routed source trace can be selected by an explicit source net ID", async
       record.source_trace_id === trace.source_trace_id,
   )
   assert(channel?.type === "source_trace")
+  assert(channel.connected_source_net_ids?.includes(net))
   assert.deepEqual(
     new Set(result.extractedSourceIds),
     new Set([net, ...channel.connected_source_port_ids]),
