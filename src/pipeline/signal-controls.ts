@@ -1,4 +1,3 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import {
   type CircuitJson,
   isQuiet,
@@ -13,6 +12,7 @@ import {
 import { type InspectedPin, pinCapabilities } from "../buffers"
 import { Diagnostic } from "../kernel"
 import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
+import { circuitJsonDb } from "./circuit-json-db"
 import { defaultDurationSeconds, prbsPatterns } from "./timing"
 
 /** Milliseconds in one second. */
@@ -219,7 +219,8 @@ export function withChannelSimulationControls({
   stepSeconds,
 }: ChannelSimulationControlOptions): ChannelSimulationControls {
   const controls: RunControls = { states: [], stimuli: [] }
-  const scope = cju([...circuit]).pcb_board.getWhere({})?.subcircuit_id
+  const db = circuitJsonDb(circuit)
+  const scope = db.pcb_board.getWhere({})?.subcircuit_id
   const records: CircuitJson = []
   records.push({
     type: "simulation_experiment",
