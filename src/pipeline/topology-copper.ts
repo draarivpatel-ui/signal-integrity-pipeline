@@ -22,7 +22,7 @@ import type {
 } from "circuit-json"
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
 import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
-import { circuitJsonDb } from "./circuit-json-db"
+import { circuitJsonDb } from "../board"
 
 /** A quantized point or the key of a copper feature that acts as one junction. */
 export type CopperPointKey = string

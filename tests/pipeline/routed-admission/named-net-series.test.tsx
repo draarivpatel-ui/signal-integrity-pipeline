@@ -1,7 +1,8 @@
 import { test } from "bun:test"
+import { cju } from "@tscircuit/circuit-json-util"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { AdmissionChannel } from "../../fixtures/admission-channel"
-import { expectAdmissionPcbSnapshot } from "../../fixtures/admission-pcb-snapshot"
+import { resolveAdmissionTraceCuts } from "../../fixtures/admission-pcb-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
@@ -15,10 +16,9 @@ test("redundant named nets do not short routed series segments", async () => {
     ibisSources: { "models/sn74lvc1g04.ibs": routedVisualIbis },
   })
   solver.solve()
-  expectAdmissionPcbSnapshot({
-    circuitJson,
+  resolveAdmissionTraceCuts({
+    db: cju([...circuitJson]),
     plan: solver.getOutput().value[0],
     expectedTraceCount: 2,
-    testPath: import.meta.path,
   })
 })
