@@ -11,7 +11,11 @@ import {
   resolveIbisReferences,
   resolveIbisReferenceVoltages,
 } from "@tscircuit/ibis-to-spice"
-import type { CircuitJson, SimulationIbisModel, SourcePortId } from "../board"
+import type {
+  CircuitJsonSnapshot,
+  SimulationIbisModel,
+  SourcePortId,
+} from "../board"
 import { fail } from "./diagnostics"
 import { loadModelSource } from "./source"
 import type { IbisSources } from "./types"
@@ -131,7 +135,7 @@ function selectedModelName({
 
 /** Circuit and assets to inspect for the requested source ports. */
 type PinInspectionOptions = {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   sources: IbisSources
   ports: ReadonlySet<SourcePortId>
 }
