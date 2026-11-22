@@ -29,6 +29,6 @@ test("a named net can be split along a two-cut routed path", async () => {
     plan,
     expectedTraceCount: 2,
     testPath: import.meta.path,
-    idealConnection: "DATA names the full two-cut path",
+    caption: "DATA names the full two-cut path",
   })
 })

@@ -1,7 +1,7 @@
 // Topology/transient unit-test source only.
 import { simulation } from "@tscircuit/core"
 import type { ResistorProps } from "@tscircuit/props"
-import type React from "react"
+import { Fragment, type JSX } from "react"
 import { Reference, Transceiver } from "./signal-parts"
 
 /** Differential test rate in bits per second. */
@@ -21,7 +21,7 @@ export default function ({
   routedTermination?: boolean
   short?: "TX" | "RX" | "RTERM"
   seriesPositive?: boolean
-}): React.JSX.Element {
+}): JSX.Element {
   let positive = "A"
   let negative = "B"
   if (reversed) {
@@ -130,7 +130,7 @@ export default function ({
 }
 
 /** Give P a longer physical path than the source shortcut through both terminations. */
-function DualTerminatedPositiveLeg(): React.JSX.Element {
+function DualTerminatedPositiveLeg(): JSX.Element {
   const footprints = [-3, -1, 1, 3]
   const names = footprints.map((_, index) => `RS${index + 1}`)
   const from = [".TX > .A", ...names.map((name) => `.${name} > .pin2`)]
@@ -145,23 +145,25 @@ function DualTerminatedPositiveLeg(): React.JSX.Element {
         connections={{ pin1: ".TX > .A", pin2: ".TX > .B" }}
       />
       {names.map((name, index) => (
-        <resistor
-          key={name}
-          name={name}
-          resistance="33"
-          footprint="0402"
-          pcbX={footprints[index]}
-          pcbY={0.3}
-        />
+        <Fragment key={name}>
+          <resistor
+            name={name}
+            resistance="33"
+            footprint="0402"
+            pcbX={footprints[index]}
+            pcbY={0.3}
+          />
+        </Fragment>
       ))}
       {from.map((pin, index) => (
-        <trace
-          key={pin}
-          from={pin}
-          to={to[index]}
-          width={0.15}
-          pcbPath={[pin, to[index]]}
-        />
+        <Fragment key={pin}>
+          <trace
+            from={pin}
+            to={to[index]}
+            width={0.15}
+            pcbPath={[pin, to[index]]}
+          />
+        </Fragment>
       ))}
     </>
   )

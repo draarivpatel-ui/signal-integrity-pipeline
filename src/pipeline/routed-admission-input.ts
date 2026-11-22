@@ -1,5 +1,5 @@
 import {
-  type CircuitJson,
+  type CircuitJsonSnapshot,
   type SimulationPcbTransientChannelSimulation,
   validateCircuitRecords,
 } from "../board"
@@ -9,7 +9,7 @@ import { listChannelSimulations, validatedScopeDistanceMm } from "./signals"
 
 /** Board and model sources supplied to routed admission. */
 export interface RoutedAdmissionInput {
-  readonly circuitJson: CircuitJson
+  readonly circuitJson: CircuitJsonSnapshot
   readonly ibisSources: Readonly<IbisSources>
   readonly scopeDistanceMm?: number
 }
@@ -19,7 +19,7 @@ function captureIbisSources(
   sources: Readonly<IbisSources>,
 ): Readonly<IbisSources> {
   const prototype: unknown = sources && Object.getPrototypeOf(sources)
-  if (prototype !== Object.prototype && prototype !== null)
+  if (!sources || (prototype !== Object.prototype && prototype !== null))
     throw new Diagnostic(
       "buffers",
       "ibis_asset",

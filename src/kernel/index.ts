@@ -25,4 +25,4 @@ export {
 export { sha256 } from "./hash"
 export { type SafeId, safeId } from "./ids"
 
-export { snapshot } from "./snapshot"
+export { type Snapshot, snapshot } from "./snapshot"

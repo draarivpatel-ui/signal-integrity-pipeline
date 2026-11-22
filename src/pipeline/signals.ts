@@ -1,14 +1,15 @@
 import type {
   CircuitJson,
+  CircuitJsonSnapshot,
   SimulationPcbDriverReceiverChannel,
   SimulationPcbTransientChannelSimulation,
   SimulationPcbTransientChannelSimulationId,
   SourcePortId,
 } from "../board"
+import { circuitJsonDb } from "../board"
 import type { IbisSources, InspectedPin } from "../buffers"
 import { type SafeId, safeId } from "../kernel"
 import type { RunControls } from "../simulation"
-import { circuitJsonDb } from "./circuit-json-db"
 import type { NumericalSettings } from "./modeling"
 import {
   type ChannelSimulationControlOptions,
@@ -52,7 +53,7 @@ export interface PreparedChannelSimulation {
 
 /** Validate the shared channel simulation namespace before any independent channel simulation work. */
 export function listChannelSimulations(
-  circuitJson: CircuitJson,
+  circuitJson: CircuitJsonSnapshot,
 ): SimulationPcbTransientChannelSimulation[] {
   const db = circuitJsonDb(circuitJson)
   const channelSimulations =
@@ -114,7 +115,7 @@ export function prepareChannelSimulationById({
   simulationPcbTransientChannelSimulationId,
   distanceMm,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   sources: IbisSources
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
   distanceMm?: number
@@ -221,7 +222,6 @@ function selectChannelSimulation({
     driverReceiverChannels,
   })
   const circuit = channelSimulationCircuit({
-    boardCircuitJson,
     db,
     channelSimulation,
     driverReceiverChannels,
@@ -237,7 +237,7 @@ function selectChannelSimulation({
 
 /** A board and one validated simulation declaration with its model sources and radius. */
 interface ChannelSimulationOptions {
-  boardCircuitJson: CircuitJson
+  boardCircuitJson: CircuitJsonSnapshot
   channelSimulation: SimulationPcbTransientChannelSimulation
   simulationPcbTransientChannelSimulationId: SafeId
   sources: IbisSources

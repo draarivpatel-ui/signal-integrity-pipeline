@@ -1,9 +1,10 @@
 import { expect } from "bun:test"
 import assert from "node:assert/strict"
-import { cju } from "@tscircuit/circuit-json-util"
+import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import type {
   PcbFabricationNotePath,
   PcbFabricationNoteText,
+  PcbTrace,
 } from "circuit-json"
 import type { CircuitJson } from "../../src/board"
 import type { RoutedChannelSimulationPlan } from "../../src/pipeline"
@@ -17,49 +18,77 @@ const LEGEND_MARGIN_MM = 0.7
 const LEGEND_LINE_MM = 0.68
 const CUT_WIDTH_MM = 0.22
 
-/** Verify every in-scope routed trace was cut and snapshot the resolved endpoint nodes. */
-export function expectAdmissionPcbSnapshot({
-  circuitJson,
+/** A physical trace and its separated SPICE nodes. */
+interface ResolvedAdmissionTrace {
+  pcbTrace: PcbTrace
+  fromSourcePortId: string
+  toSourcePortId: string
+  fromNode: string
+  toNode: string
+}
+
+/** Check that each extracted trace has its own electrical cut. */
+export function resolveAdmissionTraceCuts({
+  db,
   plan,
   expectedTraceCount,
-  testPath,
-  idealConnection,
 }: {
-  circuitJson: CircuitJson
+  db: CircuitJsonUtilObjects
   plan: RoutedChannelSimulationPlan
   expectedTraceCount: number
-  testPath: string
-  idealConnection?: string
-}): void {
+}): ResolvedAdmissionTrace[] {
   const { bindings, sections } = plan
   const { node } = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
-  const db = cju([...circuitJson])
-  const [board] = db.pcb_board.list()
-  assert.ok(board?.height)
   const { channelPcbTraceIds } = sections.copperScope
   assert.equal(channelPcbTraceIds.length, expectedTraceCount)
   assert.equal(bindings.routedTraceCuts.length, expectedTraceCount)
-  const paths: PcbFabricationNotePath[] = []
-  const captions: PcbFabricationNoteText[] = []
-  for (const [index, pcbTraceId] of channelPcbTraceIds.entries()) {
+  return channelPcbTraceIds.map((pcbTraceId) => {
     const pcbTrace = db.pcb_trace.get(pcbTraceId)
     assert.ok(pcbTrace?.source_trace_id)
     const cut = bindings.routedTraceCuts.find(
       ({ sourceTraceId }) => sourceTraceId === pcbTrace.source_trace_id,
     )
     assert.ok(cut)
-    const fromNode = node(cut.fromSourcePortId)
-    const toNode = node(cut.toSourcePortId)
+    const { fromSourcePortId, toSourcePortId } = cut
+    const fromNode = node(fromSourcePortId)
+    const toNode = node(toSourcePortId)
     assert.notEqual(fromNode, toNode, cut.sourceTraceId)
-    const labels = [cut.fromSourcePortId, cut.toSourcePortId].map(
-      (sourcePortId) => {
-        const port = db.source_port.get(sourcePortId)
-        assert.ok(port?.source_component_id)
-        const component = db.source_component.get(port.source_component_id)
-        assert.ok(component)
-        return `${component.name}.${port.name}`
-      },
-    )
+    return { pcbTrace, fromSourcePortId, toSourcePortId, fromNode, toNode }
+  })
+}
+
+/** Verify every in-scope routed trace was cut and snapshot the resolved endpoint nodes. */
+export function expectAdmissionPcbSnapshot({
+  circuitJson,
+  plan,
+  expectedTraceCount,
+  testPath,
+  caption,
+}: {
+  circuitJson: CircuitJson
+  plan: RoutedChannelSimulationPlan
+  expectedTraceCount: number
+  testPath: string
+  caption?: string
+}): void {
+  const db = cju([...circuitJson])
+  const [board] = db.pcb_board.list()
+  assert.ok(board?.height)
+  const traces = resolveAdmissionTraceCuts({ db, plan, expectedTraceCount })
+  const paths: PcbFabricationNotePath[] = []
+  const captions: PcbFabricationNoteText[] = []
+  for (const [
+    index,
+    { pcbTrace, fromSourcePortId, toSourcePortId, fromNode, toNode },
+  ] of traces.entries()) {
+    const pcbTraceId = pcbTrace.pcb_trace_id
+    const labels = [fromSourcePortId, toSourcePortId].map((sourcePortId) => {
+      const port = db.source_port.get(sourcePortId)
+      assert.ok(port?.source_component_id)
+      const component = db.source_component.get(port.source_component_id)
+      assert.ok(component)
+      return `${component.name}.${port.name}`
+    })
     const color = ROUTE_COLORS[index]
     paths.push({
       type: "pcb_fabrication_note_path",
@@ -91,11 +120,11 @@ export function expectAdmissionPcbSnapshot({
       },
     })
   }
-  if (idealConnection) {
+  if (caption) {
     captions.push({
       ...captions[0],
       pcb_fabrication_note_text_id: "ideal_connection",
-      text: idealConnection,
+      text: caption,
       color: "#ffffff",
       anchor_position: {
         x: captions[0].anchor_position.x,

@@ -27,6 +27,14 @@ test("synthetic admission emits the board mappings and hashes the supplied bytes
   const [channelSimulation] = listChannelSimulations(circuitJson)
   const simulationPcbTransientChannelSimulationId =
     channelSimulation.simulation_pcb_transient_channel_simulation_id
+  assert.equal(
+    plan.simulationPcbTransientChannelSimulationId,
+    simulationPcbTransientChannelSimulationId,
+  )
+  assert.equal(
+    plan.sections.artifactPrefix,
+    `channelSimulations/${simulationPcbTransientChannelSimulationId}`,
+  )
   const db = cju(circuitJson)
   const driverReceiverChannels =
     db.simulation_pcb_driver_receiver_channel.list()

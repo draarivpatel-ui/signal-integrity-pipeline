@@ -3,6 +3,7 @@ import {
   type ConnectivityMap,
   type CopperScope,
   channelCopperScope,
+  circuitJsonDb,
   getSourcePortConnectivityMapFromCircuitJson,
   type SignalEndpointPortIds,
   type SimulationPcbDriverReceiverChannel,
@@ -19,7 +20,6 @@ import {
   pinCapabilities,
 } from "../buffers"
 import { safeId } from "../kernel"
-import { circuitJsonDb } from "./circuit-json-db"
 import { endpointPorts } from "./signal-controls"
 import { signalTopology, validateSignalGraph } from "./topology"
 

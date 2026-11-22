@@ -1,7 +1,6 @@
 /* eslint-disable local/max-file-lines -- Experiment declaration checks share Circuit JSON and IBIS plan types. */
 // Experiment declarations (circuitNodes, generalDeclarations, modelRunDefinition).
 
-import { cju } from "@tscircuit/circuit-json-util"
 import type {
   IbisModelDefinition,
   IbisReferencePorts,
@@ -13,13 +12,14 @@ import type {
   SourceTrace,
 } from "circuit-json"
 import type {
-  CircuitJson,
+  CircuitJsonSnapshot,
   LaneMapping,
   SourceNetId,
   SourcePortId,
 } from "../board"
-import { selectPort, subcircuitTree } from "../board"
+import { circuitJsonDb, selectPort, subcircuitTree } from "../board"
 import type { ModelRunDefinition } from "../buffers"
+import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import {
   type ChannelEndpoints,
@@ -81,11 +81,11 @@ const exactly = <T>({ items, label }: { items: T[]; label: string }): T => {
 }
 
 interface CircuitNodesInput {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   mappings: readonly LaneMapping[]
   routedTraceCuts?: readonly RoutedTraceCut[]
   idealRoutedJunctions?: readonly IdealRoutedJunction[]
-  modeling: SimulationModeling
+  modeling: Snapshot<SimulationModeling>
 }
 
 /** An identifier that can be used as an electrical node. */
@@ -211,7 +211,7 @@ export function circuitNodes({
             sourceTraceIds ?? [sourceTraceId],
         ),
   )
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const traces = db.source_trace.list()
   const nets = db.source_net.list()
   // A linear routed path can carry redundant one-port declarations of the same net.
@@ -367,7 +367,7 @@ export function generalDeclarations({
   modeling,
   controls,
 }: CircuitNodesInput & {
-  controls: Record<string, RunControls>
+  controls: Snapshot<Record<string, RunControls>>
 }): Declarations {
   const referencedTypes = [
     "simulation_experiment",
@@ -389,7 +389,7 @@ export function generalDeclarations({
       seen.add(id)
     }
   }
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const errors = db.source_invalid_component_property_error
     .list()
     .filter((e) =>
@@ -561,7 +561,7 @@ export function generalDeclarations({
           "simulation_timing",
           `${experiment.name}: recording must have positive duration and a smaller maximum timestep`,
         )
-      let runControls: RunControls = { states: [], stimuli: [] }
+      let runControls: Snapshot<RunControls> = { states: [], stimuli: [] }
       if (Object.hasOwn(controls, id)) runControls = controls[id]
       const { states, stimuli: controlsForRun } = runControls
       const stimuli = controlsForRun.map((stimulus) => ({
@@ -763,7 +763,7 @@ export function generalDeclarations({
         startTimeSeconds,
         maxStepSeconds,
         experiment,
-        states,
+        states: states.map((state) => ({ ...state })),
         stimuli,
         probes,
         models: scopedModels,

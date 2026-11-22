@@ -6,6 +6,7 @@ import {
 } from "circuit-json-to-connectivity-map"
 import {
   type CircuitJson,
+  circuitJsonDb,
   type PassiveBridge,
   passiveBridges,
   type SimulationPcbDriverReceiverChannel,
@@ -14,7 +15,6 @@ import {
   sourceConnections,
   sourceNetMembers,
 } from "../board"
-import { circuitJsonDb } from "./circuit-json-db"
 import { fail } from "./diagnostics"
 import {
   buildRoutedCopper,
