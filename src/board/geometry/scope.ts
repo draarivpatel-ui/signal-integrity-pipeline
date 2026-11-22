@@ -86,12 +86,6 @@ interface CopperProximity {
   nearbyGapMm: number
 }
 
-/** Source connectivity and the members of nets included in full. */
-interface NetExpansion {
-  connectivity: ConnectivityMap
-  extractedSourceIds: Set<SourcePortId | SourceNetId>
-}
-
 /** Channel, AC ground and supply source port and net IDs, with the proximity distance. */
 interface CopperScopeOptions {
   circuit: CircuitJson
@@ -290,42 +284,41 @@ function isNearby({
   })
 }
 
-/** Add every member of each electrical net identified by the given IDs. */
-function addWholeNets({
-  ids,
-  nets,
+/** Expand nearby nets in discovery order and include nets reached through passive bridges. */
+function expandedSourceIds({
+  nearbySourceIds,
+  channelSourceIds,
+  connectivity,
+  bridges,
 }: {
-  ids: SourceConnectionGroup
-  nets: NetExpansion
-}): void {
-  const { connectivity, extractedSourceIds } = nets
-  for (const id of ids) {
+  nearbySourceIds: SourceConnectionGroup
+  channelSourceIds: ReadonlySet<SourcePortId | SourceNetId>
+  connectivity: ConnectivityMap
+  bridges: PassiveBridge[]
+}): SourceConnectionGroup {
+  const extractedSourceIds = new Set(channelSourceIds)
+  for (const id of nearbySourceIds) {
     if (extractedSourceIds.has(id)) continue
     for (const connected of sourceNetMembers({ connectivity, memberId: id }))
       extractedSourceIds.add(connected)
   }
-}
-
-/** Add whole nets reachable through passive bridges. */
-function addPassiveBridgeNets({
-  bridges,
-  nets,
-}: {
-  bridges: PassiveBridge[]
-  nets: NetExpansion
-}): void {
   let changed = true
   while (changed) {
     changed = false
     for (const pins of bridges) {
-      if (!pins.some((pin) => nets.extractedSourceIds.has(pin))) continue
+      if (!pins.some((pin) => extractedSourceIds.has(pin))) continue
       for (const pin of pins) {
-        if (nets.extractedSourceIds.has(pin)) continue
-        addWholeNets({ ids: [pin], nets })
+        if (extractedSourceIds.has(pin)) continue
+        for (const connected of sourceNetMembers({
+          connectivity,
+          memberId: pin,
+        }))
+          extractedSourceIds.add(connected)
         changed = true
       }
     }
   }
+  return [...extractedSourceIds]
 }
 
 /** Select the channel's copper and its nearby copper. */
@@ -425,8 +418,7 @@ export function channelCopperScopeWithBounds({
     if (channelSourceIds.has(net)) channelBoxes.push(box)
   }
   const proximity = { channelBoxes, nearbyGapMm }
-  const extractedSourceIds = new Set(channelSourceIds)
-  const nets = { connectivity, extractedSourceIds }
+  const nearbySourceIds: SourceConnectionGroup = []
   const nearbyRailPcbTraceIds = new Set<PcbTraceId>()
   const nearbyRailPcbViaIds = new Set<PcbViaId>()
   for (const trace of traces) {
@@ -441,7 +433,7 @@ export function channelCopperScopeWithBounds({
       nearbyRailPcbTraceIds.add(trace.pcb_trace_id)
       continue
     }
-    addWholeNets({ ids, nets })
+    nearbySourceIds.push(...ids)
   }
   for (const via of vias) {
     if (
@@ -456,7 +448,7 @@ export function channelCopperScopeWithBounds({
       nearbyRailPcbViaIds.add(via.pcb_via_id)
       continue
     }
-    addWholeNets({ ids, nets })
+    nearbySourceIds.push(...ids)
   }
   for (const pad of pads) {
     if (pad.pcb_port_id === undefined) continue
@@ -467,27 +459,32 @@ export function channelCopperScopeWithBounds({
       !isNearby({ candidate: padBox({ pad, boardLayers }), proximity })
     )
       continue
-    addWholeNets({ ids: [sourcePortId], nets })
+    nearbySourceIds.push(sourcePortId)
   }
   for (const { net, box } of signalPours) {
-    if (isNearby({ candidate: box, proximity }))
-      addWholeNets({ ids: [net], nets })
+    if (isNearby({ candidate: box, proximity })) nearbySourceIds.push(net)
   }
   const bridges = passiveBridges({
     circuit,
     excluded: referenceAndRailSourceIds,
   })
-  addPassiveBridgeNets({ bridges, nets })
+  const extractedSourceIds = expandedSourceIds({
+    nearbySourceIds,
+    channelSourceIds,
+    connectivity,
+    bridges,
+  })
+  const extracted = new Set(extractedSourceIds)
   const extractedTraces = traces.filter((trace) => {
     if (nearbyRailPcbTraceIds.has(trace.pcb_trace_id)) return true
     return traceMembers({ id: trace.source_trace_id, sources }).some((id) =>
-      extractedSourceIds.has(id),
+      extracted.has(id),
     )
   })
   const extractedVias = vias.filter((via) => {
     if (nearbyRailPcbViaIds.has(via.pcb_via_id)) return true
     return viaMembers({ via, associations }).some(
-      (id) => extractedSourceIds.has(id) || referenceSourceIds.has(id),
+      (id) => extracted.has(id) || referenceSourceIds.has(id),
     )
   })
   return {
@@ -498,7 +495,7 @@ export function channelCopperScopeWithBounds({
       extractedPcbTraceIds: extractedTraces.map((trace) => trace.pcb_trace_id),
       extractedPcbViaIds: extractedVias.map((via) => via.pcb_via_id),
       nearbyRailPcbTraceIds: [...nearbyRailPcbTraceIds],
-      extractedSourceIds: [...extractedSourceIds],
+      extractedSourceIds,
     },
   }
 }
