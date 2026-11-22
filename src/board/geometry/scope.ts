@@ -33,17 +33,23 @@ import type {
 import type { CircuitJson } from "../schema"
 import type { RoutedPoint } from "./types"
 
-/** Copper can be retained one layer above or below the selected copper. */
+/** Nearby copper can be one layer above or below the channel copper. */
 const ADJACENT_LAYER_OFFSET = 1
 
 /** Copper and electrical nets kept by the channel proximity screen. */
 export interface CopperScope {
-  lateralDistanceMm: number
-  selectedPcbTraceIds: PcbTraceId[]
-  retainedPcbTraceIds: PcbTraceId[]
-  retainedPcbViaIds: PcbViaId[]
-  railPcbTraceIds: PcbTraceId[]
-  retainedSourceIds: SourceConnectionGroup
+  /** Largest XY gap between copper bounds that counts as nearby. */
+  nearbyGapMm: number
+  /** The channel's own traces. */
+  channelPcbTraceIds: PcbTraceId[]
+  /** Traces from the channel, nearby signal nets and nearby rails. */
+  extractedPcbTraceIds: PcbTraceId[]
+  /** Vias for field extraction, including reference vias across the board. */
+  extractedPcbViaIds: PcbViaId[]
+  /** Supply or ground traces near the channel, kept as local copper only. */
+  nearbyRailPcbTraceIds: PcbTraceId[]
+  /** Source ports and nets included with their full electrical nets. */
+  extractedSourceIds: SourceConnectionGroup
 }
 
 /** Bounds in board millimetres and the inclusive span of occupied layer indices. */
@@ -65,16 +71,16 @@ interface CopperAssociations {
   traceSources: Map<PcbTraceId, SourceTraceId | undefined>
 }
 
-/** Bounds of the selected copper and the lateral screening distance. */
+/** Bounds of the channel copper and the maximum nearby XY gap. */
 interface CopperProximity {
   seeds: CopperBox[]
-  distanceMm: number
+  nearbyGapMm: number
 }
 
 /** Electrical nets that may expand beyond their nearby copper. */
 interface RetainedCopper {
   connectivity: ConnectivityMap
-  retained: Set<SourcePortId | SourceNetId>
+  extractedSourceIds: Set<SourcePortId | SourceNetId>
 }
 
 /** Caller supplies selected channel nets and identifies the AC ground and supply nets. */
@@ -255,7 +261,7 @@ function isNearby({
   candidate: CopperBox
   proximity: CopperProximity
 }): boolean {
-  const { seeds, distanceMm } = proximity
+  const { seeds, nearbyGapMm } = proximity
   return seeds.some((seed) => {
     const adjacentLayers =
       candidate.firstLayer <= seed.lastLayer + ADJACENT_LAYER_OFFSET &&
@@ -272,7 +278,7 @@ function isNearby({
       seed.xy.ymin - candidate.xy.ymax,
       candidate.xy.ymin - seed.xy.ymax,
     )
-    return Math.hypot(xGap, yGap) <= distanceMm
+    return Math.hypot(xGap, yGap) <= nearbyGapMm
   })
 }
 
@@ -284,11 +290,11 @@ function retain({
   ids: SourceConnectionGroup
   copper: RetainedCopper
 }): void {
-  const { connectivity, retained } = copper
+  const { connectivity, extractedSourceIds } = copper
   for (const id of ids) {
-    if (retained.has(id)) continue
+    if (extractedSourceIds.has(id)) continue
     for (const connected of sourceNetMembers({ connectivity, seed: id }))
-      retained.add(connected)
+      extractedSourceIds.add(connected)
   }
 }
 
@@ -304,9 +310,9 @@ function retainPassiveBridges({
   while (changed) {
     changed = false
     for (const pins of bridges) {
-      if (!pins.some((pin) => copper.retained.has(pin))) continue
+      if (!pins.some((pin) => copper.extractedSourceIds.has(pin))) continue
       for (const pin of pins) {
-        if (copper.retained.has(pin)) continue
+        if (copper.extractedSourceIds.has(pin)) continue
         retain({ ids: [pin], copper })
         changed = true
       }
@@ -327,12 +333,12 @@ function retainPassiveBridges({
 export function channelCopperScope({
   circuit,
   connectivity,
-  selected,
+  selected: channelSourceIds,
   reference,
   rails,
-  distanceMm,
+  distanceMm: nearbyGapMm,
 }: CopperScopeOptions): CopperScope {
-  if (!Number.isFinite(distanceMm) || distanceMm < 0) {
+  if (!Number.isFinite(nearbyGapMm) || nearbyGapMm < 0) {
     fail(
       "simulation_scope",
       "Copper scope distance must be finite and non-negative",
@@ -374,31 +380,31 @@ export function channelCopperScope({
     })
     return [{ net, box }]
   })
-  const selectedTraces = traces.filter((trace) => {
+  const channelTraces = traces.filter((trace) => {
     return traceMembers({ id: trace.source_trace_id, sources }).some((id) =>
-      selected.has(id),
+      channelSourceIds.has(id),
     )
   })
-  const seeds = selectedTraces.flatMap(
-    (trace) => boxes.get(trace.pcb_trace_id)!,
-  )
+  const seeds = channelTraces.flatMap((trace) => boxes.get(trace.pcb_trace_id)!)
   for (const pad of pads) {
     const sourcePort = pad.pcb_port_id && ports.get(pad.pcb_port_id)
-    if (!sourcePort || !selected.has(sourcePort)) continue
+    if (!sourcePort || !channelSourceIds.has(sourcePort)) continue
     seeds.push(padBox({ pad, layers }))
   }
   for (const via of vias) {
-    if (!viaMembers({ via, associations }).some((id) => selected.has(id)))
+    if (
+      !viaMembers({ via, associations }).some((id) => channelSourceIds.has(id))
+    )
       continue
     seeds.push(viaBox({ via, layers, blindViasAllowed }))
   }
   for (const { net, box } of signalPours) {
-    if (selected.has(net)) seeds.push(box)
+    if (channelSourceIds.has(net)) seeds.push(box)
   }
-  const proximity = { seeds, distanceMm }
-  const retained = new Set(selected)
-  const retainedCopper = { connectivity, retained }
-  const railPcbTraceIds = new Set<PcbTraceId>()
+  const proximity = { seeds, nearbyGapMm }
+  const extractedSourceIds = new Set(channelSourceIds)
+  const retainedCopper = { connectivity, extractedSourceIds }
+  const nearbyRailPcbTraceIds = new Set<PcbTraceId>()
   const nearbyRailPcbViaIds = new Set<PcbViaId>()
   for (const trace of traces) {
     if (
@@ -409,7 +415,7 @@ export function channelCopperScope({
       continue
     const ids = traceMembers({ id: trace.source_trace_id, sources })
     if (ids.some((id) => railIds.has(id))) {
-      railPcbTraceIds.add(trace.pcb_trace_id)
+      nearbyRailPcbTraceIds.add(trace.pcb_trace_id)
       continue
     }
     retain({ ids, copper: retainedCopper })
@@ -445,24 +451,24 @@ export function channelCopperScope({
   }
   const bridges = passiveBridges({ circuit, excluded: railIds })
   retainPassiveBridges({ bridges, copper: retainedCopper })
-  const keptTraces = traces.filter((trace) => {
-    if (railPcbTraceIds.has(trace.pcb_trace_id)) return true
+  const extractedTraces = traces.filter((trace) => {
+    if (nearbyRailPcbTraceIds.has(trace.pcb_trace_id)) return true
     return traceMembers({ id: trace.source_trace_id, sources }).some((id) =>
-      retained.has(id),
+      extractedSourceIds.has(id),
     )
   })
-  const keptVias = vias.filter((via) => {
+  const extractedVias = vias.filter((via) => {
     if (nearbyRailPcbViaIds.has(via.pcb_via_id)) return true
     return viaMembers({ via, associations }).some(
-      (id) => retained.has(id) || reference.has(id),
+      (id) => extractedSourceIds.has(id) || reference.has(id),
     )
   })
   return {
-    lateralDistanceMm: distanceMm,
-    selectedPcbTraceIds: selectedTraces.map((trace) => trace.pcb_trace_id),
-    retainedPcbTraceIds: keptTraces.map((trace) => trace.pcb_trace_id),
-    retainedPcbViaIds: keptVias.map((via) => via.pcb_via_id),
-    railPcbTraceIds: [...railPcbTraceIds],
-    retainedSourceIds: [...retained],
+    nearbyGapMm,
+    channelPcbTraceIds: channelTraces.map((trace) => trace.pcb_trace_id),
+    extractedPcbTraceIds: extractedTraces.map((trace) => trace.pcb_trace_id),
+    extractedPcbViaIds: extractedVias.map((via) => via.pcb_via_id),
+    nearbyRailPcbTraceIds: [...nearbyRailPcbTraceIds],
+    extractedSourceIds: [...extractedSourceIds],
   }
 }
