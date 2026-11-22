@@ -27,10 +27,10 @@ test("rectangular plated pads do not extend the scope to distant nets", async ()
       <Wire name="DISTANT" y={5} extent={3} />
     </board>,
   )
-  assert.equal(scopeFor({ circuit }).retainedPcbTraceIds.length, 1)
+  assert.equal(scopeFor({ circuit }).extractedPcbTraceIds.length, 1)
   // The 7.4 mm pad reaches within 1.15 mm of the distant trace's end pad.
   assert.equal(
-    scopeFor({ circuit, distanceMm: 1.3 }).retainedPcbTraceIds.length,
+    scopeFor({ circuit, distanceMm: 1.3 }).extractedPcbTraceIds.length,
     2,
   )
 })

@@ -49,19 +49,22 @@ test("supply and reference traces stay local and only reference vias are kept bo
   const expectedRails = ["GROUND", "SUPPLY"].map(
     (name) => scopeTrace({ circuit, name }).pcb_trace_id,
   )
-  assert.deepEqual(new Set(result.railPcbTraceIds), new Set(expectedRails))
   assert.deepEqual(
-    new Set(result.retainedPcbTraceIds),
-    new Set([...result.selectedPcbTraceIds, ...expectedRails]),
+    new Set(result.nearbyRailPcbTraceIds),
+    new Set(expectedRails),
   )
-  assert(!result.retainedSourceIds.includes(ground))
-  assert(!result.retainedSourceIds.includes(supply))
+  assert.deepEqual(
+    new Set(result.extractedPcbTraceIds),
+    new Set([...result.channelPcbTraceIds, ...expectedRails]),
+  )
+  assert(!result.extractedSourceIds.includes(ground))
+  assert(!result.extractedSourceIds.includes(supply))
   const expectedVias = circuit
     .filter((record) => record.type === "pcb_via")
     .filter((via) => via.source_net_id === ground || via.y === 0.7)
   assert.equal(expectedVias.length, 2)
   assert.deepEqual(
-    result.retainedPcbViaIds,
+    result.extractedPcbViaIds,
     expectedVias.map((via) => via.pcb_via_id),
   )
 })
