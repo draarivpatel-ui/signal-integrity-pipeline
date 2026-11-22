@@ -1,8 +1,8 @@
 import { simulation } from "@tscircuit/core"
-import type { PcbTransientChannelSimulationProps } from "@tscircuit/props"
 import type React from "react"
 import { Fragment } from "react"
 import type { RunControls } from "../../src/simulation"
+import { FixtureChannelSimulation } from "../support/core-render"
 import { routedVisualIbis } from "./routed-visual-fixture"
 import { Reference } from "./signal-parts"
 import { prepareChannelSimulations, renderSignals } from "./signal-render"
@@ -121,13 +121,12 @@ export function ParallelBus({
   driverBitRate,
   nearbyDriverPattern,
   nearbyDriversDisabled,
-}: Pick<
-  PcbTransientChannelSimulationProps,
-  "nearbyDriverPattern" | "nearbyDriversDisabled"
-> & {
+}: {
   neighbourPattern?: "1"
   driverDisabled?: boolean
   driverBitRate?: string
+  nearbyDriverPattern?: string
+  nearbyDriversDisabled?: boolean
 }): React.JSX.Element {
   return (
     <board
@@ -153,7 +152,7 @@ export function ParallelBus({
           />
         </Fragment>
       ))}
-      <simulation.pcbtransientchannelsimulation
+      <FixtureChannelSimulation
         bitRate="20Mbps"
         nearbyDriverPattern={nearbyDriverPattern}
         nearbyDriversDisabled={nearbyDriversDisabled}
@@ -174,7 +173,7 @@ export function ParallelBus({
             pattern={neighbourPattern}
           />
         )}
-      </simulation.pcbtransientchannelsimulation>
+      </FixtureChannelSimulation>
     </board>
   )
 }

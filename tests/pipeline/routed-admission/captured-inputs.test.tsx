@@ -9,7 +9,10 @@ import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { listChannelSimulations } from "../../../src/pipeline/signals"
 import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
-import { renderCoreSignals } from "../../support/core-render"
+import {
+  FixtureChannelSimulation,
+  renderCoreSignals,
+} from "../../support/core-render"
 
 /** Render a second declaration with its own name on the same board. */
 function renderTwoChannelSimulations(
@@ -22,7 +25,7 @@ function renderTwoChannelSimulations(
       {},
       <>
         {board.props.children}
-        <simulation.pcbtransientchannelsimulation
+        <FixtureChannelSimulation
           name={channelSimulationName}
           bitRate="50Mbps"
           nearbyDriverPattern="0"
@@ -32,7 +35,7 @@ function renderTwoChannelSimulations(
             driverRef=".TX0 > .Y"
             receiverRef=".RX0 > .A"
           />
-        </simulation.pcbtransientchannelsimulation>
+        </FixtureChannelSimulation>
       </>,
     ),
   )

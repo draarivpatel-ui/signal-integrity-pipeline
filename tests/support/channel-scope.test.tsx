@@ -8,6 +8,7 @@ import {
   prepareChannelSimulations,
   renderSignals,
 } from "../fixtures/signal-render"
+import { FixtureChannelSimulation } from "./core-render"
 
 /** The unmodelled three-pad copper is physically far from DATA, on the same real board. */
 function Board({
@@ -122,7 +123,7 @@ function Board({
         pcbY={25}
         pcbX={0}
       />
-      <simulation.pcbtransientchannelsimulation
+      <FixtureChannelSimulation
         name="SCOPED"
         bitRate="20Mbps"
         nearbyDriverPattern="0"
@@ -132,7 +133,7 @@ function Board({
           driverRef=".TX > .Y"
           receiverRef=".RX > .A"
         />
-      </simulation.pcbtransientchannelsimulation>
+      </FixtureChannelSimulation>
     </board>
   )
 }

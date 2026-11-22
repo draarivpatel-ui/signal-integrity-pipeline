@@ -25,6 +25,7 @@ import {
   renderSignals,
 } from "../fixtures/signal-render"
 import Differential from "../fixtures/unit-differential"
+import { FixtureChannelSimulation } from "../support/core-render"
 
 const inverterIbisPath = "models/sn74lvc1g04.ibs"
 
@@ -176,7 +177,7 @@ function Board({
           />
         </>
       )}
-      <simulation.pcbtransientchannelsimulation
+      <FixtureChannelSimulation
         bitRate="20Mbps"
         duration={duration}
         allowUnroutedTraces={allowUnroutedTraces}
@@ -190,7 +191,7 @@ function Board({
           driverRef={driverRef}
           receiverRef={receivers}
         />
-      </simulation.pcbtransientchannelsimulation>
+      </FixtureChannelSimulation>
     </board>
   )
 }
@@ -477,7 +478,7 @@ test("preparation keeps controls and probes independent across channel simulatio
       {},
       <>
         {board.props.children}
-        <simulation.pcbtransientchannelsimulation
+        <FixtureChannelSimulation
           name="ALT"
           bitRate="50Mbps"
           nearbyDriverPattern="0"
@@ -489,7 +490,7 @@ test("preparation keeps controls and probes independent across channel simulatio
             pattern="prbs7"
             seed={42}
           />
-        </simulation.pcbtransientchannelsimulation>
+        </FixtureChannelSimulation>
       </>,
     ),
   })

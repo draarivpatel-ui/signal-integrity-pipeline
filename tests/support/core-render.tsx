@@ -1,20 +1,83 @@
-import { Circuit } from "@tscircuit/core"
-import type React from "react"
+import { Circuit, simulation } from "@tscircuit/core"
+import type { PcbTransientChannelSimulationProps } from "@tscircuit/props"
+import { createContext, type ReactElement, useContext } from "react"
 import type { CircuitJson } from "../../src/board"
+
+/** New simulation props exercised against the pipeline's pinned renderer. */
+interface NearbyDriverProps {
+  nearbyDriverPattern?: string
+  nearbyDriversDisabled?: boolean
+}
+
+/** Nearby driver declarations in the fixture, indexed by simulation name. */
+type FixtureDeclarations = Map<string | undefined, NearbyDriverProps>
+
+const nearbyDriverDeclarations = createContext<FixtureDeclarations | null>(null)
+
+/** Render the simulation with pinned core and capture its nearby driver declaration. */
+export function FixtureChannelSimulation({
+  nearbyDriverPattern,
+  nearbyDriversDisabled,
+  ...props
+}: PcbTransientChannelSimulationProps & NearbyDriverProps): ReactElement {
+  const declarations = useContext(nearbyDriverDeclarations)
+  if (
+    nearbyDriverPattern !== undefined ||
+    nearbyDriversDisabled !== undefined
+  ) {
+    if (!declarations) throw new Error("Render fixtures with renderCoreSignals")
+    declarations.set(props.name, { nearbyDriverPattern, nearbyDriversDisabled })
+  }
+  return <simulation.pcbtransientchannelsimulation {...props} />
+}
+
+/** Serialize the fixture's new props onto the corresponding run rendered by core. */
+function withFixtureDeclarations({
+  records,
+  declarations,
+}: {
+  records: CircuitJson
+  declarations: FixtureDeclarations
+}): CircuitJson {
+  for (const record of records) {
+    if (record.type !== "simulation_pcb_transient_channel_simulation") continue
+    const props = declarations.get(record.name)
+    if (!props) continue
+    if (props.nearbyDriverPattern !== undefined)
+      Object.assign(record, {
+        nearby_driver_pattern: props.nearbyDriverPattern,
+      })
+    if (props.nearbyDriversDisabled !== undefined)
+      Object.assign(record, {
+        nearby_drivers_disabled: props.nearbyDriversDisabled,
+      })
+  }
+  return records
+}
 
 /** Render TSX through core and preserve partial records when it rejects the board. */
 export async function renderCoreSignals(
-  tree: React.ReactElement,
+  tree: ReactElement,
 ): Promise<CircuitJson> {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
+  const declarations: FixtureDeclarations = new Map()
   try {
-    circuit.add(tree)
+    circuit.add(
+      <nearbyDriverDeclarations.Provider value={declarations}>
+        {tree}
+      </nearbyDriverDeclarations.Provider>,
+    )
     await circuit.renderUntilSettled()
     const records = circuit.getCircuitJson()
     const errors = records.filter((record) => record.type.endsWith("_error"))
     if (errors.length) throw new Error(JSON.stringify(errors))
-    return records
+    return withFixtureDeclarations({ records, declarations })
   } catch (error) {
-    throw Object.assign(error as Error, { circuitJson: circuit.db.toArray() })
+    throw Object.assign(error as Error, {
+      circuitJson: withFixtureDeclarations({
+        records: circuit.db.toArray(),
+        declarations,
+      }),
+    })
   }
 }

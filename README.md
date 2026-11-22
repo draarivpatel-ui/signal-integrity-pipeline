@@ -57,7 +57,8 @@ channels, declare their state on the simulation. Use `nearbyDriverPattern="0"`
 or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
 `"prbs7"` to switch at the simulation bit rate from time zero.
 `nearbyDriversDisabled` takes precedence and requires every nearby driver
-model to support high impedance.
+model to support high impedance. TSX authors need a core release that emits
+these fields.
 
 ngspice must already be installed; `createNativeSolver({ tools: { ngspice } })`
 accepts an executable path. No package install or solver download happens during
