@@ -13,5 +13,7 @@ export function snapshot<T>(source: T): T {
     key,
     snapshot(entry),
   ])
-  return Object.freeze(Object.fromEntries(entries)) as T
+  const copy = Object.fromEntries(entries)
+  if (prototype === null) Object.setPrototypeOf(copy, null)
+  return Object.freeze(copy) as T
 }
