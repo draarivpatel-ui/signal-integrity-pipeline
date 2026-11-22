@@ -3,9 +3,9 @@ import type { CircuitJson } from "../../src/board"
 import type { IbisSources } from "../../src/buffers"
 import { RoutedAdmissionSolver } from "../../src/pipeline"
 import {
-  type PreparedBlock,
-  prepareBlockById,
-  signalBlocks,
+  listChannelSimulations,
+  type PreparedChannelSimulation,
+  prepareChannelSimulationById,
 } from "../../src/pipeline/signals"
 import type { RouteBindingsInput } from "../../src/simulation"
 import { renderCoreSignals } from "../support/core-render"
@@ -38,8 +38,8 @@ export async function renderSignals({
   }
 }
 
-/** Lower every signal-integrity block in board order, as RoutedAdmissionSolver does one block per step. */
-export function prepareBlocks({
+/** Lower every transient channel simulation in board order, as RoutedAdmissionSolver does one channel simulation per step. */
+export function prepareChannelSimulations({
   circuit,
   sources,
   distanceMm,
@@ -47,12 +47,13 @@ export function prepareBlocks({
   circuit: CircuitJson
   sources: IbisSources
   distanceMm?: number
-}): PreparedBlock[] {
-  return signalBlocks(circuit).map((block) =>
-    prepareBlockById({
+}): PreparedChannelSimulation[] {
+  return listChannelSimulations(circuit).map((channelSimulation) =>
+    prepareChannelSimulationById({
       circuit,
       sources,
-      blockId: block.simulation_pcb_transient_channel_simulation_id,
+      simulationPcbTransientChannelSimulationId:
+        channelSimulation.simulation_pcb_transient_channel_simulation_id,
       distanceMm,
     }),
   )
@@ -61,7 +62,7 @@ export function prepareBlocks({
 /** Binding inputs prepared by admission before a route binding solver allocates an artifact scope. */
 type AdmittedRouteBindings = Omit<RouteBindingsInput, "scope">
 
-/** The first admitted block's bindings, checked by the standalone admission solver. */
+/** The first admitted channel simulation's bindings, checked by the standalone admission solver. */
 export function admittedBindings({
   circuitJson,
   ibisSources,
