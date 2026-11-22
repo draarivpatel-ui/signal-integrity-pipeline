@@ -1,10 +1,10 @@
 import { cju } from "@tscircuit/circuit-json-util"
-import {
-  type CircuitJson,
-  type SimulationPcbDriverReceiverChannel,
-  type SimulationPcbTransientChannelSimulation,
-  type SimulationPcbTransientChannelSimulationId,
-  type SourcePortId,
+import type {
+  CircuitJson,
+  SimulationPcbDriverReceiverChannel,
+  SimulationPcbTransientChannelSimulation,
+  SimulationPcbTransientChannelSimulationId,
+  SourcePortId,
 } from "../board"
 import type { IbisSources, InspectedPin } from "../buffers"
 import { safeId } from "../kernel"
@@ -25,6 +25,7 @@ import {
 } from "./signal-models"
 import {
   inspectSignalPins,
+  type SignalPins,
   scopeSignalPins,
   validateSignalPins,
 } from "./signal-pins"
@@ -38,6 +39,9 @@ const MAX_COPPER_SCOPE_DISTANCE_MM = 32
 /** The lowered circuit and controls for a single transient channel simulation. */
 export interface PreparedChannelSimulation {
   durationSeconds: number
+  riseSeconds: number
+  stepSeconds: number
+  routedTopology: SignalPins["routedTopology"]
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
   circuit: CircuitJson
@@ -87,18 +91,10 @@ export function listChannelSimulations(
   return channelSimulations
 }
 
-/** Validate one channel simulation and lower its test intent to the private routed declarations. */
-export function prepareChannelSimulationById({
-  circuit,
-  sources,
-  simulationPcbTransientChannelSimulationId,
+/** Normalize a caller's copper search radius at the preparation boundary. */
+export function validatedScopeDistanceMm(
   distanceMm = MAX_COPPER_SCOPE_DISTANCE_MM,
-}: {
-  circuit: CircuitJson
-  sources: IbisSources
-  simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
-  distanceMm?: number
-}): PreparedChannelSimulation {
+): number {
   if (
     !Number.isFinite(distanceMm) ||
     distanceMm <= 0 ||
@@ -108,6 +104,22 @@ export function prepareChannelSimulationById({
       `Copper scope distance must be in (0,${MAX_COPPER_SCOPE_DISTANCE_MM}] mm`,
     )
   }
+  return distanceMm
+}
+
+/** Validate one channel simulation and lower its test intent to the private routed declarations. */
+export function prepareChannelSimulationById({
+  circuit,
+  sources,
+  simulationPcbTransientChannelSimulationId,
+  distanceMm,
+}: {
+  circuit: CircuitJson
+  sources: IbisSources
+  simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
+  distanceMm?: number
+}): PreparedChannelSimulation {
+  const scopeDistanceMm = validatedScopeDistanceMm(distanceMm)
   const channelSimulations = listChannelSimulations(circuit)
   const matches = channelSimulations.filter(
     (channelSimulation) =>
@@ -122,7 +134,7 @@ export function prepareChannelSimulationById({
     boardCircuitJson: circuit,
     channelSimulation: matches[0],
     sources,
-    distanceMm,
+    distanceMm: scopeDistanceMm,
   })
 }
 
@@ -220,6 +232,7 @@ function selectChannelSimulation({
   }
 }
 
+/** A board and one validated simulation declaration with its model sources and radius. */
 interface ChannelSimulationOptions {
   boardCircuitJson: CircuitJson
   channelSimulation: SimulationPcbTransientChannelSimulation
@@ -230,9 +243,13 @@ interface ChannelSimulationOptions {
 /** Lower controls and assemble the prepared simulation. */
 function withPreparedChannelControls({
   settings,
+  riseSeconds,
+  routedTopology,
   ...options
 }: ChannelSimulationControlOptions & {
   settings: NumericalSettings
+  riseSeconds: number
+  routedTopology: SignalPins["routedTopology"]
 }): PreparedChannelSimulation {
   const { circuit, controls } = withChannelSimulationControls(options)
   const {
@@ -250,11 +267,14 @@ function withPreparedChannelControls({
     pins,
     settings,
     durationSeconds,
+    riseSeconds,
+    stepSeconds: options.stepSeconds,
+    routedTopology,
   }
 }
 
 /** Prepare one channel simulation from its declarations through controls and probes. */
-function prepareChannelSimulation(
+export function prepareChannelSimulation(
   options: ChannelSimulationOptions,
 ): PreparedChannelSimulation {
   const { sources, distanceMm } = options
@@ -283,5 +303,6 @@ function prepareChannelSimulation(
     ...supplied,
     pins: pruned.pins,
     driven: signalPins.driven,
+    routedTopology: signalPins.routedTopology,
   })
 }

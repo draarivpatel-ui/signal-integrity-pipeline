@@ -10,12 +10,12 @@ import {
 } from "./route-sections"
 import type { CircuitJson } from "./schema"
 
-/** The board, selected copper and required ports passed to route sectioning. */
+/** The board, copper scope and required ports passed to route sectioning. */
 export interface RouteSectionsInput {
-  circuitJson: CircuitJson
-  scope: CopperScope
-  requiredSourcePortIds: SourcePortId[]
-  artifactPrefix: string
+  readonly circuitJson: CircuitJson
+  readonly copperScope: CopperScope
+  readonly requiredSourcePortIds: readonly SourcePortId[]
+  readonly artifactPrefix: string
 }
 /** Completed route geometry and its outer soldermask thickness when declared. */
 export interface RoutedSections {
