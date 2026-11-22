@@ -21,6 +21,7 @@ import {
   type SourcePortId,
   sourceConnections,
   validateCircuitRecords,
+  withRouteDrawing,
 } from "../board"
 import { edgeDurationSeconds, type IbisSources } from "../buffers"
 import {
@@ -358,52 +359,57 @@ export class RoutedAdmissionSolver extends BaseSolver {
   override visualize(): GraphicsObject {
     const plan = this.plans.at(-1)
     const circuit = this.input.circuitJson
-    const drawing = routeBoardDrawing({ circuit, scope: plan?.sections.scope })
+    let drawing = routeBoardDrawing({ circuit, scope: plan?.sections.scope })
     if (!plan) {
       if (this.failed)
-        routeFailure({
-          drawing,
-          box: routeBoardBox(circuit),
-          message: this.error ?? "Invalid signal scope",
-        })
+        drawing.texts!.push(
+          ...routeFailure({
+            box: routeBoardBox(circuit),
+            message: this.error ?? "Invalid signal scope",
+          }),
+        )
       return drawing
     }
     const view = routeView({ circuit, scope: plan.sections.scope })
-    routeStrip({
-      drawing,
-      pane: view.pane,
-      rows: routeLengths({ circuit, view }),
+    drawing = withRouteDrawing({
+      drawing: drawing,
+      overlay: routeStrip({
+        pane: view.pane,
+        rows: routeLengths({ circuit, view }),
+      }),
     })
-    routeMarks({
-      drawing,
-      marks: plan.bindings.mappings.flatMap((mapping) =>
-        (
-          [
-            [mapping.from, true],
-            [mapping.to, false],
-          ] as const
-        ).flatMap(([id, driver]) => {
-          const point = routePortPoint({ circuit, sourcePortId: id })
-          if (!point) return []
-          const net = view.ports.get(id)
-          return [
-            {
-              point,
-              color: net?.color ?? "#ffffff",
-              driver,
-              label: net?.label,
-            },
-          ]
-        }),
-      ),
-      unit: view.unit,
-    })
+    drawing.polygons!.push(
+      ...routeMarks({
+        marks: plan.bindings.mappings.flatMap((mapping) =>
+          (
+            [
+              [mapping.from, true],
+              [mapping.to, false],
+            ] as const
+          ).flatMap(([id, driver]) => {
+            const point = routePortPoint({ circuit, sourcePortId: id })
+            if (!point) return []
+            const net = view.ports.get(id)
+            return [
+              {
+                point,
+                color: net?.color ?? "#ffffff",
+                driver,
+                label: net?.label,
+              },
+            ]
+          }),
+        ),
+        unit: view.unit,
+      }),
+    )
     if (this.failed)
-      routeFailure({
-        drawing,
-        box: view.pane,
-        message: this.error ?? "Invalid signal scope",
-      })
+      drawing.texts!.push(
+        ...routeFailure({
+          box: view.pane,
+          message: this.error ?? "Invalid signal scope",
+        }),
+      )
     return drawing
   }
 }

@@ -356,7 +356,7 @@ test("two-trace TSX routed-admission visual SVG snapshot", async () => {
   })
 })
 
-test("rejected admission carries a visible red reason without inventing an admitted block", async () => {
+test("rejected admission carries a visible red reason without inventing an admitted channel simulation", async () => {
   const { root } = await routedVisualFixture()
   const solver = new RoutedAdmissionSolver({
     ...root.inputProblem,

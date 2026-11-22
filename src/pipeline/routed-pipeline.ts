@@ -15,6 +15,7 @@ import {
   routeText,
   routeTones,
   routeView,
+  withRouteDrawing,
 } from "../board"
 import { type ExtractedRoutes, RouteFieldsSolver } from "../extraction"
 import {
@@ -229,41 +230,44 @@ export class RoutedPipelineSolver extends BasePipelineSolver<RoutedProblem> {
         ...definition.getConstructorParams(this),
       )
     }
-    const plans = this.getStageOutput<Produced<RoutedBlockPlan[]>>(
+    const plans = this.getStageOutput<Produced<RoutedChannelSimulationPlan[]>>(
       "RoutedAdmissionSolver",
     )?.value
     const circuit = this.inputProblem.circuitJson
     if (plans && !plans.length) {
       // Nothing was admitted: the whole board with one quiet line, the same in every stage.
-      const drawing = routeBoardDrawing({ circuit, scope: undefined })
+      let drawing = routeBoardDrawing({ circuit, scope: undefined })
       const board = routeBoardBox(circuit)
-      routeText({
-        drawing,
-        x: (board.minX + board.maxX) / 2,
-        y: (board.minY + board.maxY) / 2,
-        text: "No signal-integrity blocks admitted",
-        color: routeTones.quiet,
-        size: (board.maxX - board.minX) / 40,
-      })
+      drawing.texts!.push(
+        routeText({
+          x: (board.minX + board.maxX) / 2,
+          y: (board.minY + board.maxY) / 2,
+          text: "No transient channel simulations admitted",
+          color: routeTones.quiet,
+          size: (board.maxX - board.minX) / 40,
+        }),
+      )
       return drawing
     }
     if (solver) return solver.visualize()
     // A stage that cannot be built yet shows the selected copper and its unrolled lengths in neutral grey.
     const scope = plans?.[0]?.sections.scope
-    const drawing = routeBoardDrawing({
+    let drawing = routeBoardDrawing({
       circuit,
       scope,
       color: () => routeTones.copper,
     })
     if (!scope) return drawing
     const view = routeView({ circuit, scope })
-    routeStrip({
-      drawing,
-      pane: view.pane,
-      rows: routeLengths({ circuit, view }).map((row) => ({
-        ...row,
-        parts: [{ from: 0, to: row.length, color: routeTones.copper }],
-      })),
+    drawing = withRouteDrawing({
+      drawing: drawing,
+      overlay: routeStrip({
+        pane: view.pane,
+        rows: routeLengths({ circuit, view }).map((row) => ({
+          ...row,
+          parts: [{ from: 0, to: row.length, color: routeTones.copper }],
+        })),
+      }),
     })
     return drawing
   }

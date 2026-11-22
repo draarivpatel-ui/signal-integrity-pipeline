@@ -21,6 +21,7 @@ import {
   routeView,
   type SourcePortId,
   sourceNetMembers,
+  withRouteDrawing,
 } from "../board"
 import { closestRoutePoints } from "../extraction"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
@@ -449,7 +450,7 @@ export class RouteNetworkSolver extends BaseSolver {
     const { geometry, bindings, extracted } = this.input
     const circuit = bindings.circuitJson
     const view = routeView({ circuit, scope: bindings.scope })
-    const drawing = routeBoardDrawing({ circuit, scope: bindings.scope })
+    let drawing = routeBoardDrawing({ circuit, scope: bindings.scope })
     let built: Set<number> | undefined
     if (!this.output) built = new Set(this.ladder?.wireNodes.keys() ?? [])
     const bands = extracted.slices
@@ -582,11 +583,12 @@ export class RouteNetworkSolver extends BaseSolver {
         via.y >= minY &&
         via.y <= maxY
       )
-        routeVia({
-          drawing,
-          center: via,
-          radius: width * 1.4,
-        })
+        drawing.polygons!.push(
+          ...routeVia({
+            center: via,
+            radius: width * 1.4,
+          }),
+        )
     }
     // The pane unrolls each net with its ladder cells as ticks and its coupling as violet under the bar.
     const unrolled = routeUnrolled({ view, wires: geometry.wires })
@@ -615,13 +617,17 @@ export class RouteNetworkSolver extends BaseSolver {
             .get(from.net.label)
             ?.bands!.push({ from: from.distance, to: to.distance, k })
       }
-    routeStrip({ drawing, pane: view.pane, rows: [...rows.values()] })
+    drawing = withRouteDrawing({
+      drawing: drawing,
+      overlay: routeStrip({ pane: view.pane, rows: [...rows.values()] }),
+    })
     if (this.failed)
-      routeFailure({
-        drawing,
-        box: view.pane,
-        message: this.error ?? "Network rejected",
-      })
+      drawing.texts!.push(
+        ...routeFailure({
+          box: view.pane,
+          message: this.error ?? "Network rejected",
+        }),
+      )
     return drawing
   }
 }

@@ -13,6 +13,7 @@ import {
   routeStrip,
   routeTones,
   routeView,
+  withRouteDrawing,
 } from "../board"
 import {
   type AdmittedBuffers,
@@ -170,7 +171,7 @@ export class RouteBindingsSolver extends BaseSolver {
   override visualize(): GraphicsObject {
     const circuit = this.input.circuitJson
     const view = routeView({ circuit, scope: this.input.scope })
-    const drawing = routeBoardDrawing({ circuit, scope: this.input.scope })
+    let drawing = routeBoardDrawing({ circuit, scope: this.input.scope })
     const db = cju([...circuit])
     const pcbPorts = new Map(
       db.pcb_port.list().map((port) => [port.source_port_id, port]),
@@ -229,16 +230,18 @@ export class RouteBindingsSolver extends BaseSolver {
         },
       )
     })
-    routeBuffers({ drawing, buffers, unit: view.unit })
+    drawing.polygons!.push(...routeBuffers({ buffers, unit: view.unit }))
     // Each bound net unrolled, its driver and receiver glyphs at the ends once both are bound.
     const bound = new Set(buffers.map((buffer) => buffer.label))
-    routeStrip({
-      drawing,
-      pane: view.pane,
-      rows: routeLengths({ circuit, view }).filter((row) =>
-        bound.has(row.net.label),
-      ),
-      buffers: { driver: true, receiver: true },
+    drawing = withRouteDrawing({
+      drawing: drawing,
+      overlay: routeStrip({
+        pane: view.pane,
+        rows: routeLengths({ circuit, view }).filter((row) =>
+          bound.has(row.net.label),
+        ),
+        buffers: { driver: true, receiver: true },
+      }),
     })
     if (this.failed) {
       outlinePortComponents({
@@ -250,11 +253,12 @@ export class RouteBindingsSolver extends BaseSolver {
         label: "unbound",
         context: outlineContext,
       })
-      routeFailure({
-        drawing,
-        box: view.pane,
-        message: this.error ?? "IBIS binding unavailable",
-      })
+      drawing.texts!.push(
+        ...routeFailure({
+          box: view.pane,
+          message: this.error ?? "IBIS binding unavailable",
+        }),
+      )
     }
     return drawing
   }

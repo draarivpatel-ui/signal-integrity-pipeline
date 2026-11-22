@@ -78,6 +78,7 @@ export {
   routeUnrolled,
   routeVia,
   routeView,
+  withRouteDrawing,
 } from "./route-visual"
 export type {
   CircuitJson,

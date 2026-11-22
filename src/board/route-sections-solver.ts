@@ -24,6 +24,7 @@ import {
   routeUnrolled,
   routeVia,
   routeView,
+  withRouteDrawing,
 } from "./route-visual"
 import type { CircuitJson } from "./schema"
 
@@ -155,18 +156,19 @@ export class RouteSectionsSolver extends BaseSolver {
   override visualize(): GraphicsObject {
     const circuit = this.input.circuitJson
     const view = routeView({ circuit, scope: this.input.scope })
-    const drawing = routeCanvas(view)
+    let drawing = routeCanvas(view)
     const wires = (this.geometry?.wires ?? []).filter((wire) =>
       view.traces.has(wire.trace),
     )
     const done = new Set(wires.map((wire) => wire.trace))
-    routeNets({
-      drawing,
-      circuit,
-      view,
-      traceIds: new Set([...view.traces].filter((id) => !done.has(id))),
-      color: () => routeTones.copper,
-    })
+    drawing.lines!.push(
+      ...routeNets({
+        circuit,
+        view,
+        traceIds: new Set([...view.traces].filter((id) => !done.has(id))),
+        color: () => routeTones.copper,
+      }),
+    )
     let active: PcbTraceId | undefined
     if (!this.solved) active = wires.at(-1)?.trace
     const tone = new Map<PcbTraceId | RouteNetLabel, number>()
@@ -223,23 +225,28 @@ export class RouteSectionsSolver extends BaseSolver {
       if (cut < row.length)
         row.parts!.push({ from: cut, to: row.length, color: routeTones.copper })
     }
-    routeStrip({ drawing, pane: view.pane, rows: [...rows.values()] })
+    drawing = withRouteDrawing({
+      drawing: drawing,
+      overlay: routeStrip({ pane: view.pane, rows: [...rows.values()] }),
+    })
     let width = view.unit
     if (wires.length)
       width = wires.reduce((sum, wire) => sum + wire.width, 0) / wires.length
     for (const contact of this.geometry?.viaContacts ?? [])
       if (view.traces.has(contact.trace))
-        routeVia({
-          drawing,
-          center: { x: contact.point[0], y: contact.point[1] },
-          radius: width * 1.4,
-        })
+        drawing.polygons!.push(
+          ...routeVia({
+            center: { x: contact.point[0], y: contact.point[1] },
+            radius: width * 1.4,
+          }),
+        )
     if (this.failed)
-      routeFailure({
-        drawing,
-        box: view.pane,
-        message: this.error ?? "Rejected endpoint",
-      })
+      drawing.texts!.push(
+        ...routeFailure({
+          box: view.pane,
+          message: this.error ?? "Rejected endpoint",
+        }),
+      )
     return drawing
   }
 }
