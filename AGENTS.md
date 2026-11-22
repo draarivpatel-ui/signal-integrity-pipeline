@@ -134,6 +134,7 @@ in `eslint.config.mjs` and `tools/eslint/rules.mjs`.
 
 Build names in `src/` from the words in `tools/vocabulary.yaml`. The checker splits every declared name into words (`foldProbeEye` → fold, probe, eye) and reports the share of names made only of dictionary words. It must stay at or above the file's `threshold` (85%). 100% is not the goal.
 
+- Give each subset of the same thing its own qualifier, as in `selectedPcbTraceIds` and `retainedPcbTraceIds`.
 - Prefer a word already in the dictionary. If it lists two words for one idea, use the listed one; `avoid` names the word to use instead.
 - Need a new concept? Add the word with a one-line plain-English meaning in the same PR as the code that uses it, so the reviewer sees the new word.
 - List base forms only: plurals and verb forms are accepted automatically (`ids` → id, `selected` → select).
