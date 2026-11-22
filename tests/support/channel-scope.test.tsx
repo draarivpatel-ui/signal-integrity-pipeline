@@ -122,7 +122,11 @@ function Board({
         pcbY={25}
         pcbX={0}
       />
-      <simulation.pcbtransientchannelsimulation name="SCOPED" bitRate="20Mbps">
+      <simulation.pcbtransientchannelsimulation
+        name="SCOPED"
+        bitRate="20Mbps"
+        nearbyDriverPattern="0"
+      >
         <simulation.pcbdriverreceiverchannel
           name="DATA"
           driverRef=".TX > .Y"

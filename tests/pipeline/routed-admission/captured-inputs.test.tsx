@@ -25,6 +25,7 @@ function renderTwoChannelSimulations(
         <simulation.pcbtransientchannelsimulation
           name={channelSimulationName}
           bitRate="50Mbps"
+          nearbyDriverPattern="0"
         >
           <simulation.pcbdriverreceiverchannel
             name="ALT_DATA"

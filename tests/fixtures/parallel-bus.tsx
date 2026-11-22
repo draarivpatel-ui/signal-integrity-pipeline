@@ -1,8 +1,11 @@
 import { simulation } from "@tscircuit/core"
+import type { PcbTransientChannelSimulationProps } from "@tscircuit/props"
 import type React from "react"
 import { Fragment } from "react"
+import type { RunControls } from "../../src/simulation"
 import { routedVisualIbis } from "./routed-visual-fixture"
 import { Reference } from "./signal-parts"
+import { prepareChannelSimulations, renderSignals } from "./signal-render"
 
 const asset = {
   project_relative_path: "fixture-parallel-bus.ibs",
@@ -32,6 +35,12 @@ LVC1G04_IN_33 Bus input
       "[End]",
       `[Model] Bidirectional${output.replace("Model_type Output", "Model_type I/O")}[End]`,
     ),
+}
+
+export const threeStateParallelBusSources = {
+  [asset.project_relative_path]: parallelBusSources[
+    asset.project_relative_path
+  ].replace("Model_type Output", "Model_type 3-state"),
 }
 
 const padPositions = [
@@ -109,9 +118,16 @@ function BusPart({
 export function ParallelBus({
   neighbourPattern,
   driverDisabled,
-}: {
+  driverBitRate,
+  nearbyDriverPattern,
+  nearbyDriversDisabled,
+}: Pick<
+  PcbTransientChannelSimulationProps,
+  "nearbyDriverPattern" | "nearbyDriversDisabled"
+> & {
   neighbourPattern?: "1"
   driverDisabled?: boolean
+  driverBitRate?: string
 }): React.JSX.Element {
   return (
     <board
@@ -137,12 +153,17 @@ export function ParallelBus({
           />
         </Fragment>
       ))}
-      <simulation.pcbtransientchannelsimulation bitRate="20Mbps">
+      <simulation.pcbtransientchannelsimulation
+        bitRate="20Mbps"
+        nearbyDriverPattern={nearbyDriverPattern}
+        nearbyDriversDisabled={nearbyDriversDisabled}
+      >
         <simulation.pcbdriverreceiverchannel
           name="DQ0"
           driverRef=".TX > .DQ0"
           receiverRef=".RX > .DQ0"
           driverDisabled={driverDisabled}
+          bitRate={driverBitRate}
           pattern="01"
         />
         {neighbourPattern && (
@@ -156,4 +177,37 @@ export function ParallelBus({
       </simulation.pcbtransientchannelsimulation>
     </board>
   )
+}
+
+/** Capture timing and lowered controls for the bus's unselected DQ1 driver. */
+interface ParallelBusNeighborControls {
+  durationSeconds: number
+  state: RunControls["states"][number] | undefined
+  stimulus: RunControls["stimuli"][number] | undefined
+}
+
+/** Render the bus through core and read the controls for TX.DQ1. */
+export async function parallelBusNeighborControls({
+  tree,
+  sources = parallelBusSources,
+}: {
+  tree: React.JSX.Element
+  sources?: typeof parallelBusSources
+}): Promise<ParallelBusNeighborControls> {
+  const circuit = await renderSignals({ tree })
+  const [prepared] = prepareChannelSimulations({ circuit, sources })
+  const neighbor = [...prepared.pins.values()].find(
+    (pin) => pin.pin === "2" && pin.buffer.type !== "input",
+  )
+  const { states, stimuli } =
+    prepared.controls[
+      prepared.channelSimulation.simulation_pcb_transient_channel_simulation_id
+    ]
+  return {
+    durationSeconds: prepared.durationSeconds,
+    state: states.find((state) => state.source_port_id === neighbor?.port),
+    stimulus: stimuli.find(
+      (stimulus) => stimulus.source_port_id === neighbor?.port,
+    ),
+  }
 }

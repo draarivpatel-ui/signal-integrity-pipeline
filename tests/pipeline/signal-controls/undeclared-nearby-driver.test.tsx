@@ -6,7 +6,7 @@ import {
   renderSignals,
 } from "../../fixtures/signal-render"
 
-test.failing("admission requires a state for retained nearby drivers", async () => {
+test("admission requires a state for retained nearby drivers", async () => {
   const circuit = await renderSignals({ tree: <ParallelBus /> })
   assert.throws(
     () => prepareChannelSimulations({ circuit, sources: parallelBusSources }),
