@@ -25,7 +25,8 @@ test("synthetic admission emits the board mappings and hashes the supplied bytes
     artifacts,
   } = solver.getOutput()
   const [channelSimulation] = listChannelSimulations(circuitJson)
-  const id = channelSimulation.simulation_pcb_transient_channel_simulation_id
+  const simulationPcbTransientChannelSimulationId =
+    channelSimulation.simulation_pcb_transient_channel_simulation_id
   const db = cju(circuitJson)
   const driverReceiverChannels =
     db.simulation_pcb_driver_receiver_channel.list()
@@ -51,7 +52,9 @@ test("synthetic admission emits the board mappings and hashes the supplied bytes
     ["admission.json"],
   )
   assert.deepEqual(JSON.parse(artifacts[0].body), {
-    channelSimulations: [{ id, name: "TWO", warnings: [] }],
+    channelSimulations: [
+      { simulationPcbTransientChannelSimulationId, name: "TWO", warnings: [] },
+    ],
     models: {
       [inverterModelPath]: createHash("sha256").update(bytes).digest("hex"),
     },

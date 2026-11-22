@@ -48,16 +48,18 @@ export function expectAdmissionPcbSnapshot({
       ({ sourceTraceId }) => sourceTraceId === pcbTrace.source_trace_id,
     )
     assert.ok(cut)
-    const fromNode = node(cut.from)
-    const toNode = node(cut.to)
+    const fromNode = node(cut.fromSourcePortId)
+    const toNode = node(cut.toSourcePortId)
     assert.notEqual(fromNode, toNode, cut.sourceTraceId)
-    const labels = [cut.from, cut.to].map((sourcePortId) => {
-      const port = db.source_port.get(sourcePortId)
-      assert.ok(port?.source_component_id)
-      const component = db.source_component.get(port.source_component_id)
-      assert.ok(component)
-      return `${component.name}.${port.name}`
-    })
+    const labels = [cut.fromSourcePortId, cut.toSourcePortId].map(
+      (sourcePortId) => {
+        const port = db.source_port.get(sourcePortId)
+        assert.ok(port?.source_component_id)
+        const component = db.source_component.get(port.source_component_id)
+        assert.ok(component)
+        return `${component.name}.${port.name}`
+      },
+    )
     const color = ROUTE_COLORS[index]
     paths.push({
       type: "pcb_fabrication_note_path",

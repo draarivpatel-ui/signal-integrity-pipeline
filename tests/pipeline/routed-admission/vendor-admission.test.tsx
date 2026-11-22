@@ -5,13 +5,13 @@ import {
   listChannelSimulations,
   prepareChannelSimulationById,
 } from "../../../src/pipeline/signals"
-import { routedProblem } from "../../fixtures/routed-fixture"
+import { routedAdmissionInput } from "../../fixtures/routed-fixture"
 import { vendorAvailable, vendorModels } from "../../fixtures/vendor-models"
 
 test.skipIf(!vendorAvailable(vendorModels.cmos.file))(
   "vendor admission uses shared channel simulation preparation",
   async () => {
-    const input = await routedProblem()
+    const input = await routedAdmissionInput()
     const [id] = listChannelSimulations(input.circuitJson).map(
       (channelSimulation) =>
         channelSimulation.simulation_pcb_transient_channel_simulation_id,
