@@ -1,8 +1,9 @@
-import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PcbTrace } from "circuit-json"
 import {
   type CircuitJson,
+  type CircuitJsonDb,
   type CopperScope,
+  circuitJsonDb,
   getSourcePortConnectivityMapFromCircuitJson,
   type SignalEndpoint,
   type SimulationIbisModel,
@@ -21,7 +22,6 @@ import {
   packageCapacitanceWarnings,
 } from "../buffers"
 import { voltageSourceTerminals } from "../simulation"
-import { circuitJsonDb } from "./circuit-json-db"
 import type { NumericalSettings } from "./modeling"
 import { endpointPorts } from "./signal-controls"
 import type { ScopedSignalPins, SignalPins } from "./signal-pins"
@@ -57,7 +57,7 @@ function ibisModelOverrides({
   db,
   driverReceiverChannels,
 }: {
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
 }): IbisModelOverrides {
   const modelNameBySourcePortId = new Map<SourcePortId, string>()
@@ -99,13 +99,11 @@ function ibisModelOverrides({
 
 /** Keep the board and part models, then apply the selected simulation's endpoint choices. */
 export function channelSimulationCircuit({
-  boardCircuitJson,
   db,
   channelSimulation,
   driverReceiverChannels,
 }: {
-  boardCircuitJson: CircuitJson
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
 }): CircuitJson {
@@ -115,7 +113,8 @@ export function channelSimulationCircuit({
     ...db.simulation_voltage_source.list(),
     ...db.simulation_spice_subcircuit.list(),
   ])
-  const circuit = boardCircuitJson
+  const circuit = db
+    .toArray()
     .filter(
       (record) =>
         !record.type.startsWith("simulation_") || partModelRecords.has(record),
@@ -296,7 +295,7 @@ function loadNodes({
   copperScope,
   pins,
 }: {
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
   copperScope: CopperScope
   pins: Map<SourcePortId, InspectedPin>
 }): LoadNodeIds {

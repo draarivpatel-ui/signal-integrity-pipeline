@@ -1,4 +1,5 @@
 import { test } from "bun:test"
+import assert from "node:assert/strict"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { expectAdmissionPcbSnapshot } from "../../fixtures/admission-pcb-snapshot"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
@@ -15,9 +16,13 @@ test("routed differential terminations stay electrically distinct", async () => 
     ibisSources: { "models/sn65hvd72.ibs": differentialIbis },
   })
   solver.solve()
+  const [plan] = solver.getOutput().value
+  const { requiredSourcePortIds } = plan.sections
+  assert.equal(requiredSourcePortIds.length, 6)
+  assert.equal(new Set(requiredSourcePortIds).size, 6)
   expectAdmissionPcbSnapshot({
     circuitJson,
-    plan: solver.getOutput().value[0],
+    plan,
     expectedTraceCount: 4,
     testPath: import.meta.path,
   })

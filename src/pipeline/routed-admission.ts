@@ -1,7 +1,6 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
-  type LaneMapping,
   type RouteSectionsInput,
   routeBoardBox,
   routeBoardDrawing,
@@ -16,7 +15,7 @@ import {
 } from "../board"
 import type { IbisSources } from "../buffers"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
-import type { RouteBindingsInput } from "../simulation"
+import type { RouteBindingsInput, RoutedTraceCut } from "../simulation"
 import type { RoutedLane } from "./modeling"
 import {
   type AdmittedBoard,
@@ -25,7 +24,7 @@ import {
   captureRoutedAdmissionInput,
   type RoutedAdmissionInput,
 } from "./routed-admission-input"
-import { routedReceiverMappings } from "./routed-receiver-paths"
+import { routedReceiverPaths } from "./routed-receiver-paths"
 import { compareNames, prepareChannelSimulation } from "./signals"
 
 /** Admission starts with the base route mesh resolution. */
@@ -44,12 +43,11 @@ export interface RoutedChannelSimulationPlan {
 type RoutedAdmissionOutput = Produced<readonly RoutedChannelSimulationPlan[]>
 
 /** Take the physical port pair from each cut, including loads beyond the receivers. */
-function routedTraceCut(lane: RoutedLane): LaneMapping {
+function routedTraceCut(lane: RoutedLane): RoutedTraceCut {
   return {
-    port: lane.port,
     sourceTraceId: lane.sourceTraceId,
-    from: lane.from.sourcePortId,
-    to: lane.to.sourcePortId,
+    fromSourcePortId: lane.from.sourcePortId,
+    toSourcePortId: lane.to.sourcePortId,
   }
 }
 
@@ -68,7 +66,7 @@ function planRoutedChannelSimulation({
   const prepared = prepareChannelSimulation({
     boardCircuitJson: input.circuitJson,
     sources: input.ibisSources,
-    channelSimulation,
+    ...admittedChannelSimulation,
     distanceMm: scopeDistanceMm,
   })
   const artifactPrefix = `channelSimulations/${simulationPcbTransientChannelSimulationId}`
@@ -76,8 +74,16 @@ function planRoutedChannelSimulation({
   const modeling = snapshot(prepared.settings)
   const routedTraceCuts = snapshot(modeling.lanes.map(routedTraceCut))
   const requiredSourcePortIds = Object.freeze([
-    ...new Set(routedTraceCuts.flatMap(({ from, to }) => [from, to])),
+    ...new Set(
+      routedTraceCuts.flatMap(({ fromSourcePortId, toSourcePortId }) => [
+        fromSourcePortId,
+        toSourcePortId,
+      ]),
+    ),
   ])
+  const { mappings, idealRoutedJunctions } = snapshot(
+    routedReceiverPaths(prepared),
+  )
   return Object.freeze({
     simulationPcbTransientChannelSimulationId,
     name: channelSimulation.name ?? simulationPcbTransientChannelSimulationId,
@@ -90,7 +96,8 @@ function planRoutedChannelSimulation({
     }),
     bindings: Object.freeze({
       circuitJson,
-      mappings: snapshot(routedReceiverMappings(prepared)),
+      mappings,
+      idealRoutedJunctions,
       routedTraceCuts,
       modeling,
       controls: snapshot(prepared.controls),
@@ -117,7 +124,7 @@ function finalizeAdmission({
 }): RoutedAdmissionOutput {
   const channelSimulations = channelSimulationPlans.map(
     ({ simulationPcbTransientChannelSimulationId, name, warnings }) => ({
-      id: simulationPcbTransientChannelSimulationId,
+      simulationPcbTransientChannelSimulationId,
       name,
       warnings,
     }),

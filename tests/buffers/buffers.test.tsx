@@ -23,6 +23,7 @@ test.skipIf(!modelDir)(description, async () => {
     circuit: bindings.circuitJson,
     mappings: bindings.mappings,
     routedTraceCuts: bindings.routedTraceCuts,
+    idealRoutedJunctions: bindings.idealRoutedJunctions,
     modeling: bindings.modeling,
     controls: bindings.controls,
   })

@@ -1,9 +1,9 @@
 /* eslint-disable local/max-file-lines -- SPICE source generation and its shared deck namespacing stay together. */
 // Electrical sources and SPICE namespacing for the routed deck.
-import { cju } from "@tscircuit/circuit-json-util"
 import type { SimulationVoltageSource } from "circuit-json"
-import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
-import { selectPort } from "../board"
+import type { CircuitJsonSnapshot, SourceNetId, SourcePortId } from "../board"
+import { circuitJsonDb, selectPort } from "../board"
+import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import type {
   CircuitNodes,
@@ -346,8 +346,8 @@ export function electricalSources({
   modeling,
   nodes,
 }: {
-  circuit: CircuitJson
-  modeling: SimulationModeling
+  circuit: CircuitJsonSnapshot
+  modeling: Snapshot<SimulationModeling>
   nodes: CircuitNodes
 }): ElectricalSources {
   const sources: string[] = []
@@ -355,7 +355,7 @@ export function electricalSources({
   const activeNodes = new Set(["0"])
   const dcConnections: SpiceTerminalPair[] = []
   const sourceBindings: ElectricalSources["sourceBindings"] = []
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const sourcePorts = db.source_port.list()
   const sourceComponents = db.source_component.list()
   for (const [i, source] of db.simulation_voltage_source.list().entries()) {

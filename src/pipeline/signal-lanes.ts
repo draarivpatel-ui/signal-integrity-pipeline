@@ -7,8 +7,8 @@ import type {
   SourceNetId,
   SourcePortId,
 } from "../board"
+import { circuitJsonDb } from "../board"
 import { Diagnostic } from "../kernel"
-import { circuitJsonDb } from "./circuit-json-db"
 import type { NumericalSettings, RoutedLane } from "./modeling"
 import { endpointPorts } from "./signal-controls"
 import type { SignalPins } from "./signal-pins"
