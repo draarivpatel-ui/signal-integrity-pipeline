@@ -53,9 +53,17 @@ export interface CopperScope {
   extractedSourceIds: SourceConnectionGroup
 }
 
+/** Extents of an axis-aligned copper bound in board millimetres. */
+interface CopperBounds {
+  xmin: number
+  ymin: number
+  xmax: number
+  ymax: number
+}
+
 /** Bounds in board millimetres and the inclusive span of occupied layer indices. */
 export interface CopperBox {
-  xy: Box
+  xy: CopperBounds
   firstLayer: number
   lastLayer: number
 }
@@ -136,7 +144,7 @@ function copperBox({
   occupiedLayers,
   boardLayers,
 }: {
-  xy: Box
+  xy: CopperBounds
   occupiedLayers: readonly LayerRef[]
   boardLayers: readonly LayerRef[]
 }): CopperBox {
