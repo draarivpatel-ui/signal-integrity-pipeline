@@ -1,6 +1,5 @@
 import { expect } from "bun:test"
 import assert from "node:assert/strict"
-import type { Box } from "@flatten-js/core"
 import {
   cju,
   getPlatedHolePolygon,
@@ -14,7 +13,10 @@ import type {
   PcbTrace,
   Point,
 } from "circuit-json"
-import { channelCopperScopeWithBounds } from "../../src/board/geometry/scope"
+import {
+  type CopperBox,
+  channelCopperScopeWithBounds,
+} from "../../src/board/geometry/scope"
 import { scopeOptions } from "./copper-scope-board"
 import "./extend-expect-circuit-snapshot"
 
@@ -75,7 +77,7 @@ function outline({
   radius = 0,
   gap = 0,
 }: {
-  box: Pick<Box, "xmin" | "xmax" | "ymin" | "ymax">
+  box: CopperBox["xy"]
   id: string
   color: string
   radius?: number
