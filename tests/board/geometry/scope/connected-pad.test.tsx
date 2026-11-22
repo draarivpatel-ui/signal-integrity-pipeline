@@ -8,5 +8,5 @@ test("a connected nearby pad admits its source net without a routed trace", asyn
     (record) => record.type === "source_net" && record.name === "FLOATING",
   )
   assert(net?.type === "source_net")
-  assert(scope.retainedSourceIds.includes(net.source_net_id))
+  assert(scope.extractedSourceIds.includes(net.source_net_id))
 })

@@ -40,7 +40,7 @@ test("either explicit drill limit overrides the default through-hole span", asyn
     const via = circuit.find((record) => record.type === "pcb_via")
     assert(via)
     assert.deepEqual(via.layers, [from, to])
-    assert.deepEqual(scopeFor({ circuit }).retainedPcbViaIds, [via.pcb_via_id])
+    assert.deepEqual(scopeFor({ circuit }).extractedPcbViaIds, [via.pcb_via_id])
 
     // Core emits connected layers but has no prop for a partial drill limit.
     const limited = pcb_via.parse({ ...via, ...drill })
@@ -48,6 +48,6 @@ test("either explicit drill limit overrides the default through-hole span", asyn
       if (record === via) return limited
       return record
     })
-    assert.deepEqual(scopeFor({ circuit: records }).retainedPcbViaIds, [])
+    assert.deepEqual(scopeFor({ circuit: records }).extractedPcbViaIds, [])
   }
 })
