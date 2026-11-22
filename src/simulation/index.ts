@@ -9,7 +9,6 @@
  */
 
 export {
-  circuitNodes,
   generalDeclarations,
   modelRunDefinition,
 } from "./declarations"
@@ -18,8 +17,13 @@ export {
   namespaceSpice,
   voltageSourceTerminals,
 } from "./netlist"
+export { circuitNodes } from "./routed-nodes"
+export {
+  idealSourceNodes,
+  sourceNodeGroups,
+  type SourceNodeGroups,
+} from "./source-node-groups"
 export type {
-  IdealRoutedJunction,
   RouteBindingsInput,
   RoutedCompileOptions,
   RoutedTraceCut,
