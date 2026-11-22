@@ -47,10 +47,11 @@ test.skipIf(!path || !models)(modelSelection, async () => {
   )
   assert.equal(write.settings.copperScope.selectedPcbTraceIds.length, 11)
   assert.ok(
-    boardTraceCount - write.settings.copperScope.pcbTraceIds.length > 400,
+    boardTraceCount - write.settings.copperScope.retainedPcbTraceIds.length >
+      400,
   )
   assert.ok(
-    write.settings.copperScope.pcbTraceIds.length > 11,
+    write.settings.copperScope.retainedPcbTraceIds.length > 11,
     "physically relevant neighbours must stay",
   )
   const addr = await fullBoardDdr3({
@@ -76,8 +77,8 @@ test.skipIf(!path || !models)(modelSelection, async () => {
   )
   assert.equal(local.settings.lanes.length, 24)
   assert.ok(
-    local.settings.copperScope!.pcbTraceIds.length <
-      block.settings.copperScope!.pcbTraceIds.length,
+    local.settings.copperScope!.retainedPcbTraceIds.length <
+      block.settings.copperScope!.retainedPcbTraceIds.length,
   )
   for (const distanceMm of [0, -1, NaN, Infinity, 33]) {
     assert.throws(

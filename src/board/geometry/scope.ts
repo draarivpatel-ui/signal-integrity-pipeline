@@ -40,9 +40,9 @@ const ADJACENT_LAYER_OFFSET = 1
 export interface CopperScope {
   lateralDistanceMm: number
   selectedPcbTraceIds: PcbTraceId[]
-  pcbTraceIds: PcbTraceId[]
-  pcbViaIds: PcbViaId[]
-  railTraceIds: PcbTraceId[]
+  retainedPcbTraceIds: PcbTraceId[]
+  retainedPcbViaIds: PcbViaId[]
+  railPcbTraceIds: PcbTraceId[]
   retainedSourceIds: SourceConnectionGroup
 }
 
@@ -398,8 +398,8 @@ export function channelCopperScope({
   const proximity = { seeds, distanceMm }
   const retained = new Set(selected)
   const retainedCopper = { connectivity, retained }
-  const railTraceIds = new Set<PcbTraceId>()
-  const nearbyRailVias = new Set<PcbViaId>()
+  const railPcbTraceIds = new Set<PcbTraceId>()
+  const nearbyRailPcbViaIds = new Set<PcbViaId>()
   for (const trace of traces) {
     if (
       !boxes
@@ -409,7 +409,7 @@ export function channelCopperScope({
       continue
     const ids = traceMembers({ id: trace.source_trace_id, sources })
     if (ids.some((id) => railIds.has(id))) {
-      railTraceIds.add(trace.pcb_trace_id)
+      railPcbTraceIds.add(trace.pcb_trace_id)
       continue
     }
     retain({ ids, copper: retainedCopper })
@@ -424,7 +424,7 @@ export function channelCopperScope({
       continue
     const ids = viaMembers({ via, associations })
     if (ids.some((id) => railIds.has(id))) {
-      nearbyRailVias.add(via.pcb_via_id)
+      nearbyRailPcbViaIds.add(via.pcb_via_id)
       continue
     }
     retain({ ids, copper: retainedCopper })
@@ -446,13 +446,13 @@ export function channelCopperScope({
   const bridges = passiveBridges({ circuit, excluded: railIds })
   retainPassiveBridges({ bridges, copper: retainedCopper })
   const keptTraces = traces.filter((trace) => {
-    if (railTraceIds.has(trace.pcb_trace_id)) return true
+    if (railPcbTraceIds.has(trace.pcb_trace_id)) return true
     return traceMembers({ id: trace.source_trace_id, sources }).some((id) =>
       retained.has(id),
     )
   })
   const keptVias = vias.filter((via) => {
-    if (nearbyRailVias.has(via.pcb_via_id)) return true
+    if (nearbyRailPcbViaIds.has(via.pcb_via_id)) return true
     return viaMembers({ via, associations }).some(
       (id) => retained.has(id) || reference.has(id),
     )
@@ -460,9 +460,9 @@ export function channelCopperScope({
   return {
     lateralDistanceMm: distanceMm,
     selectedPcbTraceIds: selectedTraces.map((trace) => trace.pcb_trace_id),
-    pcbTraceIds: keptTraces.map((trace) => trace.pcb_trace_id),
-    pcbViaIds: keptVias.map((via) => via.pcb_via_id),
-    railTraceIds: [...railTraceIds],
+    retainedPcbTraceIds: keptTraces.map((trace) => trace.pcb_trace_id),
+    retainedPcbViaIds: keptVias.map((via) => via.pcb_via_id),
+    railPcbTraceIds: [...railPcbTraceIds],
     retainedSourceIds: [...retained],
   }
 }

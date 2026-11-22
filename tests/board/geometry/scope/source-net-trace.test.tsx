@@ -39,7 +39,7 @@ test("a routed source trace can be selected by an explicit source net ID", async
     distanceMm: 0.5,
   })
   assert.deepEqual(result.selectedPcbTraceIds, [trace.pcb_trace_id])
-  assert.deepEqual(result.pcbTraceIds, [trace.pcb_trace_id])
+  assert.deepEqual(result.retainedPcbTraceIds, [trace.pcb_trace_id])
   assert.equal(result.lateralDistanceMm, 0.5)
   const channel = circuit.find(
     (record) =>

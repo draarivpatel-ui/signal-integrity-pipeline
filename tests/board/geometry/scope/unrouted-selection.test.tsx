@@ -12,5 +12,5 @@ test("an explicitly selected net stays in scope without physical copper", async 
   const source = scopeNet({ circuit, name: "CHANNEL" })
   const result = scopeFor({ circuit, selectedNet: "CHANNEL" })
   assert.deepEqual(result.retainedSourceIds, [source])
-  assert.deepEqual(result.pcbTraceIds, [])
+  assert.deepEqual(result.retainedPcbTraceIds, [])
 })
