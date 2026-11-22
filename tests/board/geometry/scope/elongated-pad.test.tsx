@@ -32,5 +32,5 @@ test("an elongated rectangular pad is screened using its outline", async () => {
     </board>,
   )
   const result = scopeFor({ circuit })
-  assert.deepEqual(result.pcbTraceIds, result.selectedPcbTraceIds)
+  assert.deepEqual(result.retainedPcbTraceIds, result.selectedPcbTraceIds)
 })
