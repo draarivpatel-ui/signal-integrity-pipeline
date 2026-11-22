@@ -9,6 +9,6 @@ test("the wire approaching a via stays on its entry layer", async () => {
   const implicit = scopeFor({
     circuit: await viaApproach({ explicitWire: false }),
   })
-  assert.deepEqual(explicit.retainedPcbTraceIds, explicit.selectedPcbTraceIds)
-  assert.deepEqual(implicit.retainedPcbTraceIds, implicit.selectedPcbTraceIds)
+  assert.deepEqual(explicit.extractedPcbTraceIds, explicit.channelPcbTraceIds)
+  assert.deepEqual(implicit.extractedPcbTraceIds, implicit.channelPcbTraceIds)
 })
