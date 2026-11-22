@@ -1,6 +1,6 @@
 import type { SourceTrace } from "circuit-json"
 import type {
-  CircuitJson,
+  CircuitJsonSnapshot,
   CopperScope,
   SimulationPcbDriverReceiverChannel,
   SimulationPcbTransientChannelSimulation,
@@ -8,7 +8,7 @@ import type {
   SourcePortId,
 } from "../board"
 import { circuitJsonDb } from "../board"
-import { Diagnostic } from "../kernel"
+import { Diagnostic, type Snapshot } from "../kernel"
 import type { NumericalSettings, RoutedLane } from "./modeling"
 import { endpointPorts } from "./signal-controls"
 import type { SignalPins } from "./signal-pins"
@@ -25,7 +25,7 @@ function routedLane({
   topology,
   driven,
 }: {
-  trace: SourceTrace
+  trace: Snapshot<SourceTrace>
   topology: ReadonlyMap<SourcePortId | SourceNetId, string>
   driven: ReadonlySet<SourcePortId>
 }): RoutedLane {
@@ -49,7 +49,7 @@ export function routedLanes({
   driven,
   rails,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   channelPcbTraceIds: Readonly<CopperScope["channelPcbTraceIds"]>
   topology: Map<SourcePortId | SourceNetId, string>
   driven: Set<SourcePortId>
@@ -95,7 +95,7 @@ function validateRoutedDrivers({
   lanes,
 }: {
   channelSimulation: SimulationPcbTransientChannelSimulation
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   lanes: NumericalSettings["lanes"]
 }): void {
   if (channelSimulation.allow_unrouted_traces) return
@@ -125,10 +125,10 @@ export function prepareRoutedLanes({
   driverReceiverChannels,
   signalPins,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   copperScope: CopperScope
   channelSimulation: SimulationPcbTransientChannelSimulation
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   signalPins: Pick<SignalPins, "topology" | "driven" | "rails">
 }): NumericalSettings["lanes"] {
   const { topology, driven, rails } = signalPins
