@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbPort } from "circuit-json"
 import { hypotenuse } from "../kernel"
 import { polygonContains } from "./geometry/polygon"
@@ -453,27 +454,26 @@ export function* routeSectionSteps({
     pours: [],
     warnings: [],
   }
-  geometry.pours = circuit
-    .filter((record) => record.type === "pcb_copper_pour")
-    .flatMap((pour): RoutePour[] => {
-      if (pour.shape !== "brep")
-        throw new Error(
-          `${pour.pcb_copper_pour_id}: 2D route extraction needs polygonal pours`,
-        )
-      const rings = [pour.brep_shape.outer_ring, ...pour.brep_shape.inner_rings]
-      return [
-        {
-          id: pour.pcb_copper_pour_id,
-          net: pour.source_net_id ?? "unassociated",
-          layer: pour.layer,
-          polygon: rings.map((ring) =>
-            ring.vertices.map((point): RouteXY => [point.x, point.y]),
-          ),
-        },
-      ]
-    })
+  const db = cju([...circuit])
+  geometry.pours = db.pcb_copper_pour.list().flatMap((pour): RoutePour[] => {
+    if (pour.shape !== "brep")
+      throw new Error(
+        `${pour.pcb_copper_pour_id}: 2D route extraction needs polygonal pours`,
+      )
+    const rings = [pour.brep_shape.outer_ring, ...pour.brep_shape.inner_rings]
+    return [
+      {
+        id: pour.pcb_copper_pour_id,
+        net: pour.source_net_id ?? "unassociated",
+        layer: pour.layer,
+        polygon: rings.map((ring) =>
+          ring.vertices.map((point): RouteXY => [point.x, point.y]),
+        ),
+      },
+    ]
+  })
   // Rail traces are retained as AC-ground electrodes by the extraction caller; they need no longitudinal dynamics.
-  const traces = circuit.filter((record) => record.type === "pcb_trace")
+  const traces = db.pcb_trace.list()
   for (const trace of traces) {
     if (!scope.extractedPcbTraceIds.includes(trace.pcb_trace_id)) continue
     appendRoute({ geometry, circuit, trace })
@@ -499,7 +499,7 @@ export function* routeSectionSteps({
       "Original endpoints and joins are recorded.",
     ].join(" "),
   )
-  const ports = circuit.filter((record) => record.type === "pcb_port")
+  const ports = db.pcb_port.list()
   for (const wire of geometry.wires) {
     wire.aPort = ports.some((port) =>
       portTouches({ port, layer: wire.layer, point: wire.a }),
