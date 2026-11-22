@@ -1,4 +1,3 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import type { SourceTrace } from "circuit-json"
 import type {
   CircuitJson,
@@ -9,6 +8,7 @@ import type {
   SourcePortId,
 } from "../board"
 import { Diagnostic } from "../kernel"
+import { circuitJsonDb } from "./circuit-json-db"
 import type { NumericalSettings, RoutedLane } from "./modeling"
 import { endpointPorts } from "./signal-controls"
 import type { SignalPins } from "./signal-pins"
@@ -57,7 +57,7 @@ export function routedLanes({
 }): RoutedLanes {
   const lanes: NumericalSettings["lanes"] = []
   const rejections: string[] = []
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const traces = db.source_trace.list()
   const pcbTraces = db.pcb_trace.list()
   const sortedTraces = traces.toSorted((a, b) =>
