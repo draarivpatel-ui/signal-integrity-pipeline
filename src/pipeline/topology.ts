@@ -1,4 +1,3 @@
-import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PcbPort, PcbTrace, SourceTrace } from "circuit-json"
 import {
   ConnectivityMap,
@@ -6,6 +5,8 @@ import {
 } from "circuit-json-to-connectivity-map"
 import {
   type CircuitJson,
+  type CircuitJsonDb,
+  circuitJsonDb,
   type PassiveBridge,
   passiveBridges,
   type SimulationPcbDriverReceiverChannel,
@@ -14,7 +15,6 @@ import {
   sourceConnections,
   sourceNetMembers,
 } from "../board"
-import { circuitJsonDb } from "./circuit-json-db"
 import { fail } from "./diagnostics"
 import {
   buildRoutedCopper,
@@ -73,9 +73,9 @@ export function signalTopology({
   rails: ReadonlySet<SourcePortId | SourceNetId>
 }): SignalTopology {
   const bridges = passiveBridges({ circuit, excluded: rails })
-  const sourceConnectionGroups = [...sourceConnections(circuit), ...bridges]
+  const sourceConnectionGroups = sourceConnections(circuit)
   const connectivity = new ConnectivityMap(
-    findConnectedNetworks(sourceConnectionGroups),
+    findConnectedNetworks([...sourceConnectionGroups, ...bridges]),
   )
   return { connectivity, bridges, rails, sourceConnectionGroups }
 }
@@ -94,7 +94,7 @@ function selectCopper({
   topology,
   driverReceiverChannels,
 }: {
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
   topology: SignalTopology
   driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
 }): SelectedCopper {
@@ -188,6 +188,26 @@ function differentialLegs({
   })
 }
 
+/** Check the same leg boundary for a physical or a source-level passive bridge. */
+export function crossesDifferentialLegs<T>({
+  from,
+  to,
+  differential,
+}: {
+  from: T
+  to: T
+  differential: readonly {
+    positive: ReadonlySet<T>
+    negative: ReadonlySet<T>
+  }[]
+}): boolean {
+  return differential.some(
+    ({ positive, negative }) =>
+      (positive.has(from) && negative.has(to)) ||
+      (positive.has(to) && negative.has(from)),
+  )
+}
+
 /** Add series connections through passives, leaving cross-leg loads outside the routed path. */
 function withPassiveBridges({
   bridges,
@@ -209,14 +229,7 @@ function withPassiveBridges({
     if (!first || !second) continue
     for (const a of first) {
       for (const b of second) {
-        if (
-          differential.some(
-            ({ positive, negative }) =>
-              (positive.has(a) && negative.has(b)) ||
-              (positive.has(b) && negative.has(a)),
-          )
-        )
-          continue
+        if (crossesDifferentialLegs({ from: a, to: b, differential })) continue
         if (a === b) continue
         connected[a].add(b)
         connected[b].add(a)
@@ -227,7 +240,7 @@ function withPassiveBridges({
 }
 
 /** Describe the component-bound ports admitted by channel endpoint resolution. */
-function portNames(db: CircuitJsonUtilObjects): PortNames {
+function portNames(db: CircuitJsonDb): PortNames {
   const components = Object.fromEntries(
     db.source_component
       .list()

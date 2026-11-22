@@ -1,4 +1,4 @@
-import { hypotenuse } from "../kernel"
+import { hypotenuse, type Snapshot } from "../kernel"
 import type { RouteWire, RouteXY } from "./route-sections"
 
 /** Treat near-vertical segments as vertical when choosing the canonical direction. */
@@ -16,9 +16,9 @@ export function chordDistance({
   a,
   b,
 }: {
-  point: RouteXY
-  a: RouteXY
-  b: RouteXY
+  point: Snapshot<RouteXY>
+  a: Snapshot<RouteXY>
+  b: Snapshot<RouteXY>
 }): number {
   const dx = b[0] - a[0]
   const dy = b[1] - a[1]
