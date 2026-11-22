@@ -36,7 +36,7 @@ test("through-hole barrels reach layers beyond their connected copper", async ()
     assert.deepEqual(via.layers, ["top", "inner1"])
     const neighbor = scopeTrace({ circuit, name: "NEIGHBOR" }).pcb_trace_id
     assert.equal(
-      scopeFor({ circuit }).retainedPcbTraceIds.includes(neighbor),
+      scopeFor({ circuit }).extractedPcbTraceIds.includes(neighbor),
       !allowBlindAndBuriedVias,
     )
     // Core omits the per-via flag. Add it to test an explicit through-hole on a blind-via board.
@@ -46,7 +46,7 @@ test("through-hole barrels reach layers beyond their connected copper", async ()
       return record
     })
     const scope = scopeFor({ circuit: records })
-    assert(scope.retainedPcbTraceIds.includes(neighbor))
-    assert.deepEqual(scope.retainedPcbViaIds, [via.pcb_via_id])
+    assert(scope.extractedPcbTraceIds.includes(neighbor))
+    assert.deepEqual(scope.extractedPcbViaIds, [via.pcb_via_id])
   }
 })

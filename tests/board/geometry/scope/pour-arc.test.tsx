@@ -27,7 +27,7 @@ test("a pour arc approaching the channel is retained even when its vertices are 
   assert(pour?.shape === "brep")
   const net = pour.source_net_id
   assert(net)
-  assert(!scopeFor({ circuit }).retainedSourceIds.includes(net))
+  assert(!scopeFor({ circuit }).extractedSourceIds.includes(net))
 
   // Add curved-edge metadata that the TSX pour outline does not accept yet.
   for (const bulge of [0.375, -0.375]) {
@@ -41,6 +41,6 @@ test("a pour arc approaching the channel is retained even when its vertices are 
       return record
     })
     const result = scopeFor({ circuit: records })
-    assert.equal(result.retainedSourceIds.includes(net), bulge < 0)
+    assert.equal(result.extractedSourceIds.includes(net), bulge < 0)
   }
 })
