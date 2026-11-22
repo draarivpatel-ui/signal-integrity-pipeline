@@ -44,5 +44,7 @@ test("polygonal plated pads use their board position when testing proximity", as
       record.source_component_id === component.source_component_id,
   )
   assert(port?.type === "source_port")
-  assert(!scopeFor({ circuit }).retainedSourceIds.includes(port.source_port_id))
+  assert(
+    !scopeFor({ circuit }).extractedSourceIds.includes(port.source_port_id),
+  )
 })

@@ -47,7 +47,7 @@ test("rectangular and polygonal pours admit a net only within the lateral cap", 
         return record
       })
       assert.equal(
-        scopeFor({ circuit: records }).retainedPcbTraceIds.includes(linked),
+        scopeFor({ circuit: records }).extractedPcbTraceIds.includes(linked),
         y === 1,
       )
     }
