@@ -25,7 +25,7 @@ test("the inclusive lateral cap measures the Euclidean gap between copper bounds
   )
   const result = scopeFor({ circuit })
   assert.deepEqual(
-    result.pcbTraceIds,
+    result.retainedPcbTraceIds,
     ["SELECTED", "ON_BOUNDARY", "DIAGONAL_INSIDE"].map(
       (name) => scopeTrace({ circuit, name }).pcb_trace_id,
     ),
