@@ -85,22 +85,9 @@ function routeDielectrics({
       layer.zMm + layer.thicknessMm <= upper + LAYER_TOLERANCE_MM
     )
   })
-  addOuterMask({ geometry, slice, materials, clipped })
-  return clipped
-}
-
-/** Planar mask occupies gaps between outer traces and the overcoat over those traces. */
-function addOuterMask({
-  geometry,
-  slice,
-  materials,
-  clipped,
-}: RouteCrossSectionInput & {
-  clipped: CrossSection["dielectrics"]
-}): void {
-  const layers = geometry.stack.copperLayers
+  // Planar mask occupies gaps between outer traces and the overcoat over those traces.
   if (slice.wires.some((wire) => wire.layer === "top")) {
-    const copper = layers.find((layer) => layer.name === "top")!
+    const copper = copperLayers.find((layer) => layer.name === "top")!
     const first = clipped.findIndex(
       (layer) => layer.zMm >= copper.zMinMm - LAYER_TOLERANCE_MM,
     )
@@ -112,8 +99,8 @@ function addOuterMask({
       lossTangent: materials.maskLoss,
     })
   }
-  if (!slice.wires.some((wire) => wire.layer === "bottom")) return
-  const copper = layers.find((layer) => layer.name === "bottom")!
+  if (!slice.wires.some((wire) => wire.layer === "bottom")) return clipped
+  const copper = copperLayers.find((layer) => layer.name === "bottom")!
   const last = clipped.findIndex(
     (layer) => layer.zMm >= copper.zMaxMm - LAYER_TOLERANCE_MM,
   )
@@ -124,6 +111,7 @@ function addOuterMask({
     er: materials.maskEr,
     lossTangent: materials.maskLoss,
   })
+  return clipped
 }
 
 /** Build the conductor, reference and material geometry seen by the cross-section solver. */

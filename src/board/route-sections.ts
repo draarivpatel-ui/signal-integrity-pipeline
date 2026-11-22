@@ -311,20 +311,25 @@ function routedLayer(point: RoutedPoint): LayerRef {
   return point.layer
 }
 
-/** Record via contacts and straight wire sections for one physical route. */
-function appendRoute({
-  geometry,
+/** Via contacts and wire sections contributed by a physical trace. */
+type TraceSections = Pick<SectionGeometry, "viaContacts" | "wires">
+
+/** Read via contacts and straight wire sections for one physical route. */
+function traceSections({
+  firstWireId,
   circuit,
   trace,
 }: {
-  geometry: SectionGeometry
+  firstWireId: number
   circuit: CircuitJson
   trace: PcbTrace
-}): void {
+}): TraceSections {
+  const viaContacts: ViaContact[] = []
+  const wires: RouteWire[] = []
   const route = resolveRouteVias({ circuit, trace })
   for (const via of route.filter((point) => point.route_type === "via")) {
     for (const layer of [via.from_layer, via.to_layer]) {
-      geometry.viaContacts.push({
+      viaContacts.push({
         trace: trace.pcb_trace_id,
         layer,
         point: [via.x, via.y],
@@ -348,8 +353,8 @@ function appendRoute({
     }
     const start: RouteXY = [a.x, a.y]
     const end: RouteXY = [b.x, b.y]
-    geometry.wires.push({
-      id: geometry.wires.length,
+    wires.push({
+      id: firstWireId + wires.length,
       trace: trace.pcb_trace_id,
       source: trace.source_trace_id!,
       layer,
@@ -359,6 +364,7 @@ function appendRoute({
       ...projectRouteWire({ a: start, b: end, length }),
     })
   }
+  return { viaContacts, wires }
 }
 
 type WireDirectionKey = string
@@ -375,7 +381,8 @@ function sliceParallelRoutes({
 }: {
   geometry: SectionGeometry
   scope: CopperScope
-}): void {
+}): RouteSlice[] {
+  const slices: RouteSlice[] = []
   const groups = new Map<WireDirectionKey, RouteWire[]>()
   for (const wire of geometry.wires) {
     const key = wire.u.map((n) => n.toFixed(KEY_DECIMAL_PLACES)).join(",")
@@ -423,16 +430,11 @@ function sliceParallelRoutes({
         regions.set(key, region)
       }
       for (const region of regions.values()) {
-        sliceRegion({
-          ...region,
-          start,
-          end,
-          scope,
-          slices: geometry.slices,
-        })
+        slices.push(...sliceRegion({ ...region, start, end, scope }))
       }
     }
   }
+  return slices
 }
 
 /** Board circuit and the copper to sweep into longitudinal sections. */
@@ -476,7 +478,13 @@ export function* routeSectionSteps({
   const traces = db.pcb_trace.list()
   for (const trace of traces) {
     if (!scope.extractedPcbTraceIds.includes(trace.pcb_trace_id)) continue
-    appendRoute({ geometry, circuit, trace })
+    const { viaContacts, wires } = traceSections({
+      circuit,
+      trace,
+      firstWireId: geometry.wires.length,
+    })
+    geometry.viaContacts.push(...viaContacts)
+    geometry.wires.push(...wires)
     yield geometry
   }
   const simplified = simplifyRouteWires({
@@ -500,16 +508,16 @@ export function* routeSectionSteps({
     ].join(" "),
   )
   const ports = db.pcb_port.list()
-  for (const wire of geometry.wires) {
-    wire.aPort = ports.some((port) =>
+  geometry.wires = geometry.wires.map((wire) => ({
+    ...wire,
+    aPort: ports.some((port) =>
       portTouches({ port, layer: wire.layer, point: wire.a }),
-    )
-    wire.bPort = ports.some((port) =>
+    ),
+    bPort: ports.some((port) =>
       portTouches({ port, layer: wire.layer, point: wire.b }),
-    )
-  }
-  sliceParallelRoutes({ geometry, scope })
-  geometry.slices = mergeSlices(geometry.slices)
+    ),
+  }))
+  geometry.slices = mergeSlices(sliceParallelRoutes({ geometry, scope }))
   geometry.warnings.push(
     [
       "Reference boundaries use centre-line polygon intersections; lateral fringing across plane edges/voids uses",
@@ -529,24 +537,9 @@ export function* routeSectionSteps({
   return geometry
 }
 
-/** One candidate slice and the scope and output used to retain it. */
+/** One candidate slice and the scope used to retain it. */
 interface SliceRegionOptions extends RouteSlice {
   scope: CopperScope
-  slices: RouteSlice[]
-}
-
-/** Emit a lateral group only if it contains a signal wire. */
-function appendSignalSlice({
-  wires,
-  start,
-  end,
-  references,
-  scope,
-  slices,
-}: SliceRegionOptions): void {
-  if (wires.every((wire) => scope.nearbyRailPcbTraceIds.includes(wire.trace)))
-    return
-  slices.push({ wires, start, end, references })
 }
 
 /** Split a region at lateral gaps and keep groups with at least one signal wire. */
@@ -556,25 +549,28 @@ function sliceRegion({
   start,
   end,
   scope,
-  slices,
-}: SliceRegionOptions): void {
-  const ordered = wires.sort((a, b) => a.transverse - b.transverse)
+}: SliceRegionOptions): RouteSlice[] {
+  const ordered = wires.toSorted((a, b) => a.transverse - b.transverse)
+  const groups: RouteWire[][] = []
   let group: RouteWire[] = []
   for (const wire of ordered) {
     const last = group.at(-1)
-    if (!last) {
-      group.push(wire)
-      continue
-    }
-    const gap =
-      wire.transverse - last.transverse - (wire.width + last.width) / 2
-    if (gap > scope.nearbyGapMm) {
-      appendSignalSlice({ wires: group, start, end, references, scope, slices })
-      group = []
+    if (last) {
+      const gap =
+        wire.transverse - last.transverse - (wire.width + last.width) / 2
+      if (gap > scope.nearbyGapMm) {
+        groups.push(group)
+        group = []
+      }
     }
     group.push(wire)
   }
-  appendSignalSlice({ wires: group, start, end, references, scope, slices })
+  groups.push(group)
+  return groups
+    .filter((group) =>
+      group.some((wire) => !scope.nearbyRailPcbTraceIds.includes(wire.trace)),
+    )
+    .map((wires) => ({ wires, start, end, references }))
 }
 
 /** Merge consecutive slices that have the same wires and references. */
@@ -591,8 +587,9 @@ function mergeSlices(slices: RouteSlice[]): RouteSlice[] {
       last.end = slice.end
       continue
     }
-    merged.push(slice)
-    previous.set(key, slice)
+    const next = { ...slice }
+    merged.push(next)
+    previous.set(key, next)
   }
   return merged
 }
