@@ -1,3 +1,4 @@
+import type { Snapshot } from "../kernel"
 import { hypotenuse } from "../kernel"
 import { circuitJsonDb } from "./circuit-json-db"
 
@@ -52,7 +53,7 @@ function wireNet({
   source,
   connectivity,
 }: {
-  source: SourceTrace
+  source: Snapshot<SourceTrace>
   connectivity: ConnectivityMap
 }): string {
   const port =
