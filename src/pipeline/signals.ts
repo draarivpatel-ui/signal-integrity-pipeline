@@ -1,4 +1,3 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import type {
   CircuitJson,
   SimulationPcbDriverReceiverChannel,
@@ -9,6 +8,7 @@ import type {
 import type { IbisSources, InspectedPin } from "../buffers"
 import { safeId } from "../kernel"
 import type { RunControls } from "../simulation"
+import { circuitJsonDb } from "./circuit-json-db"
 import type { NumericalSettings } from "./modeling"
 import {
   type ChannelSimulationControlOptions,
@@ -55,7 +55,7 @@ export interface PreparedChannelSimulation {
 export function listChannelSimulations(
   circuitJson: CircuitJson,
 ): SimulationPcbTransientChannelSimulation[] {
-  const db = cju([...circuitJson])
+  const db = circuitJsonDb(circuitJson)
   const channelSimulations =
     db.simulation_pcb_transient_channel_simulation.list()
   if (
@@ -201,13 +201,12 @@ function selectChannelSimulation({
     raw: channelSimulation.simulation_pcb_transient_channel_simulation_id,
     field: "simulationPcbTransientChannelSimulationId",
   })
-  const channels = cju([
-    ...boardCircuitJson,
-  ]).simulation_pcb_driver_receiver_channel.list()
-  const driverReceiverChannels = channels.filter(
-    (channel) =>
-      channel.simulation_pcb_transient_channel_simulation_id ===
-      simulationPcbTransientChannelSimulationId,
+  const db = circuitJsonDb(boardCircuitJson)
+  const driverReceiverChannels = db.simulation_pcb_driver_receiver_channel.list(
+    {
+      simulation_pcb_transient_channel_simulation_id:
+        simulationPcbTransientChannelSimulationId,
+    },
   )
   driverReceiverChannels.sort((a, b) => compareNames({ a: a.name, b: b.name }))
   validateChannelNames({
@@ -221,6 +220,7 @@ function selectChannelSimulation({
   })
   const circuit = channelSimulationCircuit({
     boardCircuitJson,
+    db,
     channelSimulation,
     driverReceiverChannels,
   })
