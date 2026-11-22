@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { SimulationVoltageSource } from "circuit-json"
 import {
   type ConnectivityMap,
@@ -49,8 +50,8 @@ function retainedVoltageSources({
   retained,
   reference,
 }: BlockSupplyOptions): RetainedSupplies {
-  const candidates = circuit
-    .filter((record) => record.type === "simulation_voltage_source")
+  const candidates = cju([...circuit])
+    .simulation_voltage_source.list()
     .map((source) => {
       const terminals = voltageSourceTerminals(source)
       const nets = terminals
@@ -87,9 +88,7 @@ function retainedVoltageSources({
 export function addBlockSupplies(options: BlockSupplyOptions): void {
   const { circuit, connectivity, pins, reference, settings } = options
   const { sources, sourceNets } = retainedVoltageSources(options)
-  for (const source of circuit.filter(
-    (record) => record.type === "simulation_voltage_source",
-  )) {
+  for (const source of cju([...circuit]).simulation_voltage_source.list()) {
     if (!sources.has(source)) circuit.splice(circuit.indexOf(source), 1)
   }
   const ground = netKey({ connectivity, id: reference })

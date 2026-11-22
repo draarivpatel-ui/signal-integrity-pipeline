@@ -1,5 +1,6 @@
 /* eslint-disable local/max-file-lines -- SPICE source generation and its shared deck namespacing stay together. */
 // Electrical sources and SPICE namespacing for the routed deck.
+import { cju } from "@tscircuit/circuit-json-util"
 import type { SimulationVoltageSource } from "circuit-json"
 import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
 import { selectPort } from "../board"
@@ -369,11 +370,10 @@ export function electricalSources({
   const activeNodes = new Set(["0"])
   const dcConnections: SpiceTerminalPair[] = []
   const sourceBindings: ElectricalSources["sourceBindings"] = []
-  const sourcePorts = circuit.filter((e) => e.type === "source_port")
-  const sourceComponents = circuit.filter((e) => e.type === "source_component")
-  for (const [i, source] of circuit
-    .filter((e) => e.type === "simulation_voltage_source")
-    .entries()) {
+  const db = cju([...circuit])
+  const sourcePorts = db.source_port.list()
+  const sourceComponents = db.source_component.list()
+  for (const [i, source] of db.simulation_voltage_source.list().entries()) {
     const [positive, negative] = voltageSourceTerminals(source)
     if (!positive || !negative)
       return fail(
@@ -436,12 +436,9 @@ export function electricalSources({
         (port) => port.source_component_id === component.source_component_id,
       )
       .sort((a, b) => Number(a.pin_number) - Number(b.pin_number))
-    const spiceSubcircuits = circuit.filter(
-      (record) => record.type === "simulation_spice_subcircuit",
-    )
-    const placed = spiceSubcircuits.filter(
-      (record) => record.source_component_id === component.source_component_id,
-    )
+    const placed = db.simulation_spice_subcircuit.list({
+      source_component_id: component.source_component_id,
+    })
     if (placed.length) {
       if (placed.length !== 1)
         fail(
