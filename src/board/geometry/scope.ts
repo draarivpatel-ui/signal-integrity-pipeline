@@ -293,7 +293,7 @@ function retain({
   const { connectivity, extractedSourceIds } = copper
   for (const id of ids) {
     if (extractedSourceIds.has(id)) continue
-    for (const connected of sourceNetMembers({ connectivity, seed: id }))
+    for (const connected of sourceNetMembers({ connectivity, memberId: id }))
       extractedSourceIds.add(connected)
   }
 }

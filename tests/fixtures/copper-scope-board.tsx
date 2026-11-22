@@ -269,9 +269,12 @@ export async function scopeNeighbors(): Promise<ScopeNeighbors> {
     connectivity,
     selected: sourceNetMembers({
       connectivity,
-      seed: selected.connected_source_port_ids[0],
+      memberId: selected.connected_source_port_ids[0],
     }),
-    reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
+    reference: sourceNetMembers({
+      connectivity,
+      memberId: ground.source_net_id,
+    }),
     rails: new Set(),
     distanceMm: 1,
   })
@@ -339,30 +342,30 @@ export function scopeFor({
   railNets?: string[]
 }): CopperScope {
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  let seed: SourceNetId
+  let memberId: SourceNetId
   if (selectedNet !== undefined) {
-    seed = scopeNet({ circuit, name: selectedNet })
+    memberId = scopeNet({ circuit, name: selectedNet })
   } else {
     const source = circuit.find(
       (record) =>
         record.type === "source_trace" && record.name === "SELECTED_route",
     )
     assert(source?.type === "source_trace")
-    seed = source.connected_source_port_ids[0]
+    memberId = source.connected_source_port_ids[0]
   }
-  const selected = sourceNetMembers({ connectivity, seed })
+  const selected = sourceNetMembers({ connectivity, memberId })
   let reference = new Set<SourceNetId>()
   if (referenceNet !== undefined) {
     reference = sourceNetMembers({
       connectivity,
-      seed: scopeNet({ circuit, name: referenceNet }),
+      memberId: scopeNet({ circuit, name: referenceNet }),
     })
   }
   const rails = new Set<SourceNetId>()
   for (const name of railNets) {
     const members = sourceNetMembers({
       connectivity,
-      seed: scopeNet({ circuit, name }),
+      memberId: scopeNet({ circuit, name }),
     })
     for (const id of members) rails.add(id)
   }
