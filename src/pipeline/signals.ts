@@ -281,6 +281,7 @@ function prepareChannelSimulation(
     signalPins,
     scopedPins,
     lanes,
+    sources,
   })
   return withPreparedChannelControls({
     ...selection,
