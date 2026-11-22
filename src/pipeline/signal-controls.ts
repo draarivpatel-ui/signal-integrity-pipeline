@@ -11,6 +11,7 @@ import {
   type SourcePortId,
 } from "../board"
 import { type InspectedPin, pinCapabilities } from "../buffers"
+import { Diagnostic } from "../kernel"
 import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
 import { defaultDurationSeconds, prbsPatterns } from "./timing"
 
@@ -58,6 +59,7 @@ export function endpointPorts(endpoint: SignalEndpoint): SignalEndpointPortIds {
 /** Fastest bit rate and maximum transient step for the recording. */
 interface SignalTiming {
   rate: number
+  riseSeconds: number
   stepSeconds: number
 }
 
@@ -71,16 +73,22 @@ export function signalTiming({
   durationSeconds: number
   edgeTimesSeconds: number[]
 }): SignalTiming {
-  const edgeTimeSeconds = Math.min(...edgeTimesSeconds)
+  const riseSeconds = Math.min(...edgeTimesSeconds)
   const rate = Math.max(
     ...driverReceiverChannels.map((signal) => signal.bit_rate_bps),
   )
   const stepSeconds = Math.min(
     1 / rate / STEPS_PER_BIT,
-    edgeTimeSeconds / STEPS_PER_EDGE,
+    riseSeconds / STEPS_PER_EDGE,
     durationSeconds / MIN_STEPS_PER_RECORDING,
   )
-  return { rate, stepSeconds }
+  if (!Number.isFinite(stepSeconds) || stepSeconds <= 0)
+    throw new Diagnostic(
+      "pipeline",
+      "simulation_timing",
+      "The admitted experiment requires a finite positive time_per_step",
+    )
+  return { rate, riseSeconds, stepSeconds }
 }
 
 /** Choose the capture duration in seconds and check coverage of enabled stimuli. */

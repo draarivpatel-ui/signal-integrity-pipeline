@@ -32,6 +32,7 @@ export type {
   SimulationPcbTransientChannelSimulationId,
   SourceNetId,
   SourcePortId,
+  SourceTraceId,
 } from "./ids"
 export type { RouteSectionsInput } from "./route-sections-solver"
 export type {
