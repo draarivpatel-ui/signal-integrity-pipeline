@@ -1,3 +1,4 @@
+import type { Snapshot } from "../kernel"
 import {
   type Box,
   Point as PlanarPoint,
@@ -13,7 +14,9 @@ import {
 import type {
   LayerRef,
   PcbComponent,
+  PcbPlatedHole,
   PcbPort,
+  PcbSmtPad,
   PcbTrace,
   PcbTraceRoutePointVia,
   PcbTraceRoutePointWire,
@@ -21,7 +24,7 @@ import type {
   SourceTrace,
 } from "circuit-json"
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
-import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
+import type { CircuitJsonSnapshot, SourceNetId, SourcePortId } from "../board"
 import { circuitJsonDb } from "../board"
 
 /** A quantized point or the key of a copper feature that acts as one junction. */
@@ -92,9 +95,9 @@ type WireEnd = PcbTraceRoutePointWire | PcbTraceRoutePointVia
 
 /** Source ports and routes admitted to physical topology validation. */
 interface CopperSelection {
-  circuit: CircuitJson
-  ports: PcbPort[]
-  traces: PcbTrace[]
+  circuit: CircuitJsonSnapshot
+  ports: readonly Snapshot<PcbPort>[]
+  traces: readonly Snapshot<PcbTrace>[]
   selected: ReadonlySet<SourceNetId | SourcePortId>
   rails: ReadonlySet<SourceNetId | SourcePortId>
   traceIds: ReadonlySet<SourceTrace["source_trace_id"]>
@@ -257,7 +260,7 @@ function routeWire({
 }
 
 /** Build the wires and barrel connections encoded directly in each selected route. */
-function traceCopper(traces: PcbTrace[]): TraceCopper {
+function traceCopper(traces: readonly Snapshot<PcbTrace>[]): TraceCopper {
   const wires: CopperWire[] = []
   const regions: CopperRegion[] = []
   const groups: CopperGroup[] = []
@@ -330,7 +333,7 @@ function copperRegions({
     if (record.type === "pcb_smtpad") {
       regions.push({
         layer: record.layer,
-        outline: getSmtPadPolygon(record),
+        outline: getSmtPadPolygon(record as PcbSmtPad),
         key: pointKey({ point: port, layer: record.layer }),
       })
       continue
@@ -338,7 +341,7 @@ function copperRegions({
     let rotation: number | undefined
     if (record.pcb_component_id !== undefined)
       rotation = rotations.get(record.pcb_component_id)
-    const outline = getPlatedHolePolygon(record, rotation)
+    const outline = getPlatedHolePolygon(record as PcbPlatedHole, rotation)
     for (const layer of record.layers)
       regions.push({ layer, outline, key: record.pcb_plated_hole_id })
     groups.push([

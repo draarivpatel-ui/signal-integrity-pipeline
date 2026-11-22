@@ -1,0 +1,19 @@
+import { test } from "bun:test"
+import assert from "node:assert/strict"
+import { circuitJsonDb, type SourcePort } from "../../../src/board"
+import type { Snapshot } from "../../../src/kernel"
+import { AdmissionChannel } from "../../fixtures/admission-channel"
+import { renderSignals } from "../../fixtures/signal-render"
+
+test("an absent source port query returns undefined", async () => {
+  const circuit = await renderSignals({
+    tree: <AdmissionChannel route="series" />,
+  })
+  const db = circuitJsonDb(circuit)
+  const port: Snapshot<SourcePort> | undefined = db.source_port.get("missing")
+  const portByName: Snapshot<SourcePort> | undefined = db.source_port.getWhere({
+    name: "missing",
+  })
+  assert.equal(port, undefined)
+  assert.equal(portByName, undefined)
+})

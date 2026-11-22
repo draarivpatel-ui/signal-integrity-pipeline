@@ -8,6 +8,7 @@ import type {
   SourceNetId,
   SourcePortId,
 } from "../board"
+import type { Snapshot } from "../kernel"
 
 /** simulation's slice of the flat public `Modeling`. (`channelReference` is shared with board's slice.) */
 export interface SimulationModeling {
@@ -79,7 +80,7 @@ export interface Declarations {
   models: PipelineIbisModel[]
   nodes: CircuitNodes
   plans: SimulationPlan[]
-  ports: Map<SourcePortId, SourcePort>
+  ports: ReadonlyMap<SourcePortId, Snapshot<SourcePort>>
 }
 
 /** Deck lines and electrical node evidence for the modeled voltage sources and passives. */

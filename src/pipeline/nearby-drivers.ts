@@ -1,7 +1,7 @@
 import { z } from "zod"
 import {
-  type CircuitJson,
   type CircuitJsonDb,
+  type CircuitJsonSnapshot,
   circuitJsonDb,
   type DriverPattern,
   type SimulationPcbTransientChannelSimulation,
@@ -39,7 +39,7 @@ export function planNearbyDrivers({
   pins,
   endpointIds,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   channelSimulation: SimulationPcbTransientChannelSimulation
   pins: Map<SourcePortId, InspectedPin>
   endpointIds: ReadonlySet<SourcePortId>
