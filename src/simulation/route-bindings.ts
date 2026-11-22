@@ -32,9 +32,9 @@ import {
 import { generalDeclarations, modelRunDefinition } from "./declarations"
 import { electricalSources } from "./netlist"
 import type {
-  RouteBindingsInput,
   RouteBuffer,
   RoutedBindings,
+  ScopedRouteBindingsInput,
 } from "./routed-types"
 import type { Declarations, SimulationPlan } from "./types"
 
@@ -49,29 +49,43 @@ export class RouteBindingsSolver extends BaseSolver {
   private readonly artifacts: Artifact[] = []
   private output?: Produced<RoutedBindings>
   /** Inputs contain domain intent, never another stage's internals. */
-  constructor(private readonly input: RouteBindingsInput) {
+  constructor(private readonly input: ScopedRouteBindingsInput) {
     super()
   }
   /** Allocate circuit nodes before compiling the first IBIS buffer. */
   private initialize(scope: ArtifactScope): Declarations {
     if (this.declarations) return this.declarations
-    const mappings = structuredClone(this.input.mappings)
-    if (!mappings.length)
+    const {
+      circuitJson,
+      copperScope,
+      mappings,
+      routedTraceCuts,
+      modeling,
+      controls,
+      options,
+      ibisSources,
+    } = this.input
+    if (!routedTraceCuts.length)
       throw new Error("Routed compilation requires physical signal mappings")
-    const { extractedPcbTraceIds, nearbyRailPcbTraceIds } = this.input.scope
-    const traces = cju([...this.input.circuitJson]).pcb_trace.list()
-    mappings[0].sourceTraceIds = traces
-      .filter(
-        ({ pcb_trace_id: id }) =>
-          extractedPcbTraceIds.includes(id) &&
-          !nearbyRailPcbTraceIds.includes(id),
+    const { extractedPcbTraceIds, nearbyRailPcbTraceIds } = copperScope
+    const additionalSourceTraceIds = cju([...circuitJson])
+      .pcb_trace.list()
+      .flatMap(
+        ({ pcb_trace_id: pcbTraceId, source_trace_id: sourceTraceId }) => {
+          if (
+            sourceTraceId === undefined ||
+            !extractedPcbTraceIds.includes(pcbTraceId) ||
+            nearbyRailPcbTraceIds.includes(pcbTraceId)
+          )
+            return []
+          return [sourceTraceId]
+        },
       )
-      .map((trace) => trace.source_trace_id!)
-
-    const { circuitJson, modeling, controls, options, ibisSources } = this.input
     const declarations = generalDeclarations({
       circuit: circuitJson,
       mappings,
+      routedTraceCuts,
+      additionalSourceTraceIds,
       modeling,
       controls,
     })
@@ -131,7 +145,7 @@ export class RouteBindingsSolver extends BaseSolver {
     if (this.models.length !== declarations.models.length) return
     const bindings = snapshot<RoutedBindings>({
       circuitJson: this.input.circuitJson,
-      scope: this.input.scope,
+      scope: this.input.copperScope,
       mappings: this.input.mappings,
       plan: this.plan!,
       nodeMap: declarations.nodes.mapping,
