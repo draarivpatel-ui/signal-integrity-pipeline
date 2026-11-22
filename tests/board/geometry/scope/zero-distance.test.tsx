@@ -9,5 +9,5 @@ test("scope accepts zero lateral distance", async () => {
       <Wire name="SELECTED" y={0} extent={3} />
     </board>,
   )
-  assert.equal(scopeFor({ circuit, distanceMm: 0 }).lateralDistanceMm, 0)
+  assert.equal(scopeFor({ circuit, distanceMm: 0 }).nearbyGapMm, 0)
 })
