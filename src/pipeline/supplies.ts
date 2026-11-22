@@ -4,9 +4,9 @@ import {
   findConnectedNetworks,
 } from "circuit-json-to-connectivity-map"
 import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
+import { circuitJsonDb } from "../board"
 import { type InspectedPin, referenceVoltages } from "../buffers"
 import { type SimulationModeling, voltageSourceTerminals } from "../simulation"
-import { circuitJsonDb } from "./circuit-json-db"
 
 /** Allowed difference between typical IBIS voltages on one reference net. */
 const REFERENCE_VOLTAGE_TOLERANCE_V = 1e-8

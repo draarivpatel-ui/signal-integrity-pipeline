@@ -3,6 +3,7 @@ import type { PcbTrace } from "circuit-json"
 import {
   type CircuitJson,
   type CopperScope,
+  circuitJsonDb,
   getSourcePortConnectivityMapFromCircuitJson,
   type SignalEndpoint,
   type SimulationIbisModel,
@@ -21,7 +22,6 @@ import {
   packageCapacitanceWarnings,
 } from "../buffers"
 import { voltageSourceTerminals } from "../simulation"
-import { circuitJsonDb } from "./circuit-json-db"
 import type { NumericalSettings } from "./modeling"
 import { endpointPorts } from "./signal-controls"
 import type { ScopedSignalPins, SignalPins } from "./signal-pins"
@@ -99,12 +99,10 @@ function ibisModelOverrides({
 
 /** Keep the board and part models, then apply the selected simulation's endpoint choices. */
 export function channelSimulationCircuit({
-  boardCircuitJson,
   db,
   channelSimulation,
   driverReceiverChannels,
 }: {
-  boardCircuitJson: CircuitJson
   db: CircuitJsonUtilObjects
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
@@ -115,7 +113,8 @@ export function channelSimulationCircuit({
     ...db.simulation_voltage_source.list(),
     ...db.simulation_spice_subcircuit.list(),
   ])
-  const circuit = boardCircuitJson
+  const circuit = db
+    .toArray()
     .filter(
       (record) =>
         !record.type.startsWith("simulation_") || partModelRecords.has(record),
