@@ -135,7 +135,7 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
   const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
   const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
   assert.equal(block.settings.lanes.length, 1)
-  const retained = new Set(block.settings.copperScope.pcbTraceIds)
+  const retained = new Set(block.settings.copperScope.retainedPcbTraceIds)
   const excluded = circuit.filter(
     (record) =>
       record.type === "pcb_trace" && !retained.has(record.pcb_trace_id),
@@ -151,9 +151,9 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
     1,
     "only the selected channel is a lane",
   )
-  const { pcbTraceIds, selectedPcbTraceIds } = near.settings.copperScope
+  const { retainedPcbTraceIds, selectedPcbTraceIds } = near.settings.copperScope
   assert.ok(
-    pcbTraceIds.length > selectedPcbTraceIds.length,
+    retainedPcbTraceIds.length > selectedPcbTraceIds.length,
     "the nearby quiet conductor stays in the copper scope",
   )
   const quiet = [...near.pins.values()].find((pin) => {
@@ -184,7 +184,7 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
     "nearby branched copper is a scoped neighbour, not a rejected lane",
   )
   assert.ok(
-    branched.settings.copperScope.pcbTraceIds.length >
+    branched.settings.copperScope.retainedPcbTraceIds.length >
       branched.settings.copperScope.selectedPcbTraceIds.length,
   )
 })
@@ -220,7 +220,9 @@ test("a shunt on retained quiet copper remains a modeled load", async () => {
       record.source_trace_id === trace.source_trace_id,
   )
   assert.ok(route?.type === "pcb_trace")
-  assert.ok(block.settings.copperScope.pcbTraceIds.includes(route.pcb_trace_id))
+  assert.ok(
+    block.settings.copperScope.retainedPcbTraceIds.includes(route.pcb_trace_id),
+  )
   assert.deepEqual(block.settings.passiveComponents, [
     { sourceComponentId: termination.source_component_id },
   ])
