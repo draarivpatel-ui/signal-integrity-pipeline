@@ -290,7 +290,7 @@ export function collectRailIds({
     )
   for (const port of [...pinReferences, ...explicit, ...supplyNetIds]) {
     if (port === undefined || railIds.has(port)) continue
-    for (const connected of sourceNetMembers({ connectivity, seed: port }))
+    for (const connected of sourceNetMembers({ connectivity, memberId: port }))
       railIds.add(connected)
   }
   return railIds
@@ -356,7 +356,7 @@ function indexBlockSignals({
       edgeTimesSeconds.push(edgeDurationSeconds(pin))
       for (const net of sourceNetMembers({
         connectivity: signalConnectivity,
-        seed: port,
+        memberId: port,
       })) {
         const owner = topology.get(net)
         if (owner && owner !== signal.name) {
@@ -386,7 +386,7 @@ function indexBlockSignals({
         }
         const driverNet = sourceNetMembers({
           connectivity: signalConnectivity,
-          seed: drivers[index],
+          memberId: drivers[index],
         })
         if (!driverNet.has(port)) {
           throw new Error(
@@ -511,7 +511,10 @@ function loadNodes({
     ...sourceTerminals,
   ]) {
     if (terminal === undefined) continue
-    for (const id of sourceNetMembers({ connectivity: ideal, seed: terminal }))
+    for (const id of sourceNetMembers({
+      connectivity: ideal,
+      memberId: terminal,
+    }))
       nodes.add(id)
   }
   return nodes
@@ -608,9 +611,9 @@ function prepareBlock({
   const copperScope = channelCopperScope({
     circuit,
     connectivity,
-    selected: new Set(topology.keys()),
-    reference: sourceNetMembers({ connectivity, seed: reference }),
-    rails,
+    channelSourceIds: new Set(topology.keys()),
+    referenceSourceIds: sourceNetMembers({ connectivity, memberId: reference }),
+    railSourceIds: rails,
     distanceMm,
   })
   const retained = new Set(copperScope.extractedSourceIds)
