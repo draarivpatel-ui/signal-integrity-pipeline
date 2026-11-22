@@ -165,10 +165,10 @@ export function NearbyPourBoard(): React.JSX.Element {
         connectsTo="net.NEIGHBOR"
         unbroken
         outline={[
-          { x: -3.4, y: 0.55 },
-          { x: -2.6, y: 0.55 },
-          { x: -2.6, y: 5.4 },
-          { x: -3.4, y: 5.4 },
+          { x: -6, y: 0.6 },
+          { x: -2, y: 0.6 },
+          { x: -2, y: 5.6 },
+          { x: -6, y: 5.6 },
         ]}
       />
       <copperpour
@@ -177,10 +177,10 @@ export function NearbyPourBoard(): React.JSX.Element {
         connectsTo="net.NEIGHBOR"
         unbroken
         outline={[
-          { x: 2.6, y: 4.6 },
-          { x: 3.4, y: 4.6 },
-          { x: 3.4, y: 5.4 },
-          { x: 2.6, y: 5.4 },
+          { x: 2, y: 4 },
+          { x: 5, y: 4 },
+          { x: 5, y: 6.5 },
+          { x: 2, y: 6.5 },
         ]}
       />
     </board>
