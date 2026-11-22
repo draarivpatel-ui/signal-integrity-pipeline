@@ -1,8 +1,8 @@
-import type React from "react"
+import { Fragment, type JSX } from "react"
 import { Wire } from "./copper-scope-board"
 
 /** Arrange routes on both sides of the inclusive XY boundary. */
-export function DistanceBoundaryBoard(): React.JSX.Element {
+export function DistanceBoundaryBoard(): JSX.Element {
   return (
     <board width={24} height={16} routeRemaining={false} schematicDisabled>
       <Wire name="SELECTED" y={0} extent={1} width={0.5} />
@@ -21,7 +21,7 @@ export function DistanceBoundaryBoard(): React.JSX.Element {
 }
 
 /** Place near and far supply and return copper on one board. */
-export function RailProximityBoard(): React.JSX.Element {
+export function RailProximityBoard(): JSX.Element {
   return (
     <board width={24} height={24} routeRemaining={false} schematicDisabled>
       <Wire name="SELECTED" y={0} extent={3} />
@@ -59,7 +59,7 @@ export function RailProximityBoard(): React.JSX.Element {
 }
 
 /** Join near and far routes through resistors. */
-export function PassiveBridgesBoard(): React.JSX.Element {
+export function PassiveBridgesBoard(): JSX.Element {
   return (
     <board width={25} height={24} routeRemaining={false} schematicDisabled>
       <Wire name="SELECTED" y={0} extent={3} />
@@ -99,7 +99,7 @@ export function ThroughHoleViaBoard({
   allowBlindAndBuriedVias,
 }: {
   allowBlindAndBuriedVias: boolean
-}): React.JSX.Element {
+}): JSX.Element {
   return (
     <board
       width={18}
@@ -124,7 +124,7 @@ export function ThroughHoleViaBoard({
 }
 
 /** Place a blind via one layer above the selected wire. */
-export function BlindViaBoard(): React.JSX.Element {
+export function BlindViaBoard(): JSX.Element {
   return (
     <board
       width={22}
@@ -147,7 +147,11 @@ export function BlindViaBoard(): React.JSX.Element {
 }
 
 /** Place a nearby signal pour on the net of a distant wire. */
-export function NearbyPourBoard(): React.JSX.Element {
+export function NearbyPourBoard({
+  pourLayer,
+}: {
+  pourLayer: "top" | "inner2"
+}): JSX.Element {
   return (
     <board
       width={18}
@@ -159,9 +163,21 @@ export function NearbyPourBoard(): React.JSX.Element {
       <Wire name="SELECTED" y={0} extent={3} />
       <Wire name="DISTANT" y={5} extent={3} />
       <trace from=".DISTANT > .A" to="net.NEIGHBOR" />
+      {pourLayer === "inner2" &&
+        [-2.7, 2.7].map((pcbX) => (
+          <Fragment key={pcbX}>
+            <via
+              pcbX={pcbX}
+              pcbY={5}
+              fromLayer="top"
+              toLayer={pourLayer}
+              connectsTo="net.NEIGHBOR"
+            />
+          </Fragment>
+        ))}
       <copperpour
         name="NEAR"
-        layer="top"
+        layer={pourLayer}
         connectsTo="net.NEIGHBOR"
         unbroken
         outline={[
@@ -173,7 +189,7 @@ export function NearbyPourBoard(): React.JSX.Element {
       />
       <copperpour
         name="FAR"
-        layer="top"
+        layer={pourLayer}
         connectsTo="net.NEIGHBOR"
         unbroken
         outline={[
