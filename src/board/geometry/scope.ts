@@ -1,5 +1,6 @@
 import { Box } from "@flatten-js/core"
 import {
+  cju,
   getPlatedHolePolygon,
   getPourPolygon,
   getSmtPadPolygon,
@@ -53,7 +54,7 @@ export interface CopperScope {
 }
 
 /** Bounds in board millimetres and the inclusive span of occupied layer indices. */
-interface CopperBox {
+export interface CopperBox {
   xy: Box
   firstLayer: number
   lastLayer: number
@@ -91,6 +92,12 @@ interface CopperScopeOptions {
   referenceSourceIds: ReadonlySet<SourcePortId | SourceNetId>
   railSourceIds: ReadonlySet<SourcePortId | SourceNetId>
   distanceMm: number
+}
+
+/** Scope result and the channel's occupied bounds used by its proximity screen. */
+interface CopperScopeWithBounds {
+  scope: CopperScope
+  channelBoxes: CopperBox[]
 }
 
 /** A signal pour that contributes channel bounds or admits a nearby net. */
@@ -320,6 +327,11 @@ function addPassiveBridgeNets({
   }
 }
 
+/** Select the channel's copper and its nearby copper. */
+export function channelCopperScope(options: CopperScopeOptions): CopperScope {
+  return channelCopperScopeWithBounds(options).scope
+}
+
 /**
  * Board-world XY is in mm (+X right, +Y top). Layers run top to bottom.
  * Conservative bounding boxes admit copper on the same or adjacent layers
@@ -330,37 +342,38 @@ function addPassiveBridgeNets({
  * without a source trace and pours without a source net.
  * The cap is not an electromagnetic error bound.
  */
-export function channelCopperScope({
+export function channelCopperScopeWithBounds({
   circuit,
   connectivity,
   channelSourceIds,
   referenceSourceIds,
   railSourceIds,
   distanceMm: nearbyGapMm,
-}: CopperScopeOptions): CopperScope {
+}: CopperScopeOptions): CopperScopeWithBounds {
   if (!Number.isFinite(nearbyGapMm) || nearbyGapMm < 0) {
     fail(
       "simulation_scope",
       "Copper scope distance must be finite and non-negative",
     )
   }
-  const board = circuit.find((record) => record.type === "pcb_board")!
+  const db = cju([...circuit])
+  const board = db.pcb_board.getWhere({})!
   const boardLayers = copperLayers(board)
   const blindViasAllowed = board.allow_blind_and_buried_vias === true
-  const traces = circuit.filter((record) => record.type === "pcb_trace")
-  const vias = circuit.filter((record) => record.type === "pcb_via")
-  const pours = circuit.filter((record) => record.type === "pcb_copper_pour")
-  const pcbPorts = circuit.filter((record) => record.type === "pcb_port")
+  const traces = db.pcb_trace.list()
+  const vias = db.pcb_via.list()
+  const pours = db.pcb_copper_pour.list()
+  const pcbPorts = db.pcb_port.list()
   const sourcePortIdByPcbPortId = new Map<PcbPortId, SourcePortId>(
     pcbPorts.map((pcbPort) => [pcbPort.pcb_port_id, pcbPort.source_port_id]),
   )
-  const pads = circuit.filter(
-    (record) =>
-      record.type === "pcb_smtpad" || record.type === "pcb_plated_hole",
-  )
-  const sourceTraces = circuit.filter(
-    (record) => record.type === "source_trace",
-  )
+  const padRecords = new Set<CircuitJson[number]>([
+    ...db.pcb_smtpad.list(),
+    ...db.pcb_plated_hole.list(),
+  ])
+  // Preserve the order of interleaved pads when adding their nets.
+  const pads = circuit.filter((record): record is Pad => padRecords.has(record))
+  const sourceTraces = db.source_trace.list()
   const sources = new Map<SourceTraceId, SourceTrace>(
     sourceTraces.map((trace) => [trace.source_trace_id, trace]),
   )
@@ -477,11 +490,14 @@ export function channelCopperScope({
     )
   })
   return {
-    nearbyGapMm,
-    channelPcbTraceIds: channelTraces.map((trace) => trace.pcb_trace_id),
-    extractedPcbTraceIds: extractedTraces.map((trace) => trace.pcb_trace_id),
-    extractedPcbViaIds: extractedVias.map((via) => via.pcb_via_id),
-    nearbyRailPcbTraceIds: [...nearbyRailPcbTraceIds],
-    extractedSourceIds: [...extractedSourceIds],
+    channelBoxes,
+    scope: {
+      nearbyGapMm,
+      channelPcbTraceIds: channelTraces.map((trace) => trace.pcb_trace_id),
+      extractedPcbTraceIds: extractedTraces.map((trace) => trace.pcb_trace_id),
+      extractedPcbViaIds: extractedVias.map((via) => via.pcb_via_id),
+      nearbyRailPcbTraceIds: [...nearbyRailPcbTraceIds],
+      extractedSourceIds: [...extractedSourceIds],
+    },
   }
 }
