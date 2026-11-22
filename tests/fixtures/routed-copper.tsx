@@ -77,13 +77,16 @@ export async function routedCopper(): Promise<RoutedCopper> {
   const scope = channelCopperScope({
     circuit: circuitJson,
     connectivity,
-    selected: sourceNetMembers({
+    channelSourceIds: sourceNetMembers({
       connectivity,
-      seed: trace.connected_source_port_ids[0],
+      memberId: trace.connected_source_port_ids[0],
     }),
-    reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
+    referenceSourceIds: sourceNetMembers({
+      connectivity,
+      memberId: ground.source_net_id,
+    }),
     distanceMm: 1,
-    rails: new Set(),
+    railSourceIds: new Set(),
   })
   return { circuitJson, scope }
 }
