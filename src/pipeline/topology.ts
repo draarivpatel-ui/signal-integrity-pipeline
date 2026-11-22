@@ -1,4 +1,4 @@
-import { cju } from "@tscircuit/circuit-json-util"
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PcbPort, PcbTrace, SourceTrace } from "circuit-json"
 import {
   ConnectivityMap,
@@ -14,6 +14,7 @@ import {
   sourceConnections,
   sourceNetMembers,
 } from "../board"
+import { circuitJsonDb } from "./circuit-json-db"
 import { fail } from "./diagnostics"
 import {
   buildRoutedCopper,
@@ -89,15 +90,14 @@ function endpointPorts(
 
 /** Select ports and traces on the drivers' signal nets without admitting rail copper. */
 function selectCopper({
-  circuit,
+  db,
   topology,
   driverReceiverChannels,
 }: {
-  circuit: CircuitJson
+  db: CircuitJsonUtilObjects
   topology: SignalTopology
   driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
 }): SelectedCopper {
-  const db = cju([...circuit])
   const { connectivity, rails } = topology
   const selected = new Set(
     driverReceiverChannels.flatMap(({ driver }) =>
@@ -227,8 +227,7 @@ function withPassiveBridges({
 }
 
 /** Describe the component-bound ports admitted by channel endpoint resolution. */
-function portNames(circuit: CircuitJson): PortNames {
-  const db = cju([...circuit])
+function portNames(db: CircuitJsonUtilObjects): PortNames {
   const components = Object.fromEntries(
     db.source_component
       .list()
@@ -314,7 +313,8 @@ export function validateSignalGraph({
   driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
   allowUnroutedTraces: boolean
 }): void {
-  const selected = selectCopper({ circuit, topology, driverReceiverChannels })
+  const db = circuitJsonDb(circuit)
+  const selected = selectCopper({ db, topology, driverReceiverChannels })
   const { graph, terminals, routed } = buildRoutedCopper({
     circuit,
     rails: topology.rails,
@@ -336,7 +336,7 @@ export function validateSignalGraph({
     graph: connected,
     terminals,
     routed,
-    names: portNames(circuit),
+    names: portNames(db),
     allowUnroutedTraces,
   })
 }
