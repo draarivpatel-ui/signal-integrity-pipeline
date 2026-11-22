@@ -137,12 +137,12 @@ export function routeCrossSection(input: RouteCrossSectionInput): CrossSection {
 }
 
 /** The two board coordinates that bound a straight route wire. */
-type RouteEndpoints = Pick<RouteWire, "a" | "b">
+type RouteEndpoints = Snapshot<Pick<RouteWire, "a" | "b">>
 
 /** Closest point on each centre-line and the distance between them. */
 interface ClosestRoutePoints {
-  first: RouteXY
-  second: RouteXY
+  first: Snapshot<RouteXY>
+  second: Snapshot<RouteXY>
   distance: number
 }
 

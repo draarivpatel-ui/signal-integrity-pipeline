@@ -122,7 +122,7 @@ export function routePosition({
   wire,
   position,
 }: {
-  wire: RouteWire
+  wire: Snapshot<RouteWire>
   position: number
 }): RouteXY {
   return [
@@ -132,7 +132,7 @@ export function routePosition({
 }
 
 /** Check whether two physical contact positions coincide within the route tolerance. */
-function sameContact(a: RouteXY, b: RouteXY): boolean {
+function sameContact(a: Snapshot<RouteXY>, b: Snapshot<RouteXY>): boolean {
   return hypotenuse(a[0] - b[0], a[1] - b[1]) < CONTACT_TOLERANCE_MM
 }
 
@@ -144,7 +144,7 @@ function portTouches({
 }: {
   port: PcbPort
   layer: LayerRef
-  point: RouteXY
+  point: Snapshot<RouteXY>
 }): boolean {
   return port.layers.includes(layer) && sameContact([port.x, port.y], point)
 }
@@ -156,11 +156,11 @@ export function routeContactFrame({
   layer,
   point,
 }: {
-  geometry: SectionGeometry
+  geometry: Snapshot<SectionGeometry>
   scope: Snapshot<CopperScope>
   layer: LayerRef
-  point: RouteXY
-}): RouteWire | undefined {
+  point: Snapshot<RouteXY>
+}): Snapshot<RouteWire> | undefined {
   const direct = geometry.wires.find((wire) => {
     if (
       scope.nearbyRailPcbTraceIds.includes(wire.trace) ||
@@ -192,8 +192,8 @@ function pourEdgeGap({
   point,
   polygon,
 }: {
-  point: RouteXY
-  polygon: CopperPolygon
+  point: Snapshot<RouteXY>
+  polygon: Snapshot<CopperPolygon>
 }): number {
   const distances = polygon.flatMap((ring) =>
     ring.map((a, i) => {
@@ -215,8 +215,8 @@ export function routeReferences({
   wire,
   position,
 }: {
-  geometry: Pick<SectionGeometry, "stack" | "pours">
-  wire: RouteWire
+  geometry: Snapshot<Pick<SectionGeometry, "stack" | "pours">>
+  wire: Snapshot<RouteWire>
   position: number
 }): RouteReference[] {
   const point = routePosition({ wire, position })
