@@ -20,7 +20,7 @@ flowchart LR
 stateDiagram-v2
   [*] --> Ready
   Ready --> Complete: RoutedAdmissionSolver
-  Ready --> Failed: invalid input
+  Ready --> Failed: invalid input or conflicting IBIS model selections
   Complete --> [*]
   Failed --> [*]
 ```
