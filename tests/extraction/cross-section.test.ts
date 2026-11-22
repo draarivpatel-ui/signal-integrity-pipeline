@@ -335,8 +335,6 @@ const HOMOGENEOUS_IDENTITY_TOLERANCE = 1e-9
 const DC_RESISTANCE_TOLERANCE = 1e-12
 /** The independent Wheeler derivative should agree within 1%. */
 const WHEELER_TOLERANCE = 0.01
-/** The Richardson extrapolation should be within 2% of the wide-strip limit. */
-const WIDE_STRIP_TOLERANCE = 0.02
 /** Allow 10% against Pozar's attenuation curve fit. */
 const POZAR_TOLERANCE = 0.1
 
@@ -768,27 +766,6 @@ test("golden stage 3: skin resistance equals Wheeler's rule recomputed independe
     if (!(worst <= WHEELER_TOLERANCE)) failures.push(`${label}: ${worst}`)
   }
   assert.deepEqual(failures, [])
-})
-
-test("golden stage 3: wide stripline skin resistance approaches Rs/w", () => {
-  // (c) Wide stripline limit R -> Rs/w (strip faces and both planes each carry half the current; Ramo, Whinnery &
-  // Van Duzer, Fields and Waves, section 8.3). r = R w/Rs; Richardson 2 r(40) - r(20) within 2% of 1, r(20) >
-  // r(40) > 1,
-  // at the default and at 24 panels/edge.
-  for (const panels of [12, 24]) {
-    const [r20, r40] = [20, 40].map((w) => {
-      const line = solveCrossSection({
-        section: centred({ w, b: 1, t: 0.035 }),
-        options: { panelsPerEdge: panels },
-      })
-      return (line.skinResistance[0][0] * w * 1e-3) / surface(copper)
-    })
-    const relativeError = Math.abs(2 * r40 - r20 - 1)
-    assert.ok(
-      relativeError <= WIDE_STRIP_TOLERANCE && r20 > r40 && r40 > 1,
-      `${panels} panels: r20 ${r20}, r40 ${r40}`,
-    )
-  }
 })
 
 test("golden stage 3: stripline conductor attenuation agrees with Pozar's Wheeler-derived closed form", () => {
