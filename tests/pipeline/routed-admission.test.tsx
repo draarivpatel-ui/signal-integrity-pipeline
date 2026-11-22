@@ -44,11 +44,11 @@ test("synthetic admission emits the board mappings and hashes the supplied bytes
   } = solver.getOutput()
   const [channelSimulation] = listChannelSimulations(circuitJson)
   const id = channelSimulation.simulation_pcb_transient_channel_simulation_id
-  const signals = circuitJson.filter(
+  const driverReceiverChannels = circuitJson.filter(
     (record) => record.type === "simulation_pcb_driver_receiver_channel",
   )
   const traces = circuitJson.filter((record) => record.type === "source_trace")
-  const expectedMappings = signals.map((signal) => {
+  const expectedMappings = driverReceiverChannels.map((signal) => {
     assert.ok(
       "source_port_id" in signal.driver &&
         "source_port_id" in signal.receivers[0],
