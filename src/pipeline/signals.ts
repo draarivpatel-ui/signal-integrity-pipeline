@@ -658,7 +658,7 @@ function prepareBlock({
   }
   const scopeForLanes = {
     ...copperScope,
-    pcbTraceIds: copperScope.selectedPcbTraceIds,
+    retainedPcbTraceIds: copperScope.selectedPcbTraceIds,
   }
   const { lanes, rejections } = routedLanes({
     circuit,
