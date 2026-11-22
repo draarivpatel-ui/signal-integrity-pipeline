@@ -37,6 +37,7 @@ const MAX_COPPER_SCOPE_DISTANCE_MM = 32
 
 /** The lowered circuit and controls for a single transient channel simulation. */
 export interface PreparedChannelSimulation {
+  warnings?: string[]
   durationSeconds: number
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
@@ -230,9 +231,11 @@ interface ChannelSimulationOptions {
 /** Lower controls and assemble the prepared simulation. */
 function withPreparedChannelControls({
   settings,
+  warnings,
   ...options
 }: ChannelSimulationControlOptions & {
   settings: NumericalSettings
+  warnings: string[]
 }): PreparedChannelSimulation {
   const { circuit, controls } = withChannelSimulationControls(options)
   const {
@@ -242,7 +245,7 @@ function withPreparedChannelControls({
     pins,
     simulationPcbTransientChannelSimulationId,
   } = options
-  return {
+  const prepared: PreparedChannelSimulation = {
     channelSimulation,
     driverReceiverChannels,
     circuit,
@@ -251,6 +254,8 @@ function withPreparedChannelControls({
     settings,
     durationSeconds,
   }
+  if (warnings.length > 0) prepared.warnings = warnings
+  return prepared
 }
 
 /** Prepare one channel simulation from its declarations through controls and probes. */

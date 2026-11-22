@@ -12,7 +12,13 @@ import {
   sourceNetMembers,
   stackupFromCircuitJson,
 } from "../board"
-import type { InspectedPin } from "../buffers"
+import {
+  coupledPackage,
+  type IbisSources,
+  type InspectedPin,
+  loadModelSource,
+  packageCapacitanceWarnings,
+} from "../buffers"
 import { voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import { endpointPorts } from "./signal-controls"
@@ -228,6 +234,39 @@ export function withUsedIbisModels({
   }
 }
 
+/** Report package corrections for the same retained physical pins that will be compiled. */
+function channelSimulationPackageWarnings({
+  circuit,
+  pins,
+  sources,
+}: PrunedIbisModels & {
+  sources: IbisSources
+}): string[] {
+  const warnings: string[] = []
+  for (const model of cju([...circuit]).simulation_ibis_model.list()) {
+    const pin = [...pins.values()].find((pin) => pin.model === model)
+    if (!pin || pin.component.coupledPackage === undefined) continue
+    const { text, evidence } = loadModelSource({
+      model: { ...model, pipelineId: model.simulation_ibis_model_id },
+      sources,
+    })
+    const selected = coupledPackage({
+      text,
+      component: pin.component,
+      pins: Object.keys(model.ibis_pin_name_to_source_port_id),
+    })
+    const file = model.ibis_model_asset.project_relative_path
+    warnings.push(
+      ...packageCapacitanceWarnings({
+        selected,
+        file,
+        sourceSha256: evidence.sourceSha256,
+      }),
+    )
+  }
+  return warnings
+}
+
 /** Source trace IDs for scoped signal routes with separate terminal nodes. */
 type RoutedLoadTraceIds = Set<PcbTrace["source_trace_id"]>
 
@@ -339,6 +378,7 @@ function retainedPassiveComponents({
 interface SuppliedSignalSettings {
   circuit: CircuitJson
   settings: NumericalSettings
+  warnings: string[]
 }
 
 /** Check the stackup and prepare numerical settings with supplies and retained loads. */
@@ -347,14 +387,17 @@ export function prepareSignalSettings({
   signalPins,
   scopedPins,
   lanes,
+  sources,
 }: {
   pruned: PrunedIbisModels
   signalPins: Pick<SignalPins, "connectivity" | "rails" | "reference">
   scopedPins: Pick<ScopedSignalPins, "copperScope" | "retained">
   lanes: NumericalSettings["lanes"]
+  sources: IbisSources
 }): SuppliedSignalSettings {
   const { connectivity, rails, reference } = signalPins
   const { copperScope, retained } = scopedPins
+  const warnings = channelSimulationPackageWarnings({ ...pruned, sources })
   const stack = stackupFromCircuitJson(pruned.circuit)
   if (!stack.relativePermittivity) {
     throw new Error(
@@ -385,5 +428,5 @@ export function prepareSignalSettings({
     retained,
     rails,
   })
-  return { circuit, settings }
+  return { circuit, settings, warnings }
 }
