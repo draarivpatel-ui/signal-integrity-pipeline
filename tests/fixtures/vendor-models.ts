@@ -36,10 +36,3 @@ export function vendorAvailable(file: string): boolean {
     throw error
   }
 }
-
-/** Read original local vendor bytes; enabled tests never substitute synthetic assets. */
-export async function vendorText(file: string): Promise<string> {
-  if (!process.env.IBIS_MODEL_DIR)
-    throw new Error("Set IBIS_MODEL_DIR to the original local vendor models")
-  return readFile(join(process.env.IBIS_MODEL_DIR, file), "utf8")
-}

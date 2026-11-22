@@ -59,14 +59,14 @@ export function prepareChannelSimulations({
   )
 }
 
-/** Gets the first channel simulation's bindings through the same IBIS decoding path as the public solver. */
+/** Gets the first channel simulation's bindings through the public solver. */
 export function admittedBindings({
   circuitJson,
   ibisSources,
 }: {
   circuitJson: CircuitJson
   ibisSources: IbisSources
-}): Omit<RouteBindingsInput, "scope"> {
+}): RouteBindingsInput {
   const root = new RoutedPipelineSolver({
     input: { circuitJson, ibisSources },
     context: {

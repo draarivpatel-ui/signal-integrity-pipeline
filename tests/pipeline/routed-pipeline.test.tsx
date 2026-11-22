@@ -12,12 +12,12 @@ import { sha256 } from "../../src/kernel"
 import { formatSpiceVectors } from "../../src/observation"
 import {
   RoutedPipelineSolver,
-  type RoutedProblem,
+  type RoutedAdmissionInput,
   type RoutedStageSolver,
   routedStages,
 } from "../../src/pipeline"
 import {
-  type RouteBindingsInput,
+  type ScopedRouteBindingsInput,
   RouteBindingsSolver,
   type RoutedBindings,
   type RoutedDeck,
@@ -32,7 +32,7 @@ import {
 } from "../fixtures/routed-deck"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
-import { routedProblem } from "../support/routed-fixture"
+import { routedProblem } from "../fixtures/routed-fixture"
 
 const pinnedDeck =
   "TSX two-trace deck pins coupled skin loss and transient vectors"
