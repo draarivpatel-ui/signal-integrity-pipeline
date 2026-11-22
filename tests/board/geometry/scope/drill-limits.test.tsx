@@ -30,8 +30,8 @@ test("a nearby via barrel with explicit drill limits retains its otherwise dista
   assert(via)
   assert.deepEqual(via.layers, ["top", "inner1"])
   const shallow = scopeFor({ circuit })
-  assert.deepEqual(shallow.retainedPcbViaIds, [])
-  assert.equal(shallow.retainedPcbTraceIds.length, 1)
+  assert.deepEqual(shallow.extractedPcbViaIds, [])
+  assert.equal(shallow.extractedPcbTraceIds.length, 1)
 
   // The TSX via supplies connected layers. Add the independent drill limits in Circuit JSON.
   for (const limits of [
@@ -44,7 +44,7 @@ test("a nearby via barrel with explicit drill limits retains its otherwise dista
       return record
     })
     const deep = scopeFor({ circuit: records })
-    assert.deepEqual(deep.retainedPcbViaIds, [via.pcb_via_id])
-    assert.equal(deep.retainedPcbTraceIds.length, 2)
+    assert.deepEqual(deep.extractedPcbViaIds, [via.pcb_via_id])
+    assert.equal(deep.extractedPcbTraceIds.length, 2)
   }
 })

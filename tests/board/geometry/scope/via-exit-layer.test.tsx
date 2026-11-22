@@ -9,5 +9,5 @@ test("a wire leaving a via does not sweep its entry layer", async () => {
     exitToLeft: true,
   })
   const scope = scopeFor({ circuit })
-  assert.deepEqual(scope.retainedPcbTraceIds, scope.selectedPcbTraceIds)
+  assert.deepEqual(scope.extractedPcbTraceIds, scope.channelPcbTraceIds)
 })

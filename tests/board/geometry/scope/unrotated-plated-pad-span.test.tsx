@@ -15,5 +15,7 @@ test("the same plated pad stays outside the channel scope at zero rotation", asy
       record.type === "pcb_port" && record.pcb_port_id === pad.pcb_port_id,
   )
   assert(port?.type === "pcb_port")
-  assert(!scopeFor({ circuit }).retainedSourceIds.includes(port.source_port_id))
+  assert(
+    !scopeFor({ circuit }).extractedSourceIds.includes(port.source_port_id),
+  )
 })
