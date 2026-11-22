@@ -44,6 +44,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
   field assignment on an argument or a record it contains, including Circuit JSON. Build and return a new array or
   object, then bind the result at the call site (`const next = withX({ circuit })`). Arrays created inside the
   function can be built up freely before returning.
+- **Keep functions short.** Write long workflows as short orchestrators that call named stage functions.
 - **Early returns and `continue`** instead of nested `if`/`else`. No value ternaries that hide a branch. Write the `if` out.
 - **Top-level functions.** No nested closures or helpers defined inside other functions. The only exception is a factory whose job is to return a function.
 - **No conditional spreads** (`...(x ? { a } : {})`). Build the object, then set the field in an `if`.
@@ -75,6 +76,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 ### Reuse and size
 - **Prefer existing libraries.** Net membership comes from `circuit-json-to-connectivity-map`, so don't write another connectivity walk. Build its map with `new ConnectivityMap(findConnectedNetworks(groups))`, not `addConnections`: in 0.0.35, `addConnections` can overwrite an existing net id.
 - **Prefer deleting code to adding it.** No fallbacks, no "restore if missing" paths, no defensive checks that another layer already owns.
+- **Keep files under about 500 lines.** Split files by concern as they grow. This is a guideline.
 - Keep a PR to what its title says. Unrelated cleanups go in their own PR.
 
 ## Words
