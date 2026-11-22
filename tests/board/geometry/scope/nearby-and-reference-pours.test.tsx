@@ -12,6 +12,6 @@ test("a nearby signal pour admits its net while a reference pour leaves its net 
   )
   assert(ground?.type === "source_net")
   assert(other?.type === "source_net")
-  assert(scope.retainedSourceIds.includes(other.source_net_id))
-  assert(!scope.retainedSourceIds.includes(ground.source_net_id))
+  assert(scope.extractedSourceIds.includes(other.source_net_id))
+  assert(!scope.extractedSourceIds.includes(ground.source_net_id))
 })
