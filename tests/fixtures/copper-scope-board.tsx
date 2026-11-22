@@ -25,6 +25,9 @@ interface WireProps {
   width?: number
   layer?: LayerRef
   startPad?: React.JSX.Element
+  endPad?: React.JSX.Element
+  pcbTeardropEnd?: boolean
+  net?: `net.${string}`
   extent?: number
 }
 
@@ -37,9 +40,14 @@ export function Wire({
   layer = "top",
   extent = 8,
   startPad,
+  endPad,
+  pcbTeardropEnd,
+  net,
 }: WireProps): React.JSX.Element {
   const from = `.${name} > .A`
   const to = `.${name} > .B`
+  const path = [from, to]
+  if (net !== undefined) path.push(net)
   const left = { x: -ACCESS_BARREL_X_MM, y: 0 }
   const right = { x: ACCESS_BARREL_X_MM, y: 0 }
   const pcbPath: NonNullable<TraceProps["pcbPath"]> = [from]
@@ -80,30 +88,36 @@ export function Wire({
                 shape="rect"
               />
             )}
-            <smtpad
-              portHints={["pin2"]}
-              pcbX={extent}
-              pcbY={0}
-              width={PAD_SIZE_MM}
-              height={PAD_SIZE_MM}
-              shape="rect"
-            />
+            {endPad ?? (
+              <smtpad
+                portHints={["pin2"]}
+                pcbX={extent}
+                pcbY={0}
+                width={PAD_SIZE_MM}
+                height={PAD_SIZE_MM}
+                shape="rect"
+              />
+            )}
           </footprint>
         }
       />
       <trace
         name={`${name}_route`}
-        from={from}
-        to={to}
+        path={path}
         width={width}
         pcbPath={pcbPath}
+        pcbTeardropEnd={pcbTeardropEnd}
       />
     </>
   )
 }
 
 /** Selected and neighboring traces, pads and pours for the proximity tests. */
-export function ScopeNeighborsBoard(): React.JSX.Element {
+export function ScopeNeighborsBoard({
+  children,
+}: {
+  children?: React.ReactNode
+}): React.JSX.Element {
   return (
     <board
       width={24}
@@ -151,6 +165,7 @@ export function ScopeNeighborsBoard(): React.JSX.Element {
           { x: -1, y: 1.4 },
         ]}
       />
+      {children}
     </board>
   )
 }
