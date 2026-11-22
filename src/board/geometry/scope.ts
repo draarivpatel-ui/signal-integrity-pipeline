@@ -225,7 +225,7 @@ function viaMembers({
   return ids
 }
 
-/** The physical barrel span includes any inactive stubs. */
+/** A board without blind vias is drilled through the full stack. */
 function viaBox({
   via,
   boardLayers,
@@ -235,18 +235,11 @@ function viaBox({
   boardLayers: readonly LayerRef[]
   blindViasAllowed: boolean
 }): CopperBox {
-  const { topmost_drill_layer: top, bottommost_drill_layer: bottom } = via
   const radius = via.outer_diameter / 2
   const { x, y } = via
   const xy = new Box(x - radius, y - radius, x + radius, y + radius)
-  if (
-    via.through_hole === true ||
-    (!blindViasAllowed && top === undefined && bottom === undefined)
-  )
-    return copperBox({ xy, occupiedLayers: boardLayers, boardLayers })
-  const occupiedLayers = [...via.layers]
-  if (top !== undefined) occupiedLayers.push(top)
-  if (bottom !== undefined) occupiedLayers.push(bottom)
+  let occupiedLayers = boardLayers
+  if (blindViasAllowed) occupiedLayers = via.layers
   return copperBox({ xy, occupiedLayers, boardLayers })
 }
 
