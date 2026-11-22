@@ -15,6 +15,7 @@ import {
   routeText,
   routeTones,
   routeView,
+  withRouteDrawing,
 } from "../board"
 import { type ExtractedRoutes, RouteFieldsSolver } from "../extraction"
 import {
@@ -36,12 +37,12 @@ import {
 import type { SolverContext } from "../solver"
 import {
   RoutedAdmissionSolver,
-  type RoutedBlockPlan,
+  type RoutedChannelSimulationPlan,
   type RoutedProblem,
 } from "./routed-admission"
 import { routedStage } from "./routed-stage"
 
-/** All six rows exist before the first step; every stage drains all admitted blocks in order. */
+/** All six rows exist before the first step; every stage drains all admitted channel simulations in order. */
 export const routedStages = [
   definePipelineStep(
     "RoutedAdmissionSolver",
@@ -86,7 +87,7 @@ export const routedStages = [
     routedStage(RouteNetworkSolver),
     (p: RoutedPipelineSolver) => [
       p.stageOutput("RoutedAdmissionSolver").value.map((plan, i) => ({
-        blockId: plan.id,
+        simulationPcbTransientChannelSimulationId: plan.id,
         name: plan.name,
         geometry: p.stageOutput("RouteSectionsSolver").value[i].geometry,
         extracted: p.stageOutput("RouteFieldsSolver").value[i],
@@ -124,7 +125,7 @@ export const routedStages = [
 
 /** Output types keyed by their debugger stage names. */
 interface RoutedStageOutputs {
-  RoutedAdmissionSolver: Produced<RoutedBlockPlan[]>
+  RoutedAdmissionSolver: Produced<RoutedChannelSimulationPlan[]>
   RouteSectionsSolver: Produced<RoutedSections[]>
   RouteFieldsSolver: Produced<ExtractedRoutes[]>
   RouteBindingsSolver: Produced<RoutedBindings[]>
@@ -132,17 +133,17 @@ interface RoutedStageOutputs {
   RouteTransientSolver: Produced<RoutedCapture[]>
 }
 
-/** A routed block’s compiled network and transient capture. */
-export interface RoutedBlockView {
-  id: RoutedBlockPlan["id"]
+/** A routed channel simulation’s compiled network and transient capture. */
+export interface RoutedChannelSimulationView {
+  id: RoutedChannelSimulationPlan["id"]
   name: string
   compiled: RoutedDeck
   capture: RoutedCapture
 }
-/** Completed block results and files from every routed stage. */
+/** Completed channel simulation results and files from every routed stage. */
 export interface RoutedInspection {
   kind: "routed-inspection"
-  blocks: RoutedBlockView[]
+  channelSimulations: RoutedChannelSimulationView[]
   files: FileMap
 }
 
@@ -184,7 +185,7 @@ export class RoutedPipelineSolver extends BasePipelineSolver<RoutedProblem> {
     if (!output) throw new Error(`Incomplete stage ${name}`)
     return output
   }
-  /** Fold each flat stage's artifacts once, preserving per-block values and paths. */
+  /** Fold each flat stage's artifacts once, preserving per-simulation values and paths. */
   override getOutput(): RoutedInspection {
     if (!this.solved) throw new Error("Routed pipeline is incomplete")
     if (this.output) return this.output
@@ -196,7 +197,7 @@ export class RoutedPipelineSolver extends BasePipelineSolver<RoutedProblem> {
     const plans = this.stageOutput("RoutedAdmissionSolver").value
     const compiled = this.stageOutput("RouteNetworkSolver").value
     const captures = this.stageOutput("RouteTransientSolver").value
-    const blocks = plans.map((plan, i) => ({
+    const channelSimulations = plans.map((plan, i) => ({
       id: plan.id,
       name: plan.name,
       compiled: compiled[i],
@@ -210,7 +211,7 @@ export class RoutedPipelineSolver extends BasePipelineSolver<RoutedProblem> {
     ])
     this.output = snapshot({
       kind: "routed-inspection",
-      blocks,
+      channelSimulations,
       files: ledger.seal(),
     })
     return this.output
@@ -229,41 +230,44 @@ export class RoutedPipelineSolver extends BasePipelineSolver<RoutedProblem> {
         ...definition.getConstructorParams(this),
       )
     }
-    const plans = this.getStageOutput<Produced<RoutedBlockPlan[]>>(
+    const plans = this.getStageOutput<Produced<RoutedChannelSimulationPlan[]>>(
       "RoutedAdmissionSolver",
     )?.value
     const circuit = this.inputProblem.circuitJson
     if (plans && !plans.length) {
       // Nothing was admitted: the whole board with one quiet line, the same in every stage.
-      const drawing = routeBoardDrawing({ circuit, scope: undefined })
+      let drawing = routeBoardDrawing({ circuit, scope: undefined })
       const board = routeBoardBox(circuit)
-      routeText({
-        drawing,
-        x: (board.minX + board.maxX) / 2,
-        y: (board.minY + board.maxY) / 2,
-        text: "No signal-integrity blocks admitted",
-        color: routeTones.quiet,
-        size: (board.maxX - board.minX) / 40,
-      })
+      drawing.texts!.push(
+        routeText({
+          x: (board.minX + board.maxX) / 2,
+          y: (board.minY + board.maxY) / 2,
+          text: "No transient channel simulations admitted",
+          color: routeTones.quiet,
+          size: (board.maxX - board.minX) / 40,
+        }),
+      )
       return drawing
     }
     if (solver) return solver.visualize()
     // A stage that cannot be built yet shows the selected copper and its unrolled lengths in neutral grey.
     const scope = plans?.[0]?.sections.scope
-    const drawing = routeBoardDrawing({
+    let drawing = routeBoardDrawing({
       circuit,
       scope,
       color: () => routeTones.copper,
     })
     if (!scope) return drawing
     const view = routeView({ circuit, scope })
-    routeStrip({
-      drawing,
-      pane: view.pane,
-      rows: routeLengths({ circuit, view }).map((row) => ({
-        ...row,
-        parts: [{ from: 0, to: row.length, color: routeTones.copper }],
-      })),
+    drawing = withRouteDrawing({
+      drawing: drawing,
+      overlay: routeStrip({
+        pane: view.pane,
+        rows: routeLengths({ circuit, view }).map((row) => ({
+          ...row,
+          parts: [{ from: 0, to: row.length, color: routeTones.copper }],
+        })),
+      }),
     })
     return drawing
   }

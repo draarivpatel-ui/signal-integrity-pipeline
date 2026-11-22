@@ -9,7 +9,7 @@ import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
 import { Inverter, Reference } from "../fixtures/signal-parts"
 import {
   admittedBindings,
-  prepareBlocks,
+  prepareChannelSimulations,
   renderSignals,
 } from "../fixtures/signal-render"
 import Differential from "../fixtures/unit-differential"
@@ -105,14 +105,14 @@ test.skipIf(!modelDir)(
   async () => {
     const circuit = await renderSignals({ tree: <Four /> })
     const ibis = await sources()
-    const a = prepareBlocks({ circuit, sources: ibis })[0]
+    const a = prepareChannelSimulations({ circuit, sources: ibis })[0]
     const channels = circuit.filter(
       (r) => r.type === "simulation_pcb_driver_receiver_channel",
     )
     const otherRecords = circuit.filter(
       (r) => r.type !== "simulation_pcb_driver_receiver_channel",
     )
-    const b = prepareBlocks({
+    const b = prepareChannelSimulations({
       circuit: [...otherRecords, ...channels.reverse()],
       sources: ibis,
     })[0]
@@ -126,8 +126,8 @@ const differentialDescription =
 test.skipIf(!modelDir)(differentialDescription, async () => {
   const circuit = await renderSignals({ tree: <Differential /> })
   const ibis = await sources()
-  const prepared = prepareBlocks({ circuit, sources: ibis })[0]
-  const receiver = prepared.signals[0].receivers[0]
+  const prepared = prepareChannelSimulations({ circuit, sources: ibis })[0]
+  const receiver = prepared.driverReceiverChannels[0].receivers[0]
   assert.ok("p_source_port_id" in receiver)
   if (!("p_source_port_id" in receiver)) return
   const resistor = circuit
@@ -140,7 +140,7 @@ test.skipIf(!modelDir)(differentialDescription, async () => {
   )
   const reversed = await renderSignals({ tree: <Differential reversed /> })
   assert.throws(
-    () => prepareBlocks({ circuit: reversed, sources: ibis }),
+    () => prepareChannelSimulations({ circuit: reversed, sources: ibis }),
     /Signal "BUS": differential pin order disagrees with IBIS/,
   )
 })
@@ -157,7 +157,7 @@ test.skipIf(!modelDir)(signalDescription, async () => {
   signal.driver_disabled = true
   const ibis = await sources()
   assert.throws(
-    () => prepareBlocks({ circuit, sources: ibis }),
+    () => prepareChannelSimulations({ circuit, sources: ibis }),
     /has no disabled state/,
   )
   signal.driver_disabled = false
