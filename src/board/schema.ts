@@ -2,6 +2,7 @@
 
 import * as base from "circuit-json"
 import type { z } from "zod"
+import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 
 export type {
@@ -12,6 +13,9 @@ export type {
   SimulationIbisModel,
   SourceTrace,
 } from "circuit-json"
+
+/** A record array and its nested values captured by a stage. */
+export type CircuitJsonSnapshot = Snapshot<base.CircuitJson>
 
 /** Picks the circuit-json schema by record type, or by ftype for source components. */
 export function recordSchema(record: {

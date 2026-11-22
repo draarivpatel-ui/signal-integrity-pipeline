@@ -1,12 +1,12 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import type {
-  CircuitJson,
+  CircuitJsonSnapshot,
   CopperScope,
   RouteSlice,
   SectionGeometry,
 } from "../board"
-import { type Produced, rootScope, snapshot } from "../kernel"
+import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
 import { solveCrossSection } from "./cross-section"
 import type { CrossSection } from "./cross-section-types"
 import { fieldsDrawing } from "./fields-visual"
@@ -38,9 +38,9 @@ const PARALLEL_COUPLING_WARNING = [
 
 /** Routed geometry, extraction options, and the artifact location. */
 export interface RouteFieldsInput {
-  geometry: SectionGeometry
-  circuitJson?: CircuitJson
-  scope?: CopperScope
+  geometry: Snapshot<SectionGeometry>
+  circuitJson?: CircuitJsonSnapshot
+  scope?: Snapshot<CopperScope>
   materials?: RouteMaterials
   maskThicknessMm?: number | null
   panels?: number
@@ -64,8 +64,10 @@ function maskThicknessSource(
 }
 
 /** Queue each conductor pair in slice order so cache population precedes coupling decisions. */
-function couplingPairs(slices: RouteSlice[]): RouteSlice[] {
-  const pairs: RouteSlice[] = []
+function couplingPairs(
+  slices: readonly Snapshot<RouteSlice>[],
+): Snapshot<RouteSlice>[] {
+  const pairs: Snapshot<RouteSlice>[] = []
   for (const slice of slices) {
     const count = slice.wires.length
     if (count > MAX_SCREEN_CONDUCTORS) {
@@ -87,7 +89,7 @@ function sliceWeight({
   slice,
   selected,
 }: {
-  slice: RouteSlice
+  slice: Snapshot<RouteSlice>
   selected: ReadonlySet<string>
 }): number {
   return (
@@ -103,13 +105,13 @@ export class RouteFieldsSolver extends BaseSolver {
     SolvedRouteSection["key"],
     RouteCoefficients
   >()
-  private pairs?: RouteSlice[]
-  private groups?: RouteSlice[]
+  private pairs?: Snapshot<RouteSlice>[]
+  private groups?: Snapshot<RouteSlice>[]
   private readonly slices: ExtractedRouteSlice[] = []
   private readonly coupling: RouteCoupling[] = []
   private pairIndex = 0
   private groupIndex = 0
-  private currentSlice?: RouteSlice
+  private currentSlice?: Snapshot<RouteSlice>
   private current?: CrossSection
   private output?: Produced<ExtractedRoutes>
   private solveMilliseconds = 0
@@ -129,7 +131,7 @@ export class RouteFieldsSolver extends BaseSolver {
     }
   }
   /** Canonical relative geometry owns the cache identity, independent of source IDs and stimulus. */
-  private solveSlice(slice: RouteSlice): SolvedRouteSection {
+  private solveSlice(slice: Snapshot<RouteSlice>): SolvedRouteSection {
     const section = routeCrossSection({
       geometry: this.input.geometry,
       slice,
@@ -201,7 +203,7 @@ export class RouteFieldsSolver extends BaseSolver {
   }
 
   /** Retrieve the screen coefficient matrix prepared before grouping the routes. */
-  private cachedPair(pair: RouteSlice): RouteCoefficients {
+  private cachedPair(pair: Snapshot<RouteSlice>): RouteCoefficients {
     const section = routeCrossSection({
       geometry: this.input.geometry,
       slice: pair,

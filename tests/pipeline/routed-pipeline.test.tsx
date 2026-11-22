@@ -3,10 +3,9 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { BasePipelineSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
-import React from "react"
 import Differential from "../../examples/level1-differential/level1-differential"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
-import type { CircuitJson } from "../../src/board"
+import type { CircuitJson, CircuitJsonSnapshot } from "../../src/board"
 import { boardPictureView } from "../../src/board/board-picture"
 import { sha256 } from "../../src/kernel"
 import { formatSpiceVectors } from "../../src/observation"
@@ -30,7 +29,7 @@ import {
   transientDurationSeconds,
   voltageNames,
 } from "../fixtures/routed-deck"
-import { routedProblem } from "../fixtures/routed-fixture"
+import { routedAdmissionInput } from "../fixtures/routed-fixture"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 
@@ -111,7 +110,7 @@ const testWithInverter = test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))
 testWithInverter(
   "six flat stages visit every channel simulation and produce deterministic artifacts",
   async () => {
-    const input = await routedProblem()
+    const input = await routedAdmissionInput()
     const solver = new RoutedPipelineSolver({ input, context: synthetic })
     assert.throws(() => solver.getOutput(), /incomplete/)
     await solver.solveAsync()
@@ -143,7 +142,10 @@ testWithInverter(
     await repeat.solveAsync()
     assert.deepEqual(repeat.getOutput(), output)
     assert.ok(solver.visualize().lines!.length > 0)
-    const renamed = structuredClone(input)
+    const renamed = {
+      ...input,
+      circuitJson: JSON.parse(JSON.stringify(input.circuitJson)) as CircuitJson,
+    }
     for (const record of renamed.circuitJson) {
       if (
         record.type === "simulation_pcb_transient_channel_simulation" ||
@@ -232,7 +234,7 @@ test("every completed stage retains its own final drawing with few, readable lab
 type DriverWeight = [timeSeconds: number, weight: number]
 
 testWithInverter("driver lead-in fits the default capture", async () => {
-  const input = await routedProblem()
+  const input = await routedAdmissionInput()
   const solver = new RoutedPipelineSolver({ input, context: synthetic })
   solver.solveUntilStage("RouteTransientSolver")
   assert.equal(
@@ -334,7 +336,7 @@ function assertDrawing({
   circuit,
   frame,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   frame: {
     drawing: GraphicsObject
     state: string
@@ -377,7 +379,7 @@ for (const name of ["two-trace", "level1-differential"] as const) {
     `${name}: drawing stays valid through all steps`,
     async () => {
       const input = await drawingInput(name)
-      const circuit: CircuitJson = input.circuitJson
+      const circuit = input.circuitJson
       let calls = 0
       const solverContext: SolverContext = {
         progress: (): void => undefined,
