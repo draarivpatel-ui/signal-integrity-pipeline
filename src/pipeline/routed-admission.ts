@@ -312,7 +312,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
     if (id !== undefined)
       this.plans.push(planRoutedBlock({ input: this.input, id }))
     const selectedConductors = this.plans.reduce((count, plan) => {
-      return count + plan.sections.scope.selectedPcbTraceIds.length
+      return count + plan.sections.scope.channelPcbTraceIds.length
     }, 0)
     this.stats = { blocks: this.plans.length, selectedConductors }
     if (this.plans.length !== ids.length) return
