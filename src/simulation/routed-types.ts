@@ -1,12 +1,14 @@
 import type {
-  CircuitJson,
+  CircuitJsonSnapshot,
   CopperScope,
   LaneMapping,
   SectionGeometry,
   SourcePortId,
+  SourceTraceId,
 } from "../board"
 import type { CompiledBuffer, IbisSources } from "../buffers"
 import type { ExtractedRoutes, RouteMaterials } from "../extraction"
+import type { Snapshot } from "../kernel"
 import type {
   CircuitNodes,
   RunControls,
@@ -26,20 +28,34 @@ export interface RoutedCompileOptions {
   cellsPerRise?: number
   readonly materials?: RouteMaterials
 }
+/** One physical conductor removed from ideal connectivity for routed extraction. */
+export interface RoutedTraceCut {
+  readonly sourceTraceId: SourceTraceId
+  readonly fromSourcePortId: SourcePortId
+  readonly toSourcePortId: SourcePortId
+}
+
+/** Distinct contacts connected by an explicit ideal segment between routed cuts. */
+export interface IdealRoutedJunction {
+  readonly fromSourcePortId: SourcePortId
+  readonly toSourcePortId: SourcePortId
+}
+
 /** Board, receiver paths and physical trace cuts for routed IBIS binding. */
 export interface RouteBindingsInput {
-  readonly circuitJson: CircuitJson
+  readonly circuitJson: CircuitJsonSnapshot
   readonly mappings: readonly LaneMapping[]
-  readonly routedTraceCuts: readonly LaneMapping[]
-  readonly modeling: Readonly<SimulationModeling>
-  readonly controls: Readonly<Record<string, RunControls>>
+  readonly routedTraceCuts: readonly RoutedTraceCut[]
+  readonly idealRoutedJunctions: readonly IdealRoutedJunction[]
+  readonly modeling: Snapshot<SimulationModeling>
+  readonly controls: Snapshot<Record<string, RunControls>>
   readonly ibisSources: Readonly<IbisSources>
   readonly options: RoutedCompileOptions
   readonly artifactPrefix: string
 }
 /** Admitted binding inputs and the copper scope resolved by route sectioning. */
 export interface ScopedRouteBindingsInput extends RouteBindingsInput {
-  readonly copperScope: CopperScope
+  readonly copperScope: Snapshot<CopperScope>
 }
 
 /** Compiled IBIS buffer data needed to wire a routed deck. */
@@ -53,8 +69,8 @@ export type RouteBuffer = Pick<
   | "sourceEvidence"
 >
 /** Immutable circuit nodes, compiled buffers and inputs for the route network. */
-export interface RoutedBindings {
-  circuitJson: CircuitJson
+export type RoutedBindings = Snapshot<{
+  circuitJson: CircuitJsonSnapshot
   scope: CopperScope
   mappings: readonly LaneMapping[]
   plan: SimulationPlan
@@ -62,12 +78,12 @@ export interface RoutedBindings {
   groundSourcePortId: SourcePortId
   electricalLines: string[]
   models: RouteBuffer[]
-}
+}>
 /** Scoped geometry, field results and electrical bindings for a routed deck. */
 export interface RouteNetworkInput {
   simulationPcbTransientChannelSimulationId: string
   name: string
-  geometry: SectionGeometry
+  geometry: Snapshot<SectionGeometry>
   extracted: ExtractedRoutes
   bindings: RoutedBindings
   materials: RouteMaterials
@@ -76,7 +92,7 @@ export interface RouteNetworkInput {
   artifactPrefix: string
 }
 /** Executable SPICE input and evidence for one routed transient. */
-export interface RoutedDeck {
+export type RoutedDeck = Snapshot<{
   simulationPcbTransientChannelSimulationId: string
   name: string
   deck: string
@@ -85,14 +101,14 @@ export interface RoutedDeck {
   durationSeconds: number
   stepSeconds: number
   evidence: Record<string, unknown>
-}
+}>
 /** A completed live transient; failures never expose a partial capture. */
-export interface RoutedCapture {
+export type RoutedCapture = Snapshot<{
   kind: "completed"
   qualification: "candidate-unqualified"
   timestampsSeconds: number[]
   probes: RoutedProbeCapture[]
-}
+}>
 
 /** Recorded voltages for a physical source port at the capture's adaptive sample times. */
 interface RoutedProbeCapture {

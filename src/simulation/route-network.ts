@@ -1,8 +1,8 @@
 /* eslint-disable local/max-file-lines -- Stage drawings use the same intermediate state as network compilation. */
-import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
+  circuitJsonDb,
   getSourcePortConnectivityMapFromCircuitJson,
   type Point,
   type RouteStripRow,
@@ -24,7 +24,13 @@ import {
   withRouteDrawing,
 } from "../board"
 import { closestRoutePoints } from "../extraction"
-import { type Produced, rootScope, sha256, snapshot } from "../kernel"
+import {
+  type Produced,
+  rootScope,
+  type Snapshot,
+  sha256,
+  snapshot,
+} from "../kernel"
 import { branchSaves } from "./branch-saves"
 import { namespaceSpice } from "./netlist"
 import {
@@ -85,8 +91,8 @@ export class RouteNetworkSolver extends BaseSolver {
   private *build(): Generator<void, Produced<RoutedDeck>> {
     const { geometry, extracted, bindings, options, materials } = this.input
     const { scope, models, mappings } = bindings
-    const plan = structuredClone(bindings.plan)
-    const db = cju([...bindings.circuitJson])
+    const probes = [...bindings.plan.probes]
+    const db = circuitJsonDb(bindings.circuitJson)
     const stackup = db.pcb_stackup.list()[0]
     const maskLayers = stackup.layers.filter(
       (layer) => layer.layer_type === "soldermask",
@@ -217,19 +223,17 @@ export class RouteNetworkSolver extends BaseSolver {
     )
     for (const [i, node] of biasNodes.entries())
       lines.push(`RBIAS${i} ${node} 0 ${BIAS_RESISTANCE}`)
-    for (const probe of plan.probes.filter(
-      (probe) => probe.referenceNode !== "0",
-    )) {
+    for (const probe of probes.filter((probe) => probe.referenceNode !== "0")) {
       const terminals = [
         ["P", probe.signalNode, probe.signalSourceId],
         ["N", probe.referenceNode, probe.referenceSourceId],
       ] as const
       for (const [suffix, signalNode, signalSourceId] of terminals) {
-        plan.probes.push({
+        probes.push({
           ...probe,
           name: `${probe.name}_${suffix}`,
           simulationVoltageProbeId: `${probe.simulationVoltageProbeId}_${suffix}`,
-          column: plan.probes.length + 1,
+          column: probes.length + 1,
           signalNode,
           signalSourceId: signalSourceId!,
           referenceNode: "0",
@@ -238,7 +242,7 @@ export class RouteNetworkSolver extends BaseSolver {
       }
     }
     // Only save receiver nodes and behavioural-source branch dependencies; the engine exposes the resulting vectors.
-    const probeNodes = plan.probes.flatMap((probe) => [
+    const probeNodes = probes.flatMap((probe) => [
       probe.signalNode,
       probe.referenceNode,
     ])
@@ -253,7 +257,7 @@ export class RouteNetworkSolver extends BaseSolver {
       }),
     )
     const connectivity = getSourcePortConnectivityMapFromCircuitJson(
-      bindings.circuitJson,
+      db.toArray(),
     )
     const ground = sourceNetMembers({
       connectivity,
@@ -343,7 +347,7 @@ export class RouteNetworkSolver extends BaseSolver {
     )
     const evidence = {
       endpoint_nodes: endpointNodes,
-      probes: plan.probes,
+      probes,
       label: "JLC standard stackup (assumed)",
       materials,
       mask_thickness_source: maskThicknessSource,
@@ -416,7 +420,7 @@ export class RouteNetworkSolver extends BaseSolver {
       name: this.input.name,
       deck,
       requestSha256: sha256(JSON.stringify(request)),
-      probes: plan.probes,
+      probes,
       durationSeconds: options.durationSeconds,
       stepSeconds: options.stepSeconds,
       evidence,
@@ -561,7 +565,7 @@ export class RouteNetworkSolver extends BaseSolver {
     let transitions: Record<string, unknown>[] = []
     if (Array.isArray(records)) transitions = records
     const physical = new Map(
-      cju([...circuit])
+      circuitJsonDb(circuit)
         .pcb_via.list()
         .map((item) => [item.pcb_via_id, item]),
     )
@@ -648,8 +652,8 @@ function routedNode({
 
 /** Resolves a physical point on a routed wire to its electrical node. */
 export type RouteEndpoint = (input: {
-  wire: RouteWire
-  point: RouteXY
+  wire: Snapshot<RouteWire>
+  point: Snapshot<RouteXY>
 }) => string
 
 /** Rail wires are explicit ideal AC electrodes; all other route junctions share physical coordinates. */
@@ -678,7 +682,7 @@ function offsetPoint({
   position,
   transverse,
 }: {
-  wire: RouteWire
+  wire: Snapshot<RouteWire>
   position: number
   transverse: number
 }): Point {

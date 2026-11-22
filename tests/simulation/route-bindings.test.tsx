@@ -6,16 +6,16 @@ import {
   type RoutedStageSolver,
 } from "../../src/pipeline"
 import {
-  type ScopedRouteBindingsInput,
   RouteBindingsSolver,
   type RoutedBindings,
+  type ScopedRouteBindingsInput,
 } from "../../src/simulation"
+import { routedAdmissionInput } from "../fixtures/routed-fixture"
 import { vendorAvailable } from "../fixtures/vendor-models"
-import { routedProblem } from "../fixtures/routed-fixture"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
-  const input = await routedProblem()
+  const input = await routedAdmissionInput()
   const admission = new RoutedAdmissionSolver(input)
   admission.solve()
   const plan = admission.getOutput().value[0]

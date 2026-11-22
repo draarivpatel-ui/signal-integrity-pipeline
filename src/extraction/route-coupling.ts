@@ -1,4 +1,5 @@
 import type { RouteSlice, RouteWire } from "../board"
+import type { Snapshot } from "../kernel"
 import type { RouteCoefficients } from "./route-lines"
 
 /** Retain a pair if either normalized mutual coefficient reaches 0.5%. */
@@ -21,10 +22,10 @@ export function routeCoupling({
   solve,
   records,
 }: {
-  slice: RouteSlice
-  solve: (slice: RouteSlice) => RouteCoefficients
+  slice: Snapshot<RouteSlice>
+  solve: (slice: Snapshot<RouteSlice>) => RouteCoefficients
   records: RouteCoupling[]
-}): RouteSlice[] {
+}): Snapshot<RouteSlice>[] {
   const groups = slice.wires.map((_, i) => i)
   for (let i = 0; i < slice.wires.length; i++) {
     for (let j = i + 1; j < slice.wires.length; j++) {
