@@ -38,9 +38,9 @@ test("a routed source trace can be selected by an explicit source net ID", async
     rails: new Set(),
     distanceMm: 0.5,
   })
-  assert.deepEqual(result.selectedPcbTraceIds, [trace.pcb_trace_id])
-  assert.deepEqual(result.retainedPcbTraceIds, [trace.pcb_trace_id])
-  assert.equal(result.lateralDistanceMm, 0.5)
+  assert.deepEqual(result.channelPcbTraceIds, [trace.pcb_trace_id])
+  assert.deepEqual(result.extractedPcbTraceIds, [trace.pcb_trace_id])
+  assert.equal(result.nearbyGapMm, 0.5)
   const channel = circuit.find(
     (record) =>
       record.type === "source_trace" &&
@@ -48,7 +48,7 @@ test("a routed source trace can be selected by an explicit source net ID", async
   )
   assert(channel?.type === "source_trace")
   assert.deepEqual(
-    new Set(result.retainedSourceIds),
+    new Set(result.extractedSourceIds),
     new Set([net, ...channel.connected_source_port_ids]),
   )
 })

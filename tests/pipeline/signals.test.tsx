@@ -433,7 +433,7 @@ test("preparation omits a resistor array with a floating branch", async () => {
     sources: inverterSources,
     distanceMm: 1,
   })
-  const retained = prepared.settings.copperScope.retainedSourceIds
+  const retained = prepared.settings.copperScope.extractedSourceIds
   assert.ok(retained.includes(model.spice_pin_to_source_port_map.pin1))
   assert.deepEqual(prepared.settings.passiveComponents, [])
 })
@@ -541,7 +541,7 @@ test("via plating comes from the preset and must be in the stackup", async () =>
   assert.equal(stack.plated_hole_copper_thickness, 0.018)
   assert.ok(
     prepareBlocks({ circuit, sources: inverterSources })[0].settings.copperScope
-      .retainedPcbViaIds.length >= 2,
+      .extractedPcbViaIds.length >= 2,
   )
   delete stack.plated_hole_copper_thickness
   assert.throws(
