@@ -175,9 +175,12 @@ test("coalesces aligned conductor projections", async () => {
   const scope = channelCopperScope({
     circuit,
     connectivity,
-    selected,
-    reference: sourceNetMembers({ connectivity, seed: ground.source_net_id }),
-    rails: new Set(),
+    channelSourceIds: selected,
+    referenceSourceIds: sourceNetMembers({
+      connectivity,
+      memberId: ground.source_net_id,
+    }),
+    railSourceIds: new Set(),
     distanceMm: 1,
   })
   const geometry = segmentRoutes({ circuit, scope })
