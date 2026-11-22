@@ -28,7 +28,7 @@ function renderTwoChannelSimulations(
         <FixtureChannelSimulation
           name={channelSimulationName}
           bitRate="50Mbps"
-          nearbyDriverPattern="0"
+          aggressorPattern="0"
         >
           <simulation.pcbdriverreceiverchannel
             name="ALT_DATA"

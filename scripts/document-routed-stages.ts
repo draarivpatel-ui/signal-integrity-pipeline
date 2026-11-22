@@ -23,7 +23,7 @@ export function routedStageDocumentation(): string {
   )
   const failures = names.map((name, i) => {
     if (i === 0)
-      return `  ${name} --> failed: invalid admission, including undeclared nearby drivers`
+      return `  ${name} --> failed: invalid admission, including undeclared aggressors`
     return `  ${name} --> failed`
   })
   const states = [

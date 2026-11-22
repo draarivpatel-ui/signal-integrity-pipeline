@@ -53,7 +53,7 @@ function twoChannelSimulationBoard(
       name={`BLOCK${i}`}
       bitRate={FIXTURE_BIT_RATE}
       duration={FIXTURE_DURATION_SECONDS}
-      nearbyDriverPattern="0"
+      aggressorPattern="0"
     >
       <simulation.pcbdriverreceiverchannel
         name={`DATA${i}`}

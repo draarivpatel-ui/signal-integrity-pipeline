@@ -126,7 +126,7 @@ function Board({
       <FixtureChannelSimulation
         name="SCOPED"
         bitRate="20Mbps"
-        nearbyDriverPattern="0"
+        aggressorPattern="0"
       >
         <simulation.pcbdriverreceiverchannel
           name="DATA"

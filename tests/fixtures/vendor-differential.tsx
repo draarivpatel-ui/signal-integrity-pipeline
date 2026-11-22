@@ -18,7 +18,7 @@ export function VendorDifferential(): ReactElement {
       child.type !== simulation.pcbtransientchannelsimulation
     )
       return child
-    return <FixtureChannelSimulation {...child.props} nearbyDriverPattern="0" />
+    return <FixtureChannelSimulation {...child.props} aggressorPattern="0" />
   })
   return cloneElement(board, {}, children)
 }

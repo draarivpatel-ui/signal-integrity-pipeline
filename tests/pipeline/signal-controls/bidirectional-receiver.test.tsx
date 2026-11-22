@@ -9,7 +9,7 @@ import {
 
 test("a bidirectional DQ declared as a receiver does not drive the net", async () => {
   const circuit = await renderSignals({
-    tree: <ParallelBus nearbyDriverPattern="0" />,
+    tree: <ParallelBus aggressorPattern="0" />,
   })
   const [prepared] = prepareChannelSimulations({
     circuit,

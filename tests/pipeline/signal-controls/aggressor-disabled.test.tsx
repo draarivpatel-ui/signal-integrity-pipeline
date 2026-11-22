@@ -2,13 +2,13 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import {
   ParallelBus,
-  parallelBusNeighborControls,
+  parallelBusAggressorControls,
   threeStateParallelBusSources,
 } from "../../fixtures/parallel-bus"
 
-test("a disabled nearby driver has no stimulus even if a pattern is set", async () => {
-  const { state, stimulus } = await parallelBusNeighborControls({
-    tree: <ParallelBus nearbyDriversDisabled nearbyDriverPattern="clock" />,
+test("a disabled aggressor has no stimulus even if a pattern is set", async () => {
+  const { state, stimulus } = await parallelBusAggressorControls({
+    tree: <ParallelBus aggressorsDisabled aggressorPattern="clock" />,
     sources: threeStateParallelBusSources,
   })
   assert.equal(state?.is_output, true)

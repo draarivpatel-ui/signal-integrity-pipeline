@@ -53,12 +53,13 @@ contains cached subcircuits. Core checks endpoint connectivity and routing,
 supplies preset via plating, and plans omitted pseudo-random binary sequence (PRBS) seeds by channel name.
 The pipeline reads the IBIS assets and validates the selected model capabilities.
 If the copper scope retains any output-capable pins outside the selected
-channels, declare their state on the simulation. Use `nearbyDriverPattern="0"`
+channel endpoints, those pins are aggressors. Declare their state on the simulation. Use `aggressorPattern="0"`
 or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
 `"prbs7"` to switch at the simulation bit rate from time zero.
-`nearbyDriversDisabled` takes precedence and requires every nearby driver
-model to support high impedance. TSX authors need a core release that emits
-these fields.
+`aggressorsDisabled` takes precedence and requires every aggressor
+model to support high impedance. The selected channels (victims) keep their
+own `pattern` and `driverDisabled` settings. TSX authors need a core release that
+emits the aggressor fields.
 
 ngspice must already be installed; `createNativeSolver({ tools: { ngspice } })`
 accepts an executable path. No package install or solver download happens during
@@ -115,7 +116,7 @@ availability and version. A missing binary shows `ngspice not found on PATH`.
 
 ```mermaid
 flowchart TD
-  board[/"Your board<br/>(Circuit JSON with transient channel simulations)"/] --> s1["1. Admit each channel simulation: drivers, receivers, the copper scope and declared nearby driver states<br/><small>pipeline</small>"]
+  board[/"Your board<br/>(Circuit JSON with transient channel simulations)"/] --> s1["1. Admit each channel simulation: drivers, receivers, the copper scope and declared aggressor states<br/><small>pipeline</small>"]
   chips[/"Chip models<br/>(IBIS files; coupled package admission)"/] --> s1
   s1 --> s2["2. Cut the scoped copper into straight sections over their reference planes<br/><small>board</small>"]
   s2 --> s3["3. Solve each unique cross-section's coupled R, L, G and C<br/><small>extraction</small>"]
@@ -169,7 +170,7 @@ stateDiagram-v2
   RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
   RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
-  RoutedAdmissionSolver --> failed: invalid admission, including undeclared nearby drivers
+  RoutedAdmissionSolver --> failed: invalid admission, including undeclared aggressors
   RouteSectionsSolver --> failed
   RouteFieldsSolver --> failed
   RouteBindingsSolver --> failed
@@ -185,7 +186,7 @@ independent run. A differential endpoint drives opposite physical levels and
 measures P minus N. Quiet channels remain connected and are probed at the far
 receiver and at the near quiet driver. Single-ended probes always use their chip's
 local ground. Numeric offsets are seconds. Automatic duration ends when the
-last channel or switching nearby driver completes one full pattern at its
+last channel or switching aggressor completes one full pattern at its
 declared bit rate after its offset.
 Clock uses two unit intervals, a switching literal uses its bit count, and
 PRBS7 uses 127 unit intervals. Quiet channels use one unit interval from time

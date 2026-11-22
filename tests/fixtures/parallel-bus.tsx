@@ -119,14 +119,14 @@ export function ParallelBus({
   neighbourPattern,
   driverDisabled,
   driverBitRate,
-  nearbyDriverPattern,
-  nearbyDriversDisabled,
+  aggressorPattern,
+  aggressorsDisabled,
 }: {
   neighbourPattern?: "1"
   driverDisabled?: boolean
   driverBitRate?: string
-  nearbyDriverPattern?: string
-  nearbyDriversDisabled?: boolean
+  aggressorPattern?: string
+  aggressorsDisabled?: boolean
 }): React.JSX.Element {
   return (
     <board
@@ -154,8 +154,8 @@ export function ParallelBus({
       ))}
       <FixtureChannelSimulation
         bitRate="20Mbps"
-        nearbyDriverPattern={nearbyDriverPattern}
-        nearbyDriversDisabled={nearbyDriversDisabled}
+        aggressorPattern={aggressorPattern}
+        aggressorsDisabled={aggressorsDisabled}
       >
         <simulation.pcbdriverreceiverchannel
           name="DQ0"
@@ -178,24 +178,24 @@ export function ParallelBus({
   )
 }
 
-/** Capture timing and lowered controls for the bus's unselected DQ1 driver. */
-interface ParallelBusNeighborControls {
+/** Capture timing and lowered controls for the bus's DQ1 aggressor. */
+interface ParallelBusAggressorControls {
   durationSeconds: number
   state: RunControls["states"][number] | undefined
   stimulus: RunControls["stimuli"][number] | undefined
 }
 
 /** Render the bus through core and read the controls for TX.DQ1. */
-export async function parallelBusNeighborControls({
+export async function parallelBusAggressorControls({
   tree,
   sources = parallelBusSources,
 }: {
   tree: React.JSX.Element
   sources?: typeof parallelBusSources
-}): Promise<ParallelBusNeighborControls> {
+}): Promise<ParallelBusAggressorControls> {
   const circuit = await renderSignals({ tree })
   const [prepared] = prepareChannelSimulations({ circuit, sources })
-  const neighbor = [...prepared.pins.values()].find(
+  const aggressor = [...prepared.pins.values()].find(
     (pin) => pin.pin === "2" && pin.buffer.type !== "input",
   )
   const { states, stimuli } =
@@ -204,9 +204,9 @@ export async function parallelBusNeighborControls({
     ]
   return {
     durationSeconds: prepared.durationSeconds,
-    state: states.find((state) => state.source_port_id === neighbor?.port),
+    state: states.find((state) => state.source_port_id === aggressor?.port),
     stimulus: stimuli.find(
-      (stimulus) => stimulus.source_port_id === neighbor?.port,
+      (stimulus) => stimulus.source_port_id === aggressor?.port,
     ),
   }
 }

@@ -14,7 +14,7 @@ import {
 import type { InspectedPin } from "../buffers"
 import { Diagnostic, type Snapshot } from "../kernel"
 import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
-import type { NearbyDrivers } from "./nearby-drivers"
+import type { Aggressors } from "./aggressors"
 import { defaultDurationSeconds, prbsPatterns } from "./timing"
 
 /** Milliseconds in one second. */
@@ -47,7 +47,7 @@ export interface ChannelSimulationControlOptions {
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   pins: Map<SourcePortId, InspectedPin>
   driven: Map<SourcePortId, Snapshot<SimulationPcbDriverReceiverChannel>>
-  nearbyDrivers: NearbyDrivers
+  aggressors: Aggressors
   durationSeconds: number
   stepSeconds: number
 }
@@ -242,7 +242,7 @@ export function withChannelSimulationControls({
   driverReceiverChannels,
   pins,
   driven,
-  nearbyDrivers,
+  aggressors,
   durationSeconds,
   stepSeconds,
 }: ChannelSimulationControlOptions): ChannelSimulationControls {
@@ -264,21 +264,22 @@ export function withChannelSimulationControls({
   })
   for (const pin of pins.values()) {
     const signal = driven.get(pin.port)
-    const nearby = nearbyDrivers.get(pin.port)
+    const aggressor = aggressors.get(pin.port)
     const state: RunControls["states"][number] = {
       source_port_id: pin.port,
-      is_output: signal !== undefined || nearby !== undefined,
+      is_output: signal !== undefined || aggressor !== undefined,
     }
     if (signal) state.is_output_enabled = !signal.driver_disabled
-    else if (nearby !== undefined) state.is_output_enabled = nearby !== null
+    else if (aggressor !== undefined)
+      state.is_output_enabled = aggressor !== null
     controls.states.push(state)
-    if (!nearby) continue
+    if (!aggressor) continue
     controls.stimuli.push(
       driverStimulus({
         name: pin.port,
-        signal: nearby,
+        signal: aggressor,
         port: pin.port,
-        bits: signalBits({ signal: nearby, durationSeconds }),
+        bits: signalBits({ signal: aggressor, durationSeconds }),
         inverted: pin.buffer.polarity === "inverting",
       }),
     )

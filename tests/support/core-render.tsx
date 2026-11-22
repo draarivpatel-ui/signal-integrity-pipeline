@@ -4,29 +4,26 @@ import { createContext, type ReactElement, useContext } from "react"
 import type { CircuitJson } from "../../src/board"
 
 /** New simulation props exercised against the pipeline's pinned renderer. */
-interface NearbyDriverProps {
-  nearbyDriverPattern?: string
-  nearbyDriversDisabled?: boolean
+interface AggressorProps {
+  aggressorPattern?: string
+  aggressorsDisabled?: boolean
 }
 
-/** Nearby driver declarations in the fixture, indexed by simulation name. */
-type FixtureDeclarations = Map<string | undefined, NearbyDriverProps>
+/** Aggressor declarations in the fixture, indexed by simulation name. */
+type FixtureDeclarations = Map<string | undefined, AggressorProps>
 
-const nearbyDriverDeclarations = createContext<FixtureDeclarations | null>(null)
+const aggressorDeclarations = createContext<FixtureDeclarations | null>(null)
 
-/** Render the simulation with pinned core and capture its nearby driver declaration. */
+/** Render the simulation with pinned core and capture its aggressor declaration. */
 export function FixtureChannelSimulation({
-  nearbyDriverPattern,
-  nearbyDriversDisabled,
+  aggressorPattern,
+  aggressorsDisabled,
   ...props
-}: PcbTransientChannelSimulationProps & NearbyDriverProps): ReactElement {
-  const declarations = useContext(nearbyDriverDeclarations)
-  if (
-    nearbyDriverPattern !== undefined ||
-    nearbyDriversDisabled !== undefined
-  ) {
+}: PcbTransientChannelSimulationProps & AggressorProps): ReactElement {
+  const declarations = useContext(aggressorDeclarations)
+  if (aggressorPattern !== undefined || aggressorsDisabled !== undefined) {
     if (!declarations) throw new Error("Render fixtures with renderCoreSignals")
-    declarations.set(props.name, { nearbyDriverPattern, nearbyDriversDisabled })
+    declarations.set(props.name, { aggressorPattern, aggressorsDisabled })
   }
   return <simulation.pcbtransientchannelsimulation {...props} />
 }
@@ -43,13 +40,13 @@ function withFixtureDeclarations({
     if (record.type !== "simulation_pcb_transient_channel_simulation") continue
     const props = declarations.get(record.name)
     if (!props) continue
-    if (props.nearbyDriverPattern !== undefined)
+    if (props.aggressorPattern !== undefined)
       Object.assign(record, {
-        nearby_driver_pattern: props.nearbyDriverPattern,
+        aggressor_pattern: props.aggressorPattern,
       })
-    if (props.nearbyDriversDisabled !== undefined)
+    if (props.aggressorsDisabled !== undefined)
       Object.assign(record, {
-        nearby_drivers_disabled: props.nearbyDriversDisabled,
+        aggressors_disabled: props.aggressorsDisabled,
       })
   }
   return records
@@ -63,9 +60,9 @@ export async function renderCoreSignals(
   const declarations: FixtureDeclarations = new Map()
   try {
     circuit.add(
-      <nearbyDriverDeclarations.Provider value={declarations}>
+      <aggressorDeclarations.Provider value={declarations}>
         {tree}
-      </nearbyDriverDeclarations.Provider>,
+      </aggressorDeclarations.Provider>,
     )
     await circuit.renderUntilSettled()
     const records = circuit.getCircuitJson()

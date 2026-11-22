@@ -9,7 +9,7 @@ import {
 
 test("a bus driver with output explicitly disabled gets no stimulus", async () => {
   const circuit = await renderSignals({
-    tree: <ParallelBus driverDisabled nearbyDriverPattern="0" />,
+    tree: <ParallelBus driverDisabled aggressorPattern="0" />,
   })
   const [prepared] = prepareChannelSimulations({
     circuit,

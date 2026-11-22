@@ -14,8 +14,8 @@ import {
 } from "../buffers"
 import { type SafeId, type Snapshot, safeId } from "../kernel"
 import type { RunControls } from "../simulation"
+import { planAggressors } from "./aggressors"
 import type { NumericalSettings } from "./modeling"
-import { planNearbyDrivers } from "./nearby-drivers"
 import {
   type ChannelSimulationControlOptions,
   channelSimulationDurationSeconds,
@@ -292,13 +292,13 @@ export function prepareChannelSimulation(
   const scopedPins = scopeSignalPins({ ...inspection, signalPins })
   const scoped = { ...selection, ...scopedPins, circuit, signalPins }
   validateSignalPins(scoped)
-  const nearbyDrivers = planNearbyDrivers({
+  const aggressors = planAggressors({
     ...scoped,
     endpointIds: signalPins.endpointIds,
   })
   const patterns: DriverPattern[] = [...selection.driverReceiverChannels]
   const edgeTimesSeconds = [...signalPins.edgeTimesSeconds]
-  for (const [port, signal] of nearbyDrivers) {
+  for (const [port, signal] of aggressors) {
     if (signal === null || isQuiet(signal)) continue
     patterns.push(signal)
     edgeTimesSeconds.push(edgeDurationSeconds(scoped.pins.get(port)!))
@@ -323,7 +323,7 @@ export function prepareChannelSimulation(
     ...timing,
     ...supplied,
     durationSeconds,
-    nearbyDrivers,
+    aggressors,
     pins: pruned.pins,
     driven: signalPins.driven,
     routedTopology: signalPins.routedTopology,

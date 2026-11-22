@@ -2,12 +2,12 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import {
   ParallelBus,
-  parallelBusNeighborControls,
+  parallelBusAggressorControls,
 } from "../../fixtures/parallel-bus"
 
-test("a nearby driver holds the declared quiet low level", async () => {
-  const { state, stimulus } = await parallelBusNeighborControls({
-    tree: <ParallelBus nearbyDriverPattern="0" />,
+test("an aggressor holds the declared quiet low level", async () => {
+  const { state, stimulus } = await parallelBusAggressorControls({
+    tree: <ParallelBus aggressorPattern="0" />,
   })
   assert.equal(state?.is_output_enabled, true)
   assert.equal(stimulus?.initial_state, 0)
