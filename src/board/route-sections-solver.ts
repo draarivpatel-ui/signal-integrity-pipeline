@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import { type Produced, rootScope, snapshot } from "../kernel"
@@ -90,9 +91,8 @@ export class RouteSectionsSolver extends BaseSolver {
     if (!result.done) return
 
     const { circuitJson, requiredSourcePortIds, artifactPrefix } = this.input
-    const [stackup] = circuitJson.filter(
-      (record) => record.type === "pcb_stackup",
-    )
+    const db = cju([...circuitJson])
+    const [stackup] = db.pcb_stackup.list()
     const masks = stackup.layers.filter(
       (layer) => layer.layer_type === "soldermask",
     )
@@ -102,11 +102,9 @@ export class RouteSectionsSolver extends BaseSolver {
       )
     }
     for (const id of requiredSourcePortIds) {
-      const port = circuitJson.find(
-        (record) => record.type === "pcb_port" && record.source_port_id === id,
-      )
+      const port = db.pcb_port.getWhere({ source_port_id: id })
       if (
-        port?.type === "pcb_port" &&
+        port &&
         port.layers.some((layer) =>
           routeContactFrame({
             geometry,

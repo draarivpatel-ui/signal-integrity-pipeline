@@ -1,3 +1,5 @@
+import { cju } from "@tscircuit/circuit-json-util"
+import type { PcbVia } from "circuit-json"
 import { fail } from "../diagnostics"
 import type { CircuitJson } from "../schema"
 import type { PcbTrace, PortSelector, RoutedPoint, SourcePort } from "./types"
@@ -13,24 +15,24 @@ export function resolveRouteVias({
   circuit: CircuitJson
   trace: PcbTrace
 }): RoutedPoint[] {
+  let vias: PcbVia[] | undefined
   return trace.route.map((point) => {
     if (point.route_type === "through_pad")
       fail("route_type", "Only wire/via routed primitives supported")
     if (point.route_type !== "via") return point
-    const matches = circuit
-      .filter((e) => e.type === "pcb_via")
-      .filter(
-        (via) =>
-          (via.pcb_trace_id === trace.pcb_trace_id ||
-            (via.source_trace_id !== undefined &&
-              via.source_trace_id === trace.source_trace_id)) &&
-          (via.pcb_trace_id === undefined ||
-            via.pcb_trace_id === trace.pcb_trace_id) &&
-          (via.source_trace_id === undefined ||
-            via.source_trace_id === trace.source_trace_id) &&
-          via.subcircuit_id === trace.subcircuit_id &&
-          Math.hypot(via.x - point.x, via.y - point.y) < VIA_MATCH_DISTANCE_MM,
-      )
+    vias ??= cju([...circuit]).pcb_via.list()
+    const matches = vias.filter(
+      (via) =>
+        (via.pcb_trace_id === trace.pcb_trace_id ||
+          (via.source_trace_id !== undefined &&
+            via.source_trace_id === trace.source_trace_id)) &&
+        (via.pcb_trace_id === undefined ||
+          via.pcb_trace_id === trace.pcb_trace_id) &&
+        (via.source_trace_id === undefined ||
+          via.source_trace_id === trace.source_trace_id) &&
+        via.subcircuit_id === trace.subcircuit_id &&
+        Math.hypot(via.x - point.x, via.y - point.y) < VIA_MATCH_DISTANCE_MM,
+    )
     if (matches.length > 1)
       fail(
         "via_geometry",
@@ -73,11 +75,9 @@ export function selectPort({
 }): SourcePort {
   if (!selector)
     fail("pin_mapping", "Explicit physical source port selector required")
+  const db = cju([...circuit])
   if (selector.sourcePortId) {
-    const ports = circuit.filter(
-      (e): e is SourcePort =>
-        e.type === "source_port" && e.source_port_id === selector.sourcePortId,
-    )
+    const ports = db.source_port.list({ source_port_id: selector.sourcePortId })
     if (ports.length !== 1) {
       fail(
         "pin_mapping",
@@ -86,12 +86,7 @@ export function selectPort({
     }
     return ports[0]
   }
-  const sourceComponents = circuit.filter(
-    (record) => record.type === "source_component",
-  )
-  const components = sourceComponents.filter(
-    (record) => record.name === selector.component,
-  )
+  const components = db.source_component.list({ name: selector.component })
   if (components.length !== 1) {
     const advice = "use sourcePortId in repeated scopes"
     fail(
@@ -100,18 +95,15 @@ export function selectPort({
     )
   }
   const component = components[0]
-  const ports = circuit
-    .filter((record) => record.type === "source_port")
-    .filter((port) => {
-      if (port.source_component_id !== component.source_component_id)
-        return false
-      const pinName = `pin${port.pin_number}`
-      return (
-        port.port_hints?.includes(selector.port ?? "") ||
-        port.name === selector.port ||
-        pinName === selector.port
-      )
-    })
+  const ports = db.source_port.list().filter((port) => {
+    if (port.source_component_id !== component.source_component_id) return false
+    const pinName = `pin${port.pin_number}`
+    return (
+      port.port_hints?.includes(selector.port ?? "") ||
+      port.name === selector.port ||
+      pinName === selector.port
+    )
+  })
   if (ports.length !== 1) {
     fail(
       "pin_mapping",
