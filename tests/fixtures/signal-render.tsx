@@ -2,9 +2,9 @@ import type React from "react"
 import type { CircuitJson } from "../../src/board"
 import type { IbisSources } from "../../src/buffers"
 import {
-  type PreparedBlock,
-  prepareBlockById,
-  signalBlocks,
+  listChannelSimulations,
+  type PreparedChannelSimulation,
+  prepareChannelSimulationById,
 } from "../../src/pipeline/signals"
 import { renderCoreSignals } from "../support/core-render"
 
@@ -36,8 +36,8 @@ export async function renderSignals({
   }
 }
 
-/** Lower every signal-integrity block in board order, as RoutedAdmissionSolver does one block per step. */
-export function prepareBlocks({
+/** Lower every transient channel simulation in board order, as RoutedAdmissionSolver does one channel simulation per step. */
+export function prepareChannelSimulations({
   circuit,
   sources,
   distanceMm,
@@ -45,12 +45,13 @@ export function prepareBlocks({
   circuit: CircuitJson
   sources: IbisSources
   distanceMm?: number
-}): PreparedBlock[] {
-  return signalBlocks(circuit).map((block) =>
-    prepareBlockById({
+}): PreparedChannelSimulation[] {
+  return listChannelSimulations(circuit).map((channelSimulation) =>
+    prepareChannelSimulationById({
       circuit,
       sources,
-      blockId: block.simulation_pcb_transient_channel_simulation_id,
+      simulationPcbTransientChannelSimulationId:
+        channelSimulation.simulation_pcb_transient_channel_simulation_id,
       distanceMm,
     }),
   )
