@@ -236,33 +236,42 @@ export function compareNames({ a, b }: { a: string; b: string }): number {
   return left.length - right.length
 }
 
-/** Apply endpoint-specific IBIS model choices to the copied block records. */
-function applyIbisModelOverrides({
+/** Copy the IBIS model records with each endpoint's model choice applied to its pins. */
+function withIbisModelOverrides({
   circuit,
   signals,
 }: {
   circuit: CircuitJson
   signals: SimulationPcbDriverReceiverChannel[]
-}): void {
-  for (const model of cju([...circuit]).simulation_ibis_model.list()) {
-    for (const signal of signals) {
-      for (const endpoint of [signal.driver, ...signal.receivers]) {
-        for (const [index, port] of endpointPorts(endpoint).entries()) {
-          const selected = selectedIbisModel({ endpoint, index })
-          if (!selected) continue
-          for (const [pin, target] of Object.entries(
-            model.ibis_pin_name_to_source_port_id,
-          )) {
-            if (target !== port) continue
-            model.ibis_pin_name_to_model_name = {
-              ...model.ibis_pin_name_to_model_name,
-              [pin]: selected,
-            }
-          }
-        }
+}): CircuitJson {
+  const modelNameBySourcePortId = new Map<SourcePortId, string>()
+  for (const signal of signals) {
+    for (const endpoint of [signal.driver, ...signal.receivers]) {
+      for (const [index, sourcePortId] of endpointPorts(endpoint).entries()) {
+        const modelName = selectedIbisModel({ endpoint, index })
+        if (modelName !== undefined)
+          modelNameBySourcePortId.set(sourcePortId, modelName)
       }
     }
   }
+  return circuit.map((record) => {
+    if (record.type !== "simulation_ibis_model") return record
+    const overrides = Object.entries(
+      record.ibis_pin_name_to_source_port_id,
+    ).flatMap(([pin, sourcePortId]) => {
+      const modelName = modelNameBySourcePortId.get(sourcePortId)
+      if (modelName === undefined) return []
+      return [[pin, modelName] as const]
+    })
+    if (!overrides.length) return record
+    return {
+      ...record,
+      ibis_pin_name_to_model_name: {
+        ...record.ibis_pin_name_to_model_name,
+        ...Object.fromEntries(overrides),
+      },
+    }
+  })
 }
 
 /** Collect all ports and nets tied to declared rails or to IBIS reference pins. */
@@ -593,8 +602,10 @@ function prepareBlock({
       BLOCK_MODEL_RECORDS.includes(record.type)
     )
   })
-  const circuit = structuredClone([...records, block, ...signals])
-  applyIbisModelOverrides({ circuit, signals })
+  const circuit = withIbisModelOverrides({
+    circuit: structuredClone([...records, block, ...signals]),
+    signals,
+  })
   const endpointIds = new Set(
     signals.flatMap((signal) =>
       [signal.driver, ...signal.receivers].flatMap(endpointPorts),
