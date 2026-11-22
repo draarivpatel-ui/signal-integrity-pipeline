@@ -169,14 +169,13 @@ export class RouteBindingsSolver extends BaseSolver {
     const circuit = this.input.circuitJson
     const view = routeView({ circuit, scope: this.input.scope })
     const drawing = routeBoardDrawing({ circuit, scope: this.input.scope })
+    const db = cju([...circuit])
     const pcbPorts = new Map(
-      circuit
-        .filter((port) => port.type === "pcb_port")
-        .map((port) => [port.source_port_id, port]),
+      db.pcb_port.list().map((port) => [port.source_port_id, port]),
     )
     const components = new Map(
-      circuit
-        .filter((component) => component.type === "pcb_component")
+      db.pcb_component
+        .list()
         .map((component) => [component.pcb_component_id, component]),
     )
     const outlineContext = {

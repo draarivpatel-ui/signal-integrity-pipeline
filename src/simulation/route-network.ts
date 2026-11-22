@@ -559,8 +559,8 @@ export class RouteNetworkSolver extends BaseSolver {
     let transitions: Record<string, unknown>[] = []
     if (Array.isArray(records)) transitions = records
     const physical = new Map(
-      circuit
-        .filter((item) => item.type === "pcb_via")
+      cju([...circuit])
+        .pcb_via.list()
         .map((item) => [item.pcb_via_id, item]),
     )
     const { minX, maxX, minY, maxY } = view.focus
