@@ -4,7 +4,10 @@ import { simulation } from "@tscircuit/core"
 import React from "react"
 import { routedVisualIbis } from "../fixtures/routed-visual-fixture"
 import { Inverter, Reference } from "../fixtures/signal-parts"
-import { prepareBlocks, renderSignals } from "../fixtures/signal-render"
+import {
+  prepareChannelSimulations,
+  renderSignals,
+} from "../fixtures/signal-render"
 
 /** The unmodelled three-pad copper is physically far from DATA, on the same real board. */
 function Board({
@@ -133,15 +136,21 @@ function Board({
 test("unrelated branched copper cannot reject a selected channel", async () => {
   const circuit = await renderSignals({ tree: <Board /> })
   const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
-  const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
-  assert.equal(block.settings.lanes.length, 1)
-  const retained = new Set(block.settings.copperScope.extractedPcbTraceIds)
+  const [channelSimulation] = prepareChannelSimulations({
+    circuit,
+    sources,
+    distanceMm: 1,
+  })
+  assert.equal(channelSimulation.settings.lanes.length, 1)
+  const retained = new Set(
+    channelSimulation.settings.copperScope.extractedPcbTraceIds,
+  )
   const excluded = circuit.filter(
     (record) =>
       record.type === "pcb_trace" && !retained.has(record.pcb_trace_id),
   )
   assert.equal(excluded.length, 2)
-  const near = prepareBlocks({
+  const near = prepareChannelSimulations({
     circuit: await renderSignals({ tree: <Board neighbour /> }),
     sources,
     distanceMm: 1,
@@ -158,13 +167,15 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
   )
   const quiet = [...near.pins.values()].find((pin) => {
     if (pin.buffer.type !== "output") return false
-    return !near.signals.some(
+    return !near.driverReceiverChannels.some(
       ({ driver }) =>
         "source_port_id" in driver && driver.source_port_id === pin.port,
     )
   })!
   const { stimuli } =
-    near.controls[near.block.simulation_pcb_transient_channel_simulation_id]
+    near.controls[
+      near.channelSimulation.simulation_pcb_transient_channel_simulation_id
+    ]
   const quietStimulus = stimuli.some((stimulus) => {
     return (
       stimulus.source_port_id === quiet.port &&
@@ -173,7 +184,7 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
   })
   assert.ok(quietStimulus)
   const nearbyBranch = await renderSignals({ tree: <Board unrelatedY={0.5} /> })
-  const branched = prepareBlocks({
+  const branched = prepareChannelSimulations({
     circuit: nearbyBranch,
     sources,
     distanceMm: 1,
@@ -195,7 +206,11 @@ test("a shunt on retained quiet copper remains a modeled load", async () => {
     expectedErrors: ["pcb_port_not_connected_error"],
   })
   const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
-  const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
+  const [channelSimulation] = prepareChannelSimulations({
+    circuit,
+    sources,
+    distanceMm: 1,
+  })
   const termination = circuit.find(
     (record) =>
       record.type === "source_component" && record.name === "QUIET_TERM",
@@ -221,11 +236,11 @@ test("a shunt on retained quiet copper remains a modeled load", async () => {
   )
   assert.ok(route?.type === "pcb_trace")
   assert.ok(
-    block.settings.copperScope.extractedPcbTraceIds.includes(
+    channelSimulation.settings.copperScope.extractedPcbTraceIds.includes(
       route.pcb_trace_id,
     ),
   )
-  assert.deepEqual(block.settings.passiveComponents, [
+  assert.deepEqual(channelSimulation.settings.passiveComponents, [
     { sourceComponentId: termination.source_component_id },
   ])
 })

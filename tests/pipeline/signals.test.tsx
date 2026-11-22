@@ -9,9 +9,9 @@ import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import {
   compareNames,
   endpointPorts,
-  type PreparedBlock,
-  prepareBlockById,
-  signalBlocks,
+  listChannelSimulations,
+  type PreparedChannelSimulation,
+  prepareChannelSimulationById,
 } from "../../src/pipeline/signals"
 import { electricalSources, generalDeclarations } from "../../src/simulation"
 import {
@@ -20,7 +20,10 @@ import {
   separateClampIbis,
 } from "../fixtures/routed-visual-fixture"
 import { Inverter, Reference } from "../fixtures/signal-parts"
-import { prepareBlocks, renderSignals } from "../fixtures/signal-render"
+import {
+  prepareChannelSimulations,
+  renderSignals,
+} from "../fixtures/signal-render"
 import Differential from "../fixtures/unit-differential"
 
 const inverterIbisPath = "models/sn74lvc1g04.ibs"
@@ -199,25 +202,32 @@ test("full unrouted check reaches the segment after a series passive", async () 
     tree: <Board missing allowUnroutedTraces />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
-  const block = circuit.find(
+  const channelSimulation = circuit.find(
     (record) => record.type === "simulation_pcb_transient_channel_simulation",
   )!
-  if (block.type !== "simulation_pcb_transient_channel_simulation")
-    throw new Error("Missing block")
-  block.allow_unrouted_traces = false
+  if (channelSimulation.type !== "simulation_pcb_transient_channel_simulation")
+    throw new Error("Missing channel simulation")
+  channelSimulation.allow_unrouted_traces = false
   assert.throws(
-    () => prepareBlocks({ circuit, sources: inverterSources }),
+    () => prepareChannelSimulations({ circuit, sources: inverterSources }),
     /is not routed between/,
   )
   const geometryOnly = circuit.filter(
     (record) => !record.type.endsWith("_error"),
   )
   assert.throws(
-    () => prepareBlocks({ circuit: geometryOnly, sources: inverterSources }),
+    () =>
+      prepareChannelSimulations({
+        circuit: geometryOnly,
+        sources: inverterSources,
+      }),
     /is not routed between/,
   )
-  block.allow_unrouted_traces = true
-  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  channelSimulation.allow_unrouted_traces = true
+  const [prepared] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
   assert.equal(
     prepared.settings.lanes.length,
     1,
@@ -227,10 +237,13 @@ test("full unrouted check reaches the segment after a series passive", async () 
 
 test("branched routed receiver arrays get the channel fanout diagnostic", async () => {
   const circuit = await renderSignals({ tree: <Board branch /> })
-  assert.throws(() => prepareBlocks({ circuit, sources: inverterSources }), {
-    code: "channel_fanout",
-    message: /branched routes are not supported yet/,
-  })
+  assert.throws(
+    () => prepareChannelSimulations({ circuit, sources: inverterSources }),
+    {
+      code: "channel_fanout",
+      message: /branched routes are not supported yet/,
+    },
+  )
 })
 
 test("pipeline checks selected IBIS roles and disabled states after TSX rendering", async () => {
@@ -246,17 +259,23 @@ test("pipeline checks selected IBIS roles and disabled states after TSX renderin
   )
   assert.throws(
     () =>
-      prepareBlocks({ circuit, sources: { [inverterIbisPath]: inputOnly } }),
+      prepareChannelSimulations({
+        circuit,
+        sources: { [inverterIbisPath]: inputOnly },
+      }),
     /Signal "D81".*LVC1G04_OUT_33.*does not support driving/,
   )
   assert.throws(
     () =>
-      prepareBlocks({ circuit, sources: { [inverterIbisPath]: outputOnly } }),
+      prepareChannelSimulations({
+        circuit,
+        sources: { [inverterIbisPath]: outputOnly },
+      }),
     /Signal "D81".*LVC1G04_IN_33.*does not support receiving/,
   )
   assert.throws(
     () =>
-      prepareBlocks({
+      prepareChannelSimulations({
         circuit: disabled,
         sources: { [inverterIbisPath]: routedVisualIbis },
       }),
@@ -273,7 +292,11 @@ test("a disabled three-state driver still rejects a malformed literal pattern", 
     "Model_type 3-state",
   )
   assert.throws(
-    () => prepareBlocks({ circuit, sources: { [inverterIbisPath]: tristate } }),
+    () =>
+      prepareChannelSimulations({
+        circuit,
+        sources: { [inverterIbisPath]: tristate },
+      }),
     /pseudo-random binary sequence \(PRBS\)/,
   )
 })
@@ -282,7 +305,7 @@ test("an unlisted output on the same net is diagnosed before routed branch check
   const circuit = await renderSignals({ tree: <Board extraDriver /> })
   assert.throws(
     () =>
-      prepareBlocks({
+      prepareChannelSimulations({
         circuit,
         sources: { [inverterIbisPath]: routedVisualIbis },
       }),
@@ -290,8 +313,8 @@ test("an unlisted output on the same net is diagnosed before routed branch check
   )
 })
 
-/** Give the second block its own source asset and a configurable distance from the first. */
-function TwoIndependentBlocks({
+/** Give the second channel simulation its own source asset and a configurable distance from the first. */
+function TwoIndependentChannelSimulations({
   otherY,
 }: {
   otherY: number
@@ -327,24 +350,29 @@ function TwoIndependentBlocks({
   )
 }
 
-/** Prepare only the first block without the other board model's asset. */
-async function prepareFirstBlock(otherY: number): Promise<PreparedBlock> {
+/** Prepare only the first channel simulation without the other board model's asset. */
+async function prepareFirstChannelSimulation(
+  otherY: number,
+): Promise<PreparedChannelSimulation> {
   const circuit = await renderSignals({
-    tree: <TwoIndependentBlocks otherY={otherY} />,
+    tree: <TwoIndependentChannelSimulations otherY={otherY} />,
     expectedErrors: ["pcb_port_not_connected_error"],
   })
-  const first = signalBlocks(circuit).find((block) => block.name === "TWO")
+  const first = listChannelSimulations(circuit).find(
+    (channelSimulation) => channelSimulation.name === "TWO",
+  )
   assert.ok(first)
-  return prepareBlockById({
+  return prepareChannelSimulationById({
     circuit,
     sources: inverterSources,
-    blockId: first.simulation_pcb_transient_channel_simulation_id,
+    simulationPcbTransientChannelSimulationId:
+      first.simulation_pcb_transient_channel_simulation_id,
     distanceMm: 1,
   })
 }
 
-test("preparing one block does not load assets for distant unretained pins", async () => {
-  const prepared = await prepareFirstBlock(45)
+test("preparing one channel simulation does not load assets for distant unretained pins", async () => {
+  const prepared = await prepareFirstChannelSimulation(45)
   assert.equal(prepared.pins.size, 4)
   const paths = new Set(
     [...prepared.pins.values()].map(
@@ -355,7 +383,7 @@ test("preparing one block does not load assets for distant unretained pins", asy
 })
 
 test("preparation still loads IBIS assets for retained quiet pins", async () => {
-  await assert.rejects(prepareFirstBlock(0.9), /distant[.]ibs/)
+  await assert.rejects(prepareFirstChannelSimulation(0.9), /distant[.]ibs/)
 })
 
 test("preparation omits a resistor array with a floating branch", async () => {
@@ -428,7 +456,7 @@ test("preparation omits a resistor array with a floating branch", async () => {
     (record) => record.type === "simulation_spice_subcircuit",
   )
   assert.ok(model?.type === "simulation_spice_subcircuit")
-  const [prepared] = prepareBlocks({
+  const [prepared] = prepareChannelSimulations({
     circuit,
     sources: inverterSources,
     distanceMm: 1,
@@ -438,7 +466,7 @@ test("preparation omits a resistor array with a floating branch", async () => {
   assert.deepEqual(prepared.settings.passiveComponents, [])
 })
 
-test("preparation keeps controls and probes independent across blocks", async () => {
+test("preparation keeps controls and probes independent across channel simulations", async () => {
   const board = TwoTraceBoard({ "data-pattern": "prbs7" })
   const circuit = await renderSignals({
     tree: React.cloneElement(
@@ -468,14 +496,17 @@ test("preparation keeps controls and probes independent across blocks", async ()
     channels.find((channel) => channel.name === "VICTIM")?.seed,
     undefined,
   )
-  const [two, alt] = prepareBlocks({ circuit, sources: inverterSources })
-  assert.equal(two.block.name, "TWO")
-  assert.equal(alt.block.name, "ALT")
+  const [two, alt] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
+  assert.equal(two.channelSimulation.name, "TWO")
+  assert.equal(alt.channelSimulation.name, "ALT")
   assert.deepEqual(Object.keys(two.controls), [
-    two.block.simulation_pcb_transient_channel_simulation_id,
+    two.channelSimulation.simulation_pcb_transient_channel_simulation_id,
   ])
   assert.deepEqual(Object.keys(alt.controls), [
-    alt.block.simulation_pcb_transient_channel_simulation_id,
+    alt.channelSimulation.simulation_pcb_transient_channel_simulation_id,
   ])
   const [twoPlan] = generalDeclarations(declarationInput(two)).plans
   const [altPlan] = generalDeclarations(declarationInput(alt)).plans
@@ -493,7 +524,7 @@ test("preparation keeps controls and probes independent across blocks", async ()
     twoPlan.stimuli[0].transmission_pattern.bits,
     alternate.transmission_pattern.bits,
   )
-  const [dataSignal, victim] = two.signals
+  const [dataSignal, victim] = two.driverReceiverChannels
   assert.deepEqual(
     twoPlan.probes.map((probe) => [probe.name, probe.signalSourceId]),
     [
@@ -510,9 +541,12 @@ test("preparation keeps controls and probes independent across blocks", async ()
 
 test("unlisted outputs drive low and the listed driver receives a legal seed", async () => {
   const circuit = await renderSignals({ tree: <Board unlisted /> })
-  const prepared = prepareBlocks({ circuit, sources: inverterSources })[0]
-  assert.equal(prepared.signals[0].seed, 127)
-  const { driver } = prepared.signals[0]
+  const prepared = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })[0]
+  assert.equal(prepared.driverReceiverChannels[0].seed, 127)
+  const { driver } = prepared.driverReceiverChannels[0]
   let listedPort = ""
   if ("source_port_id" in driver) listedPort = driver.source_port_id
   const extra = [...prepared.pins.values()].find(
@@ -520,7 +554,7 @@ test("unlisted outputs drive low and the listed driver receives a legal seed", a
   )!
   const { states, stimuli } =
     prepared.controls[
-      prepared.block.simulation_pcb_transient_channel_simulation_id
+      prepared.channelSimulation.simulation_pcb_transient_channel_simulation_id
     ]
   assert.equal(
     states.find((state) => state.source_port_id === extra.port)
@@ -540,24 +574,26 @@ test("via plating comes from the preset and must be in the stackup", async () =>
   if (stack.type !== "pcb_stackup") throw new Error("Missing stackup")
   assert.equal(stack.plated_hole_copper_thickness, 0.018)
   assert.ok(
-    prepareBlocks({ circuit, sources: inverterSources })[0].settings.copperScope
-      .extractedPcbViaIds.length >= 2,
+    prepareChannelSimulations({ circuit, sources: inverterSources })[0].settings
+      .copperScope.extractedPcbViaIds.length >= 2,
   )
   delete stack.plated_hole_copper_thickness
   assert.throws(
-    () => prepareBlocks({ circuit, sources: inverterSources }),
+    () => prepareChannelSimulations({ circuit, sources: inverterSources }),
     /pcb_stackup must specify plated_hole_copper_thickness/,
   )
   stack.plated_hole_copper_thickness = 0.025
   assert.doesNotThrow(() =>
-    prepareBlocks({ circuit, sources: inverterSources }),
+    prepareChannelSimulations({ circuit, sources: inverterSources }),
   )
 })
 
 type DeclarationInput = Parameters<typeof generalDeclarations>[0]
 
 /** Map each prepared physical lane to its declaration endpoints. */
-function declarationInput(prepared: PreparedBlock): DeclarationInput {
+function declarationInput(
+  prepared: PreparedChannelSimulation,
+): DeclarationInput {
   return {
     circuit: prepared.circuit,
     mappings: prepared.settings.lanes.map((lane) => ({
@@ -594,7 +630,7 @@ test("preparation preserves a declared 2.8 V supply on a retained rail", async (
     ),
     expectedErrors: ["pcb_port_not_connected_error"],
   })
-  const [prepared] = prepareBlocks({
+  const [prepared] = prepareChannelSimulations({
     circuit,
     sources: inverterSources,
     distanceMm: 1,
@@ -623,7 +659,7 @@ test("preparation biases a distinct 1.8 V power clamp reference", async () => {
     tree: <Board clampNet="net.PC" />,
     expectedErrors: ["pcb_port_not_connected_error"],
   })
-  const [prepared] = prepareBlocks({
+  const [prepared] = prepareChannelSimulations({
     circuit,
     sources: { [inverterIbisPath]: separateClampIbis },
   })
@@ -653,7 +689,7 @@ test("preparation rejects incompatible typical voltages on one reference rail", 
   })
   const sources = { [inverterIbisPath]: separateClampIbis }
   assert.throws(
-    () => prepareBlocks({ circuit, sources }),
+    () => prepareChannelSimulations({ circuit, sources }),
     /shared reference has incompatible/,
   )
 })
@@ -663,14 +699,16 @@ test("a routed differential termination shares the receiver endpoint on each leg
     tree: <Differential routedTermination />,
     expectedErrors: ["pcb_port_not_connected_error"],
   })
-  const [prepared] = prepareBlocks({
+  const [prepared] = prepareChannelSimulations({
     circuit,
     sources: { "models/sn65hvd72.ibs": differentialIbis },
   })
   const input = declarationInput(prepared)
   const { nodes, plans } = generalDeclarations(input)
   assert.equal(input.mappings.length, 4)
-  const [positive, negative] = endpointPorts(prepared.signals[0].receivers[0])
+  const [positive, negative] = endpointPorts(
+    prepared.driverReceiverChannels[0].receivers[0],
+  )
   assert.ok(negative)
   for (const port of [positive, negative]) {
     assert.equal(
@@ -695,7 +733,10 @@ test("PRBS31 fits the pattern limit at exactly 65536 intervals", async () => {
   const circuit = await renderSignals({
     tree: <Board pattern="prbs31" duration={65_536 / 20e6} />,
   })
-  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [prepared] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
   const [plan] = generalDeclarations(declarationInput(prepared)).plans
   assert.equal(plan.stimuli[0].transmission_pattern.bits.length, 65_536)
 })
@@ -705,7 +746,7 @@ test("PRBS31 rejects overlong captures during preparation", async () => {
     tree: <Board pattern="prbs31" duration={70_000 / 20e6} />,
   })
   assert.throws(
-    () => prepareBlocks({ circuit, sources: inverterSources }),
+    () => prepareChannelSimulations({ circuit, sources: inverterSources }),
     /at most 65536 bits/,
   )
 })
@@ -714,7 +755,7 @@ test("the default capture accepts a quiet driver whose offset is past the end", 
   const automatic = await renderSignals({
     tree: <Board pattern="0" offset={3e-6} />,
   })
-  const [prepared] = prepareBlocks({
+  const [prepared] = prepareChannelSimulations({
     circuit: automatic,
     sources: inverterSources,
   })
@@ -726,7 +767,10 @@ test("a constant driver with an in-range offset starts at zero", async () => {
   const circuit = await renderSignals({
     tree: <Board pattern="111" offset={0.5e-6} />,
   })
-  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [prepared] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
   const [plan] = generalDeclarations(declarationInput(prepared)).plans
   assert.equal(plan.stimuli[0].start_time_ms, 0)
 })
@@ -735,7 +779,10 @@ test("an explicit capture accepts a constant driver with a late offset and start
   const circuit = await renderSignals({
     tree: <Board pattern="0" offset={3e-6} duration={1e-6} />,
   })
-  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [prepared] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
   const [plan] = generalDeclarations(declarationInput(prepared)).plans
   assert.equal(plan.stimuli[0].start_time_ms, 0)
 })
@@ -744,7 +791,10 @@ test("a switching driver keeps its nonzero offset", async () => {
   const circuit = await renderSignals({
     tree: <Board pattern="01" offset={0.5} />,
   })
-  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [prepared] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
   const [plan] = generalDeclarations(declarationInput(prepared)).plans
   assert.equal(plan.stimuli[0].start_time_ms, 500)
 })
@@ -754,7 +804,11 @@ test("capture timing rejects a switching driver whose offset is past the end", a
     tree: <Board pattern="01" offset={3e-6} duration={1e-6} />,
   })
   assert.throws(
-    () => prepareBlocks({ circuit: explicit, sources: inverterSources }),
+    () =>
+      prepareChannelSimulations({
+        circuit: explicit,
+        sources: inverterSources,
+      }),
     /stimulus starts after/,
   )
 })
@@ -764,7 +818,7 @@ test("an invalid repeated pattern is rejected even with an offset past the captu
     tree: <Board pattern="xxx" offset={3e-6} duration={1e-6} />,
   })
   assert.throws(
-    () => prepareBlocks({ circuit, sources: inverterSources }),
+    () => prepareChannelSimulations({ circuit, sources: inverterSources }),
     /pattern must be/,
   )
 })
@@ -773,17 +827,23 @@ test("capture timing limits the maximum timestep for a 1 ps recording", async ()
   const circuit = await renderSignals({
     tree: <Board pattern="01" duration={1e-12} />,
   })
-  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [prepared] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
   const [plan] = generalDeclarations(declarationInput(prepared)).plans
   assert.ok(plan.maxStepSeconds < plan.durationSeconds)
 })
 
 test("preparation does not add empty warnings to results or errors", async () => {
   const circuit = await renderSignals({ tree: <Board /> })
-  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
+  const [prepared] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
   assert.equal(Object.hasOwn(prepared, "warnings"), false)
   assert.throws(
-    () => prepareBlocks({ circuit, sources: {} }),
+    () => prepareChannelSimulations({ circuit, sources: {} }),
     (error) => {
       assert.ok(error instanceof Error)
       assert.equal(Object.hasOwn(error, "warnings"), false)
@@ -792,38 +852,43 @@ test("preparation does not add empty warnings to results or errors", async () =>
   )
 })
 
-test("the removed modeling API cannot supply a test or synthesize a block", () => {
-  assert.deepEqual(signalBlocks([]), [])
+test("the removed modeling API cannot supply a test or synthesize a channel simulation", () => {
+  assert.deepEqual(listChannelSimulations([]), [])
 })
 
 test("explicit duration converts to ms and automatic duration stays absent", async () => {
   const automatic = await renderSignals({ tree: <Board /> })
-  const automaticBlock = automatic.find(
+  const automaticChannelSimulation = automatic.find(
     (record) => record.type === "simulation_pcb_transient_channel_simulation",
   )
-  assert.equal(automaticBlock?.duration_ms, undefined)
+  assert.equal(automaticChannelSimulation?.duration_ms, undefined)
   assert.equal(
-    prepareBlocks({ circuit: automatic, sources: inverterSources })[0]
-      .durationSeconds,
+    prepareChannelSimulations({
+      circuit: automatic,
+      sources: inverterSources,
+    })[0].durationSeconds,
     127 / 20e6,
   )
 
   const explicit = await renderSignals({ tree: <Board duration={1e-9} /> })
-  const [prepared] = prepareBlocks({
+  const [prepared] = prepareChannelSimulations({
     circuit: explicit,
     sources: inverterSources,
   })
   assert.ok(Math.abs(prepared.durationSeconds - 1e-9) <= Number.EPSILON * 1e-9)
   assert.ok(
-    Math.abs((prepared.block.duration_ms ?? NaN) - 1e-6) <=
+    Math.abs((prepared.channelSimulation.duration_ms ?? NaN) - 1e-6) <=
       Number.EPSILON * 1e-6,
   )
 })
 
 test("numeric TSX offsets are seconds and precede one pattern period", async () => {
   const circuit = await renderSignals({ tree: <Board offset={0.5} /> })
-  const [prepared] = prepareBlocks({ circuit, sources: inverterSources })
-  assert.equal(prepared.signals[0].offset_ms, 500)
+  const [prepared] = prepareChannelSimulations({
+    circuit,
+    sources: inverterSources,
+  })
+  assert.equal(prepared.driverReceiverChannels[0].offset_ms, 500)
   assert.ok(Math.abs(prepared.durationSeconds - (0.5 + 127 / 20e6)) < 1e-15)
 })
 

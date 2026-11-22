@@ -138,11 +138,17 @@ export function compileBuffers<
       const index = admitted.models.findIndex(
         (selected) => selected.pipelineId === model.pipelineId,
       )
-      const input = define({ model, plan })
+      const definition = define({ model, plan })
       const source = admitted.sources[index]
-      input.definition.source = {
-        file: source.evidence.ibsFile,
-        sha256: source.evidence.sourceSha256,
+      const input: ModelRunDefinition = {
+        ...definition,
+        definition: {
+          ...definition.definition,
+          source: {
+            file: source.evidence.ibsFile,
+            sha256: source.evidence.sourceSha256,
+          },
+        },
       }
       const result = converter.convertIbisModelToSpice(
         source.bytes,

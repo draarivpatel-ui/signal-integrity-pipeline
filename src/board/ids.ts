@@ -30,8 +30,8 @@ export type PcbViaId = PcbVia["pcb_via_id"]
 /** The identifier of a PCB copper pour in Circuit JSON. */
 export type PcbCopperPourId = PcbCopperPour["pcb_copper_pour_id"]
 
-/** The identifier of a PCB transient channel simulation block in Circuit JSON. */
-export type SimulationBlockId =
+/** The identifier of a PCB transient channel simulation in Circuit JSON. */
+export type SimulationPcbTransientChannelSimulationId =
   SimulationPcbTransientChannelSimulation["simulation_pcb_transient_channel_simulation_id"]
 
 /** One single-ended port, or the positive and negative ports in that order. */
