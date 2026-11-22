@@ -14,7 +14,7 @@ import {
   captureRoutedAdmissionInput,
   type RoutedAdmissionInput,
 } from "./routed-admission-input"
-import { routedReceiverPaths } from "./routed-receiver-paths"
+import { routedReceiverMappings } from "./routed-receiver-paths"
 import { compareNames, prepareChannelSimulation } from "./signals"
 
 /** Admission starts with the base route mesh resolution. */
@@ -74,8 +74,8 @@ function planRoutedChannelSimulation({
       ]),
     ),
   ])
-  const { mappings, idealRoutedJunctions } = snapshot(
-    routedReceiverPaths(prepared),
+  const mappings = snapshot(
+    routedReceiverMappings({ prepared, cuts: routedTraceCuts }),
   )
   return Object.freeze({
     simulationPcbTransientChannelSimulationId,
@@ -91,7 +91,6 @@ function planRoutedChannelSimulation({
     bindings: Object.freeze({
       circuitJson,
       mappings,
-      idealRoutedJunctions,
       routedTraceCuts,
       modeling,
       controls: snapshot(prepared.controls),

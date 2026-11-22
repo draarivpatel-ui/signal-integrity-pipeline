@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb } from "../../../src/board"
+import { circuitJsonDb, type SourcePort } from "../../../src/board"
+import type { Snapshot } from "../../../src/kernel"
 import { AdmissionChannel } from "../../fixtures/admission-channel"
 import { renderSignals } from "../../fixtures/signal-render"
 
@@ -9,6 +10,10 @@ test("an absent source port query returns undefined", async () => {
     tree: <AdmissionChannel route="series" />,
   })
   const db = circuitJsonDb(circuit)
-  assert.equal(db.source_port.get("missing"), undefined)
-  assert.equal(db.source_port.getWhere({ name: "missing" }), undefined)
+  const port: Snapshot<SourcePort> | undefined = db.source_port.get("missing")
+  const portByName: Snapshot<SourcePort> | undefined = db.source_port.getWhere({
+    name: "missing",
+  })
+  assert.equal(port, undefined)
+  assert.equal(portByName, undefined)
 })
