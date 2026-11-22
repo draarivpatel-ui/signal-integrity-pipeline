@@ -10,13 +10,13 @@ import {
 test("vias on a retained adjacent route are retained", async () => {
   const { circuit, scope } = await scopeNeighbors()
   assert.equal(
-    scope.retainedPcbViaIds.length,
+    scope.extractedPcbViaIds.length,
     2,
     "vias on the retained adjacent route are included",
   )
   const adjacent = scopeTrace({ circuit, name: "ADJACENT" })
   assert(adjacent.source_trace_id)
-  const vias = new Set(scope.retainedPcbViaIds)
+  const vias = new Set(scope.extractedPcbViaIds)
   const sourceLinked = circuit.map((record) => {
     if (record.type !== "pcb_via" || !vias.has(record.pcb_via_id)) return record
     return pcb_via.parse({
@@ -26,7 +26,7 @@ test("vias on a retained adjacent route are retained", async () => {
     })
   })
   assert.deepEqual(
-    scopeFor({ circuit: sourceLinked }).retainedPcbViaIds,
-    scope.retainedPcbViaIds,
+    scopeFor({ circuit: sourceLinked }).extractedPcbViaIds,
+    scope.extractedPcbViaIds,
   )
 })
