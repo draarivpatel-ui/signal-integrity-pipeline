@@ -56,7 +56,7 @@ function wireNet({
   const port =
     source.connected_source_port_ids[0] ?? source.connected_source_net_ids?.[0]
   if (!port) return source.source_trace_id
-  return [...sourceNetMembers({ connectivity, seed: port })].sort()[0]
+  return [...sourceNetMembers({ connectivity, memberId: port })].sort()[0]
 }
 
 /** Partition parallel wires into connected sets based on their physical overlap. */

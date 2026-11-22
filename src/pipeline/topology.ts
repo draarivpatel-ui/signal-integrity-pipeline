@@ -98,8 +98,8 @@ function selectCopper({
   const { connectivity, rails } = topology
   const selected = new Set(
     signals.flatMap(({ driver }) =>
-      endpointPorts(driver).flatMap((seed) => [
-        ...sourceNetMembers({ connectivity, seed }),
+      endpointPorts(driver).flatMap((memberId) => [
+        ...sourceNetMembers({ connectivity, memberId }),
       ]),
     ),
   )
