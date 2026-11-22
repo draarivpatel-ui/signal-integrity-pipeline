@@ -238,8 +238,10 @@ export function expectCopperScopeSnapshot({
       ]
     },
   )
+  let extractedPourCount = 0
   const pours = db.pcb_copper_pour.list().flatMap((pour) => {
     if (pour.source_net_id === undefined) return []
+    if (extractedSources.has(pour.source_net_id)) extractedPourCount += 1
     const color = copperColor({
       channel: input.channelSourceIds.has(pour.source_net_id),
       extracted: extractedSources.has(pour.source_net_id),
@@ -253,7 +255,7 @@ export function expectCopperScopeSnapshot({
     ]
   })
   const lines = [
-    `Extracted ${counted({ count: extractedTraces.size, noun: "trace" })}, ${counted({ count: extractedVias.size, noun: "via" })}`,
+    `Extracted ${counted({ count: extractedTraces.size, noun: "trace" })}, ${counted({ count: extractedVias.size, noun: "via" })}, ${counted({ count: extractedPourCount, noun: "pour" })}`,
     `${counted({ count: railTraces.size, noun: "rail trace" })}, ${nearbyGapMm} mm gap`,
   ]
   const longest = Math.max(...lines.map((line) => line.length))
