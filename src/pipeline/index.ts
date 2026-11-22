@@ -2,7 +2,7 @@
 export type { NumericalSettings } from "./modeling"
 export { RoutedAdmissionSolver, type RoutedProblem } from "./routed-admission"
 export {
-  type RoutedBlockView,
+  type RoutedChannelSimulationView,
   type RoutedInspection,
   RoutedPipelineSolver,
   routedStages,

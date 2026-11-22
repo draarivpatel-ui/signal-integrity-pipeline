@@ -164,6 +164,12 @@ function settledTail({
   }
 }
 
+/** Measured switching samples and settled tails proven for one schedule. */
+interface ScheduledWeights {
+  samples: Weights
+  tails: SwitchingTail[]
+}
+
 /** Stitch full measured coefficient edges, discarding only proven settled tails when necessary. */
 function scheduleWeights({
   buffer,
@@ -171,20 +177,21 @@ function scheduleWeights({
   schedule,
   physicalPin,
   document,
-  tails,
 }: {
   buffer: IbisBuffer
   corner: IbisCorner
   schedule: LogicalSchedule
   physicalPin: string
   document: IbisDocument
-  tails: SwitchingTail[]
-}): Weights {
+}): ScheduledWeights {
   const pullup = Number(Boolean(schedule.initialState))
   const pulldown = 1 - pullup
   const samples: Weights = [[0, pullup, pulldown]]
-  if (!schedule.transitions.length)
-    return [...samples, [schedule.duration, pullup, pulldown]]
+  const tails: SwitchingTail[] = []
+  if (!schedule.transitions.length) {
+    samples.push([schedule.duration, pullup, pulldown])
+    return { samples, tails }
+  }
   const converted = convertIbisBuffer(document, buffer.name, {
     corner,
     mode: "output",
@@ -259,7 +266,7 @@ function scheduleWeights({
   const last = samples.at(-1)!
   if (last[0] < schedule.duration)
     samples.push([schedule.duration, last[1], last[2]])
-  return samples
+  return { samples, tails }
 }
 
 /** Read the two nodes of a generated PWL voltage line. */
@@ -344,14 +351,22 @@ export function convertSwitching({
       buffer.polarity,
     )
     pin.stimulusHash = schedule.sha256
-    const samples = scheduleWeights({
+    const { samples, tails: pinTails } = scheduleWeights({
       buffer,
       corner: input.definition.corner,
       schedule,
       physicalPin: pin.physicalPin,
       document,
-      tails,
     })
+    for (const tail of pinTails) {
+      if (
+        !tails.some(
+          (entry) =>
+            entry.physicalPin === tail.physicalPin && entry.edge === tail.edge,
+        )
+      )
+        tails.push(tail)
+    }
     for (const [label, column] of [
       ["KU", 1],
       ["KD", 2],

@@ -4,10 +4,10 @@ import {
   isQuiet,
   type SignalEndpoint,
   type SignalEndpointPortIds,
-  type SimulationBlockId,
   type SimulationExperiment,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
+  type SimulationPcbTransientChannelSimulationId,
   type SourcePortId,
 } from "../board"
 import { type InspectedPin, pinCapabilities } from "../buffers"
@@ -29,9 +29,9 @@ const SPICE_OPTIONS: NonNullable<SimulationExperiment["spice_options"]> = {
 
 interface ControlOptions {
   circuit: CircuitJson
-  simulationPcbTransientChannelSimulationId: SimulationBlockId
-  block: SimulationPcbTransientChannelSimulation
-  signals: SimulationPcbDriverReceiverChannel[]
+  simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
   pins: Map<SourcePortId, InspectedPin>
   driven: Map<SourcePortId, SimulationPcbDriverReceiverChannel>
   durationSeconds: number
@@ -46,21 +46,21 @@ export function endpointPorts(endpoint: SignalEndpoint): SignalEndpointPortIds {
 }
 
 /** Choose the capture duration in seconds and check coverage of enabled stimuli. */
-export function blockDurationSeconds({
-  block,
-  signals,
+export function channelSimulationDurationSeconds({
+  channelSimulation,
+  driverReceiverChannels,
 }: {
-  block: SimulationPcbTransientChannelSimulation
-  signals: SimulationPcbDriverReceiverChannel[]
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
 }): number {
   let durationSeconds: number
-  if (block.duration_ms === undefined)
-    durationSeconds = defaultDurationSeconds(signals)
-  else durationSeconds = block.duration_ms / MILLISECONDS_PER_SECOND
+  if (channelSimulation.duration_ms === undefined)
+    durationSeconds = defaultDurationSeconds(driverReceiverChannels)
+  else durationSeconds = channelSimulation.duration_ms / MILLISECONDS_PER_SECOND
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     throw new Error("Recording duration must be finite and positive.")
   }
-  for (const signal of signals) {
+  for (const signal of driverReceiverChannels) {
     if (signal.driver_disabled) continue
     const startSeconds = signal.offset_ms / MILLISECONDS_PER_SECOND
     if (!Number.isFinite(startSeconds) || startSeconds < 0)
@@ -154,24 +154,31 @@ export function signalBits({
   return bits
 }
 
-/** Append the experiment and probes while lowering pin states and stimuli. */
-export function appendBlockControls({
+/** Circuit with the lowered experiment and probes, plus their pin states and stimuli. */
+interface ChannelSimulationControls {
+  circuit: CircuitJson
+  controls: RunControls
+}
+
+/** Lower pin states, stimuli, an experiment and its probes for one channel simulation. */
+export function withChannelSimulationControls({
   circuit,
   simulationPcbTransientChannelSimulationId,
-  block,
-  signals,
+  channelSimulation,
+  driverReceiverChannels,
   pins,
   driven,
   durationSeconds,
   rate,
   stepSeconds,
-}: ControlOptions): RunControls {
+}: ControlOptions): ChannelSimulationControls {
   const controls: RunControls = { states: [], stimuli: [] }
   const scope = cju([...circuit]).pcb_board.getWhere({})?.subcircuit_id
-  circuit.push({
+  const records: CircuitJson = []
+  records.push({
     type: "simulation_experiment",
     simulation_experiment_id: simulationPcbTransientChannelSimulationId,
-    name: block.name ?? simulationPcbTransientChannelSimulationId,
+    name: channelSimulation.name ?? simulationPcbTransientChannelSimulationId,
     experiment_type: "spice_transient_analysis",
     spice_engine: "pcb_spice",
     spice_options: { ...SPICE_OPTIONS },
@@ -208,7 +215,7 @@ export function appendBlockControls({
       },
     })
   }
-  for (const signal of signals) {
+  for (const signal of driverReceiverChannels) {
     const bits = signalBits({ signal, durationSeconds })
     if (signal.driver_disabled) continue
     let initialState: 0 | 1 = 0
@@ -229,13 +236,13 @@ export function appendBlockControls({
       })
     }
   }
-  for (const signal of signals) {
+  for (const signal of driverReceiverChannels) {
     for (const [index, endpoint] of probeEndpoints(signal).entries()) {
       const ports = endpointPorts(endpoint)
       let ref = ports[1]
       if (!("p_source_port_id" in endpoint))
         ref = pins.get(ports[0])!.references.pulldown
-      circuit.push({
+      records.push({
         type: "simulation_voltage_probe",
         simulation_voltage_probe_id: `${signal.simulation_pcb_driver_receiver_channel_id}_${index}`,
         name: `${signal.name}_${index}`,
@@ -245,5 +252,5 @@ export function appendBlockControls({
       })
     }
   }
-  return controls
+  return { circuit: [...circuit, ...records], controls }
 }

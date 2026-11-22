@@ -26,7 +26,7 @@ async function scopedModelDefinition(): Promise<
     A1: references,
     B1: references,
   }
-  // prepareBlocks trims physical mappings after spatial scope selection, retaining these source dictionaries.
+  // prepareChannelSimulations trims physical mappings after spatial scope selection, retaining these source dictionaries.
   delete pinMap.B1
   const plan = {
     durationSeconds: MODEL_DURATION_SECONDS,

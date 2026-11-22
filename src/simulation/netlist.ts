@@ -263,21 +263,6 @@ export function voltageSourceTerminals(
   return [source.terminal1_source_port_id, source.terminal2_source_port_id]
 }
 
-/** Marks both nodes as modeled and formats their SPICE terminal pair. */
-function terminals({
-  activeNodes,
-  positive,
-  negative,
-}: {
-  activeNodes: Set<string>
-  positive: string
-  negative: string
-}): string {
-  activeNodes.add(positive)
-  activeNodes.add(negative)
-  return `${positive} ${negative}`
-}
-
 /** Formats the source's DC or square-wave expression for the SPICE deck. */
 function voltageSourceExpression(source: SimulationVoltageSource): string {
   if (source.is_dc_source || !source.wave_shape) {
@@ -385,9 +370,8 @@ export function electricalSources({
     if (pos === neg)
       fail("supply_short", "Voltage source terminals resolve to the same node")
     const expression = voltageSourceExpression(source)
-    sources.push(
-      `VPHYSICAL${i} ${terminals({ activeNodes, positive: pos, negative: neg })} ${expression}`,
-    )
+    activeNodes.add(pos).add(neg)
+    sources.push(`VPHYSICAL${i} ${pos} ${neg} ${expression}`)
     const port = sourcePorts.find((e) => e.source_port_id === positive)
     const component = sourceComponents.find(
       (e) => e.source_component_id === port?.source_component_id,
@@ -408,9 +392,9 @@ export function electricalSources({
     )
     if (pos === neg)
       fail("supply_short", "Explicit supply terminals resolve to the same node")
-    const pair = terminals({ activeNodes, positive: pos, negative: neg })
+    activeNodes.add(pos).add(neg)
     sources.push(
-      `VDECLARED${i} ${pair} ${value({ input: source.voltageV, label: "declared supply" })}`,
+      `VDECLARED${i} ${pos} ${neg} ${value({ input: source.voltageV, label: "declared supply" })}`,
     )
     sourceBindings.push({
       name: `modeling.supplies[${i}]`,
@@ -515,13 +499,13 @@ export function electricalSources({
           `${component.name}: only explicit resistor/capacitor/inductor models supported`,
         )
     }
-    const pair = terminals({ activeNodes, positive: pos, negative: neg })
+    activeNodes.add(pos).add(neg)
     const componentValue = value({
       input: amount,
       label: `${component.name} ${quantity}`,
       positive: true,
     })
-    passives.push(`${kind}PHYSICAL${i} ${pair} ${componentValue}`)
+    passives.push(`${kind}PHYSICAL${i} ${pos} ${neg} ${componentValue}`)
     if (kind !== "C") dcConnections.push([pos, neg])
   }
   if (!sources.length)
