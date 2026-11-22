@@ -479,9 +479,7 @@ function blockPackageWarnings({
   sources: IbisSources
 }): string[] {
   const warnings: string[] = []
-  for (const model of circuit.filter(
-    (record) => record.type === "simulation_ibis_model",
-  )) {
+  for (const model of cju([...circuit]).simulation_ibis_model.list()) {
     const pin = [...pins.values()].find((pin) => pin.model === model)
     if (!pin || pin.component.coupledPackage === undefined) continue
     const { text, evidence } = loadModelSource({
