@@ -142,8 +142,8 @@ interface WordLocation {
   section: Section
 }
 
-/** Records a well-formed dictionary word, rejecting duplicates across all sections. */
-function claimWord({
+/** Validate a dictionary word and reject duplicates across all sections. */
+function validateWord({
   word,
   line,
   section,
@@ -152,7 +152,7 @@ function claimWord({
   word: string
   line: number
   section: Section
-  seen: Map<string, WordLocation>
+  seen: ReadonlyMap<string, WordLocation>
 }): void {
   if (!isWord(word)) {
     const description = "lowercase letters and digits, starting with a letter"
@@ -162,10 +162,7 @@ function claimWord({
     )
   }
   const before = seen.get(word)
-  if (!before) {
-    seen.set(word, { line, section })
-    return
-  }
+  if (!before) return
   let where = `already listed in ${section}`
   if (before.section !== section)
     where = `already listed in ${before.section}; a word belongs to one section`
@@ -250,7 +247,8 @@ export function parseVocabulary(text: string): Vocabulary {
           `general entries are lists of words: "- word word ...", got "${body}"`,
         )
       for (const word of list) {
-        claimWord({ word, line, section, seen })
+        validateWord({ word, line, section, seen })
+        seen.set(word, { line, section })
         vocab.general.add(word)
       }
       return
@@ -265,7 +263,8 @@ export function parseVocabulary(text: string): Vocabulary {
         `${section} entries look like "word: ${need}", got "${body}"`,
       )
     const [word, value] = entry
-    claimWord({ word, line, section, seen })
+    validateWord({ word, line, section, seen })
+    seen.set(word, { line, section })
     if (!value)
       throw new VocabularyError(line, `"${word}" in ${section} needs ${need}`)
     vocab[section].set(word, value)
@@ -494,25 +493,6 @@ function declaredName(n: ts.Node): string | undefined {
 const skipped = (name: string): boolean =>
   name.length < 2 || name === "this" || splitWords(name).length === 0
 
-/** Records each declaration once, then visits its children. */
-function collectDeclaredNames({
-  node,
-  exported,
-  found,
-}: {
-  node: ts.Node
-  exported: ReadonlySet<ExportedName>
-  found: Map<string, CollectedName>
-}): void {
-  const name = declaredName(node)
-  if (name !== undefined && !skipped(name) && !found.has(name)) {
-    found.set(name, { name, exported: exported.has(name) })
-  }
-  ts.forEachChild(node, (child) =>
-    collectDeclaredNames({ node: child, exported, found }),
-  )
-}
-
 /** The distinct names a file declares (see the header for what counts), in first-seen order. */
 export function collectNames({
   file,
@@ -524,7 +504,18 @@ export function collectNames({
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)
   const exported = exportedNames(sf)
   const found = new Map<string, CollectedName>()
-  collectDeclaredNames({ node: sf, exported, found })
+  const pending: ts.Node[] = [sf]
+  while (pending.length) {
+    const node = pending.pop()!
+    const name = declaredName(node)
+    if (name !== undefined && !skipped(name) && !found.has(name))
+      found.set(name, { name, exported: exported.has(name) })
+    const children: ts.Node[] = []
+    ts.forEachChild(node, (child) => {
+      children.push(child)
+    })
+    for (let i = children.length - 1; i >= 0; i--) pending.push(children[i])
+  }
   return [...found.values()]
 }
 

@@ -433,7 +433,7 @@ export function channelCopperScopeWithBounds({
       nearbyRailPcbTraceIds.add(trace.pcb_trace_id)
       continue
     }
-    nearbySourceIds.push(...ids)
+    for (const id of ids) nearbySourceIds.push(id)
   }
   for (const via of vias) {
     if (
@@ -448,7 +448,7 @@ export function channelCopperScopeWithBounds({
       nearbyRailPcbViaIds.add(via.pcb_via_id)
       continue
     }
-    nearbySourceIds.push(...ids)
+    for (const id of ids) nearbySourceIds.push(id)
   }
   for (const pad of pads) {
     if (pad.pcb_port_id === undefined) continue
