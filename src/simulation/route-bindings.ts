@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import {
   type AdmittedBuffers,
@@ -43,9 +44,7 @@ export class RouteBindingsSolver extends BaseSolver {
     if (!mappings.length)
       throw new Error("Routed compilation requires physical signal mappings")
     const { extractedPcbTraceIds, nearbyRailPcbTraceIds } = this.input.scope
-    const traces = this.input.circuitJson.filter(
-      (record) => record.type === "pcb_trace",
-    )
+    const traces = cju([...this.input.circuitJson]).pcb_trace.list()
     mappings[0].sourceTraceIds = traces
       .filter(
         ({ pcb_trace_id: id }) =>

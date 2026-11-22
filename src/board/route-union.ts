@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { hypotenuse } from "../kernel"
 import {
   type ConnectivityMap,
@@ -192,7 +193,7 @@ export function unionRouteWires({
 }): RouteWire[] {
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const nets = new Map<SourceTraceId, string>()
-  const sources = circuit.filter((record) => record.type === "source_trace")
+  const sources = cju([...circuit]).source_trace.list()
   const groups = new Map<CopperGroupKey, RouteWire[]>()
   for (const wire of wires) {
     let net = nets.get(wire.source)

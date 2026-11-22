@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import {
   type CircuitJson,
   isQuiet,
@@ -166,9 +167,7 @@ export function appendBlockControls({
   stepSeconds,
 }: ControlOptions): RunControls {
   const controls: RunControls = { states: [], stimuli: [] }
-  const scope = circuit.find(
-    (record) => record.type === "pcb_board",
-  )?.subcircuit_id
+  const scope = cju([...circuit]).pcb_board.getWhere({})?.subcircuit_id
   circuit.push({
     type: "simulation_experiment",
     simulation_experiment_id: simulationPcbTransientChannelSimulationId,
