@@ -28,7 +28,7 @@ const SPICE_OPTIONS: NonNullable<SimulationExperiment["spice_options"]> = {
 
 interface ControlOptions {
   circuit: CircuitJson
-  id: SimulationBlockId
+  simulationPcbTransientChannelSimulationId: SimulationBlockId
   block: SimulationPcbTransientChannelSimulation
   signals: SimulationPcbDriverReceiverChannel[]
   pins: Map<SourcePortId, InspectedPin>
@@ -156,7 +156,7 @@ export function signalBits({
 /** Append the experiment and probes while lowering pin states and stimuli. */
 export function appendBlockControls({
   circuit,
-  id,
+  simulationPcbTransientChannelSimulationId,
   block,
   signals,
   pins,
@@ -171,8 +171,8 @@ export function appendBlockControls({
   )?.subcircuit_id
   circuit.push({
     type: "simulation_experiment",
-    simulation_experiment_id: id,
-    name: block.name ?? id,
+    simulation_experiment_id: simulationPcbTransientChannelSimulationId,
+    name: block.name ?? simulationPcbTransientChannelSimulationId,
     experiment_type: "spice_transient_analysis",
     spice_engine: "pcb_spice",
     spice_options: { ...SPICE_OPTIONS },
