@@ -28,10 +28,21 @@ const GAP_COLOR = "#f9f1da"
 
 /** Keeps annotation outlines visible without hiding small copper features. */
 const OUTLINE_WIDTH_MM = 0.08
-/** Keep the legend and result above the copper on the narrowest test board. */
-const FONT_SIZE_MM = 0.47
+/** Caption height as a share of the board height, so text reads the same on every board. */
+const CAPTION_HEIGHT_RATIO = 0.035
+/** Caption advance per character as a fraction of its height, with margin. */
+const CHARACTER_WIDTH_RATIO = 0.45
+/** Share of the board width the longest caption line may use. */
+const CAPTION_WIDTH_RATIO = 0.9
 const TOP_MARGIN_MM = 0.75
-const LINE_SPACING_MM = 0.7
+/** Baseline-to-baseline distance as a multiple of the caption height. */
+const LINE_SPACING_RATIO = 1.5
+
+/** Count with its noun, singular for one. */
+function counted({ count, noun }: { count: number; noun: string }): string {
+  if (count === 1) return `${count} ${noun}`
+  return `${count} ${noun}s`
+}
 
 /** The rendered board and its channel, rail, and distance selection. */
 type CopperScopeSnapshotOptions = Parameters<typeof scopeOptions>[0] & {
@@ -115,28 +126,34 @@ function caption({
   text,
   position,
   index,
+  fontSizeMm,
 }: {
   text: string
   position: Point
   index: number
+  fontSizeMm: number
 }): PcbFabricationNoteText {
   return {
     type: "pcb_fabrication_note_text",
     pcb_fabrication_note_text_id: `scope_caption_${index}`,
     font: "tscircuit2024",
-    font_size: FONT_SIZE_MM,
+    font_size: fontSizeMm,
     text,
     layer: "top",
     anchor_position: {
       x: position.x,
-      y: position.y - index * LINE_SPACING_MM,
+      y: position.y - index * fontSizeMm * LINE_SPACING_RATIO,
     },
     anchor_alignment: "center",
     color: GAP_COLOR,
   }
 }
 
-/** Snapshot the production scope and the exact per-feature bounds used to select it. */
+/**
+ * Snapshot the production scope and the exact per-feature bounds used to select it.
+ * Mint is the channel, blue extracted copper, amber nearby rail traces, grey dropped
+ * copper; dashed outlines are the nearby gap around the channel.
+ */
 export function expectCopperScopeSnapshot({
   testPath,
   ...options
@@ -235,10 +252,16 @@ export function expectCopperScopeSnapshot({
       }),
     ]
   })
-  const captions = [
-    `Extracted ${extractedTraces.size} traces, ${extractedVias.size} vias | rails ${railTraces.size} | gap ${nearbyGapMm} mm`,
-    "Mint channel | blue extracted | amber rail | grey dropped | dashed gap",
-  ].map((text, index) =>
+  const lines = [
+    `Extracted ${counted({ count: extractedTraces.size, noun: "trace" })}, ${counted({ count: extractedVias.size, noun: "via" })}`,
+    `${counted({ count: railTraces.size, noun: "rail trace" })}, ${nearbyGapMm} mm gap`,
+  ]
+  const longest = Math.max(...lines.map((line) => line.length))
+  const fontSizeMm = Math.min(
+    board.height! * CAPTION_HEIGHT_RATIO,
+    (board.width! * CAPTION_WIDTH_RATIO) / (longest * CHARACTER_WIDTH_RATIO),
+  )
+  const captions = lines.map((text, index) =>
     caption({
       text,
       position: {
@@ -246,6 +269,7 @@ export function expectCopperScopeSnapshot({
         y: board.center.y + board.height! / 2 - TOP_MARGIN_MM,
       },
       index,
+      fontSizeMm,
     }),
   )
   const pcb = circuit.filter((record) => record.type !== "pcb_silkscreen_text")
