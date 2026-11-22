@@ -43,11 +43,11 @@ test("passive bridges extend a nearby signal but stop at supply and reference ne
   )
   const result = scopeFor({ circuit, referenceNet: "GND", railNets: ["VDD"] })
   assert.deepEqual(
-    result.retainedPcbTraceIds,
+    result.extractedPcbTraceIds,
     ["SELECTED", "NEAR", "FAR", "LAST"].map(
       (name) => scopeTrace({ circuit, name }).pcb_trace_id,
     ),
   )
   for (const name of ["GND", "VDD"])
-    assert(!result.retainedSourceIds.includes(scopeNet({ circuit, name })))
+    assert(!result.extractedSourceIds.includes(scopeNet({ circuit, name })))
 })
