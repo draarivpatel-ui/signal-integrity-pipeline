@@ -1,4 +1,3 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import type { SimulationVoltageSource } from "circuit-json"
 import {
   type ConnectivityMap,
@@ -7,6 +6,7 @@ import {
 import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
 import { type InspectedPin, referenceVoltages } from "../buffers"
 import { type SimulationModeling, voltageSourceTerminals } from "../simulation"
+import { circuitJsonDb } from "./circuit-json-db"
 
 /** Allowed difference between typical IBIS voltages on one reference net. */
 const REFERENCE_VOLTAGE_TOLERANCE_V = 1e-8
@@ -43,21 +43,21 @@ interface RetainedSupplies {
 
 /** Include sources reachable from the retained nets without traversing the shared reference. */
 function retainedVoltageSources({
-  circuit,
+  voltageSources,
   connectivity,
   pins,
   retained,
   reference,
-}: ChannelSimulationSupplyOptions): RetainedSupplies {
-  const candidates = cju([...circuit])
-    .simulation_voltage_source.list()
-    .map((source) => {
-      const terminals = voltageSourceTerminals(source)
-      const nets = terminals
-        .filter((id) => id !== undefined)
-        .map((id) => netKey({ connectivity, id }))
-      return { source, nets }
-    })
+}: Omit<ChannelSimulationSupplyOptions, "circuit"> & {
+  voltageSources: SimulationVoltageSource[]
+}): RetainedSupplies {
+  const candidates = voltageSources.map((source) => {
+    const terminals = voltageSourceTerminals(source)
+    const nets = terminals
+      .filter((id) => id !== undefined)
+      .map((id) => netKey({ connectivity, id }))
+    return { source, nets }
+  })
   const seeds = new Set([...retained].map((id) => netKey({ connectivity, id })))
   for (const pin of pins.values()) {
     for (const port of Object.values(pin.references)) {
@@ -94,7 +94,12 @@ export function withChannelSimulationSupplies(
   options: ChannelSimulationSupplyOptions,
 ): ChannelSimulationSupplies {
   const { circuit, connectivity, pins, reference } = options
-  const { sources, sourceNets } = retainedVoltageSources(options)
+  const db = circuitJsonDb(circuit)
+  const voltageSources = db.simulation_voltage_source.list()
+  const { sources, sourceNets } = retainedVoltageSources({
+    ...options,
+    voltageSources,
+  })
   const supplies: ChannelSimulationSupplies["supplies"] = []
   const ground = netKey({ connectivity, id: reference })
   const netVoltages = new Map<string, ReferenceBias>()
@@ -145,11 +150,11 @@ export function withChannelSimulationSupplies(
       voltageV: voltage,
     })
   }
+  const discardedSources = new Set<CircuitJson[number]>(
+    voltageSources.filter((source) => !sources.has(source)),
+  )
   return {
-    circuit: circuit.filter(
-      (record) =>
-        record.type !== "simulation_voltage_source" || sources.has(record),
-    ),
+    circuit: circuit.filter((record) => !discardedSources.has(record)),
     supplies,
   }
 }
