@@ -82,7 +82,7 @@ export class RouteSectionsSolver extends BaseSolver {
     this.stats = {
       routes: Math.min(
         this.iterations,
-        this.input.scope.retainedPcbTraceIds.length,
+        this.input.scope.extractedPcbTraceIds.length,
       ),
       wires: geometry.wires.length,
       slices: geometry.slices.length,

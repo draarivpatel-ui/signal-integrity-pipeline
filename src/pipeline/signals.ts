@@ -98,16 +98,16 @@ type RoutedLanes = {
   rejections: string[]
 }
 
-/** Audit only selected/nearby routed nets; unsupported neighbours remain visible. */
+/** Build lanes and report unsupported routed traces on the channel. */
 export function routedLanes({
   circuit,
-  scope,
+  channelPcbTraceIds,
   topology,
   driven,
   rails,
 }: {
   circuit: CircuitJson
-  scope: CopperScope
+  channelPcbTraceIds: Readonly<CopperScope["channelPcbTraceIds"]>
   topology: Map<SourcePortId | SourceNetId, string>
   driven: Set<SourcePortId>
   rails: Set<SourcePortId | SourceNetId>
@@ -122,11 +122,7 @@ export function routedLanes({
     const pcb = pcbTraces.filter(
       (route) => route.source_trace_id === trace.source_trace_id,
     )
-    if (
-      !pcb.some((route) =>
-        scope.retainedPcbTraceIds.includes(route.pcb_trace_id),
-      )
-    )
+    if (!pcb.some((route) => channelPcbTraceIds.includes(route.pcb_trace_id)))
       continue
     const members = [...ports, ...(trace.connected_source_net_ids ?? [])]
     if (members.some((port) => rails.has(port))) continue
@@ -519,8 +515,8 @@ function loadNodes({
   copperScope: CopperScope
   pins: PreparedBlock["pins"]
 }): LoadNodeIds {
-  const scoped = new Set(copperScope.retainedPcbTraceIds)
-  const railTraces = new Set(copperScope.railPcbTraceIds)
+  const scoped = new Set(copperScope.extractedPcbTraceIds)
+  const railTraces = new Set(copperScope.nearbyRailPcbTraceIds)
   const routed = new Set(
     circuit
       .filter((record) => record.type === "pcb_trace")
@@ -656,7 +652,7 @@ function prepareBlock({
     rails,
     distanceMm,
   })
-  const retained = new Set(copperScope.retainedSourceIds)
+  const retained = new Set(copperScope.extractedSourceIds)
   const ports = new Set([...retained].filter((port) => !rails.has(port)))
   for (const port of endpointIds) ports.add(port)
   const pins = inspectPins({ circuit, sources, ports })
@@ -695,13 +691,9 @@ function prepareBlock({
       `${label} is on the signal and has no supported SPICE or IBIS model.`,
     )
   }
-  const scopeForLanes = {
-    ...copperScope,
-    retainedPcbTraceIds: copperScope.selectedPcbTraceIds,
-  }
   const { lanes, rejections } = routedLanes({
     circuit,
-    scope: scopeForLanes,
+    channelPcbTraceIds: copperScope.channelPcbTraceIds,
     topology,
     driven: new Set(driven.keys()),
     rails,
@@ -727,7 +719,7 @@ function prepareBlock({
     copperScope,
     channelReference: { sourcePortId: reference },
   }
-  if (copperScope.retainedPcbViaIds.length && !stack.viaPlatingMm) {
+  if (copperScope.extractedPcbViaIds.length && !stack.viaPlatingMm) {
     throw new Error(
       "pcb_stackup must specify plated_hole_copper_thickness for routed vias",
     )

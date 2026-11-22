@@ -24,11 +24,11 @@ test("a selected physical via seeds proximity without a selected trace or pad", 
     </board>,
   )
   const result = scopeFor({ circuit, selectedNet: "CHANNEL" })
-  assert.deepEqual(result.selectedPcbTraceIds, [])
-  assert.deepEqual(result.retainedPcbTraceIds, [
+  assert.deepEqual(result.channelPcbTraceIds, [])
+  assert.deepEqual(result.extractedPcbTraceIds, [
     scopeTrace({ circuit, name: "NEAR" }).pcb_trace_id,
   ])
   const via = circuit.find((record) => record.type === "pcb_via")
   assert(via)
-  assert.deepEqual(result.retainedPcbViaIds, [via.pcb_via_id])
+  assert.deepEqual(result.extractedPcbViaIds, [via.pcb_via_id])
 })

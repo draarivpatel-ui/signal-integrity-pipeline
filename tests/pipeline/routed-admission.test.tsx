@@ -60,7 +60,7 @@ test("synthetic admission emits the board mappings and hashes the supplied bytes
     return { port: signal.name, from, to, sourceTraceId: trace.source_trace_id }
   })
   assert.deepEqual(plan.bindings.mappings, expectedMappings)
-  assert.equal(plan.sections.scope.selectedPcbTraceIds.length, 2)
+  assert.equal(plan.sections.scope.channelPcbTraceIds.length, 2)
   assert.deepEqual(
     artifacts.map((artifact) => artifact.path),
     ["admission.json"],
@@ -98,7 +98,7 @@ test.skipIf(skipVendorModel)(
     assert.deepEqual(plan.sections.scope, block.settings.copperScope)
     assert.deepEqual(plan.warnings, [])
     assert.equal(
-      solver.getOutput().value[0].sections.scope.selectedPcbTraceIds.length,
+      solver.getOutput().value[0].sections.scope.channelPcbTraceIds.length,
       2,
     )
     const drawing = solver.visualize()
@@ -195,7 +195,7 @@ test("all blocks and the manifest use the same captured inputs", async () => {
     ["TWO", "ALT"],
   )
   assert.deepEqual(
-    plans.map((plan) => plan.sections.scope.lateralDistanceMm),
+    plans.map((plan) => plan.sections.scope.nearbyGapMm),
     [1, 1],
   )
   assert.equal(
@@ -311,12 +311,12 @@ test("a routed receiver segment survives an ideal driver segment", async () => {
   })
   solver.solve()
   const [{ bindings, sections }] = solver.getOutput().value
-  const [traceId] = sections.scope.selectedPcbTraceIds
+  const [traceId] = sections.scope.channelPcbTraceIds
   const trace = circuitJson.find(
     (record) => record.type === "pcb_trace" && record.pcb_trace_id === traceId,
   )
   assert.ok(trace?.type === "pcb_trace" && trace.source_trace_id)
-  assert.equal(sections.scope.selectedPcbTraceIds.length, 1)
+  assert.equal(sections.scope.channelPcbTraceIds.length, 1)
   assert.deepEqual(
     bindings.mappings.map((mapping) => mapping.sourceTraceId),
     [trace.source_trace_id],
