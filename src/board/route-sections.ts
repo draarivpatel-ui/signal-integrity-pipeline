@@ -1,6 +1,6 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbPort } from "circuit-json"
-import { hypotenuse } from "../kernel"
+import { hypotenuse, type Snapshot } from "../kernel"
+import { circuitJsonDb } from "./circuit-json-db"
 import { polygonContains } from "./geometry/polygon"
 import { resolveRouteVias } from "./geometry/ports"
 import type { CopperScope } from "./geometry/scope"
@@ -22,7 +22,7 @@ import {
   simplifyRouteWires,
 } from "./route-simplify"
 import { unionRouteWires } from "./route-union"
-import type { CircuitJson, LayerRef } from "./schema"
+import type { CircuitJsonSnapshot, LayerRef } from "./schema"
 import { type BoardStackup, stackupFromCircuitJson } from "./stackup"
 
 /** Millimeter tolerance for matching ports, wire ends, via contacts and lateral joins. */
@@ -122,7 +122,7 @@ export function routePosition({
   wire,
   position,
 }: {
-  wire: RouteWire
+  wire: Snapshot<RouteWire>
   position: number
 }): RouteXY {
   return [
@@ -132,7 +132,7 @@ export function routePosition({
 }
 
 /** Check whether two physical contact positions coincide within the route tolerance. */
-function sameContact(a: RouteXY, b: RouteXY): boolean {
+function sameContact(a: Snapshot<RouteXY>, b: Snapshot<RouteXY>): boolean {
   return hypotenuse(a[0] - b[0], a[1] - b[1]) < CONTACT_TOLERANCE_MM
 }
 
@@ -144,7 +144,7 @@ function portTouches({
 }: {
   port: PcbPort
   layer: LayerRef
-  point: RouteXY
+  point: Snapshot<RouteXY>
 }): boolean {
   return port.layers.includes(layer) && sameContact([port.x, port.y], point)
 }
@@ -156,11 +156,11 @@ export function routeContactFrame({
   layer,
   point,
 }: {
-  geometry: SectionGeometry
-  scope: CopperScope
+  geometry: Snapshot<SectionGeometry>
+  scope: Snapshot<CopperScope>
   layer: LayerRef
-  point: RouteXY
-}): RouteWire | undefined {
+  point: Snapshot<RouteXY>
+}): Snapshot<RouteWire> | undefined {
   const direct = geometry.wires.find((wire) => {
     if (
       scope.nearbyRailPcbTraceIds.includes(wire.trace) ||
@@ -192,8 +192,8 @@ function pourEdgeGap({
   point,
   polygon,
 }: {
-  point: RouteXY
-  polygon: CopperPolygon
+  point: Snapshot<RouteXY>
+  polygon: Snapshot<CopperPolygon>
 }): number {
   const distances = polygon.flatMap((ring) =>
     ring.map((a, i) => {
@@ -215,8 +215,8 @@ export function routeReferences({
   wire,
   position,
 }: {
-  geometry: Pick<SectionGeometry, "stack" | "pours">
-  wire: RouteWire
+  geometry: Snapshot<Pick<SectionGeometry, "stack" | "pours">>
+  wire: Snapshot<RouteWire>
   position: number
 }): RouteReference[] {
   const point = routePosition({ wire, position })
@@ -321,7 +321,7 @@ function traceSections({
   trace,
 }: {
   firstWireId: number
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   trace: PcbTrace
 }): TraceSections {
   const viaContacts: ViaContact[] = []
@@ -380,7 +380,7 @@ function sliceParallelRoutes({
   scope,
 }: {
   geometry: SectionGeometry
-  scope: CopperScope
+  scope: Snapshot<CopperScope>
 }): RouteSlice[] {
   const slices: RouteSlice[] = []
   const groups = new Map<WireDirectionKey, RouteWire[]>()
@@ -439,8 +439,8 @@ function sliceParallelRoutes({
 
 /** Board circuit and the copper to sweep into longitudinal sections. */
 interface RouteSectionOptions {
-  circuit: CircuitJson
-  scope: CopperScope
+  circuit: CircuitJsonSnapshot
+  scope: Snapshot<CopperScope>
 }
 
 /** Sweep exact parallel directions, partitioning at route ends, widths, layers and actual pour holes. */
@@ -456,7 +456,7 @@ export function* routeSectionSteps({
     pours: [],
     warnings: [],
   }
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   geometry.pours = db.pcb_copper_pour.list().flatMap((pour): RoutePour[] => {
     if (pour.shape !== "brep")
       throw new Error(
@@ -539,7 +539,7 @@ export function* routeSectionSteps({
 
 /** One candidate slice and the scope used to retain it. */
 interface SliceRegionOptions extends RouteSlice {
-  scope: CopperScope
+  scope: Snapshot<CopperScope>
 }
 
 /** Split a region at lateral gaps and keep groups with at least one signal wire. */

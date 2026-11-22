@@ -1,17 +1,16 @@
 import {
-  type CircuitJson,
+  type CircuitJsonSnapshot,
   type SimulationPcbTransientChannelSimulation,
-  type SimulationPcbTransientChannelSimulationId,
   validateCircuitRecords,
 } from "../board"
-import type { IbisSources } from "../buffers"
-import { safeId, snapshot } from "../kernel"
+import { type IbisSources, invalidIbisSource } from "../buffers"
+import { Diagnostic, type SafeId, safeId, snapshot } from "../kernel"
 import type { RoutedCompileOptions } from "../simulation"
 import { listChannelSimulations, validatedScopeDistanceMm } from "./signals"
 
 /** Board and model sources supplied to routed admission. */
 export interface RoutedAdmissionInput {
-  readonly circuitJson: CircuitJson
+  readonly circuitJson: CircuitJsonSnapshot
   readonly ibisSources: Readonly<IbisSources>
   readonly scopeDistanceMm?: number
   readonly materials?: RoutedCompileOptions["materials"]
@@ -31,12 +30,29 @@ class IbisModelBytes extends Uint8Array {
 function captureIbisSources(
   sources: Readonly<IbisSources>,
 ): Readonly<IbisSources> {
-  const ibisSources: IbisSources = Object.create(Object.getPrototypeOf(sources))
-  for (const [assetPath, source] of Object.entries(sources)) {
+  const prototype: unknown = sources && Object.getPrototypeOf(sources)
+  if (!sources || (prototype !== Object.prototype && prototype !== null))
+    throw new Diagnostic(
+      "buffers",
+      "ibis_asset",
+      "Expected a plain ibisSources dictionary",
+    )
+  const ibisSources: IbisSources = Object.create(prototype)
+  for (const assetPath of Object.keys(sources)) {
+    const source = sources[assetPath]
     if (typeof source === "string") {
       Object.defineProperty(ibisSources, assetPath, {
         enumerable: true,
         value: source,
+      })
+      continue
+    }
+    if (!(source instanceof Uint8Array)) {
+      Object.defineProperty(ibisSources, assetPath, {
+        enumerable: true,
+        get() {
+          return invalidIbisSource(assetPath)
+        },
       })
       continue
     }
@@ -54,7 +70,7 @@ function captureIbisSources(
 /** A named simulation declaration and its validated artifact ID. */
 export interface AdmittedChannelSimulation {
   channelSimulation: SimulationPcbTransientChannelSimulation
-  simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
+  simulationPcbTransientChannelSimulationId: SafeId
 }
 
 /** Validated search radius and ordered declarations after board admission. */

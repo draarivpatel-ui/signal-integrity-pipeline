@@ -11,11 +11,11 @@ import {
   type RoutedBindings,
 } from "../../src/simulation"
 import { vendorAvailable } from "../fixtures/vendor-models"
-import { routedProblem } from "../fixtures/routed-fixture"
+import { routedAdmissionInput } from "../fixtures/routed-fixture"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
-  const input = await routedProblem()
+  const input = await routedAdmissionInput()
   const admission = new RoutedAdmissionSolver(input)
   admission.solve()
   const plan = admission.getOutput().value[0]

@@ -31,7 +31,7 @@ import {
 } from "../fixtures/routed-deck"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
-import { routedProblem } from "../fixtures/routed-fixture"
+import { routedAdmissionInput } from "../fixtures/routed-fixture"
 
 const vendorModelSkip =
   !process.env.IBIS_MODEL_DIR &&
@@ -119,7 +119,7 @@ const synthetic: SolverContext = {
 test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
   "six flat stages visit every channelSimulation and produce deterministic artifacts",
   async () => {
-    const input = await routedProblem()
+    const input = await routedAdmissionInput()
     const solver = new RoutedPipelineSolver({ input, context: synthetic })
     assert.throws(() => solver.getOutput(), /incomplete/)
     await solver.solveAsync()
@@ -151,7 +151,10 @@ test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
     await repeat.solveAsync()
     assert.deepEqual(repeat.getOutput(), output)
     assert.ok(solver.visualize().lines!.length > 0)
-    const renamed = structuredClone(input)
+    const renamed = {
+      ...input,
+      circuitJson: JSON.parse(JSON.stringify(input.circuitJson)) as CircuitJson,
+    }
     for (const record of renamed.circuitJson) {
       if (
         record.type === "simulation_pcb_transient_channel_simulation" ||
@@ -242,7 +245,7 @@ type DriverWeight = [timeSeconds: number, weight: number]
 test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
   "driver lead-in fits the default capture",
   async () => {
-    const input = await routedProblem()
+    const input = await routedAdmissionInput()
     const solver = new RoutedPipelineSolver({ input, context: synthetic })
     solver.solveUntilStage("RouteTransientSolver")
     assert.equal(
