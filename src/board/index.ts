@@ -5,7 +5,7 @@
  * Imports: kernel.
  */
 
-export { circuitJsonDb } from "./circuit-json-db"
+export { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
 export {
   type ConnectivityMap,
   getSourcePortConnectivityMapFromCircuitJson,
