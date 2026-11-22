@@ -37,5 +37,5 @@ test("an unrelated through-pad route does not prevent copper screening", async (
   )
   const result = scopeFor({ circuit })
   assert.equal(result.selectedPcbTraceIds.length, 1)
-  assert.deepEqual(result.pcbTraceIds, result.selectedPcbTraceIds)
+  assert.deepEqual(result.retainedPcbTraceIds, result.selectedPcbTraceIds)
 })
