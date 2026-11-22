@@ -146,7 +146,7 @@ function splitSpicePins(source: string): string[] {
 }
 
 /** Read terminals from the first placed subcircuit header with a name and terminal field. */
-function placedSubcircuitPins(source: string): string[] | undefined {
+export function placedSubcircuitPins(source: string): string[] | undefined {
   for (
     let start = source.indexOf(".");
     start !== -1;

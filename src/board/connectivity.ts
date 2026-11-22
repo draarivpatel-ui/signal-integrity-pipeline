@@ -1,16 +1,23 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import type { SourceComponentBase } from "circuit-json"
-import type { ConnectivityMap } from "circuit-json-to-connectivity-map"
+import {
+  type ConnectivityMap,
+  getSourcePortConnectivityMapFromCircuitJson as getSourcePortConnectivity,
+} from "circuit-json-to-connectivity-map"
+import { circuitJsonDb } from "./circuit-json-db"
 import type { SourceNetId, SourcePortId } from "./ids"
-import type { CircuitJson } from "./schema"
+import type { CircuitJson, CircuitJsonSnapshot } from "./schema"
 
 /** The identifier of a source component in Circuit JSON. */
 type SourceComponentId = SourceComponentBase["source_component_id"]
 
-export {
-  type ConnectivityMap,
-  getSourcePortConnectivityMapFromCircuitJson,
-} from "circuit-json-to-connectivity-map"
+export type { ConnectivityMap } from "circuit-json-to-connectivity-map"
+
+/** Read source connectivity from a borrowed Circuit JSON record array. */
+export function getSourcePortConnectivityMapFromCircuitJson(
+  circuit: CircuitJsonSnapshot,
+): ConnectivityMap {
+  return getSourcePortConnectivity(circuit as CircuitJson)
+}
 
 /** Return the electrical net members, including the given ID even when isolated. */
 export function sourceNetMembers({
@@ -33,7 +40,7 @@ export type SourceNetMembers = Set<SourcePortId | SourceNetId>
 
 /** Collect source connectivity groups in the same order as the library's source map. */
 export function sourceConnections(
-  circuit: CircuitJson,
+  circuit: CircuitJsonSnapshot,
 ): SourceConnectionGroup[] {
   return circuit.flatMap((record) => {
     if (record.type === "source_trace") {
@@ -45,9 +52,11 @@ export function sourceConnections(
       ]
     }
     if (record.type === "source_component")
-      return record.internally_connected_source_port_ids ?? []
+      return (record.internally_connected_source_port_ids ?? []).map((ids) => [
+        ...ids,
+      ])
     if (record.type === "source_component_internal_connection")
-      return [record.source_port_ids]
+      return [[...record.source_port_ids]]
     return []
   })
 }
@@ -60,10 +69,10 @@ export function passiveBridges({
   circuit,
   excluded,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   excluded: ReadonlySet<SourcePortId>
 }): PassiveBridge[] {
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const ports = new Map<SourceComponentId, SourcePortId[]>()
   for (const port of db.source_port.list()) {
     if (port.source_component_id === undefined) continue

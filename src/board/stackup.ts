@@ -1,6 +1,5 @@
 import { type PcbBoard, pcb_stackup } from "circuit-json"
 import { circuitJsonDb } from "./circuit-json-db"
-
 import { fail } from "./diagnostics"
 import type { CircuitJsonSnapshot } from "./schema"
 
