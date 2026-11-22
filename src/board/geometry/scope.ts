@@ -351,8 +351,8 @@ export function channelCopperScope({
   const vias = circuit.filter((record) => record.type === "pcb_via")
   const pours = circuit.filter((record) => record.type === "pcb_copper_pour")
   const pcbPorts = circuit.filter((record) => record.type === "pcb_port")
-  const ports = new Map<PcbPortId, SourcePortId>(
-    pcbPorts.map((port) => [port.pcb_port_id, port.source_port_id]),
+  const sourcePortIdByPcbPortId = new Map<PcbPortId, SourcePortId>(
+    pcbPorts.map((pcbPort) => [pcbPort.pcb_port_id, pcbPort.source_port_id]),
   )
   const pads = circuit.filter(
     (record) =>
@@ -389,8 +389,10 @@ export function channelCopperScope({
   })
   const seeds = channelTraces.flatMap((trace) => boxes.get(trace.pcb_trace_id)!)
   for (const pad of pads) {
-    const sourcePort = pad.pcb_port_id && ports.get(pad.pcb_port_id)
-    if (!sourcePort || !channelSourceIds.has(sourcePort)) continue
+    if (pad.pcb_port_id === undefined) continue
+    const sourcePortId = sourcePortIdByPcbPortId.get(pad.pcb_port_id)
+    if (sourcePortId === undefined || !channelSourceIds.has(sourcePortId))
+      continue
     seeds.push(padBox({ pad, boardLayers }))
   }
   for (const via of vias) {
@@ -438,14 +440,15 @@ export function channelCopperScope({
     retain({ ids, copper: retainedCopper })
   }
   for (const pad of pads) {
-    const port = pad.pcb_port_id && ports.get(pad.pcb_port_id)
+    if (pad.pcb_port_id === undefined) continue
+    const sourcePortId = sourcePortIdByPcbPortId.get(pad.pcb_port_id)
     if (
-      !port ||
-      railIds.has(port) ||
+      sourcePortId === undefined ||
+      railIds.has(sourcePortId) ||
       !isNearby({ candidate: padBox({ pad, boardLayers }), proximity })
     )
       continue
-    retain({ ids: [port], copper: retainedCopper })
+    retain({ ids: [sourcePortId], copper: retainedCopper })
   }
   for (const { net, box } of signalPours) {
     if (isNearby({ candidate: box, proximity }))
