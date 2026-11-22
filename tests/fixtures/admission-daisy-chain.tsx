@@ -82,7 +82,38 @@ export function AdmissionDaisyChain({
       )}
       {placedLoad && (
         <>
-          <chip name="LOAD" pcbX={7} footprint="sot23">
+          <chip
+            name="LOAD"
+            pcbX={7}
+            footprint={
+              <footprint>
+                <smtpad
+                  portHints={["pin1"]}
+                  pcbX={0}
+                  pcbY={0.6}
+                  width={0.3}
+                  height={0.3}
+                  shape="rect"
+                />
+                <smtpad
+                  portHints={["pin2"]}
+                  pcbX={0.6}
+                  pcbY={0.6}
+                  width={0.3}
+                  height={0.3}
+                  shape="rect"
+                />
+                <smtpad
+                  portHints={["pin3"]}
+                  pcbX={0}
+                  pcbY={0}
+                  width={0.3}
+                  height={0.3}
+                  shape="rect"
+                />
+              </footprint>
+            }
+          >
             <spicemodel
               source={".subckt LOAD pin1 pin2\nR1 pin1 pin2 33\n.ends LOAD"}
             />
