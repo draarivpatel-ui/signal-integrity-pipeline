@@ -11,18 +11,18 @@ import { boardPictureView } from "../../src/board/board-picture"
 import { sha256 } from "../../src/kernel"
 import { formatSpiceVectors } from "../../src/observation"
 import {
-  RoutedPipelineSolver,
   type RoutedAdmissionInput,
+  RoutedPipelineSolver,
   type RoutedStageSolver,
   routedStages,
 } from "../../src/pipeline"
 import {
-  type ScopedRouteBindingsInput,
   RouteBindingsSolver,
   type RoutedBindings,
   type RoutedDeck,
   type RouteNetworkInput,
   RouteNetworkSolver,
+  type ScopedRouteBindingsInput,
 } from "../../src/simulation"
 import type { SolverContext } from "../../src/solver"
 import {
@@ -30,9 +30,9 @@ import {
   transientDurationSeconds,
   voltageNames,
 } from "../fixtures/routed-deck"
+import { routedProblem } from "../fixtures/routed-fixture"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
-import { routedProblem } from "../fixtures/routed-fixture"
 
 const pinnedDeck =
   "TSX two-trace deck pins coupled skin loss and transient vectors"
@@ -60,7 +60,7 @@ test.skipIf(!process.env.IBIS_MODEL_DIR)(pinnedDeck, async () => {
     stepSeconds: 1e-11,
   }
   const bindingsStage = solver.getSolver<
-    RoutedStageSolver<RouteBindingsInput, RoutedBindings>
+    RoutedStageSolver<ScopedRouteBindingsInput, RoutedBindings>
   >("RouteBindingsSolver")!
   const [[input]] = bindingsStage.getConstructorParams()
   const bindings = new RouteBindingsSolver({ ...input, options })
@@ -355,7 +355,7 @@ function assertDrawing({
 /** Load the synthetic two-trace input or the optional local differential model. */
 async function drawingInput(
   name: "two-trace" | "level1-differential",
-): Promise<RoutedProblem> {
+): Promise<RoutedAdmissionInput> {
   if (name === "two-trace")
     return (await routedVisualFixture()).root.inputProblem
   const modelDirectory = process.env.IBIS_MODEL_DIR
