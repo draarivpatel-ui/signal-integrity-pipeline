@@ -12,7 +12,7 @@ import {
   RouteNetworkSolver,
 } from "../../src/simulation"
 import { routedRequest } from "../../src/simulation/route-transient"
-import { routedProblem } from "../fixtures/routed-fixture"
+import { routedAdmissionInput } from "../fixtures/routed-fixture"
 import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
 import Single from "../fixtures/unit-single-ended"
 import { vendorAvailable } from "../fixtures/vendor-models"
@@ -26,7 +26,7 @@ let testNetwork: NetworkStage | undefined
 /** Assemble the network from the rendered fixture and the local vendor model. */
 async function routedNetwork(): Promise<NetworkStage> {
   if (testNetwork) return testNetwork
-  const input = await routedProblem()
+  const input = await routedAdmissionInput()
   const solverContext = {
     progress: (): void => undefined,
     runSolver: async (): Promise<never> => {

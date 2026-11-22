@@ -1,7 +1,7 @@
 // Topology/transient unit-test source only.
 import { simulation } from "@tscircuit/core"
 import type { ResistorProps } from "@tscircuit/props"
-import type React from "react"
+import { Fragment, type JSX } from "react"
 import { Reference, Transceiver } from "./signal-parts"
 
 /** Differential test rate in bits per second. */
@@ -14,10 +14,14 @@ const CAPTURE_BITS = 48
 export default function ({
   reversed = false,
   routedTermination = false,
+  short,
+  seriesPositive = false,
 }: {
   reversed?: boolean
   routedTermination?: boolean
-}): React.JSX.Element {
+  short?: "TX" | "RX" | "RTERM"
+  seriesPositive?: boolean
+}): JSX.Element {
   let positive = "A"
   let negative = "B"
   if (reversed) {
@@ -49,12 +53,16 @@ export default function ({
       <Transceiver name="TX" x={-5} />
       <Transceiver name="RX" x={5} />
       <Reference />
-      <trace
-        from=".TX > .A"
-        to=".RX > .A"
-        width={0.2}
-        pcbPath={[".TX > .A", ".RX > .A"]}
-      />
+      {seriesPositive ? (
+        <DualTerminatedPositiveLeg />
+      ) : (
+        <trace
+          from=".TX > .A"
+          to=".RX > .A"
+          width={0.2}
+          pcbPath={[".TX > .A", ".RX > .A"]}
+        />
+      )}
       <trace
         from=".TX > .B"
         to=".RX > .B"
@@ -103,6 +111,9 @@ export default function ({
           />
         </>
       )}
+      {short === "TX" && <trace from=".TX > .A" to=".TX > .B" />}
+      {short === "RX" && <trace from=".RX > .A" to=".RX > .B" />}
+      {short === "RTERM" && <trace from=".RTERM > .pin1" to=".RTERM > .pin2" />}
       <simulation.pcbtransientchannelsimulation
         name="RS485"
         bitRate={BIT_RATE_BPS}
@@ -115,5 +126,45 @@ export default function ({
         />
       </simulation.pcbtransientchannelsimulation>
     </board>
+  )
+}
+
+/** Give P a longer physical path than the source shortcut through both terminations. */
+function DualTerminatedPositiveLeg(): JSX.Element {
+  const footprints = [-3, -1, 1, 3]
+  const names = footprints.map((_, index) => `RS${index + 1}`)
+  const from = [".TX > .A", ...names.map((name) => `.${name} > .pin2`)]
+  const to = [...names.map((name) => `.${name} > .pin1`), ".RX > .A"]
+  return (
+    <>
+      <resistor
+        name="RDRV"
+        resistance="120"
+        footprint="0402"
+        pcbX={-7}
+        connections={{ pin1: ".TX > .A", pin2: ".TX > .B" }}
+      />
+      {names.map((name, index) => (
+        <Fragment key={name}>
+          <resistor
+            name={name}
+            resistance="33"
+            footprint="0402"
+            pcbX={footprints[index]}
+            pcbY={0.3}
+          />
+        </Fragment>
+      ))}
+      {from.map((pin, index) => (
+        <Fragment key={pin}>
+          <trace
+            from={pin}
+            to={to[index]}
+            width={0.15}
+            pcbPath={[pin, to[index]]}
+          />
+        </Fragment>
+      ))}
+    </>
   )
 }

@@ -33,11 +33,13 @@ export {
 } from "./route-transitions"
 export { routedControl } from "./routed-control"
 export type {
+  IdealRoutedJunction,
   RouteBindingsInput,
   RoutedBindings,
   RoutedCapture,
   RoutedCompileOptions,
   RoutedDeck,
+  RoutedTraceCut,
   RouteNetworkInput,
   ScopedRouteBindingsInput,
 } from "./routed-types"

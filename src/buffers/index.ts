@@ -20,8 +20,12 @@ export type {
   ReferencePorts,
   ReferenceVoltages,
 } from "./inspect"
-export { inspectPins, pinCapabilities, referenceVoltages } from "./inspect"
-export { loadModelSource, relativeFile } from "./source"
+export {
+  inspectPins,
+  pinCapabilities,
+  referenceVoltages,
+} from "./inspect"
+export { invalidIbisSource, loadModelSource, relativeFile } from "./source"
 export type { TextRange } from "./text"
 export type {
   AdmittedBuffers,
