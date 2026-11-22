@@ -541,7 +541,7 @@ test("via plating comes from the preset and must be in the stackup", async () =>
   assert.equal(stack.plated_hole_copper_thickness, 0.018)
   assert.ok(
     prepareBlocks({ circuit, sources: inverterSources })[0].settings.copperScope
-      .pcbViaIds.length >= 2,
+      .retainedPcbViaIds.length >= 2,
   )
   delete stack.plated_hole_copper_thickness
   assert.throws(
