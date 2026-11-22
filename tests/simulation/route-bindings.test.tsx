@@ -3,8 +3,8 @@ import assert from "node:assert/strict"
 import { RouteSectionsSolver } from "../../src/board"
 import { RoutedAdmissionSolver } from "../../src/pipeline"
 import { RouteBindingsSolver } from "../../src/simulation"
+import { routedProblem } from "../fixtures/routed-fixture"
 import { vendorAvailable } from "../fixtures/vendor-models"
-import { routedProblem } from "../support/routed-fixture"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
@@ -16,7 +16,7 @@ async function routeBindings(): Promise<RouteBindingsSolver> {
   sections.solve()
   return new RouteBindingsSolver({
     ...plan.bindings,
-    scope: sections.getOutput().value.scope,
+    copperScope: sections.getOutput().value.scope,
   })
 }
 
