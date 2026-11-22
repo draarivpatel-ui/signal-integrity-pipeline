@@ -4,45 +4,12 @@ import {
   scopeFor,
   scopeNet,
   scopeTrace,
-  Wire,
 } from "../../../fixtures/copper-scope-board"
+import { RailProximityBoard } from "../../../fixtures/copper-scope-cases"
 import { renderCoreSignals } from "../../../support/core-render"
 
 test("supply and reference traces stay local and only reference vias are kept board-wide", async () => {
-  const circuit = await renderCoreSignals(
-    <board width={24} height={24} routeRemaining={false} schematicDisabled>
-      <Wire name="SELECTED" y={0} extent={3} />
-      <Wire name="GROUND" y={-0.6} extent={3} />
-      <Wire name="SUPPLY" y={0.6} extent={3} />
-      <Wire name="FAR_GROUND" y={-8} extent={3} />
-      <Wire name="FAR_SUPPLY" y={8} extent={3} />
-      <trace from=".GROUND > .A" to="net.GND" />
-      <trace from=".FAR_GROUND > .A" to="net.GND" />
-      <trace from=".SUPPLY > .A" to="net.VDD" />
-      <trace from=".FAR_SUPPLY > .A" to="net.VDD" />
-      <via
-        pcbX={8}
-        pcbY={-8}
-        fromLayer="top"
-        toLayer="bottom"
-        connectsTo="net.GND"
-      />
-      <via
-        pcbX={8}
-        pcbY={8}
-        fromLayer="top"
-        toLayer="bottom"
-        connectsTo="net.VDD"
-      />
-      <via
-        pcbX={0}
-        pcbY={0.7}
-        fromLayer="top"
-        toLayer="bottom"
-        connectsTo="net.VDD"
-      />
-    </board>,
-  )
+  const circuit = await renderCoreSignals(<RailProximityBoard />)
   const ground = scopeNet({ circuit, name: "GND" })
   const supply = scopeNet({ circuit, name: "VDD" })
   const result = scopeFor({ circuit, referenceNet: "GND", railNets: ["VDD"] })
