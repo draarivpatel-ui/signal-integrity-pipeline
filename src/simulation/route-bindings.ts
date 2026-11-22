@@ -27,6 +27,7 @@ import {
   type ArtifactScope,
   type Produced,
   rootScope,
+  type Snapshot,
   snapshot,
 } from "../kernel"
 import { generalDeclarations, modelRunDefinition } from "./declarations"
@@ -283,8 +284,11 @@ export class RouteBindingsSolver extends BaseSolver {
 
 /** Circuit lookups and drawing scale shared by all component outlines. */
 interface PortOutlineContext {
-  pcbPorts: ReadonlyMap<PcbPort["source_port_id"], PcbPort>
-  components: ReadonlyMap<PcbComponent["pcb_component_id"], PcbComponent>
+  pcbPorts: ReadonlyMap<PcbPort["source_port_id"], Snapshot<PcbPort>>
+  components: ReadonlyMap<
+    PcbComponent["pcb_component_id"],
+    Snapshot<PcbComponent>
+  >
   unit: number
 }
 
