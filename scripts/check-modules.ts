@@ -125,13 +125,8 @@ function startsWithWord({
 type AssertionLiteral = string
 
 /** Extracts ASCII words from a test assertion's regular expression literal. */
-function collectWords({
-  text,
-  words,
-}: {
-  text: string
-  words: Set<AssertionLiteral>
-}): void {
+function assertionWords(text: string): AssertionLiterals {
+  const words: AssertionLiterals = new Set()
   let word = ""
   for (const char of text) {
     if (isWordCharacter(char)) {
@@ -144,6 +139,7 @@ function collectWords({
     }
   }
   if (word) words.add(word)
+  return words
 }
 /** Normalizes a native path to forward slashes so reports and comparisons match on every OS. */
 const toPosix = (p: string): string => p.split(sep).join("/")
@@ -294,37 +290,30 @@ type ActiveExemptions = {
   violations: Violation[]
 }
 
-/** True when an entry's expiry is valid and not yet passed; otherwise records an EX violation. */
-function exemptionIsLive({
+/** Report an invalid or expired exemption. */
+function exemptionViolation({
   expires,
   module,
   what,
   today,
-  violations,
 }: {
   expires: unknown
   module: string
   what: string
   today: string
-  violations: Violation[]
-}): boolean {
-  if (!isoDate(expires)) {
-    violations.push({
+}): Violation | undefined {
+  if (!isoDate(expires))
+    return {
       rule: "EX",
       module,
       message: `${what}: "expires" must be an ISO date (YYYY-MM-DD), got ${JSON.stringify(expires)}`,
-    })
-    return false
-  }
-  if (today > expires) {
-    violations.push({
+    }
+  if (today > expires)
+    return {
       rule: "EX",
       module,
       message: `${what} expired on ${expires}; finish the move and delete the entry from tools/exemptions.json`,
-    })
-    return false
-  }
-  return true
+    }
 }
 
 /** Validates expiry; returns the waivers that are still in force plus EX violations. */
@@ -338,29 +327,28 @@ export function activeExemptions({
   const violations: Violation[] = []
   const waivers = new Map<ModuleInfo["dir"], Set<WaiverRuleName>>()
   let legacy: string[] = []
-  if (
-    ex.legacy &&
-    exemptionIsLive({
+  if (ex.legacy) {
+    const violation = exemptionViolation({
       expires: ex.legacy.expires,
       module: "src",
       what: "legacy exemption",
       today,
-      violations,
     })
-  )
-    legacy = (ex.legacy.paths ?? []).map(toPosix)
+    if (violation) violations.push(violation)
+    else legacy = (ex.legacy.paths ?? []).map(toPosix)
+  }
   for (const [dir, w] of Object.entries(ex.modules ?? {})) {
     const what = `waiver of ${(w?.waive ?? []).join("/") || "nothing"}`
-    if (
-      !exemptionIsLive({
-        expires: w?.expires,
-        module: dir,
-        what,
-        today,
-        violations,
-      })
-    )
+    const violation = exemptionViolation({
+      expires: w?.expires,
+      module: dir,
+      what,
+      today,
+    })
+    if (violation) {
+      violations.push(violation)
       continue
+    }
     const bad = (w.waive ?? []).filter((r) => !["M1", "M2", "M3"].includes(r))
     if (bad.length)
       violations.push({
@@ -397,21 +385,14 @@ function isAssertion({
 }
 
 /** Records strings and words from regex literals in an assertion or table of assertion inputs. */
-function collectAssertionLiterals({
-  root,
-  found,
-}: {
-  root: ts.Node
-  found: Set<AssertionLiteral>
-}): void {
+function assertionLiterals(root: ts.Node): AssertionLiterals {
+  const found: AssertionLiterals = new Set()
   visit(root, (n) => {
-    if (ts.isStringLiteralLike(n)) {
-      found.add(n.text)
-      return
-    }
+    if (ts.isStringLiteralLike(n)) found.add(n.text)
     if (ts.isRegularExpressionLiteral(n))
-      collectWords({ text: n.text, words: found })
+      for (const word of assertionWords(n.text)) found.add(word)
   })
+  return found
 }
 
 /** Literals in assertion arguments or in the iterable of a table-driven assertion loop. */
@@ -427,14 +408,16 @@ function assertedLiterals(file: string): AssertionLiterals {
   visit(source, (node) => {
     if (ts.isCallExpression(node) && isAssertion({ node, source })) {
       for (const root of node.arguments)
-        collectAssertionLiterals({ root, found })
+        for (const literal of assertionLiterals(root)) found.add(literal)
     }
     if (!ts.isForOfStatement(node)) return
     let asserts = false
     visit(node.statement, (statement) => {
       if (isAssertion({ node: statement, source })) asserts = true
     })
-    if (asserts) collectAssertionLiterals({ root: node.expression, found })
+    if (asserts)
+      for (const literal of assertionLiterals(node.expression))
+        found.add(literal)
   })
   return found
 }
@@ -443,21 +426,6 @@ function assertedLiterals(file: string): AssertionLiterals {
 interface ModuleViolation {
   rule: "M1" | "M2" | "M3"
   message: string
-}
-
-/** Creates a reporter that applies the module's active waivers. */
-function createModuleViolationReporter({
-  module,
-  waived,
-  out,
-}: {
-  module: string
-  waived: ReadonlySet<WaiverRuleName>
-  out: Violation[]
-}): (violation: ModuleViolation) => void {
-  return ({ rule, message }) => {
-    if (!waived.has(rule)) out.push({ rule, module, message })
-  }
 }
 
 /** Checks one module against M1-M3, skipping rules its exemption waives. */
@@ -473,8 +441,7 @@ export function checkModule({
     today: options.today,
   })
   const waived = waivers.get(m.dir) ?? new Set<WaiverRuleName>()
-  const out: Violation[] = []
-  const push = createModuleViolationReporter({ module: m.dir, waived, out })
+  const out: ModuleViolation[] = []
 
   const calls = findDiagnosticsCalls(m.root)
   if (calls.length !== 1) {
@@ -482,18 +449,18 @@ export function checkModule({
     let locations = ""
     if (files.length) locations = ` (${files.join(", ")})`
     const expected = `expected exactly one diagnostics('${m.dir}', [...] as const) call`
-    push({
+    out.push({
       rule: "M1",
       message: `${expected}, found ${calls.length}${locations}`,
     })
   }
   for (const c of calls) {
     if (c.problem) {
-      push({ rule: "M1", message: `${toPosix(c.file)}: ${c.problem}` })
+      out.push({ rule: "M1", message: `${toPosix(c.file)}: ${c.problem}` })
       continue
     }
     if (c.domain !== m.dir)
-      push({
+      out.push({
         rule: "M1",
         message: `${toPosix(c.file)}: diagnostics domain '${c.domain}' must be the directory name '${m.dir}'`,
       })
@@ -501,22 +468,26 @@ export function checkModule({
 
   const tests = walk({ dir: m.tests, keep: isTestFile })
   if (!tests.length) {
-    push({ rule: "M2", message: `${toPosix(m.tests)}/ has no *.test.* file` })
-    return out
+    out.push({
+      rule: "M2",
+      message: `${toPosix(m.tests)}/ has no *.test.* file`,
+    })
   }
 
   const codes = [...new Set(calls.flatMap((c) => c.codes ?? []))]
-  if (codes.length) {
+  if (codes.length && tests.length) {
     const asserted = new Set<AssertionLiteral>()
     for (const t of tests) for (const s of assertedLiterals(t)) asserted.add(s)
     for (const code of codes)
       if (!asserted.has(code))
-        push({
+        out.push({
           rule: "M3",
           message: `declared code '${code}' is not asserted by any test in ${toPosix(m.tests)}/`,
         })
   }
   return out
+    .filter(({ rule }) => !waived.has(rule))
+    .map(({ rule, message }) => ({ rule, module: m.dir, message }))
 }
 
 interface ImportEdge {
