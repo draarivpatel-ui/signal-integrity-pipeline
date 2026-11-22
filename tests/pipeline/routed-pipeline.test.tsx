@@ -11,12 +11,12 @@ import { sha256 } from "../../src/kernel"
 import { formatSpiceVectors } from "../../src/observation"
 import {
   RoutedPipelineSolver,
-  type RoutedProblem,
+  type RoutedAdmissionInput,
   type RoutedStageSolver,
   routedStages,
 } from "../../src/pipeline"
 import {
-  type RouteBindingsInput,
+  type ScopedRouteBindingsInput,
   RouteBindingsSolver,
   type RoutedBindings,
   type RoutedDeck,
@@ -31,7 +31,7 @@ import {
 } from "../fixtures/routed-deck"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
-import { routedProblem } from "../support/routed-fixture"
+import { routedProblem } from "../fixtures/routed-fixture"
 
 const vendorModelSkip =
   !process.env.IBIS_MODEL_DIR &&
@@ -69,7 +69,7 @@ test.skipIf(Boolean(vendorModelSkip))(
       stepSeconds: 1e-11,
     }
     const bindingsStage = solver.getSolver<
-      RoutedStageSolver<RouteBindingsInput, RoutedBindings>
+      RoutedStageSolver<ScopedRouteBindingsInput, RoutedBindings>
     >("RouteBindingsSolver")!
     const [[input]] = bindingsStage.getConstructorParams()
     const bindings = new RouteBindingsSolver({ ...input, options })

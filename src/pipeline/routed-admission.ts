@@ -1,8 +1,18 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
-import type {
-  LaneMapping,
-  RouteSectionsInput,
-  SimulationPcbTransientChannelSimulationId,
+import type { GraphicsObject } from "graphics-debug"
+import {
+  type LaneMapping,
+  type RouteSectionsInput,
+  routeBoardBox,
+  routeBoardDrawing,
+  routeFailure,
+  routeLengths,
+  routeMarks,
+  routePortPoint,
+  routeStrip,
+  routeView,
+  type SimulationPcbTransientChannelSimulationId,
+  withRouteDrawing,
 } from "../board"
 import type { IbisSources } from "../buffers"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
@@ -178,5 +188,68 @@ export class RoutedAdmissionSolver extends BaseSolver {
     typeof RoutedAdmissionSolver
   > {
     return [this.input]
+  }
+  /**
+   * Scoped copper in net colours with drivers as dots and receivers as rings, and each net's routed length
+   * unrolled in the pane; a rejection writes one red reason.
+   */
+  override visualize(): GraphicsObject {
+    const plan = this.channelSimulationPlans.at(-1)
+    const circuit = this.input.circuitJson
+    let drawing = routeBoardDrawing({
+      circuit,
+      scope: plan?.sections.copperScope,
+    })
+    if (!plan) {
+      if (this.failed)
+        drawing.texts!.push(
+          ...routeFailure({
+            box: routeBoardBox(circuit),
+            message: this.error ?? "Invalid signal scope",
+          }),
+        )
+      return drawing
+    }
+    const view = routeView({ circuit, scope: plan.sections.copperScope })
+    drawing = withRouteDrawing({
+      drawing: drawing,
+      overlay: routeStrip({
+        pane: view.pane,
+        rows: routeLengths({ circuit, view }),
+      }),
+    })
+    drawing.polygons!.push(
+      ...routeMarks({
+        marks: plan.bindings.mappings.flatMap((mapping) =>
+          (
+            [
+              [mapping.from, true],
+              [mapping.to, false],
+            ] as const
+          ).flatMap(([id, driver]) => {
+            const point = routePortPoint({ circuit, sourcePortId: id })
+            if (!point) return []
+            const net = view.ports.get(id)
+            return [
+              {
+                point,
+                color: net?.color ?? "#ffffff",
+                driver,
+                label: net?.label,
+              },
+            ]
+          }),
+        ),
+        unit: view.unit,
+      }),
+    )
+    if (this.failed)
+      drawing.texts!.push(
+        ...routeFailure({
+          box: view.pane,
+          message: this.error ?? "Invalid signal scope",
+        }),
+      )
+    return drawing
   }
 }
