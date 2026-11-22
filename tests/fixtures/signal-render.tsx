@@ -62,7 +62,7 @@ export function prepareChannelSimulations({
 /** Binding inputs prepared by admission before a route binding solver allocates an artifact scope. */
 type AdmittedRouteBindings = Omit<RouteBindingsInput, "scope">
 
-/** The first admitted block's bindings, checked by the standalone admission solver. */
+/** The first admitted channel simulation's bindings, checked by the standalone admission solver. */
 export function admittedBindings({
   circuitJson,
   ibisSources,
