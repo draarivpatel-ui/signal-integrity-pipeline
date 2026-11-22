@@ -1,24 +1,24 @@
-import type { CircuitJson, CopperScope, LaneMapping } from "../board"
+import type { CircuitJson, LaneMapping } from "../board"
 import type { IbisSources } from "../buffers"
 import type { RouteMaterials } from "../extraction"
 import type { RunControls, SimulationModeling } from "./types"
 
 /** Timing and mesh settings shared by the routed simulation stages. */
 export interface RoutedCompileOptions {
-  riseSeconds: number
-  refinement: number
-  durationSeconds: number
-  stepSeconds: number
-  materials?: RouteMaterials
+  readonly riseSeconds: number
+  readonly refinement: number
+  readonly durationSeconds: number
+  readonly stepSeconds: number
+  readonly materials?: RouteMaterials
 }
-/** Geometry-independent data required to bind ports to routed IBIS buffers. */
+/** Board, receiver paths and physical trace cuts for routed IBIS binding. */
 export interface RouteBindingsInput {
-  circuitJson: CircuitJson
-  scope: CopperScope
-  mappings: LaneMapping[]
-  modeling: SimulationModeling
-  controls: Record<string, RunControls>
-  ibisSources: IbisSources
-  options: RoutedCompileOptions
-  artifactPrefix: string
+  readonly circuitJson: CircuitJson
+  readonly mappings: readonly LaneMapping[]
+  readonly routedTraceCuts: readonly LaneMapping[]
+  readonly modeling: Readonly<SimulationModeling>
+  readonly controls: Readonly<Record<string, RunControls>>
+  readonly ibisSources: Readonly<IbisSources>
+  readonly options: RoutedCompileOptions
+  readonly artifactPrefix: string
 }
