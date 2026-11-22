@@ -161,7 +161,7 @@ export function routeContactFrame({
   point: RouteXY
 }): RouteWire | undefined {
   const direct = geometry.wires.find((wire) => {
-    if (scope.railTraceIds.includes(wire.trace) || wire.layer !== layer)
+    if (scope.railPcbTraceIds.includes(wire.trace) || wire.layer !== layer)
       return false
     const joins = wire.joins?.map((join) => join.from) ?? []
     return [wire.a, wire.b, ...joins].some((endpoint) =>
@@ -170,7 +170,10 @@ export function routeContactFrame({
   })
   if (direct) return direct
   const contact = geometry.viaContacts.find((contact) => {
-    if (scope.railTraceIds.includes(contact.trace) || contact.layer !== layer)
+    if (
+      scope.railPcbTraceIds.includes(contact.trace) ||
+      contact.layer !== layer
+    )
       return false
     return sameContact(contact.point, point)
   })
@@ -395,7 +398,7 @@ function sliceParallelRoutes({
       const regions = new Map<ReferenceProfileKey, ReferenceRegion>()
       for (const wire of active) {
         const references = routeReferences({ geometry, wire, position: middle })
-        if (!references.length && scope.railTraceIds.includes(wire.trace))
+        if (!references.length && scope.railPcbTraceIds.includes(wire.trace))
           continue
         if (!references.length) {
           const point = routePosition({ wire, position: middle })
@@ -466,7 +469,7 @@ export function* routeSectionSteps({
   // Rail traces are retained as AC-ground electrodes by the extraction caller; they need no longitudinal dynamics.
   const traces = circuit.filter((record) => record.type === "pcb_trace")
   for (const trace of traces) {
-    if (!scope.pcbTraceIds.includes(trace.pcb_trace_id)) continue
+    if (!scope.retainedPcbTraceIds.includes(trace.pcb_trace_id)) continue
     appendRoute({ geometry, circuit, trace })
     yield geometry
   }
@@ -535,7 +538,7 @@ function appendSignalSlice({
   scope,
   slices,
 }: SliceRegionOptions): void {
-  if (wires.every((wire) => scope.railTraceIds.includes(wire.trace))) return
+  if (wires.every((wire) => scope.railPcbTraceIds.includes(wire.trace))) return
   slices.push({ wires, start, end, references })
 }
 
