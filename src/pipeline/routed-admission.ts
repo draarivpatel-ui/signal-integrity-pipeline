@@ -1,337 +1,178 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
-import type { SourceTrace } from "circuit-json"
-import {
-  type CircuitJson,
-  getSourcePortConnectivityMapFromCircuitJson,
-  type LaneMapping,
-  passiveBridges,
-  type RouteSectionsInput,
-  type SimulationPcbDriverReceiverChannel,
-  type SourceNetId,
-  type SourcePortId,
-  sourceConnections,
-  validateCircuitRecords,
+import type {
+  LaneMapping,
+  RouteSectionsInput,
+  SimulationPcbTransientChannelSimulationId,
 } from "../board"
-import { edgeDurationSeconds, type IbisSources } from "../buffers"
+import type { IbisSources } from "../buffers"
+import { type Produced, rootScope, sha256, snapshot } from "../kernel"
+import type { RouteBindingsInput } from "../simulation"
+import type { RoutedLane } from "./modeling"
 import {
-  type Produced,
-  rootScope,
-  type SafeId,
-  safeId,
-  sha256,
-  snapshot,
-} from "../kernel"
-import type { RouteBindingsInput, RoutedCompileOptions } from "../simulation"
-import { collectRailIds } from "./signal-pins"
-import {
-  endpointPorts,
-  listChannelSimulations,
-  type PreparedChannelSimulation,
-  prepareChannelSimulationById,
-} from "./signals"
-
-/** Default and maximum radius of the admitted copper scope, in millimeters. */
-const MAX_SCOPE_DISTANCE_MM = 32
-
-/** Circuit JSON experiment records store milliseconds and routed stages use seconds. */
-const MILLISECONDS_PER_SECOND = 1000
+  type AdmittedBoard,
+  type AdmittedChannelSimulation,
+  admitBoard,
+  captureRoutedAdmissionInput,
+  type RoutedAdmissionInput,
+} from "./routed-admission-input"
+import { routedReceiverMappings } from "./routed-receiver-paths"
+import { compareNames, prepareChannelSimulation } from "./signals"
 
 /** Admission starts with the base route mesh resolution. */
 const BASE_REFINEMENT = 1
 
-/** Circuit and model bytes supplied to routed admission. */
-export interface RoutedProblem {
-  circuitJson: CircuitJson
-  ibisSources: IbisSources
-  scopeDistanceMm?: number
-  materials?: RoutedCompileOptions["materials"]
-}
+/** Admission has no warnings before the downstream compilation stages. */
+const ADMISSION_WARNINGS: readonly string[] = Object.freeze([])
+
 /** Frozen section and binding inputs for one admitted transient channel simulation. */
 export interface RoutedChannelSimulationPlan {
-  id: SafeId
-  name: string
-  sections: RouteSectionsInput
-  bindings: Omit<RouteBindingsInput, "scope">
-  warnings: string[]
+  readonly simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
+  readonly name: string
+  readonly sections: RouteSectionsInput
+  readonly bindings: RouteBindingsInput
+  readonly warnings: readonly string[]
 }
-/** A source port or a named net participating in a receiver path. */
-type SourceId = SourcePortId | SourceNetId
-type SourceTraceId = SourceTrace["source_trace_id"]
 
-/** Ordered routed trace identifiers along a receiver path. */
-type PathTraceIds = SourceTraceId[]
+/** The completed channel plans and their admission manifest. */
+type RoutedAdmissionOutput = Produced<readonly RoutedChannelSimulationPlan[]>
 
-/** Validated channel simulation IDs in board order. */
-type RoutedChannelSimulationIds = SafeId[]
-
-/** Immutable IBIS text keyed by the declared asset path. */
-type ModelSourceText = Record<string, string>
-
-/** One declared asset path and its SHA-256 digest. */
-type ModelHash = [path: string, sha256: string]
-
-/** Endpoints of the routed traces that sectioning must physically contact. */
-type RequiredSourcePortIds = RouteSectionsInput["requiredSourcePortIds"]
-
-/** A path edge and its optional extracted source trace. */
-interface RouteConnection {
-  to: SourceId
-  sourceTraceId?: SourceTraceId
-}
-/** Source adjacency retaining edge order and routed trace labels. */
-type RouteConnections = Map<SourceId, RouteConnection[]>
-
-/** Undirected source connection, optionally carried by an extracted trace. */
-type RouteEdge = RouteConnection & { from: SourceId }
-
-/** Build the validated source topology, excluding reference rails and labeling routed traces. */
-function channelSimulationRouteConnections({
-  circuit,
-  pins,
-  settings,
-}: PreparedChannelSimulation): RouteConnections {
-  const connections: RouteConnections = new Map()
-  if (!settings.lanes.length) return connections
-  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const rails = collectRailIds({ circuit, connectivity, pins })
-  const edges: RouteEdge[] = []
-  // Visit routed parallels first when a source trace also declares the same connection.
-  for (const lane of settings.lanes) {
-    const { from, to, sourceTraceId } = lane
-    if (!from.sourcePortId || !to.sourcePortId || !sourceTraceId) continue
-    edges.push({
-      from: from.sourcePortId,
-      to: to.sourcePortId,
-      sourceTraceId,
-    })
+/** Take the physical port pair from each cut, including loads beyond the receivers. */
+function routedTraceCut(lane: RoutedLane): LaneMapping {
+  return {
+    port: lane.port,
+    sourceTraceId: lane.sourceTraceId,
+    from: lane.from.sourcePortId,
+    to: lane.to.sourcePortId,
   }
-  for (const [from, ...targets] of [
-    ...sourceConnections(circuit),
-    ...passiveBridges({ circuit, excluded: rails }),
-  ]) {
-    if (rails.has(from)) continue
-    for (const to of targets) edges.push({ from, to })
-  }
-  for (const { from, to, sourceTraceId } of edges) {
-    for (const [a, b] of [
-      [from, to],
-      [to, from],
-    ]) {
-      const neighbors = connections.get(a) ?? []
-      neighbors.push({ to: b, sourceTraceId })
-      connections.set(a, neighbors)
-    }
-  }
-  return connections
 }
 
-/** Find a receiver path by visiting source nodes in breadth-first order. */
-function pathTraceIds({
-  connections,
-  from,
-  to,
-}: {
-  connections: RouteConnections
-  from: SourcePortId
-  to: SourcePortId
-}): PathTraceIds {
-  const paths = new Map<SourceId, PathTraceIds>([[from, []]])
-  for (const [node, traceIds] of paths) {
-    if (node === to) return traceIds
-    for (const neighbor of connections.get(node) ?? []) {
-      if (paths.has(neighbor.to)) continue
-      const trace = neighbor.sourceTraceId
-      if (trace) {
-        paths.set(neighbor.to, [...traceIds, trace])
-        continue
-      }
-      paths.set(neighbor.to, traceIds)
-    }
-  }
-  return []
-}
-
-/** Match each receiver leg with the extracted traces along the corresponding driver path. */
-function receiverMappings({
-  signal,
-  connections,
-}: {
-  signal: SimulationPcbDriverReceiverChannel
-  connections: RouteConnections
-}): LaneMapping[] {
-  const driverPorts = endpointPorts(signal.driver)
-  return signal.receivers.flatMap((receiver) =>
-    endpointPorts(receiver).flatMap((to, i) => {
-      const from = driverPorts[i]
-      const sourceTraceIds = pathTraceIds({ connections, from, to })
-      const [sourceTraceId] = sourceTraceIds
-      if (sourceTraceId === undefined) return []
-      const mapping: LaneMapping = {
-        port: signal.name,
-        from,
-        to,
-        sourceTraceId,
-      }
-      if (sourceTraceIds.length > 1) mapping.sourceTraceIds = sourceTraceIds
-      return [mapping]
-    }),
-  )
-}
-
-/** Copy IBIS UTF-8 bytes into immutable text without removing a BOM. */
-function modelSourceText(sources: IbisSources): ModelSourceText {
-  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })
-  return Object.fromEntries(
-    Object.entries(sources).map(([name, source]) => {
-      if (typeof source === "string") return [name, source]
-      return [name, decoder.decode(source)]
-    }),
-  )
-}
-
-/** Lower one admitted channel simulation into the routed stage inputs. */
+/** Lower the validated declaration into sectioning and binding inputs. */
 function planRoutedChannelSimulation({
   input,
-  id,
+  scopeDistanceMm,
+  admittedChannelSimulation,
 }: {
-  input: RoutedProblem
-  id: SafeId
+  input: RoutedAdmissionInput
+  scopeDistanceMm: number
+  admittedChannelSimulation: AdmittedChannelSimulation
 }): RoutedChannelSimulationPlan {
-  const prepared = prepareChannelSimulationById({
-    circuit: input.circuitJson,
+  const { channelSimulation, simulationPcbTransientChannelSimulationId } =
+    admittedChannelSimulation
+  const prepared = prepareChannelSimulation({
+    boardCircuitJson: input.circuitJson,
     sources: input.ibisSources,
-    simulationPcbTransientChannelSimulationId: id,
-    distanceMm: input.scopeDistanceMm ?? MAX_SCOPE_DISTANCE_MM,
+    channelSimulation,
+    distanceMm: scopeDistanceMm,
   })
-  const connections = channelSimulationRouteConnections(prepared)
-  const mappings = prepared.driverReceiverChannels.flatMap((signal) =>
-    receiverMappings({ signal, connections }),
-  )
-  const experiment = cju([...prepared.circuit]).simulation_experiment.getWhere(
-    {},
-  )
-  if (!experiment) throw new Error("Missing admitted experiment")
-  const { time_per_step: timePerStep } = experiment
-  if (
-    timePerStep === undefined ||
-    !Number.isFinite(timePerStep) ||
-    timePerStep <= 0
-  ) {
-    throw new Error(
-      "The admitted experiment requires a finite positive time_per_step",
-    )
-  }
-  const driverPorts = prepared.driverReceiverChannels.flatMap((signal) =>
-    endpointPorts(signal.driver),
-  )
-  const driverRiseSeconds = driverPorts.map((id) =>
-    edgeDurationSeconds(prepared.pins.get(id)!),
-  )
-  const options: RoutedCompileOptions = {
-    riseSeconds: Math.min(...driverRiseSeconds),
-    refinement: BASE_REFINEMENT,
-    stepSeconds: timePerStep / MILLISECONDS_PER_SECOND,
-    durationSeconds: prepared.durationSeconds,
-    materials: input.materials,
-  }
-  const artifactPrefix = `blocks/${id}`
+  const artifactPrefix = `channelSimulations/${simulationPcbTransientChannelSimulationId}`
   const circuitJson = snapshot(prepared.circuit)
   const modeling = snapshot(prepared.settings)
-  const requiredSourcePortIds: RequiredSourcePortIds = modeling.lanes.flatMap(
-    (lane) => [lane.from.sourcePortId!, lane.to.sourcePortId!],
-  )
-  Object.freeze(requiredSourcePortIds)
+  const routedTraceCuts = snapshot(modeling.lanes.map(routedTraceCut))
+  const requiredSourcePortIds = Object.freeze([
+    ...new Set(routedTraceCuts.flatMap(({ from, to }) => [from, to])),
+  ])
   return Object.freeze({
-    id,
-    name: prepared.channelSimulation.name ?? id,
-    warnings: snapshot(prepared.warnings ?? []),
+    simulationPcbTransientChannelSimulationId,
+    name: channelSimulation.name ?? simulationPcbTransientChannelSimulationId,
+    warnings: ADMISSION_WARNINGS,
     sections: Object.freeze({
       circuitJson,
-      scope: modeling.copperScope,
+      copperScope: modeling.copperScope,
       requiredSourcePortIds,
       artifactPrefix,
     }),
     bindings: Object.freeze({
       circuitJson,
-      mappings: snapshot(mappings),
+      mappings: snapshot(routedReceiverMappings(prepared)),
+      routedTraceCuts,
       modeling,
       controls: snapshot(prepared.controls),
       ibisSources: input.ibisSources,
-      options: Object.freeze(options),
+      options: Object.freeze({
+        riseSeconds: prepared.riseSeconds,
+        refinement: BASE_REFINEMENT,
+        stepSeconds: prepared.stepSeconds,
+        durationSeconds: prepared.durationSeconds,
+        materials: input.materials,
+      }),
       artifactPrefix,
     }),
   })
 }
 
-/** Root admission performs exactly one channel simulation's lowering per step. */
-export class RoutedAdmissionSolver extends BaseSolver {
-  private readonly input: RoutedProblem
-  private ids?: RoutedChannelSimulationIds
-  private readonly plans: RoutedChannelSimulationPlan[] = []
-  private output?: Produced<RoutedChannelSimulationPlan[]>
-  /** Capture a single board and model version for the whole admission run. */
-  constructor(input: RoutedProblem) {
-    super()
-    this.input = snapshot({
-      ...input,
-      ibisSources: modelSourceText(input.ibisSources),
-    })
-  }
-  /** Validate the shared inputs and collect the ordered channel simulation IDs on first use. */
-  private channelSimulationIds(): RoutedChannelSimulationIds {
-    if (this.ids) return this.ids
-    validateCircuitRecords(this.input.circuitJson)
-    this.ids = listChannelSimulations(this.input.circuitJson).map(
-      (channelSimulation) =>
-        safeId({
-          raw: channelSimulation.simulation_pcb_transient_channel_simulation_id,
-          field: "simulationPcbTransientChannelSimulationId",
-        }),
-    )
-    const distance = this.input.scopeDistanceMm ?? MAX_SCOPE_DISTANCE_MM
-    if (
-      !Number.isFinite(distance) ||
-      distance <= 0 ||
-      distance > MAX_SCOPE_DISTANCE_MM
-    ) {
-      throw new Error(
-        `Copper scope distance must be in (0,${MAX_SCOPE_DISTANCE_MM}] mm`,
-      )
-    }
-    return this.ids
-  }
-  /** Use shared channel simulation preparation for channel intent and model policy. */
-  override _step(): void {
-    const ids = this.channelSimulationIds()
-    const id = ids[this.plans.length]
-    if (id !== undefined)
-      this.plans.push(planRoutedChannelSimulation({ input: this.input, id }))
-    const selectedConductors = this.plans.reduce((count, plan) => {
-      return count + plan.sections.scope.channelPcbTraceIds.length
-    }, 0)
-    this.stats = { channelSimulations: this.plans.length, selectedConductors }
-    if (this.plans.length !== ids.length) return
-    const value = this.plans.slice()
-    Object.freeze(value)
-    const channelSimulations = value.map(({ id, name, warnings }) => ({
-      id,
+/** Publish the manifest and the completed plans as one immutable output. */
+function finalizeAdmission({
+  channelSimulationPlans,
+  ibisSources,
+}: {
+  channelSimulationPlans: readonly RoutedChannelSimulationPlan[]
+  ibisSources: Readonly<IbisSources>
+}): RoutedAdmissionOutput {
+  const channelSimulations = channelSimulationPlans.map(
+    ({ simulationPcbTransientChannelSimulationId, name, warnings }) => ({
+      id: simulationPcbTransientChannelSimulationId,
       name,
       warnings,
-    }))
-    const modelHashes = Object.entries(this.input.ibisSources).map(
-      ([name, bytes]): ModelHash => [name, sha256(bytes)],
-    )
-    const models = Object.fromEntries(modelHashes)
-    const artifact = rootScope("pipeline").json("admission.json", {
-      blocks: channelSimulations,
-      models,
+    }),
+  )
+  const assetPaths = Object.keys(ibisSources).sort((a, b) =>
+    compareNames({ a, b }),
+  )
+  const models = Object.fromEntries(
+    assetPaths.map((assetPath) => [assetPath, sha256(ibisSources[assetPath])]),
+  )
+  const artifact = rootScope("pipeline").json("admission.json", {
+    channelSimulations,
+    models,
+  })
+  return Object.freeze({
+    value: Object.freeze([...channelSimulationPlans]),
+    artifacts: Object.freeze([Object.freeze(artifact)]),
+  })
+}
+
+/** Root admission performs exactly one channel simulation's lowering per step. */
+export class RoutedAdmissionSolver extends BaseSolver {
+  private readonly input: RoutedAdmissionInput
+  private admittedBoard?: AdmittedBoard
+  private readonly channelSimulationPlans: RoutedChannelSimulationPlan[] = []
+  private channelPcbTraceCount = 0
+  private output?: RoutedAdmissionOutput
+  /** Capture a single board and model version for the whole admission run. */
+  constructor(input: RoutedAdmissionInput) {
+    super()
+    this.input = captureRoutedAdmissionInput(input)
+  }
+  /** Prepare the next channel simulation and finalize once all plans are ready. */
+  override _step(): void {
+    this.admittedBoard ??= admitBoard(this.input)
+    const { channelSimulations, scopeDistanceMm } = this.admittedBoard
+    const admittedChannelSimulation =
+      channelSimulations[this.channelSimulationPlans.length]
+    if (admittedChannelSimulation) {
+      const plan = planRoutedChannelSimulation({
+        input: this.input,
+        scopeDistanceMm,
+        admittedChannelSimulation,
+      })
+      this.channelSimulationPlans.push(plan)
+      this.channelPcbTraceCount +=
+        plan.sections.copperScope.channelPcbTraceIds.length
+    }
+    const channelSimulationCount = this.channelSimulationPlans.length
+    this.stats = {
+      channelSimulationCount,
+      channelPcbTraceCount: this.channelPcbTraceCount,
+    }
+    if (channelSimulationCount !== channelSimulations.length) return
+    this.output = finalizeAdmission({
+      channelSimulationPlans: this.channelSimulationPlans,
+      ibisSources: this.input.ibisSources,
     })
-    this.output = { value, artifacts: [artifact] }
     this.solved = true
   }
   /** No partially admitted channel simulation list escapes. */
-  override getOutput(): Produced<RoutedChannelSimulationPlan[]> {
+  override getOutput(): RoutedAdmissionOutput {
     if (!this.output) throw new Error("Routed admission is incomplete")
     return this.output
   }
