@@ -17,6 +17,7 @@ import type {
   LaneMapping,
   SourceNetId,
   SourcePortId,
+  SourceTraceId,
 } from "../board"
 import { selectPort, subcircuitTree } from "../board"
 import type { ModelRunDefinition } from "../buffers"
@@ -77,6 +78,7 @@ interface CircuitNodesInput {
   circuit: CircuitJson
   mappings: readonly LaneMapping[]
   routedTraceCuts?: readonly LaneMapping[]
+  additionalSourceTraceIds?: readonly SourceTraceId[]
   modeling: SimulationModeling
 }
 
@@ -180,6 +182,7 @@ export function circuitNodes({
   circuit,
   mappings,
   routedTraceCuts,
+  additionalSourceTraceIds = [],
   modeling,
 }: CircuitNodesInput): CircuitNodes {
   const parents: SourceParents = new Map()
@@ -190,11 +193,12 @@ export function circuitNodes({
       parents.set(element.source_net_id, element.source_net_id)
   }
   const traceCuts = routedTraceCuts ?? mappings
-  const channelTraces = new Set(
-    traceCuts.flatMap(
+  const channelTraces = new Set([
+    ...traceCuts.flatMap(
       (mapping) => mapping.sourceTraceIds ?? [mapping.sourceTraceId],
     ),
-  )
+    ...additionalSourceTraceIds,
+  ])
   const db = cju([...circuit])
   const traces = db.source_trace.list()
   const nets = db.source_net.list()
@@ -370,6 +374,7 @@ export function generalDeclarations({
   circuit,
   mappings,
   routedTraceCuts,
+  additionalSourceTraceIds,
   modeling,
   controls,
 }: CircuitNodesInput & {
@@ -417,7 +422,13 @@ export function generalDeclarations({
   }))
   if (!models.length)
     fail("ibis_model", "At least one serialized native IBIS model required")
-  const nodes = circuitNodes({ circuit, mappings, routedTraceCuts, modeling })
+  const nodes = circuitNodes({
+    circuit,
+    mappings,
+    routedTraceCuts,
+    additionalSourceTraceIds,
+    modeling,
+  })
   const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
   const sourceNets = new Set(
     db.source_net.list().map((net) => net.source_net_id),

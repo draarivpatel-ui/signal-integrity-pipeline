@@ -32,6 +32,11 @@ export interface RouteBindingsInput {
   readonly options: RoutedCompileOptions
   readonly artifactPrefix: string
 }
+/** Admitted binding inputs and the copper scope resolved by route sectioning. */
+export interface ScopedRouteBindingsInput extends RouteBindingsInput {
+  readonly copperScope: CopperScope
+}
+
 /** Compiled IBIS buffer data needed to wire a routed deck. */
 export type RouteBuffer = Pick<
   CompiledBuffer,
@@ -46,7 +51,7 @@ export type RouteBuffer = Pick<
 export interface RoutedBindings {
   circuitJson: CircuitJson
   scope: CopperScope
-  mappings: LaneMapping[]
+  mappings: readonly LaneMapping[]
   plan: SimulationPlan
   nodeMap: CircuitNodes["mapping"]
   groundSourcePortId: SourcePortId
