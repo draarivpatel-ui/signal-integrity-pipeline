@@ -6,6 +6,7 @@ import {
 } from "../board"
 import type { IbisSources } from "../buffers"
 import { safeId, snapshot } from "../kernel"
+import type { RoutedCompileOptions } from "../simulation"
 import { listChannelSimulations, validatedScopeDistanceMm } from "./signals"
 
 /** Board and model sources supplied to routed admission. */
@@ -13,6 +14,7 @@ export interface RoutedAdmissionInput {
   readonly circuitJson: CircuitJson
   readonly ibisSources: Readonly<IbisSources>
   readonly scopeDistanceMm?: number
+  readonly materials?: RoutedCompileOptions["materials"]
 }
 
 /** Capture original bytes without decoding and give readers copies of byte views. */
@@ -79,6 +81,7 @@ export function captureRoutedAdmissionInput(
   return Object.freeze({
     circuitJson: snapshot(input.circuitJson),
     scopeDistanceMm: input.scopeDistanceMm,
+    materials: snapshot(input.materials),
     ibisSources: captureIbisSources(input.ibisSources),
   })
 }
