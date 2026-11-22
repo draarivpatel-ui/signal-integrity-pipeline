@@ -7,7 +7,10 @@ import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import { routeTones } from "../../src/board"
 import { sha256 } from "../../src/kernel"
 import { RoutedAdmissionSolver } from "../../src/pipeline"
-import { prepareBlockById, signalBlocks } from "../../src/pipeline/signals"
+import {
+  listChannelSimulations,
+  prepareChannelSimulationById,
+} from "../../src/pipeline/signals"
 import { circuitNodes } from "../../src/simulation"
 import { AdmissionChannel } from "../fixtures/admission-channel"
 import {
@@ -39,8 +42,8 @@ test("synthetic admission emits the board mappings and hashes the supplied bytes
     value: [plan],
     artifacts,
   } = solver.getOutput()
-  const [block] = signalBlocks(circuitJson)
-  const id = block.simulation_pcb_transient_channel_simulation_id
+  const [channelSimulation] = listChannelSimulations(circuitJson)
+  const id = channelSimulation.simulation_pcb_transient_channel_simulation_id
   const signals = circuitJson.filter(
     (record) => record.type === "simulation_pcb_driver_receiver_channel",
   )
@@ -78,24 +81,28 @@ test("synthetic admission emits the board mappings and hashes the supplied bytes
 })
 
 test.skipIf(skipVendorModel)(
-  "vendor admission retains shared block lowering and warnings",
+  "vendor admission retains shared channelSimulation lowering and warnings",
   async () => {
     const input = await routedProblem()
-    const [id] = signalBlocks(input.circuitJson).map(
-      (block) => block.simulation_pcb_transient_channel_simulation_id,
+    const [id] = listChannelSimulations(input.circuitJson).map(
+      (channelSimulation) =>
+        channelSimulation.simulation_pcb_transient_channel_simulation_id,
     )
-    const block = prepareBlockById({
+    const channelSimulation = prepareChannelSimulationById({
       circuit: input.circuitJson,
       sources: input.ibisSources,
-      blockId: id,
+      simulationPcbTransientChannelSimulationId: id,
       distanceMm: input.scopeDistanceMm,
     })
     const solver = new RoutedAdmissionSolver(input)
     solver.step()
     assert.equal(solver.solved, true)
     const [plan] = solver.getOutput().value
-    assert.deepEqual(plan.sections.circuitJson, block.circuit)
-    assert.deepEqual(plan.sections.scope, block.settings.copperScope)
+    assert.deepEqual(plan.sections.circuitJson, channelSimulation.circuit)
+    assert.deepEqual(
+      plan.sections.scope,
+      channelSimulation.settings.copperScope,
+    )
     assert.deepEqual(plan.warnings, [])
     assert.equal(
       solver.getOutput().value[0].sections.scope.channelPcbTraceIds.length,
@@ -125,7 +132,7 @@ test.skipIf(skipVendorModel)(
   },
 )
 
-test("empty boards admit no fake blocks", () => {
+test("empty boards admit no fake channel simulations", () => {
   const solver = new RoutedAdmissionSolver({ circuitJson: [], ibisSources: {} })
   solver.solve()
   assert.deepEqual(solver.getOutput().value, [])
@@ -155,7 +162,7 @@ test("byte inputs retain the exact admitted model bytes", async () => {
   )
 })
 
-test("all blocks and the manifest use the same captured inputs", async () => {
+test("all channel simulations and the manifest use the same captured inputs", async () => {
   const board = TwoTraceBoard()
   const circuitJson = await renderCoreSignals(
     React.cloneElement(
@@ -179,7 +186,7 @@ test("all blocks and the manifest use the same captured inputs", async () => {
   solver.step()
   assert.equal(solver.solved, false)
   ibisSources[inverterModelPath] += "| Modified after the first step\n"
-  signalBlocks(circuitJson)[1].name = "Changed"
+  listChannelSimulations(circuitJson)[1].name = "Changed"
   input.scopeDistanceMm = 2
   solver.step()
   const {
@@ -204,14 +211,14 @@ test("all blocks and the manifest use the same captured inputs", async () => {
   )
 })
 
-test("an empty serialized block ID fails immediately", async () => {
-  // Simulate imported records where the block has no channel references to its ID.
+test("an empty serialized channel simulation ID fails immediately", async () => {
+  // Simulate imported records where the channel simulation has no channel references to its ID.
   const rendered = await renderCoreSignals(<TwoTraceBoard />)
   const circuitJson = rendered.filter(
     (record) => record.type !== "simulation_pcb_driver_receiver_channel",
   )
-  const [block] = signalBlocks(circuitJson)
-  block.simulation_pcb_transient_channel_simulation_id = ""
+  const [channelSimulation] = listChannelSimulations(circuitJson)
+  channelSimulation.simulation_pcb_transient_channel_simulation_id = ""
   const solver = new RoutedAdmissionSolver({ circuitJson, ibisSources: {} })
   assert.throws(() => solver.step(), { code: "simulation_id" })
 })
@@ -267,7 +274,7 @@ test("series resistor keeps both routed segments electrically distinct", async (
   const circuitJson = await renderCoreSignals(
     <AdmissionChannel route="series" />,
   )
-  signalBlocks(circuitJson)[0].allow_unrouted_traces = false
+  listChannelSimulations(circuitJson)[0].allow_unrouted_traces = false
   const solver = new RoutedAdmissionSolver({
     circuitJson,
     ibisSources: { [inverterModelPath]: routedVisualIbis },
@@ -349,7 +356,7 @@ test("two-trace TSX routed-admission visual SVG snapshot", async () => {
   })
 })
 
-test("rejected admission carries a visible red reason without inventing an admitted block", async () => {
+test("rejected admission carries a visible red reason without inventing an admitted channel simulation", async () => {
   const { root } = await routedVisualFixture()
   const solver = new RoutedAdmissionSolver({
     ...root.inputProblem,

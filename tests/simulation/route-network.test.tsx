@@ -18,7 +18,7 @@ import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 import { routedProblem } from "../support/routed-fixture"
 
-/** The network stage produces one routed deck per admitted block. */
+/** The network stage produces one routed deck per admitted channel simulation. */
 type NetworkStage = RoutedStageSolver<RouteNetworkInput, RoutedDeck>
 
 let testNetwork: NetworkStage | undefined

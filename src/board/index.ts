@@ -29,7 +29,7 @@ export type {
 } from "./geometry/types"
 export type {
   SignalEndpointPortIds,
-  SimulationBlockId,
+  SimulationPcbTransientChannelSimulationId,
   SourceNetId,
   SourcePortId,
 } from "./ids"
@@ -78,6 +78,7 @@ export {
   routeUnrolled,
   routeVia,
   routeView,
+  withRouteDrawing,
 } from "./route-visual"
 export type {
   CircuitJson,
