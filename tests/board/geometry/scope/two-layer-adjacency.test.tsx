@@ -27,7 +27,7 @@ test("top and bottom copper are adjacent on a two-layer board", async () => {
     ),
   )
   const scope = scopeFor({ circuit })
-  assert.deepEqual(scope.pcbTraceIds, [
+  assert.deepEqual(scope.retainedPcbTraceIds, [
     ...scope.selectedPcbTraceIds,
     bottom.pcb_trace_id,
   ])
