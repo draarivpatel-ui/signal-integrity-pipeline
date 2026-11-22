@@ -26,9 +26,9 @@ import type { RouteBindingsInput, RoutedCompileOptions } from "../simulation"
 import {
   collectRailIds,
   endpointPorts,
-  type PreparedBlock,
-  prepareBlockById,
-  signalBlocks,
+  listChannelSimulations,
+  type PreparedChannelSimulation,
+  prepareChannelSimulationById,
 } from "./signals"
 
 /** Default and maximum radius of the admitted copper scope, in millimeters. */
@@ -47,8 +47,8 @@ export interface RoutedProblem {
   scopeDistanceMm?: number
   materials?: RoutedCompileOptions["materials"]
 }
-/** Frozen section and binding inputs for one admitted transient block. */
-export interface RoutedBlockPlan {
+/** Frozen section and binding inputs for one admitted transient channel simulation. */
+export interface RoutedChannelSimulationPlan {
   id: SafeId
   name: string
   sections: RouteSectionsInput
@@ -62,8 +62,8 @@ type SourceTraceId = SourceTrace["source_trace_id"]
 /** Ordered routed trace identifiers along a receiver path. */
 type PathTraceIds = SourceTraceId[]
 
-/** Validated block IDs in board order. */
-type RoutedBlockIds = SafeId[]
+/** Validated channel simulation IDs in board order. */
+type RoutedChannelSimulationIds = SafeId[]
 
 /** Immutable IBIS text keyed by the declared asset path. */
 type ModelSourceText = Record<string, string>
@@ -82,42 +82,25 @@ interface RouteConnection {
 /** Source adjacency retaining edge order and routed trace labels. */
 type RouteConnections = Map<SourceId, RouteConnection[]>
 
-/** Connect two source nodes, marking edges that represent extracted copper. */
-function addRouteConnection({
-  connections,
-  from,
-  to,
-  sourceTraceId,
-}: RouteConnection & {
-  connections: RouteConnections
-  from: SourceId
-}): void {
-  for (const [a, b] of [
-    [from, to],
-    [to, from],
-  ]) {
-    const neighbors = connections.get(a) ?? []
-    neighbors.push({ to: b, sourceTraceId })
-    connections.set(a, neighbors)
-  }
-}
+/** Undirected source connection, optionally carried by an extracted trace. */
+type RouteEdge = RouteConnection & { from: SourceId }
 
 /** Build the validated source topology, excluding reference rails and labeling routed traces. */
-function blockRouteConnections({
+function channelSimulationRouteConnections({
   circuit,
   pins,
   settings,
-}: PreparedBlock): RouteConnections {
+}: PreparedChannelSimulation): RouteConnections {
   const connections: RouteConnections = new Map()
   if (!settings.lanes.length) return connections
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const rails = collectRailIds({ circuit, connectivity, pins })
+  const edges: RouteEdge[] = []
   // Visit routed parallels first when a source trace also declares the same connection.
   for (const lane of settings.lanes) {
     const { from, to, sourceTraceId } = lane
     if (!from.sourcePortId || !to.sourcePortId || !sourceTraceId) continue
-    addRouteConnection({
-      connections,
+    edges.push({
       from: from.sourcePortId,
       to: to.sourcePortId,
       sourceTraceId,
@@ -128,7 +111,17 @@ function blockRouteConnections({
     ...passiveBridges({ circuit, excluded: rails }),
   ]) {
     if (rails.has(from)) continue
-    for (const to of targets) addRouteConnection({ connections, from, to })
+    for (const to of targets) edges.push({ from, to })
+  }
+  for (const { from, to, sourceTraceId } of edges) {
+    for (const [a, b] of [
+      [from, to],
+      [to, from],
+    ]) {
+      const neighbors = connections.get(a) ?? []
+      neighbors.push({ to: b, sourceTraceId })
+      connections.set(a, neighbors)
+    }
   }
   return connections
 }
@@ -197,25 +190,27 @@ function modelSourceText(sources: IbisSources): ModelSourceText {
   )
 }
 
-/** Lower one admitted SI block into the routed stage inputs. */
-function planRoutedBlock({
+/** Lower one admitted channel simulation into the routed stage inputs. */
+function planRoutedChannelSimulation({
   input,
   id,
 }: {
   input: RoutedProblem
   id: SafeId
-}): RoutedBlockPlan {
-  const block = prepareBlockById({
+}): RoutedChannelSimulationPlan {
+  const prepared = prepareChannelSimulationById({
     circuit: input.circuitJson,
     sources: input.ibisSources,
-    blockId: id,
+    simulationPcbTransientChannelSimulationId: id,
     distanceMm: input.scopeDistanceMm ?? MAX_SCOPE_DISTANCE_MM,
   })
-  const connections = blockRouteConnections(block)
-  const mappings = block.signals.flatMap((signal) =>
+  const connections = channelSimulationRouteConnections(prepared)
+  const mappings = prepared.driverReceiverChannels.flatMap((signal) =>
     receiverMappings({ signal, connections }),
   )
-  const experiment = cju([...block.circuit]).simulation_experiment.getWhere({})
+  const experiment = cju([...prepared.circuit]).simulation_experiment.getWhere(
+    {},
+  )
   if (!experiment) throw new Error("Missing admitted experiment")
   const { time_per_step: timePerStep } = experiment
   if (
@@ -227,30 +222,30 @@ function planRoutedBlock({
       "The admitted experiment requires a finite positive time_per_step",
     )
   }
-  const driverPorts = block.signals.flatMap((signal) =>
+  const driverPorts = prepared.driverReceiverChannels.flatMap((signal) =>
     endpointPorts(signal.driver),
   )
   const driverRiseSeconds = driverPorts.map((id) =>
-    edgeDurationSeconds(block.pins.get(id)!),
+    edgeDurationSeconds(prepared.pins.get(id)!),
   )
   const options: RoutedCompileOptions = {
     riseSeconds: Math.min(...driverRiseSeconds),
     refinement: BASE_REFINEMENT,
     stepSeconds: timePerStep / MILLISECONDS_PER_SECOND,
-    durationSeconds: block.durationSeconds,
+    durationSeconds: prepared.durationSeconds,
     materials: input.materials,
   }
   const artifactPrefix = `blocks/${id}`
-  const circuitJson = snapshot(block.circuit)
-  const modeling = snapshot(block.settings)
+  const circuitJson = snapshot(prepared.circuit)
+  const modeling = snapshot(prepared.settings)
   const requiredSourcePortIds: RequiredSourcePortIds = modeling.lanes.flatMap(
     (lane) => [lane.from.sourcePortId!, lane.to.sourcePortId!],
   )
   Object.freeze(requiredSourcePortIds)
   return Object.freeze({
     id,
-    name: block.block.name ?? id,
-    warnings: snapshot(block.warnings ?? []),
+    name: prepared.channelSimulation.name ?? id,
+    warnings: snapshot(prepared.warnings ?? []),
     sections: Object.freeze({
       circuitJson,
       scope: modeling.copperScope,
@@ -261,7 +256,7 @@ function planRoutedBlock({
       circuitJson,
       mappings: snapshot(mappings),
       modeling,
-      controls: snapshot(block.controls),
+      controls: snapshot(prepared.controls),
       ibisSources: input.ibisSources,
       options: Object.freeze(options),
       artifactPrefix,
@@ -269,12 +264,12 @@ function planRoutedBlock({
   })
 }
 
-/** Root admission performs exactly one SI block's lowering per step. */
+/** Root admission performs exactly one channel simulation's lowering per step. */
 export class RoutedAdmissionSolver extends BaseSolver {
   private readonly input: RoutedProblem
-  private ids?: RoutedBlockIds
-  private readonly plans: RoutedBlockPlan[] = []
-  private output?: Produced<RoutedBlockPlan[]>
+  private ids?: RoutedChannelSimulationIds
+  private readonly plans: RoutedChannelSimulationPlan[] = []
+  private output?: Produced<RoutedChannelSimulationPlan[]>
   /** Capture a single board and model version for the whole admission run. */
   constructor(input: RoutedProblem) {
     super()
@@ -283,15 +278,16 @@ export class RoutedAdmissionSolver extends BaseSolver {
       ibisSources: modelSourceText(input.ibisSources),
     })
   }
-  /** Validate the shared inputs and collect the ordered block IDs on first use. */
-  private blockIds(): RoutedBlockIds {
+  /** Validate the shared inputs and collect the ordered channel simulation IDs on first use. */
+  private channelSimulationIds(): RoutedChannelSimulationIds {
     if (this.ids) return this.ids
     validateCircuitRecords(this.input.circuitJson)
-    this.ids = signalBlocks(this.input.circuitJson).map((block) =>
-      safeId({
-        raw: block.simulation_pcb_transient_channel_simulation_id,
-        field: "simulationPcbTransientChannelSimulationId",
-      }),
+    this.ids = listChannelSimulations(this.input.circuitJson).map(
+      (channelSimulation) =>
+        safeId({
+          raw: channelSimulation.simulation_pcb_transient_channel_simulation_id,
+          field: "simulationPcbTransientChannelSimulationId",
+        }),
     )
     const distance = this.input.scopeDistanceMm ?? MAX_SCOPE_DISTANCE_MM
     if (
@@ -305,20 +301,20 @@ export class RoutedAdmissionSolver extends BaseSolver {
     }
     return this.ids
   }
-  /** Use shared block preparation for channel intent and model policy. */
+  /** Use shared channel simulation preparation for channel intent and model policy. */
   override _step(): void {
-    const ids = this.blockIds()
+    const ids = this.channelSimulationIds()
     const id = ids[this.plans.length]
     if (id !== undefined)
-      this.plans.push(planRoutedBlock({ input: this.input, id }))
+      this.plans.push(planRoutedChannelSimulation({ input: this.input, id }))
     const selectedConductors = this.plans.reduce((count, plan) => {
       return count + plan.sections.scope.channelPcbTraceIds.length
     }, 0)
-    this.stats = { blocks: this.plans.length, selectedConductors }
+    this.stats = { channelSimulations: this.plans.length, selectedConductors }
     if (this.plans.length !== ids.length) return
     const value = this.plans.slice()
     Object.freeze(value)
-    const blocks = value.map(({ id, name, warnings }) => ({
+    const channelSimulations = value.map(({ id, name, warnings }) => ({
       id,
       name,
       warnings,
@@ -328,14 +324,14 @@ export class RoutedAdmissionSolver extends BaseSolver {
     )
     const models = Object.fromEntries(modelHashes)
     const artifact = rootScope("pipeline").json("admission.json", {
-      blocks,
+      blocks: channelSimulations,
       models,
     })
     this.output = { value, artifacts: [artifact] }
     this.solved = true
   }
-  /** No partially admitted block list escapes. */
-  override getOutput(): Produced<RoutedBlockPlan[]> {
+  /** No partially admitted channel simulation list escapes. */
+  override getOutput(): Produced<RoutedChannelSimulationPlan[]> {
     if (!this.output) throw new Error("Routed admission is incomplete")
     return this.output
   }

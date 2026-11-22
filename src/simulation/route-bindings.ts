@@ -61,9 +61,11 @@ export class RouteBindingsSolver extends BaseSolver {
       controls,
     })
     this.declarations = declarations
-    this.plan = declarations.plans[0]
-    this.plan.durationSeconds = options.durationSeconds
-    this.plan.maxStepSeconds = options.stepSeconds
+    this.plan = {
+      ...declarations.plans[0],
+      durationSeconds: options.durationSeconds,
+      maxStepSeconds: options.stepSeconds,
+    }
     this.electricalLines = electricalSources({
       circuit: circuitJson,
       modeling,
