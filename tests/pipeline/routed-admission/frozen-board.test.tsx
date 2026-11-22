@@ -1,0 +1,26 @@
+import { test } from "bun:test"
+import assert from "node:assert/strict"
+import { TwoTraceBoard } from "../../../examples/routed/two-trace-board"
+import { RoutedAdmissionSolver } from "../../../src/pipeline"
+import { inverterModelPath } from "../../fixtures/routed-fixture"
+import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
+import { renderCoreSignals } from "../../support/core-render"
+
+test("sectioning and binding share one frozen board", async () => {
+  const circuitJson = await renderCoreSignals(<TwoTraceBoard />)
+  const solver = new RoutedAdmissionSolver({
+    circuitJson,
+    ibisSources: { [inverterModelPath]: routedVisualIbis },
+  })
+  solver.solve()
+  const output = solver.getOutput()
+  const { value, artifacts } = output
+  const [plan] = value
+  assert.ok(plan.sections.circuitJson === plan.bindings.circuitJson)
+  assert.ok(Object.isFrozen(plan.sections.circuitJson))
+  assert.ok(Object.isFrozen(plan.sections.circuitJson[0]))
+  assert.ok(Object.isFrozen(value))
+  assert.ok(Object.isFrozen(output))
+  assert.ok(Object.isFrozen(artifacts))
+  assert.ok(Object.isFrozen(artifacts[0]))
+})

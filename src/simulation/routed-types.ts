@@ -17,26 +17,31 @@ import type {
 
 /** Timing and mesh settings shared by the routed simulation stages. */
 export interface RoutedCompileOptions {
-  riseSeconds: number
-  refinement: number
-  durationSeconds: number
-  stepSeconds: number
+  readonly riseSeconds: number
+  readonly refinement: number
+  readonly durationSeconds: number
+  readonly stepSeconds: number
   panels?: number
   currentToleranceA?: number
   cellsPerRise?: number
-  materials?: RouteMaterials
+  readonly materials?: RouteMaterials
 }
-/** Geometry-independent data required to bind ports to routed IBIS buffers. */
+/** Board, receiver paths and physical trace cuts for routed IBIS binding. */
 export interface RouteBindingsInput {
-  circuitJson: CircuitJson
-  scope: CopperScope
-  mappings: LaneMapping[]
-  modeling: SimulationModeling
-  controls: Record<string, RunControls>
-  ibisSources: IbisSources
-  options: RoutedCompileOptions
-  artifactPrefix: string
+  readonly circuitJson: CircuitJson
+  readonly mappings: readonly LaneMapping[]
+  readonly routedTraceCuts: readonly LaneMapping[]
+  readonly modeling: Readonly<SimulationModeling>
+  readonly controls: Readonly<Record<string, RunControls>>
+  readonly ibisSources: Readonly<IbisSources>
+  readonly options: RoutedCompileOptions
+  readonly artifactPrefix: string
 }
+/** Admitted binding inputs and the copper scope resolved by route sectioning. */
+export interface ScopedRouteBindingsInput extends RouteBindingsInput {
+  readonly copperScope: CopperScope
+}
+
 /** Compiled IBIS buffer data needed to wire a routed deck. */
 export type RouteBuffer = Pick<
   CompiledBuffer,
@@ -51,7 +56,7 @@ export type RouteBuffer = Pick<
 export interface RoutedBindings {
   circuitJson: CircuitJson
   scope: CopperScope
-  mappings: LaneMapping[]
+  mappings: readonly LaneMapping[]
   plan: SimulationPlan
   nodeMap: CircuitNodes["mapping"]
   groundSourcePortId: SourcePortId
@@ -67,7 +72,7 @@ export interface RouteNetworkInput {
   bindings: RoutedBindings
   materials: RouteMaterials
   options: RoutedCompileOptions
-  warnings: string[]
+  warnings: readonly string[]
   artifactPrefix: string
 }
 /** Executable SPICE input and evidence for one routed transient. */
