@@ -62,7 +62,7 @@ const MAX_DRIVER_NEIGHBORS = 1
 /** A linear junction can have one incoming and one outgoing connection. */
 const MAX_PATH_NEIGHBORS = 2
 
-/** Extend the source nets through series passives for the block's rail set. */
+/** Extend the source nets through series passives for the channel simulation's rail set. */
 export function signalTopology({
   circuit,
   rails,
@@ -89,16 +89,16 @@ function endpointPorts(
 function selectCopper({
   circuit,
   topology,
-  signals,
+  driverReceiverChannels,
 }: {
   circuit: CircuitJson
   topology: SignalTopology
-  signals: readonly SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
 }): SelectedCopper {
   const db = cju([...circuit])
   const { connectivity, rails } = topology
   const selected = new Set(
-    signals.flatMap(({ driver }) =>
+    driverReceiverChannels.flatMap(({ driver }) =>
       endpointPorts(driver).flatMap((memberId) => [
         ...sourceNetMembers({ connectivity, memberId }),
       ]),
@@ -155,15 +155,15 @@ function reachable({
 
 /** Find each differential leg before joining components across series passives. */
 function differentialLegs({
-  signals,
+  driverReceiverChannels,
   terminals,
   nets,
 }: {
-  signals: readonly SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
   terminals: CopperTerminals
   nets: CopperNets
 }): DifferentialCopper[] {
-  return signals.flatMap(({ driver, receivers }) => {
+  return driverReceiverChannels.flatMap(({ driver, receivers }) => {
     if ("source_port_id" in driver) return []
     const ends = [
       driver,
@@ -243,14 +243,14 @@ function portNames(circuit: CircuitJson): PortNames {
 
 /** Check linearity for routed drivers and enforce receiver coverage under strict routing. */
 function checkSignalRoutes({
-  signals,
+  driverReceiverChannels,
   graph,
   terminals,
   routed,
   names,
   allowUnroutedTraces,
 }: {
-  signals: readonly SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
   graph: CopperGraph
   terminals: CopperTerminals
   routed: ReadonlySet<CopperPointKey>
@@ -258,7 +258,7 @@ function checkSignalRoutes({
   allowUnroutedTraces: boolean
 }): void {
   const nets = copperNets(graph)
-  for (const { name, driver, receivers } of signals) {
+  for (const { name, driver, receivers } of driverReceiverChannels) {
     const drivers = endpointPorts(driver)
     const targets = receivers.map(endpointPorts)
     for (const [leg, port] of drivers.entries()) {
@@ -304,22 +304,22 @@ function checkSignalRoutes({
 export function validateSignalGraph({
   circuit,
   topology,
-  signals,
+  driverReceiverChannels,
   allowUnroutedTraces,
 }: {
   circuit: CircuitJson
   topology: SignalTopology
-  signals: readonly SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
   allowUnroutedTraces: boolean
 }): void {
-  const selected = selectCopper({ circuit, topology, signals })
+  const selected = selectCopper({ circuit, topology, driverReceiverChannels })
   const { graph, terminals, routed } = buildRoutedCopper({
     circuit,
     rails: topology.rails,
     ...selected,
   })
   const differential = differentialLegs({
-    signals,
+    driverReceiverChannels,
     terminals,
     nets: copperNets(graph),
   })
@@ -330,7 +330,7 @@ export function validateSignalGraph({
     terminals,
   })
   checkSignalRoutes({
-    signals,
+    driverReceiverChannels,
     graph: connected,
     terminals,
     routed,
