@@ -3,12 +3,12 @@ import assert from "node:assert/strict"
 import { RouteSectionsSolver } from "../../src/board"
 import { RoutedAdmissionSolver } from "../../src/pipeline"
 import { RouteBindingsSolver } from "../../src/simulation"
-import { routedProblem } from "../fixtures/routed-fixture"
+import { routedAdmissionInput } from "../fixtures/routed-fixture"
 import { vendorAvailable } from "../fixtures/vendor-models"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
-  const input = await routedProblem()
+  const input = await routedAdmissionInput()
   const admission = new RoutedAdmissionSolver(input)
   admission.solve()
   const plan = admission.getOutput().value[0]

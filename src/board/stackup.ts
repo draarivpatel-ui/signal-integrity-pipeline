@@ -1,7 +1,8 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import { type PcbBoard, pcb_stackup } from "circuit-json"
+import { circuitJsonDb } from "./circuit-json-db"
+
 import { fail } from "./diagnostics"
-import type { CircuitJson } from "./schema"
+import type { CircuitJsonSnapshot } from "./schema"
 
 /** Conductivity used for copper layers without a declared value, in siemens per metre. */
 export const defaultCopperConductivitySm = 5.8e7
@@ -34,8 +35,10 @@ export interface BoardStackup {
 }
 
 /** Public. Circuit JSON is top→bottom; solver z=0 is the upper face of bottom copper. */
-export function stackupFromCircuitJson(circuit: CircuitJson): BoardStackup {
-  const db = cju([...circuit])
+export function stackupFromCircuitJson(
+  circuit: CircuitJsonSnapshot,
+): BoardStackup {
+  const db = circuitJsonDb(circuit)
   const boards = db.pcb_board.list()
   const records = db.pcb_stackup.list()
   // Plain Error (no code), exactly as before the module split.

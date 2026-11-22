@@ -5,6 +5,7 @@
  * Imports: kernel.
  */
 
+export { circuitJsonDb } from "./circuit-json-db"
 export {
   type ConnectivityMap,
   getSourcePortConnectivityMapFromCircuitJson,
@@ -53,6 +54,7 @@ export {
 } from "./route-sections-solver"
 export type {
   CircuitJson,
+  CircuitJsonSnapshot,
   SimulationExperiment,
   SimulationIbisModel,
 } from "./schema"
