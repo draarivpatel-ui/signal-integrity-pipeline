@@ -2,7 +2,11 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { selectPackageModel } from "../../src/buffers/package-matrix"
 import type { PackageModel } from "../../src/buffers/package-model"
-import { vendorAvailable, vendorText } from "../fixtures/vendor-models"
+import {
+  loadVendorModelText,
+  vendorAvailable,
+  vendorModels,
+} from "../fixtures/vendor-models"
 
 const model: PackageModel = {
   name: "fixture",
@@ -208,7 +212,7 @@ test.skipIf(!vendorAvailable("sprm552c.ibs"))(am335xPackage, async () => {
   // A passive reciprocal lumped package (IBIS 7.x [Define Package Model]; Paul, Inductance: Loop and Partial, ch. 5):
   // L and C symmetric positive definite, every |k| = |M_ij|/sqrt(L_ii L_jj) < 1; R PSD; the Maxwell C has positive
   // diagonal, non-positive off-diagonal entries and non-negative row sums. Tolerances are floating point only.
-  const text = await vendorText("sprm552c.ibs")
+  const text = await loadVendorModelText(vendorModels.am335x)
   const model = parsePackageModel({ text, name: "am335x_zcz" })
   const selected = selectPackageModel({ model, pins: model.pins })
   const L = energyFacts(model.L)

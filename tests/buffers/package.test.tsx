@@ -101,6 +101,7 @@ async function fixture(
   const declarations = generalDeclarations({
     circuit: bindings.circuitJson,
     mappings: bindings.mappings,
+    routedTraceCuts: bindings.routedTraceCuts,
     modeling: bindings.modeling,
     controls: bindings.controls,
   })
