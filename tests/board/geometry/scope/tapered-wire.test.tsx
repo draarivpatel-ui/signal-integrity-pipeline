@@ -16,7 +16,9 @@ test("a tapered wire is admitted when its widest copper reaches the scope", asyn
     </board>,
   )
   const trace = scopeTrace({ circuit, name: "TAPER" })
-  assert(!scopeFor({ circuit }).pcbTraceIds.includes(trace.pcb_trace_id))
+  assert(
+    !scopeFor({ circuit }).retainedPcbTraceIds.includes(trace.pcb_trace_id),
+  )
   // Core renders the centerline at a constant width. Add the native taper metadata.
   const tapered = pcb_trace.parse({
     ...trace,
@@ -37,6 +39,8 @@ test("a tapered wire is admitted when its widest copper reaches the scope", asyn
     return record
   })
   assert(
-    scopeFor({ circuit: records }).pcbTraceIds.includes(trace.pcb_trace_id),
+    scopeFor({ circuit: records }).retainedPcbTraceIds.includes(
+      trace.pcb_trace_id,
+    ),
   )
 })

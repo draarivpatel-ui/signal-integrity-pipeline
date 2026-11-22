@@ -122,7 +122,11 @@ export function routedLanes({
     const pcb = pcbTraces.filter(
       (route) => route.source_trace_id === trace.source_trace_id,
     )
-    if (!pcb.some((route) => scope.pcbTraceIds.includes(route.pcb_trace_id)))
+    if (
+      !pcb.some((route) =>
+        scope.retainedPcbTraceIds.includes(route.pcb_trace_id),
+      )
+    )
       continue
     const members = [...ports, ...(trace.connected_source_net_ids ?? [])]
     if (members.some((port) => rails.has(port))) continue
@@ -515,8 +519,8 @@ function loadNodes({
   copperScope: CopperScope
   pins: PreparedBlock["pins"]
 }): LoadNodeIds {
-  const scoped = new Set(copperScope.pcbTraceIds)
-  const railTraces = new Set(copperScope.railTraceIds)
+  const scoped = new Set(copperScope.retainedPcbTraceIds)
+  const railTraces = new Set(copperScope.railPcbTraceIds)
   const routed = new Set(
     circuit
       .filter((record) => record.type === "pcb_trace")
@@ -693,7 +697,7 @@ function prepareBlock({
   }
   const scopeForLanes = {
     ...copperScope,
-    pcbTraceIds: copperScope.selectedPcbTraceIds,
+    retainedPcbTraceIds: copperScope.selectedPcbTraceIds,
   }
   const { lanes, rejections } = routedLanes({
     circuit,
@@ -723,7 +727,7 @@ function prepareBlock({
     copperScope,
     channelReference: { sourcePortId: reference },
   }
-  if (copperScope.pcbViaIds.length && !stack.viaPlatingMm) {
+  if (copperScope.retainedPcbViaIds.length && !stack.viaPlatingMm) {
     throw new Error(
       "pcb_stackup must specify plated_hole_copper_thickness for routed vias",
     )

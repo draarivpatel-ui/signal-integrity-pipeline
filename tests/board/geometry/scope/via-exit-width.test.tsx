@@ -25,5 +25,5 @@ test("copper screening includes the width of a wire leaving a via", async () => 
       )
     }),
   )
-  assert(scopeFor({ circuit }).pcbTraceIds.includes(fan.pcb_trace_id))
+  assert(scopeFor({ circuit }).retainedPcbTraceIds.includes(fan.pcb_trace_id))
 })
