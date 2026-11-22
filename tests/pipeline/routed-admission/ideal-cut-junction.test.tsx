@@ -20,11 +20,11 @@ test("an ideal wire can join successive cuts on one partial receiver path", asyn
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [junction] = bindings.idealRoutedJunctions
-  assert.ok(junction)
+  const [driverCut, receiverCut] = bindings.routedTraceCuts
+  assert.ok(driverCut && receiverCut)
   const { node } = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
-  const middleNode = node(junction.fromSourcePortId)
-  assert.equal(middleNode, node(junction.toSourcePortId))
+  const middleNode = node(driverCut.toSourcePortId)
+  assert.equal(middleNode, node(receiverCut.fromSourcePortId))
   assert.equal(bindings.mappings[1]?.sourceTraceIds?.length, 2)
   expectAdmissionPcbSnapshot({
     circuitJson,

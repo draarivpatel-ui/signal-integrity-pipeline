@@ -1,6 +1,7 @@
+import type { Snapshot } from "../kernel"
 import type { PcbTrace } from "circuit-json"
 import {
-  type CircuitJson,
+  type CircuitJsonSnapshot,
   type CircuitJsonDb,
   type CopperScope,
   circuitJsonDb,
@@ -23,7 +24,7 @@ import { withChannelSimulationSupplies } from "./supplies"
 
 /** Source component variants with a functional model type and component ID. */
 type SourceComponent = Extract<
-  CircuitJson[number],
+  CircuitJsonSnapshot[number],
   { type: "source_component" }
 >
 
@@ -44,7 +45,7 @@ function selectedIbisModel({
 }
 
 /** Map each IBIS record that needs a copy with selected endpoint models. */
-type IbisModelOverrides = Map<CircuitJson[number], SimulationIbisModel>
+type IbisModelOverrides = Map<CircuitJsonSnapshot[number], SimulationIbisModel>
 
 /** Collect model choices and prepare replacements for the matching IBIS records. */
 function ibisModelOverrides({
@@ -52,7 +53,7 @@ function ibisModelOverrides({
   driverReceiverChannels,
 }: {
   db: CircuitJsonDb
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
 }): IbisModelOverrides {
   const modelNameBySourcePortId = new Map<SourcePortId, string>()
   for (const signal of driverReceiverChannels) {
@@ -99,10 +100,10 @@ export function channelSimulationCircuit({
 }: {
   db: CircuitJsonDb
   channelSimulation: SimulationPcbTransientChannelSimulation
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
-}): CircuitJson {
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
+}): CircuitJsonSnapshot {
   const models = ibisModelOverrides({ db, driverReceiverChannels })
-  const partModelRecords = new Set<CircuitJson[number]>([
+  const partModelRecords = new Set<CircuitJsonSnapshot[number]>([
     ...db.simulation_ibis_model.list(),
     ...db.simulation_voltage_source.list(),
     ...db.simulation_spice_subcircuit.list(),
@@ -119,7 +120,7 @@ export function channelSimulationCircuit({
 }
 
 /** A routed signal component can use a built-in passive model. */
-function hasBuiltInPassiveModel(component: SourceComponent): boolean {
+function hasBuiltInPassiveModel(component: Snapshot<SourceComponent>): boolean {
   return ["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
     component.ftype,
   )
@@ -131,7 +132,7 @@ export function validateComponentModels({
   topology,
   pins,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   topology: ReadonlyMap<SourcePortId | SourceNetId, string>
   pins: ReadonlyMap<SourcePortId, InspectedPin>
 }): void {
@@ -159,7 +160,7 @@ export function validateComponentModels({
 
 /** Pruned circuit and inspected pins pointing to its updated model records. */
 interface PrunedIbisModels {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   pins: Map<SourcePortId, InspectedPin>
 }
 
@@ -200,18 +201,21 @@ export function withUsedIbisModels({
   circuit,
   pins,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   pins: Map<SourcePortId, InspectedPin>
 }): PrunedIbisModels {
   const db = circuitJsonDb(circuit)
-  const models = new Map<CircuitJson[number], SimulationIbisModel | undefined>()
+  const models = new Map<
+    CircuitJsonSnapshot[number],
+    SimulationIbisModel | undefined
+  >()
   for (const model of db.simulation_ibis_model.list()) {
     const used = [...pins.values()].filter((pin) => pin.model === model)
     if (used.length === 0) models.set(model, undefined)
     else models.set(model, prunedIbisModel({ model, usedPins: used }))
   }
   return {
-    circuit: circuit.flatMap((record): CircuitJson => {
+    circuit: circuit.flatMap((record): CircuitJsonSnapshot => {
       if (!models.has(record)) return [record]
       const model = models.get(record)
       if (model === undefined) return []
@@ -234,7 +238,7 @@ function routedLoadTraceIds({
   pcbTraces,
   copperScope,
 }: {
-  pcbTraces: PcbTrace[]
+  pcbTraces: readonly Snapshot<PcbTrace>[]
   copperScope: CopperScope
 }): RoutedLoadTraceIds {
   const scoped = new Set(copperScope.extractedPcbTraceIds)
@@ -304,7 +308,7 @@ function retainedPassiveComponents({
   retained,
   rails,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   copperScope: CopperScope
   pins: Map<SourcePortId, InspectedPin>
   retained: ReadonlySet<SourcePortId | SourceNetId>
@@ -331,7 +335,7 @@ function retainedPassiveComponents({
 
 /** Numerical settings and the pruned circuit with its supplies. */
 interface SuppliedSignalSettings {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   settings: NumericalSettings
 }
 

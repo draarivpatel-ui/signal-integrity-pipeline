@@ -3,7 +3,7 @@ import type { TraceProps } from "@tscircuit/props"
 import type React from "react"
 import { Inverter, Reference } from "./signal-parts"
 
-type Route = "series" | "unrouted" | "receiver-only"
+type Route = "series" | "unrouted" | "receiver-only" | "driver-only"
 
 /** A logical driver-to-receiver connection with optional series copper. */
 export function AdmissionChannel({
@@ -13,14 +13,20 @@ export function AdmissionChannel({
 }: {
   route: Route
   namedNets?: boolean
-  short?: "resistor" | "channel"
+  short?: "resistor" | "channel" | "junction"
 }): React.JSX.Element {
   const driver = ".TX > .Y"
   const receiver = ".RX > .A"
   const seriesInput = ".RS > .pin1"
   const seriesOutput = ".RS > .pin2"
   let driverPath: TraceProps["pcbPath"]
-  if (route === "series") driverPath = [driver, seriesInput]
+  if (route === "series" || route === "driver-only")
+    driverPath = [driver, seriesInput]
+  const join = ".JOIN > .A"
+  let receiverStart = seriesOutput
+  if (short === "junction") receiverStart = join
+  let receiverPath: TraceProps["pcbPath"]
+  if (route !== "driver-only") receiverPath = [receiverStart, receiver]
   return (
     <board
       width={18}
@@ -70,11 +76,18 @@ export function AdmissionChannel({
             pcbPath={driverPath}
           />
           <trace
-            from={seriesOutput}
+            from={receiverStart}
             to={receiver}
             width={0.2}
-            pcbPath={[seriesOutput, receiver]}
+            pcbPath={receiverPath}
           />
+        </>
+      )}
+      {short === "junction" && (
+        <>
+          <Inverter name="JOIN" x={2.5} y={0} driver={false} />
+          <trace from={seriesOutput} to={join} />
+          <trace from={seriesInput} to={join} />
         </>
       )}
       {short === "resistor" && <trace from={seriesInput} to={seriesOutput} />}
