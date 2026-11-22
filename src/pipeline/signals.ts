@@ -163,17 +163,22 @@ export function signalBlocks(
       `This board has ${blocks.length} ${element} blocks; give each a name.`,
     )
   }
-  const ids = new Set(
+  const simulationPcbTransientChannelSimulationIds = new Set(
     blocks.map((block) => block.simulation_pcb_transient_channel_simulation_id),
   )
-  if (ids.size !== blocks.length)
+  if (simulationPcbTransientChannelSimulationIds.size !== blocks.length)
     throw new Error(
       "Duplicate simulation_pcb_transient_channel_simulation identifier",
     )
   for (const signal of circuitJson.filter(
     (record) => record.type === "simulation_pcb_driver_receiver_channel",
   )) {
-    if (ids.has(signal.simulation_pcb_transient_channel_simulation_id)) continue
+    if (
+      simulationPcbTransientChannelSimulationIds.has(
+        signal.simulation_pcb_transient_channel_simulation_id,
+      )
+    )
+      continue
     throw new Error(`${signal.name}: unknown signal-integrity block`)
   }
   return blocks
@@ -600,7 +605,7 @@ function prepareBlock({
   sources: IbisSources
   distanceMm: number
 }): PreparedBlock {
-  const id = safeId({
+  const simulationPcbTransientChannelSimulationId = safeId({
     raw: block.simulation_pcb_transient_channel_simulation_id,
     field: "simulationPcbTransientChannelSimulationId",
   })
@@ -608,19 +613,23 @@ function prepareBlock({
     (record) => record.type === "simulation_pcb_driver_receiver_channel",
   )
   const signals = channels.filter(
-    (channel) => channel.simulation_pcb_transient_channel_simulation_id === id,
+    (channel) =>
+      channel.simulation_pcb_transient_channel_simulation_id ===
+      simulationPcbTransientChannelSimulationId,
   )
   signals.sort((a, b) => compareNames({ a: a.name, b: b.name }))
-  const names = new Set(signals.map((signal) => signal.name))
-  const ids = new Set(
+  const signalNames = new Set(signals.map((signal) => signal.name))
+  const simulationPcbDriverReceiverChannelIds = new Set(
     signals.map((signal) => signal.simulation_pcb_driver_receiver_channel_id),
   )
   if (
     !signals.length ||
-    names.size !== signals.length ||
-    ids.size !== signals.length
+    signalNames.size !== signals.length ||
+    simulationPcbDriverReceiverChannelIds.size !== signals.length
   ) {
-    throw new Error(`${block.name ?? id}: require distinct named signals`)
+    throw new Error(
+      `${block.name ?? simulationPcbTransientChannelSimulationId}: require distinct named signals`,
+    )
   }
   const durationSeconds = blockDurationSeconds({ block, signals })
   const records = input.filter((record) => {
@@ -757,7 +766,7 @@ function prepareBlock({
   })
   const controls = appendBlockControls({
     circuit,
-    id,
+    simulationPcbTransientChannelSimulationId,
     block,
     signals,
     pins,
@@ -770,7 +779,7 @@ function prepareBlock({
     block,
     signals,
     circuit,
-    controls: { [id]: controls },
+    controls: { [simulationPcbTransientChannelSimulationId]: controls },
     pins,
     settings,
     durationSeconds,
