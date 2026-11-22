@@ -20,10 +20,9 @@ import {
   type CopperGraph,
   type CopperPointKey,
   type CopperTerminals,
-  joinCopperPoints,
 } from "./topology-copper"
 
-/** The source grouping and the series connections permitted for this block's rails. */
+/** The source grouping and the series connections permitted for the channel simulation's rails. */
 interface SignalTopology {
   connectivity: ConnectivityMap
   bridges: PassiveBridge[]
@@ -188,7 +187,7 @@ function differentialLegs({
 }
 
 /** Add series connections through passives, leaving cross-leg loads outside the routed path. */
-function joinPassiveBridges({
+function withPassiveBridges({
   bridges,
   differential,
   graph,
@@ -198,7 +197,10 @@ function joinPassiveBridges({
   differential: DifferentialCopper[]
   graph: CopperGraph
   terminals: CopperTerminals
-}): void {
+}): CopperGraph {
+  const connected = Object.fromEntries(
+    Object.entries(graph).map(([key, neighbors]) => [key, new Set(neighbors)]),
+  )
   for (const [pinA, pinB] of bridges) {
     const first = terminals.get(pinA)
     const second = terminals.get(pinB)
@@ -213,10 +215,13 @@ function joinPassiveBridges({
           )
         )
           continue
-        joinCopperPoints({ graph, a, b })
+        if (a === b) continue
+        connected[a].add(b)
+        connected[b].add(a)
       }
     }
   }
+  return connected
 }
 
 /** Describe the component-bound ports admitted by channel endpoint resolution. */
@@ -318,7 +323,7 @@ export function validateSignalGraph({
     terminals,
     nets: copperNets(graph),
   })
-  joinPassiveBridges({
+  const connected = withPassiveBridges({
     bridges: topology.bridges,
     differential,
     graph,
@@ -326,7 +331,7 @@ export function validateSignalGraph({
   })
   checkSignalRoutes({
     signals,
-    graph,
+    graph: connected,
     terminals,
     routed,
     names: portNames(circuit),

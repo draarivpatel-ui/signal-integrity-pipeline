@@ -85,32 +85,22 @@ type SourceNodeId = SourcePortId | SourceNetId
 /** Representatives used to join source ports and nets before SPICE nodes are numbered. */
 type SourceParents = Map<SourceNodeId, SourceNodeId>
 
-/** Registers any source port or net that has no representative yet. */
-function addSourceNode({
-  parents,
-  id,
-}: {
-  parents: SourceParents
-  id: SourceNodeId
-}): void {
-  if (id && !parents.has(id)) parents.set(id, id)
-}
-
-/** Finds the representative of an existing port or net and compresses its path. */
+/** Finds the representative of an existing port or net. */
 function sourceRoot({
   parents,
   id,
 }: {
-  parents: SourceParents
+  parents: ReadonlyMap<SourceNodeId, SourceNodeId>
   id: SourceNodeId
 }): SourceNodeId {
-  const parent = parents.get(id)
-  if (parent === undefined)
-    fail("simulation_reference", `Unknown source port/net ${id}`)
-  if (parent === id) return id
-  const root = sourceRoot({ parents, id: parent })
-  parents.set(id, root)
-  return root
+  let current = id
+  for (;;) {
+    const parent = parents.get(current)
+    if (parent === undefined)
+      fail("simulation_reference", `Unknown source port/net ${current}`)
+    if (parent === current) return current
+    current = parent
+  }
 }
 
 /** A net record's representative after joining net-only traces across subcircuits. */
@@ -118,14 +108,15 @@ function netGroupRoot({
   netGroup,
   id,
 }: {
-  netGroup: Map<SourceNetId, SourceNetId>
+  netGroup: ReadonlyMap<SourceNetId, SourceNetId>
   id: SourceNetId
 }): SourceNetId {
-  const parent = netGroup.get(id) ?? id
-  if (parent === id) return id
-  const root = netGroupRoot({ netGroup, id: parent })
-  netGroup.set(id, root)
-  return root
+  let current = id
+  for (;;) {
+    const parent = netGroup.get(current)
+    if (parent === undefined || parent === current) return current
+    current = parent
+  }
 }
 
 /** Logical source nets attached to a physical port by single-port traces. */
@@ -141,7 +132,7 @@ function portNetBindings({
   port: SourcePortId
   traces: readonly SourceTrace[]
   channelTraces: ReadonlySet<SourceTrace["source_trace_id"]>
-  netGroup: Map<SourceNetId, SourceNetId>
+  netGroup: ReadonlyMap<SourceNetId, SourceNetId>
 }): PortNetBindings {
   const bindings = traces.filter(
     (trace) =>
@@ -160,12 +151,13 @@ function portNetBindings({
 function createCircuitNodeLookup({
   parents,
   splitNets,
-  names,
+  groundRoot,
 }: {
-  parents: SourceParents
+  parents: ReadonlyMap<SourceNodeId, SourceNodeId>
   splitNets: ReadonlySet<SourceNetId>
-  names: Map<SourceNodeId, string>
+  groundRoot: SourceNodeId
 }): CircuitNodes["node"] {
+  const names = new Map([[groundRoot, "0"]])
   return (id) => {
     if (splitNets.has(id))
       fail(
@@ -190,10 +182,10 @@ export function circuitNodes({
 }: CircuitNodesInput): CircuitNodes {
   const parents: SourceParents = new Map()
   for (const element of circuit) {
-    if (element.type === "source_port")
-      addSourceNode({ parents, id: element.source_port_id })
-    if (element.type === "source_net")
-      addSourceNode({ parents, id: element.source_net_id })
+    if (element.type === "source_port" && element.source_port_id)
+      parents.set(element.source_port_id, element.source_port_id)
+    if (element.type === "source_net" && element.source_net_id)
+      parents.set(element.source_net_id, element.source_net_id)
   }
   const channelTraces = new Set(
     mappings.flatMap(
@@ -278,7 +270,9 @@ export function circuitNodes({
         (id) => !splitNets.has(id),
       ),
     ]
-    for (const id of connected) addSourceNode({ parents, id })
+    for (const id of connected) {
+      if (id && !parents.has(id)) parents.set(id, id)
+    }
     for (const id of connected.slice(1)) {
       parents.set(
         sourceRoot({ parents, id }),
@@ -291,8 +285,7 @@ export function circuitNodes({
     selector: modeling.channelReference,
   }).source_port_id
   const groundRoot = sourceRoot({ parents, id: ground })
-  const names = new Map([[groundRoot, "0"]])
-  const node = createCircuitNodeLookup({ parents, splitNets, names })
+  const node = createCircuitNodeLookup({ parents, splitNets, groundRoot })
   const ids = [...parents.keys()].filter((id) => !splitNets.has(id))
   for (const id of ids) node(id)
   const endpoints = mappings.flatMap((mapping) => [
