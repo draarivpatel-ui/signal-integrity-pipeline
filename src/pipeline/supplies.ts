@@ -3,7 +3,7 @@ import {
   type ConnectivityMap,
   findConnectedNetworks,
 } from "circuit-json-to-connectivity-map"
-import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
+import type { CircuitJsonSnapshot, SourceNetId, SourcePortId } from "../board"
 import { circuitJsonDb } from "../board"
 import { type InspectedPin, referenceVoltages } from "../buffers"
 import { type SimulationModeling, voltageSourceTerminals } from "../simulation"
@@ -17,7 +17,7 @@ interface ReferenceBias {
 }
 
 interface ChannelSimulationSupplyOptions {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   connectivity: ConnectivityMap
   pins: Map<SourcePortId, InspectedPin>
   retained: ReadonlySet<SourcePortId | SourceNetId>
@@ -85,7 +85,7 @@ function retainedVoltageSources({
 
 /** Circuit with its retained sources and any inferred supplies. */
 interface ChannelSimulationSupplies {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   supplies: NonNullable<SimulationModeling["supplies"]>
 }
 
@@ -150,7 +150,7 @@ export function withChannelSimulationSupplies(
       voltageV: voltage,
     })
   }
-  const discardedSources = new Set<CircuitJson[number]>(
+  const discardedSources = new Set<CircuitJsonSnapshot[number]>(
     voltageSources.filter((source) => !sources.has(source)),
   )
   return {

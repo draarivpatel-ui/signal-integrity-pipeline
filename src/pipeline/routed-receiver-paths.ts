@@ -1,222 +1,228 @@
 import {
-  ConnectivityMap,
-  findConnectedNetworks,
-} from "circuit-json-to-connectivity-map"
-import {
+  circuitJsonDb,
   type LaneMapping,
-  type SimulationPcbDriverReceiverChannel,
-  type SourceNetId,
   type SourcePortId,
   type SourceTraceId,
-  sourceNetMembers,
 } from "../board"
-import type { IdealRoutedJunction } from "../simulation"
+import {
+  idealSourceNodes,
+  type RoutedTraceCut,
+  type SourceNodeGroups,
+  sourceNodeGroups,
+} from "../simulation"
 import { fail } from "./diagnostics"
 import { endpointPorts, type PreparedChannelSimulation } from "./signals"
 import { crossesDifferentialLegs } from "./topology"
 
-/** A source port or a named net participating in a receiver path. */
-type SourcePortOrNetId = SourcePortId | SourceNetId
-
-/** A source adjacency edge that records how the path traverses the board. */
-interface RouteConnection {
-  from: SourcePortOrNetId
-  to: SourcePortOrNetId
-  kind: "routed" | "passive" | "ideal"
-  sourceTraceId?: SourceTraceId
+/** A physical cut between source groups, labelled with its extracted trace. */
+interface RoutedEdge extends RoutedTraceCut {
+  kind: "routed"
 }
 
-/** Source adjacency retaining edge order and routed trace labels. */
-type RouteConnections = Map<SourcePortOrNetId, RouteConnection[]>
-
-/** An ordered walk from a driver to a receiver. */
-type ReceiverPath = readonly RouteConnection[]
-
-/** Receiver mappings and the explicit ideal junctions between their physical cuts. */
-interface RoutedReceiverPaths {
-  mappings: LaneMapping[]
-  idealRoutedJunctions: IdealRoutedJunction[]
+/** A path through a series component, which does not contribute a trace. */
+interface SeriesEdge {
+  kind: "series"
+  fromSourcePortId: SourcePortId
+  toSourcePortId: SourcePortId
 }
 
-/** Build the path graph without rails or passive loads across differential legs. */
-function channelSimulationRouteConnections({
-  routedTopology,
-  settings,
-  driverReceiverChannels,
-}: PreparedChannelSimulation): RouteConnections {
-  const { rails, sourceConnectionGroups, bridges } = routedTopology
-  const signalGroups = sourceConnectionGroups.filter(
-    (group) => !group.some((port) => rails.has(port)),
-  )
-  const connectivity = new ConnectivityMap(findConnectedNetworks(signalGroups))
-  const differential = driverReceiverChannels.flatMap(
+type ReceiverEdge = RoutedEdge | SeriesEdge
+
+/** Incident routed and series edges indexed by electrical node. */
+type ReceiverGraph = ReadonlyMap<SourcePortId, ReceiverEdge[]>
+
+/** Index routed and series edges at both ends. */
+function receiverGraph({
+  edges,
+  groups,
+}: {
+  edges: readonly ReceiverEdge[]
+  groups: SourceNodeGroups
+}): ReceiverGraph {
+  const graph = new Map<SourcePortId, ReceiverEdge[]>()
+  for (const edge of edges) {
+    const from = groups.get(edge.fromSourcePortId) ?? edge.fromSourcePortId
+    const to = groups.get(edge.toSourcePortId) ?? edge.toSourcePortId
+    if (from === to) continue
+    const joined = { ...edge, fromSourcePortId: from, toSourcePortId: to }
+    for (const port of [from, to]) {
+      const incident = graph.get(port)
+      if (incident) incident.push(joined)
+      else graph.set(port, [joined])
+    }
+  }
+  return graph
+}
+
+/** Find the other node of an edge incident to this one. */
+function otherNode({
+  edge,
+  port,
+}: {
+  edge: ReceiverEdge
+  port: SourcePortId
+}): SourcePortId {
+  if (edge.fromSourcePortId === port) return edge.toSourcePortId
+  return edge.fromSourcePortId
+}
+
+/** Ordered extracted trace IDs between two reachable nodes. */
+type ReceiverTraceIds = SourceTraceId[]
+
+/** Recover the ordered cut IDs from an already-validated connectivity graph. */
+function receiverTraceIds({
+  graph,
+  from,
+  to,
+  excluded,
+}: {
+  graph: ReceiverGraph
+  from: SourcePortId
+  to: SourcePortId
+  excluded?: ReceiverEdge
+}): ReceiverTraceIds | undefined {
+  const reached = new Map<SourcePortId, ReceiverEdge | null>([[from, null]])
+  for (const [port] of reached) {
+    if (port === to) {
+      const traceIds: ReceiverTraceIds = []
+      let current = port
+      let edge = reached.get(current)
+      while (edge) {
+        if (edge.kind === "routed") traceIds.push(edge.sourceTraceId)
+        current = otherNode({ edge, port: current })
+        edge = reached.get(current)
+      }
+      return traceIds.reverse()
+    }
+    for (const edge of graph.get(port) ?? []) {
+      if (edge === excluded) continue
+      const next = otherNode({ edge, port })
+      if (!reached.has(next)) reached.set(next, edge)
+    }
+  }
+}
+
+/** Retain evidence of a routed receiver path which an ideal bypass closes into a loop. */
+function bypassedReceiverTraceIds({
+  graph,
+  port,
+}: {
+  graph: ReceiverGraph
+  port: SourcePortId
+}): ReceiverTraceIds {
+  for (const edge of graph.get(port) ?? []) {
+    const from = otherNode({ edge, port })
+    const traceIds = receiverTraceIds({ graph, from, to: port, excluded: edge })
+    if (!traceIds) continue
+    if (edge.kind === "routed") return [edge.sourceTraceId, ...traceIds]
+    if (traceIds.length) return traceIds
+  }
+  return []
+}
+
+/** Include series passives along a leg and leave differential terminations outside it. */
+function receiverEdges({
+  prepared,
+  cuts,
+  groups,
+}: {
+  prepared: PreparedChannelSimulation
+  cuts: readonly RoutedTraceCut[]
+  groups: SourceNodeGroups
+}): ReceiverEdge[] {
+  const legGroups = sourceNodeGroups([
+    ...[...groups].map(([id, group]) => [id, group]),
+    ...cuts.map(({ fromSourcePortId, toSourcePortId }) => [
+      fromSourcePortId,
+      toSourcePortId,
+    ]),
+  ])
+  const differential = prepared.driverReceiverChannels.flatMap(
     ({ driver, receivers }) => {
       if ("source_port_id" in driver) return []
-      const ends = [
+      const endpoints = [
         driver,
-        ...receivers.filter((receiver) => "p_source_port_id" in receiver),
+        ...receivers.filter((end) => "p_source_port_id" in end),
       ]
       return [
         {
           positive: new Set(
-            ends.flatMap((endpoint) => [
-              ...sourceNetMembers({
-                connectivity,
-                memberId: endpoint.p_source_port_id,
-              }),
-            ]),
+            endpoints.map(
+              (end) =>
+                legGroups.get(end.p_source_port_id) ?? end.p_source_port_id,
+            ),
           ),
           negative: new Set(
-            ends.flatMap((endpoint) => [
-              ...sourceNetMembers({
-                connectivity,
-                memberId: endpoint.n_source_port_id,
-              }),
-            ]),
+            endpoints.map(
+              (end) =>
+                legGroups.get(end.n_source_port_id) ?? end.n_source_port_id,
+            ),
           ),
         },
       ]
     },
   )
-  const edges: RouteConnection[] = settings.lanes.map(
-    ({ from, to, sourceTraceId }) => ({
-      from: from.sourcePortId,
-      to: to.sourcePortId,
-      sourceTraceId,
-      kind: "routed",
-    }),
-  )
-  for (const [from, to] of bridges) {
-    if (crossesDifferentialLegs({ from, to, differential })) continue
-    edges.push({ from, to, kind: "passive" })
-  }
-  for (const [from, ...targets] of signalGroups) {
-    for (const to of targets) edges.push({ from, to, kind: "ideal" })
-  }
-  const connections: RouteConnections = new Map()
-  for (const edge of edges) {
-    for (const oriented of [edge, { ...edge, from: edge.to, to: edge.from }]) {
-      const neighbors = connections.get(oriented.from) ?? []
-      neighbors.push(oriented)
-      connections.set(oriented.from, neighbors)
-    }
-  }
-  return connections
-}
-
-/** Find the shortest path by visiting each reachable source node once. */
-function receiverPath({
-  connections,
-  from,
-  to,
-  allowIdeal,
-}: {
-  connections: RouteConnections
-  from: SourcePortId
-  to: SourcePortId
-  allowIdeal: boolean
-}): ReceiverPath | undefined {
-  const visited = new Map<SourcePortOrNetId, RouteConnection | null>([
-    [from, null],
-  ])
-  for (const [port] of visited) {
-    if (port === to) {
-      const path: RouteConnection[] = []
-      let edge = visited.get(to)
-      while (edge) {
-        path.push(edge)
-        edge = visited.get(edge.from)
-      }
-      return path.reverse()
-    }
-    for (const edge of connections.get(port) ?? []) {
-      if (!allowIdeal && edge.kind === "ideal") continue
-      if (!visited.has(edge.to)) visited.set(edge.to, edge)
-    }
-  }
-  return undefined
-}
-
-/** Identify ideal wires that the selected path uses to join separate physical cuts. */
-function idealRoutedJunctions(path: ReceiverPath): IdealRoutedJunction[] {
-  const junctions: IdealRoutedJunction[] = []
-  let fromSourcePortId: SourcePortId | undefined
-  for (const edge of path) {
-    if (edge.kind === "ideal") continue
-    if (edge.kind === "passive") {
-      fromSourcePortId = undefined
+  const edges: ReceiverEdge[] = cuts.map((cut) => ({ ...cut, kind: "routed" }))
+  for (const [fromSourcePortId, toSourcePortId] of prepared.routedTopology
+    .bridges) {
+    if (
+      crossesDifferentialLegs({
+        from: legGroups.get(fromSourcePortId) ?? fromSourcePortId,
+        to: legGroups.get(toSourcePortId) ?? toSourcePortId,
+        differential,
+      })
+    )
       continue
-    }
-    if (fromSourcePortId !== undefined && fromSourcePortId !== edge.from)
-      junctions.push({ fromSourcePortId, toSourcePortId: edge.from })
-    fromSourcePortId = edge.to
+    edges.push({ kind: "series", fromSourcePortId, toSourcePortId })
   }
-  return junctions
+  return edges
 }
 
-/** Keep each leg on its complete physical path ahead of any parallel ideal shortcut. */
-function channelReceiverPaths({
-  driverReceiverChannel,
-  connections,
-  allowUnroutedTraces,
+/** Resolve each declared receiver against the cut graph of ideal electrical groups. */
+export function routedReceiverMappings({
+  prepared,
+  cuts,
 }: {
-  driverReceiverChannel: SimulationPcbDriverReceiverChannel
-  connections: RouteConnections
-  allowUnroutedTraces: boolean
-}): RoutedReceiverPaths {
+  prepared: PreparedChannelSimulation
+  cuts: readonly RoutedTraceCut[]
+}): LaneMapping[] {
+  const { groups } = idealSourceNodes({
+    db: circuitJsonDb(prepared.circuit),
+    cuts,
+  })
+  const edges = receiverEdges({ prepared, cuts, groups })
+  const physical = receiverGraph({ edges, groups: new Map() })
+  const graph = receiverGraph({ edges, groups })
   const mappings: LaneMapping[] = []
-  const junctions: IdealRoutedJunction[] = []
-  const driverPorts = endpointPorts(driverReceiverChannel.driver)
-  for (const receiver of driverReceiverChannel.receivers) {
-    for (const [index, to] of endpointPorts(receiver).entries()) {
-      const from = driverPorts[index]
-      let path = receiverPath({ connections, from, to, allowIdeal: false })
-      if (path === undefined && allowUnroutedTraces) {
-        path = receiverPath({ connections, from, to, allowIdeal: true })
+  for (const { name, driver, receivers } of prepared.driverReceiverChannels) {
+    const driverPorts = endpointPorts(driver)
+    for (const receiver of receivers) {
+      for (const [leg, to] of endpointPorts(receiver).entries()) {
+        const from = driverPorts[leg]
+        const fromNode = groups.get(from) ?? from
+        const toNode = groups.get(to) ?? to
+        let traceIds = receiverTraceIds({ graph, from: fromNode, to: toNode })
+        if (
+          !prepared.channelSimulation.allow_unrouted_traces ||
+          fromNode === toNode
+        ) {
+          traceIds = receiverTraceIds({ graph: physical, from, to })
+          if (!traceIds && prepared.channelSimulation.allow_unrouted_traces)
+            traceIds = bypassedReceiverTraceIds({ graph, port: fromNode })
+        }
+        if (!traceIds)
+          return fail(
+            "channel_net",
+            `${name}: no source path from ${from} to ${to}`,
+          )
+        const [sourceTraceId] = traceIds
+        if (sourceTraceId === undefined) continue
+        const mapping = { port: name, from, to, sourceTraceId }
+        if (traceIds.length > 1)
+          mappings.push({ ...mapping, sourceTraceIds: traceIds })
+        else mappings.push(mapping)
       }
-      if (!path)
-        return fail(
-          "channel_net",
-          `${driverReceiverChannel.name}: no source path from ${from} to ${to}`,
-        )
-      const traceIds = path.flatMap(({ sourceTraceId }) =>
-        sourceTraceId === undefined ? [] : [sourceTraceId],
-      )
-      const [sourceTraceId] = traceIds
-      if (sourceTraceId === undefined) continue
-      const mapping = {
-        port: driverReceiverChannel.name,
-        from,
-        to,
-        sourceTraceId,
-      }
-      if (traceIds.length > 1)
-        mappings.push({ ...mapping, sourceTraceIds: traceIds })
-      else mappings.push(mapping)
-      junctions.push(...idealRoutedJunctions(path))
     }
   }
-  return { mappings, idealRoutedJunctions: junctions }
-}
-
-/** Identify routed traces and ideal junctions along the declared receiver paths. */
-export function routedReceiverPaths(
-  prepared: PreparedChannelSimulation,
-): RoutedReceiverPaths {
-  if (!prepared.settings.lanes.length)
-    return { mappings: [], idealRoutedJunctions: [] }
-  const connections = channelSimulationRouteConnections(prepared)
-  const paths = prepared.driverReceiverChannels.map((driverReceiverChannel) =>
-    channelReceiverPaths({
-      driverReceiverChannel,
-      connections,
-      allowUnroutedTraces: prepared.channelSimulation.allow_unrouted_traces,
-    }),
-  )
-  return {
-    mappings: paths.flatMap(({ mappings }) => mappings),
-    idealRoutedJunctions: paths.flatMap(
-      ({ idealRoutedJunctions }) => idealRoutedJunctions,
-    ),
-  }
+  return mappings
 }

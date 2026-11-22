@@ -10,7 +10,6 @@
 
 export { branchSaves } from "./branch-saves"
 export {
-  circuitNodes,
   generalDeclarations,
   modelRunDefinition,
 } from "./declarations"
@@ -32,8 +31,13 @@ export {
 } from "./route-transitions"
 
 export { routedControl } from "./routed-control"
+export { circuitNodes } from "./routed-nodes"
+export {
+  idealSourceNodes,
+  sourceNodeGroups,
+  type SourceNodeGroups,
+} from "./source-node-groups"
 export type {
-  IdealRoutedJunction,
   RouteBindingsInput,
   RoutedBindings,
   RoutedCompileOptions,
