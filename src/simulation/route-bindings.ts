@@ -184,16 +184,17 @@ export class RouteBindingsSolver extends BaseSolver {
     const outlineContext = {
       pcbPorts,
       components,
-      drawing,
       unit: view.unit,
     }
     const buffers = this.models.flatMap((model) => {
-      outlinePortComponents({
-        ports: Object.values(model.spicePinMapping),
-        color: routeTones.via,
-        label: model.name,
-        context: outlineContext,
-      })
+      drawing.polygons!.push(
+        ...portComponentOutlines({
+          ports: Object.values(model.spicePinMapping),
+          color: routeTones.via,
+          label: model.name,
+          context: outlineContext,
+        }),
+      )
       return [...new Set(Object.values(model.spicePinMapping))].flatMap(
         (id) => {
           const point = routePortPoint({ circuit, sourcePortId: id })
@@ -244,15 +245,17 @@ export class RouteBindingsSolver extends BaseSolver {
       }),
     })
     if (this.failed) {
-      outlinePortComponents({
-        ports: this.input.mappings.flatMap((mapping) => [
-          mapping.from,
-          mapping.to,
-        ]),
-        color: routeTones.failure,
-        label: "unbound",
-        context: outlineContext,
-      })
+      drawing.polygons!.push(
+        ...portComponentOutlines({
+          ports: this.input.mappings.flatMap((mapping) => [
+            mapping.from,
+            mapping.to,
+          ]),
+          color: routeTones.failure,
+          label: "unbound",
+          context: outlineContext,
+        }),
+      )
       drawing.texts!.push(
         ...routeFailure({
           box: view.pane,
@@ -268,12 +271,11 @@ export class RouteBindingsSolver extends BaseSolver {
 interface PortOutlineContext {
   pcbPorts: ReadonlyMap<PcbPort["source_port_id"], PcbPort>
   components: ReadonlyMap<PcbComponent["pcb_component_id"], PcbComponent>
-  drawing: GraphicsObject
   unit: number
 }
 
 /** Outline the parts that own the selected ports. */
-function outlinePortComponents({
+function portComponentOutlines({
   ports,
   color,
   label,
@@ -283,19 +285,21 @@ function outlinePortComponents({
   color: string
   label: string
   context: PortOutlineContext
-}): void {
-  const { pcbPorts, components, drawing, unit } = context
+}): NonNullable<GraphicsObject["polygons"]> {
+  const outlines: NonNullable<GraphicsObject["polygons"]> = []
+  const { pcbPorts, components, unit } = context
   for (const id of new Set(
     [...ports].map((port) => pcbPorts.get(port)?.pcb_component_id),
   )) {
     if (!id) continue
     const component = components.get(id)
     if (component)
-      drawing.polygons!.push({
+      outlines.push({
         points: routeOutline(component),
         stroke: color,
         strokeWidth: unit * 0.2,
         label,
       })
   }
+  return outlines
 }
