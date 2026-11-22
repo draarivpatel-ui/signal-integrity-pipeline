@@ -1,5 +1,5 @@
 import type { RouteSlice, RouteWire, RouteXY, SectionGeometry } from "../board"
-import { hypotenuse } from "../kernel"
+import { hypotenuse, type Snapshot } from "../kernel"
 import { sectionInverse } from "./cross-section-matrix"
 import type { CrossSection, CrossSectionResult } from "./cross-section-types"
 import { multiply, transpose } from "./linalg"
@@ -18,15 +18,17 @@ export type SolvedRouteSection = {
 }
 
 /** A route slice with its canonical field coefficients. */
-export interface ExtractedRouteSlice extends RouteSlice, SolvedRouteSection {}
+export interface ExtractedRouteSlice
+  extends Snapshot<RouteSlice>,
+    SolvedRouteSection {}
 /** Solved slices, unique field sections, and extraction evidence. */
-export interface ExtractedRoutes {
+export type ExtractedRoutes = Snapshot<{
   slices: ExtractedRouteSlice[]
   sections: SolvedRouteSection[]
   materials: RouteMaterials
   warnings: string[]
   coupling: RouteCoupling[]
-}
+}>
 /** Laminate loss and soldermask thickness and dielectric properties. */
 export interface RouteMaterials {
   maskMm: number
@@ -35,12 +37,12 @@ export interface RouteMaterials {
   substrateLoss: number
 }
 /** Per-unit-length field coefficients for a routed section. */
-export type RouteCoefficients = CrossSectionResult
+export type RouteCoefficients = Snapshot<CrossSectionResult>
 
 /** Stackup, slice, and materials used to form one field section. */
 interface RouteCrossSectionInput {
-  geometry: SectionGeometry
-  slice: RouteSlice
+  geometry: Snapshot<SectionGeometry>
+  slice: Snapshot<RouteSlice>
   materials: RouteMaterials
 }
 
@@ -135,12 +137,12 @@ export function routeCrossSection(input: RouteCrossSectionInput): CrossSection {
 }
 
 /** The two board coordinates that bound a straight route wire. */
-type RouteEndpoints = Pick<RouteWire, "a" | "b">
+type RouteEndpoints = Snapshot<Pick<RouteWire, "a" | "b">>
 
 /** Closest point on each centre-line and the distance between them. */
 interface ClosestRoutePoints {
-  first: RouteXY
-  second: RouteXY
+  first: Snapshot<RouteXY>
+  second: Snapshot<RouteXY>
   distance: number
 }
 

@@ -1,5 +1,5 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
+import { circuitJsonDb } from "../board"
 import {
   type AdmittedBuffers,
   type AssemblyEntry,
@@ -45,6 +45,7 @@ export class RouteBindingsSolver extends BaseSolver {
       copperScope,
       mappings,
       routedTraceCuts,
+      idealRoutedJunctions,
       modeling,
       controls,
       options,
@@ -53,7 +54,7 @@ export class RouteBindingsSolver extends BaseSolver {
     if (!routedTraceCuts.length)
       throw new Error("Routed compilation requires physical signal mappings")
     const { extractedPcbTraceIds, nearbyRailPcbTraceIds } = copperScope
-    const additionalSourceTraceIds = cju([...circuitJson])
+    const additionalSourceTraceIds = circuitJsonDb(circuitJson)
       .pcb_trace.list()
       .flatMap(
         ({ pcb_trace_id: pcbTraceId, source_trace_id: sourceTraceId }) => {
@@ -70,6 +71,7 @@ export class RouteBindingsSolver extends BaseSolver {
       circuit: circuitJson,
       mappings,
       routedTraceCuts,
+      idealRoutedJunctions,
       additionalSourceTraceIds,
       modeling,
       controls,

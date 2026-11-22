@@ -51,6 +51,11 @@ function containsHtmlOpening(text: string): boolean {
   return next === "" || !WORD_CHARACTERS.includes(next)
 }
 
+/** Report an asset value whose runtime type cannot contain IBIS text or bytes. */
+export function invalidIbisSource(path: string): never {
+  return fail("ibis_asset", `${path}: expected a string or Uint8Array`)
+}
+
 /**
  * Admits the caller-supplied IBIS bytes for one model: checks the path, size, format and UTF-8 text,
  * then records the SHA-256 evidence. Nothing is ever downloaded from the declared URL.
@@ -68,7 +73,7 @@ export function loadModelSource({
     fail("ibis_asset_missing", `Supply IBIS bytes for ${path} in ibisSources`)
   const source = sources[path]
   if (typeof source !== "string" && !(source instanceof Uint8Array))
-    fail("ibis_asset", `${path}: expected a string or Uint8Array`)
+    invalidIbisSource(path)
   let bytes: Uint8Array
   if (typeof source === "string") {
     bytes = new TextEncoder().encode(source)

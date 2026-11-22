@@ -38,6 +38,6 @@ test("a partially routed daisy chain keeps its ideal receiver connection", async
     plan,
     expectedTraceCount: 1,
     testPath: import.meta.path,
-    idealConnection: `MID.A and RX.A share ${node(middleSourcePortId)} on the ideal leg`,
+    caption: `MID.A and RX.A share ${node(middleSourcePortId)} on the ideal leg`,
   })
 })
