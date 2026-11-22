@@ -142,7 +142,7 @@ function portTouches({
   layer,
   point,
 }: {
-  port: PcbPort
+  port: Snapshot<PcbPort>
   layer: LayerRef
   point: RouteXY
 }): boolean {
@@ -322,7 +322,7 @@ function traceSections({
 }: {
   firstWireId: number
   circuit: CircuitJsonSnapshot
-  trace: PcbTrace
+  trace: Snapshot<PcbTrace>
 }): TraceSections {
   const viaContacts: ViaContact[] = []
   const wires: RouteWire[] = []
