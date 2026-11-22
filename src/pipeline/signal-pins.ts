@@ -1,5 +1,6 @@
+import type { Snapshot } from "../kernel"
 import {
-  type CircuitJson,
+  type CircuitJsonSnapshot,
   type ConnectivityMap,
   type CopperScope,
   channelCopperScope,
@@ -28,13 +29,13 @@ type RailIds = Set<SourcePortId | SourceNetId>
 
 /** Driver pins, named nets and edge times from validated channel endpoints. */
 interface SignalIndex {
-  driven: Map<SourcePortId, SimulationPcbDriverReceiverChannel>
+  driven: Map<SourcePortId, Snapshot<SimulationPcbDriverReceiverChannel>>
   topology: Map<SourcePortId | SourceNetId, string>
   edgeTimesSeconds: number[]
 }
 
 interface SignalIndexOptions {
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   pins: Map<SourcePortId, InspectedPin>
   signalConnectivity: ConnectivityMap
 }
@@ -45,7 +46,7 @@ function collectRailIds({
   connectivity,
   pins,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   connectivity: ConnectivityMap
   pins: Map<SourcePortId, InspectedPin>
 }): RailIds {
@@ -78,7 +79,7 @@ function checkDifferentialPairs({
   signal,
   pins,
 }: {
-  signal: SimulationPcbDriverReceiverChannel
+  signal: Snapshot<SimulationPcbDriverReceiverChannel>
   pins: Map<SourcePortId, InspectedPin>
 }): void {
   const label = `Signal "${signal.name}"`
@@ -108,7 +109,7 @@ function validatedDriverPin({
 }: {
   pins: SignalIndexOptions["pins"]
   port: SourcePortId
-  signal: SimulationPcbDriverReceiverChannel
+  signal: Snapshot<SimulationPcbDriverReceiverChannel>
 }): InspectedPin {
   const label = `Signal "${signal.name}"`
   const pin = pins.get(port)
@@ -135,7 +136,7 @@ function validateReceivers({
   driverPorts,
   signalConnectivity,
 }: Pick<SignalIndexOptions, "pins" | "signalConnectivity"> & {
-  signal: SimulationPcbDriverReceiverChannel
+  signal: Snapshot<SimulationPcbDriverReceiverChannel>
   driverPorts: SignalEndpointPortIds
 }): void {
   const label = `Signal "${signal.name}"`
@@ -175,7 +176,10 @@ function indexDriverReceiverChannels({
   pins,
   signalConnectivity,
 }: SignalIndexOptions): SignalIndex {
-  const driven = new Map<SourcePortId, SimulationPcbDriverReceiverChannel>()
+  const driven = new Map<
+    SourcePortId,
+    Snapshot<SimulationPcbDriverReceiverChannel>
+  >()
   const topology = new Map<SourcePortId | SourceNetId, string>()
   const edgeTimesSeconds: number[] = []
   for (const signal of driverReceiverChannels) {
@@ -223,9 +227,9 @@ export function inspectSignalPins({
   sources,
   driverReceiverChannels,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   sources: IbisSources
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
 }): SignalPins {
   const endpointIds = new Set(
     driverReceiverChannels.flatMap((signal) =>
@@ -267,7 +271,7 @@ export function scopeSignalPins({
   distanceMm,
   signalPins,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   sources: IbisSources
   distanceMm: number
   signalPins: SignalPins
@@ -296,10 +300,10 @@ export function validateSignalPins({
   driverReceiverChannels,
   channelSimulation,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   signalPins: SignalPins
   pins: ScopedSignalPins["pins"]
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   channelSimulation: SimulationPcbTransientChannelSimulation
 }): void {
   const { topology, driven, routedTopology } = signalPins
