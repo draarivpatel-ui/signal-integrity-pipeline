@@ -23,8 +23,8 @@ import {
   snapshot,
 } from "../kernel"
 import type { RouteBindingsInput, RoutedCompileOptions } from "../simulation"
+import { collectRailIds } from "./signal-pins"
 import {
-  collectRailIds,
   endpointPorts,
   listChannelSimulations,
   type PreparedChannelSimulation,
