@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { SourceTrace } from "circuit-json"
 import {
@@ -213,9 +214,7 @@ function planRoutedBlock({
   const mappings = block.signals.flatMap((signal) =>
     receiverMappings({ signal, connections }),
   )
-  const experiment = block.circuit.find(
-    (record) => record.type === "simulation_experiment",
-  )
+  const experiment = cju([...block.circuit]).simulation_experiment.getWhere({})
   if (!experiment) throw new Error("Missing admitted experiment")
   const { time_per_step: timePerStep } = experiment
   if (
