@@ -1,4 +1,5 @@
 import type { PcbVia } from "circuit-json"
+import type { Snapshot } from "../../kernel"
 import { circuitJsonDb } from "../circuit-json-db"
 import { fail } from "../diagnostics"
 import type { CircuitJsonSnapshot } from "../schema"
@@ -72,7 +73,7 @@ export function selectPort({
 }: {
   circuit: CircuitJsonSnapshot
   selector: PortSelector | undefined
-}): SourcePort {
+}): Snapshot<SourcePort> {
   if (!selector)
     fail("pin_mapping", "Explicit physical source port selector required")
   const db = circuitJsonDb(circuit)
