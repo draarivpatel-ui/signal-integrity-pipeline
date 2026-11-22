@@ -20,8 +20,8 @@ threshold: 85
 domain:
   above: toward increasing solver z in a physical stackup
   actual: read directly from the physical source-board records
-  admission: validation and derivation of one declared signal-integrity block
-  admit: the check that reads declared input (board records, IBIS bytes, signal-integrity blocks) before anything else uses it
+  admission: validation and derivation of one declared transient channel simulation
+  admit: the check that reads declared input (board records, IBIS bytes, transient channel simulations) before anything else uses it
   allow: an explicit caller-selected modelling permission
   antipad: clearance opening in a plane around a signal via
   arc: distance measured along a routed polyline including its bends
@@ -33,7 +33,6 @@ domain:
   below: toward decreasing solver z in a physical stackup
   bias: very weak DC anchor used to fix an otherwise floating common-mode voltage
   bind: attach chip models and probes to the planned experiment
-  block: an independently declared group of signals in a channel experiment
   board: the circuit board being analysed, read from Circuit JSON
   bottom: the outer copper layer on the lower face of the board
   bound: the pipeline state after binding; elsewhere, a lower or upper limit of a range

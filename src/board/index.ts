@@ -29,7 +29,7 @@ export type {
 } from "./geometry/types"
 export type {
   SignalEndpointPortIds,
-  SimulationBlockId,
+  SimulationPcbTransientChannelSimulationId,
   SourceNetId,
   SourcePortId,
 } from "./ids"

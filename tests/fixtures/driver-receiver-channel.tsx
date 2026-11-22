@@ -15,7 +15,7 @@ type DriverReceiverChannelOptions = {
   driverDisabled?: boolean
 }
 
-/** Render one block on independent routed nets and return its emitted channel records. */
+/** Render one channel simulation on independent routed nets and return its emitted channel records. */
 export async function driverReceiverChannels(
   options: [DriverReceiverChannelOptions, ...DriverReceiverChannelOptions[]],
 ): Promise<SimulationPcbDriverReceiverChannel[]> {
