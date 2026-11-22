@@ -483,8 +483,8 @@ export function* routeSectionSteps({
       trace,
       firstWireId: geometry.wires.length,
     })
-    geometry.viaContacts.push(...viaContacts)
-    geometry.wires.push(...wires)
+    for (const contact of viaContacts) geometry.viaContacts.push(contact)
+    for (const wire of wires) geometry.wires.push(wire)
     yield geometry
   }
   const simplified = simplifyRouteWires({
