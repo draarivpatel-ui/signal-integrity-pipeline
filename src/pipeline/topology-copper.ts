@@ -6,7 +6,6 @@ import {
 } from "@flatten-js/core"
 import {
   circlePolygon,
-  cju,
   getPlatedHolePolygon,
   getSmtPadPolygon,
   getTraceSegmentPolygon,
@@ -23,6 +22,7 @@ import type {
 } from "circuit-json"
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
 import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
+import { circuitJsonDb } from "./circuit-json-db"
 
 /** A quantized point or the key of a copper feature that acts as one junction. */
 export type CopperPointKey = string
@@ -297,7 +297,7 @@ function copperRegions({
 }: CopperSelection): RegionCopper {
   const selectedPorts = new Map(ports.map((port) => [port.pcb_port_id, port]))
   const selectedTraces = new Set(traces.map((trace) => trace.pcb_trace_id))
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const rotations = new Map<PcbComponent["pcb_component_id"], number>(
     db.pcb_component
       .list()

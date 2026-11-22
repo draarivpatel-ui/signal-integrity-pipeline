@@ -1,4 +1,3 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import {
   type CircuitJson,
   type ConnectivityMap,
@@ -20,6 +19,7 @@ import {
   pinCapabilities,
 } from "../buffers"
 import { safeId } from "../kernel"
+import { circuitJsonDb } from "./circuit-json-db"
 import { endpointPorts } from "./signal-controls"
 import { signalTopology, validateSignalGraph } from "./topology"
 
@@ -50,7 +50,7 @@ function collectRailIds({
   pins: Map<SourcePortId, InspectedPin>
 }): RailIds {
   const railIds: RailIds = new Set()
-  const db = cju([...circuit])
+  const db = circuitJsonDb(circuit)
   const sourceNets = db.source_net.list()
   const supplyNetIds = sourceNets
     .filter((net) => net.is_ground || net.is_power)
