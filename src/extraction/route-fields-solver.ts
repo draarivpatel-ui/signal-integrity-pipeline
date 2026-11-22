@@ -89,7 +89,7 @@ function sliceWeight({
   slice,
   selected,
 }: {
-  slice: RouteSlice
+  slice: Snapshot<RouteSlice>
   selected: ReadonlySet<string>
 }): number {
   return (
@@ -111,7 +111,7 @@ export class RouteFieldsSolver extends BaseSolver {
   private readonly coupling: RouteCoupling[] = []
   private pairIndex = 0
   private groupIndex = 0
-  private currentSlice?: RouteSlice
+  private currentSlice?: Snapshot<RouteSlice>
   private current?: CrossSection
   private output?: Produced<ExtractedRoutes>
   private solveMilliseconds = 0

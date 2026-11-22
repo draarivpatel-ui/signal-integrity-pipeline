@@ -188,7 +188,7 @@ export class RouteBindingsSolver extends BaseSolver {
     const circuit = this.input.circuitJson
     const view = routeView({ circuit, scope: this.input.copperScope })
     let drawing = routeBoardDrawing({ circuit, scope: this.input.copperScope })
-    const db = cju([...circuit])
+    const db = circuitJsonDb(circuit)
     const pcbPorts = new Map(
       db.pcb_port.list().map((port) => [port.source_port_id, port]),
     )

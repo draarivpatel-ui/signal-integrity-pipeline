@@ -3,25 +3,23 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { BasePipelineSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
-import React from "react"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
-import type { CircuitJson } from "../../src/board"
+import type { CircuitJson, CircuitJsonSnapshot } from "../../src/board"
 import { boardPictureView } from "../../src/board/board-picture"
 import { sha256 } from "../../src/kernel"
 import { formatSpiceVectors } from "../../src/observation"
 import {
   RoutedPipelineSolver,
-  type RoutedAdmissionInput,
   type RoutedStageSolver,
   routedStages,
 } from "../../src/pipeline"
 import {
-  type ScopedRouteBindingsInput,
   RouteBindingsSolver,
   type RoutedBindings,
   type RoutedDeck,
   type RouteNetworkInput,
   RouteNetworkSolver,
+  type ScopedRouteBindingsInput,
 } from "../../src/simulation"
 import type { SolverContext } from "../../src/solver"
 import {
@@ -29,9 +27,9 @@ import {
   transientDurationSeconds,
   voltageNames,
 } from "../fixtures/routed-deck"
+import { routedAdmissionInput } from "../fixtures/routed-fixture"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
-import { routedAdmissionInput } from "../fixtures/routed-fixture"
 
 const vendorModelSkip =
   !process.env.IBIS_MODEL_DIR &&
@@ -348,7 +346,7 @@ function assertDrawing({
   circuit,
   frame,
 }: {
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
   frame: {
     drawing: GraphicsObject
     state: string
@@ -369,7 +367,7 @@ function assertDrawing({
 for (const name of ["two-trace"])
   test(`${name}: every iteration, stage boundary and pending transient has a physical drawing`, async () => {
     const input = (await routedVisualFixture()).root.inputProblem
-    const circuit: CircuitJson = input.circuitJson
+    const circuit = input.circuitJson
     let calls = 0
     const solverContext: SolverContext = {
       progress: (): void => undefined,

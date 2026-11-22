@@ -6,12 +6,12 @@ import {
   type RoutedStageSolver,
 } from "../../src/pipeline"
 import {
-  type ScopedRouteBindingsInput,
   RouteBindingsSolver,
   type RoutedBindings,
+  type ScopedRouteBindingsInput,
 } from "../../src/simulation"
-import { vendorAvailable } from "../fixtures/vendor-models"
 import { routedAdmissionInput } from "../fixtures/routed-fixture"
+import { vendorAvailable } from "../fixtures/vendor-models"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
