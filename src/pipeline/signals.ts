@@ -1,4 +1,5 @@
 /* eslint-disable local/max-file-lines -- Keep the preparation steps and their validation together. */
+import { cju } from "@tscircuit/circuit-json-util"
 import {
   type CircuitJson,
   type ConnectivityMap,
@@ -110,8 +111,9 @@ export function routedLanes({
 }): RoutedLanes {
   const lanes: NumericalSettings["lanes"] = []
   const rejections: string[] = []
-  const traces = circuit.filter((record) => record.type === "source_trace")
-  const pcbTraces = circuit.filter((record) => record.type === "pcb_trace")
+  const db = cju([...circuit])
+  const traces = db.source_trace.list()
+  const pcbTraces = db.pcb_trace.list()
   traces.sort((a, b) => a.source_trace_id.localeCompare(b.source_trace_id))
   for (const trace of traces) {
     const ports = trace.connected_source_port_ids
@@ -150,9 +152,8 @@ export function routedLanes({
 export function signalBlocks(
   circuitJson: CircuitJson,
 ): SimulationPcbTransientChannelSimulation[] {
-  const blocks = circuitJson.filter(
-    (r) => r.type === "simulation_pcb_transient_channel_simulation",
-  )
+  const db = cju([...circuitJson])
+  const blocks = db.simulation_pcb_transient_channel_simulation.list()
   if (blocks.length > 1 && blocks.some((block) => !block.name)) {
     const element = "<simulation.pcbtransientchannelsimulation>"
     throw new Error(
@@ -166,9 +167,7 @@ export function signalBlocks(
     throw new Error(
       "Duplicate simulation_pcb_transient_channel_simulation identifier",
     )
-  for (const signal of circuitJson.filter(
-    (record) => record.type === "simulation_pcb_driver_receiver_channel",
-  )) {
+  for (const signal of db.simulation_pcb_driver_receiver_channel.list()) {
     if (
       simulationPcbTransientChannelSimulationIds.has(
         signal.simulation_pcb_transient_channel_simulation_id,
@@ -245,9 +244,7 @@ function applyIbisModelOverrides({
   circuit: CircuitJson
   signals: SimulationPcbDriverReceiverChannel[]
 }): void {
-  for (const model of circuit.filter(
-    (r) => r.type === "simulation_ibis_model",
-  )) {
+  for (const model of cju([...circuit]).simulation_ibis_model.list()) {
     for (const signal of signals) {
       for (const endpoint of [signal.driver, ...signal.receivers]) {
         for (const [index, port] of endpointPorts(endpoint).entries()) {
@@ -279,15 +276,16 @@ function collectRailIds({
   pins: Map<SourcePortId, InspectedPin>
 }): RailIds {
   const railIds: RailIds = new Set()
-  const sourceNets = circuit.filter((record) => record.type === "source_net")
+  const db = cju([...circuit])
+  const sourceNets = db.source_net.list()
   const supplyNetIds = sourceNets
     .filter((net) => net.is_ground || net.is_power)
     .map((net) => net.source_net_id)
   const pinReferences = [...pins.values()].flatMap((pin) =>
     Object.values(pin.references),
   )
-  const explicit = circuit
-    .filter((record) => record.type === "simulation_ibis_model")
+  const explicit = db.simulation_ibis_model
+    .list()
     .flatMap((model) =>
       Object.values(
         model.ibis_pin_name_to_reference_source_port_ids ?? {},
@@ -316,12 +314,11 @@ function hasSupportedComponentModel({
     )
   )
     return true
-  return circuit.some((record) => {
-    return (
-      record.type === "simulation_spice_subcircuit" &&
-      record.source_component_id === component.source_component_id
-    )
-  })
+  return Boolean(
+    cju([...circuit]).simulation_spice_subcircuit.getWhere({
+      source_component_id: component.source_component_id,
+    }),
+  )
 }
 
 /** Check driver and receiver IBIS roles and index the selected copper nets. */
@@ -441,9 +438,7 @@ function pruneIbisModels({
   circuit: CircuitJson
   pins: Map<SourcePortId, InspectedPin>
 }): void {
-  for (const model of circuit.filter(
-    (record) => record.type === "simulation_ibis_model",
-  )) {
+  for (const model of cju([...circuit]).simulation_ibis_model.list()) {
     const used = [...pins.values()].filter((pin) => pin.model === model)
     if (!used.length) {
       circuit.splice(circuit.indexOf(model), 1)
@@ -483,16 +478,17 @@ function loadNodes({
 }): LoadNodeIds {
   const scoped = new Set(copperScope.extractedPcbTraceIds)
   const railTraces = new Set(copperScope.nearbyRailPcbTraceIds)
+  const db = cju([...circuit])
   const routed = new Set(
-    circuit
-      .filter((record) => record.type === "pcb_trace")
+    db.pcb_trace
+      .list()
       .filter(
         (trace) =>
           scoped.has(trace.pcb_trace_id) && !railTraces.has(trace.pcb_trace_id),
       )
       .map((trace) => trace.source_trace_id),
   )
-  const traces = circuit.filter((record) => record.type === "source_trace")
+  const traces = db.source_trace.list()
   const ideal = getSourcePortConnectivityMapFromCircuitJson(
     traces.filter((trace) => !routed.has(trace.source_trace_id)),
   )
@@ -506,8 +502,8 @@ function loadNodes({
     pin.port,
     ...Object.values(pin.references),
   ])
-  const sourceTerminals = circuit
-    .filter((record) => record.type === "simulation_voltage_source")
+  const sourceTerminals = db.simulation_voltage_source
+    .list()
     .flatMap(voltageSourceTerminals)
   const nodes: LoadNodeIds = new Set()
   for (const terminal of [
@@ -570,9 +566,7 @@ function prepareBlock({
     raw: block.simulation_pcb_transient_channel_simulation_id,
     field: "simulationPcbTransientChannelSimulationId",
   })
-  const channels = input.filter(
-    (record) => record.type === "simulation_pcb_driver_receiver_channel",
-  )
+  const channels = cju([...input]).simulation_pcb_driver_receiver_channel.list()
   const signals = channels.filter(
     (channel) =>
       channel.simulation_pcb_transient_channel_simulation_id ===
@@ -648,10 +642,9 @@ function prepareBlock({
     edgeTimeSeconds / STEPS_PER_EDGE,
     durationSeconds / MIN_STEPS_PER_RECORDING,
   )
-  const circuitPorts = circuit.filter((record) => record.type === "source_port")
-  const components = circuit.filter(
-    (record) => record.type === "source_component",
-  )
+  const db = cju([...circuit])
+  const circuitPorts = db.source_port.list()
+  const components = db.source_component.list()
   for (const port of circuitPorts) {
     if (!topology.has(port.source_port_id) || pins.has(port.source_port_id))
       continue
@@ -705,9 +698,7 @@ function prepareBlock({
     settings,
   })
   const nodes = loadNodes({ circuit, copperScope, pins })
-  const spiceModels = circuit.filter(
-    (record) => record.type === "simulation_spice_subcircuit",
-  )
+  const spiceModels = db.simulation_spice_subcircuit.list()
   // Keep a retained load only when every modeled terminal already has an external connection.
   settings.passiveComponents = components.flatMap((component) => {
     if (!hasSupportedComponentModel({ component, circuit })) return []
