@@ -8,8 +8,12 @@ type Route = "series" | "unrouted" | "receiver-only"
 /** A logical driver-to-receiver connection with optional series copper. */
 export function AdmissionChannel({
   route,
+  allowUnroutedTraces = true,
+  namedNets = false,
 }: {
   route: Route
+  allowUnroutedTraces?: boolean
+  namedNets?: boolean
 }): React.JSX.Element {
   const driver = ".TX > .Y"
   const receiver = ".RX > .A"
@@ -73,10 +77,18 @@ export function AdmissionChannel({
           />
         </>
       )}
+      {namedNets && (
+        <>
+          <trace from={driver} to="net.DRIVER" />
+          <trace from={seriesInput} to="net.DRIVER" />
+          <trace from={seriesOutput} to="net.RECEIVER" />
+          <trace from={receiver} to="net.RECEIVER" />
+        </>
+      )}
       <simulation.pcbtransientchannelsimulation
         name="SERIES"
         bitRate="20Mbps"
-        allowUnroutedTraces
+        allowUnroutedTraces={allowUnroutedTraces}
       >
         <simulation.pcbdriverreceiverchannel
           name="DATA"

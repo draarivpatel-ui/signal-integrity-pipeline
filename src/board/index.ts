@@ -32,6 +32,7 @@ export type {
   SimulationPcbTransientChannelSimulationId,
   SourceNetId,
   SourcePortId,
+  SourceTraceId,
 } from "./ids"
 export {
   type RouteReference,

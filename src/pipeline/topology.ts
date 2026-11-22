@@ -24,6 +24,7 @@ import {
 
 /** The source grouping and the series connections permitted for the channel simulation's rails. */
 interface SignalTopology {
+  sourceConnectionGroups: ReturnType<typeof sourceConnections>
   connectivity: ConnectivityMap
   bridges: PassiveBridge[]
   rails: ReadonlySet<SourcePortId | SourceNetId>
@@ -71,10 +72,11 @@ export function signalTopology({
   rails: ReadonlySet<SourcePortId | SourceNetId>
 }): SignalTopology {
   const bridges = passiveBridges({ circuit, excluded: rails })
+  const sourceConnectionGroups = [...sourceConnections(circuit), ...bridges]
   const connectivity = new ConnectivityMap(
-    findConnectedNetworks([...sourceConnections(circuit), ...bridges]),
+    findConnectedNetworks(sourceConnectionGroups),
   )
-  return { connectivity, bridges, rails }
+  return { connectivity, bridges, rails, sourceConnectionGroups }
 }
 
 /** Keep endpoint ports in positive-to-negative order for differential channels. */
