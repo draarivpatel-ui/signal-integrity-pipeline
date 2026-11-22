@@ -327,20 +327,28 @@ export function scopeTrace({
   return trace
 }
 
-/** Scope the default SELECTED wire or a named logical net on the rendered board. */
-export function scopeFor({
-  circuit,
-  distanceMm = 1,
-  selectedNet,
-  referenceNet,
-  railNets = [],
-}: {
+/** Board and named channel and rail inputs used by scope tests. */
+interface ScopeFixtureOptions {
   circuit: CircuitJson
   distanceMm?: number
   selectedNet?: string
   referenceNet?: string
   railNets?: string[]
-}): CopperScope {
+}
+
+/** Scope the default SELECTED wire or a named logical net on the rendered board. */
+export function scopeFor(options: ScopeFixtureOptions): CopperScope {
+  return channelCopperScope(scopeOptions(options))
+}
+
+/** Resolve named test nets to the input for the production scope calculation. */
+export function scopeOptions({
+  circuit,
+  distanceMm = 1,
+  selectedNet,
+  referenceNet,
+  railNets = [],
+}: ScopeFixtureOptions): Parameters<typeof channelCopperScope>[0] {
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   let memberId: SourceNetId
   if (selectedNet !== undefined) {
@@ -369,12 +377,12 @@ export function scopeFor({
     })
     for (const id of members) railSourceIds.add(id)
   }
-  return channelCopperScope({
+  return {
     circuit,
     connectivity,
     channelSourceIds,
     referenceSourceIds,
     railSourceIds,
     distanceMm,
-  })
+  }
 }

@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { SourceComponentBase } from "circuit-json"
 import type { ConnectivityMap } from "circuit-json-to-connectivity-map"
 import type { SourceNetId, SourcePortId } from "./ids"
@@ -62,10 +63,10 @@ export function passiveBridges({
   circuit: CircuitJson
   excluded: ReadonlySet<SourcePortId>
 }): PassiveBridge[] {
+  const db = cju([...circuit])
   const ports = new Map<SourceComponentId, SourcePortId[]>()
-  for (const port of circuit) {
-    if (port.type !== "source_port" || port.source_component_id === undefined)
-      continue
+  for (const port of db.source_port.list()) {
+    if (port.source_component_id === undefined) continue
     const pins = ports.get(port.source_component_id)
     if (!pins) {
       ports.set(port.source_component_id, [port.source_port_id])
@@ -79,8 +80,7 @@ export function passiveBridges({
     "simple_inductor",
   ]
   const connections: PassiveBridge[] = []
-  for (const component of circuit) {
-    if (component.type !== "source_component") continue
+  for (const component of db.source_component.list()) {
     if (!passiveTypes.includes(component.ftype)) continue
     const pins = ports.get(component.source_component_id)
     if (pins?.length === 2 && pins.every((pin) => !excluded.has(pin)))

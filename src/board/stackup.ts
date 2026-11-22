@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { type PcbBoard, pcb_stackup } from "circuit-json"
 import { fail } from "./diagnostics"
 import type { CircuitJson } from "./schema"
@@ -34,8 +35,9 @@ export interface BoardStackup {
 
 /** Public. Circuit JSON is top→bottom; solver z=0 is the upper face of bottom copper. */
 export function stackupFromCircuitJson(circuit: CircuitJson): BoardStackup {
-  const boards = circuit.filter((record) => record.type === "pcb_board")
-  const records = circuit.filter((record) => record.type === "pcb_stackup")
+  const db = cju([...circuit])
+  const boards = db.pcb_board.list()
+  const records = db.pcb_stackup.list()
   // Plain Error (no code), exactly as before the module split.
   if (!records.length) {
     const boardId = boards[0]?.pcb_board_id ?? "(missing pcb_board)"
