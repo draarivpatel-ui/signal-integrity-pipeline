@@ -19,7 +19,7 @@ flowchart LR
 stateDiagram-v2
   [*] --> Ready
   Ready --> Complete: Signal checks and pin selection
-  Ready --> Failed: invalid input
+  Ready --> Failed: invalid input or conflicting IBIS model selections
   Complete --> [*]
   Failed --> [*]
 ```

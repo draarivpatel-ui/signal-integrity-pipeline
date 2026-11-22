@@ -61,8 +61,14 @@ function withIbisModelOverrides({
     for (const endpoint of [signal.driver, ...signal.receivers]) {
       for (const [index, sourcePortId] of endpointPorts(endpoint).entries()) {
         const modelName = selectedIbisModel({ endpoint, index })
-        if (modelName !== undefined)
-          modelNameBySourcePortId.set(sourcePortId, modelName)
+        if (modelName === undefined) continue
+        const previous = modelNameBySourcePortId.get(sourcePortId)
+        if (previous !== undefined && previous !== modelName) {
+          throw new Error(
+            `Conflicting IBIS models for source port ${sourcePortId}: "${previous}" and "${modelName}".`,
+          )
+        }
+        modelNameBySourcePortId.set(sourcePortId, modelName)
       }
     }
   }
