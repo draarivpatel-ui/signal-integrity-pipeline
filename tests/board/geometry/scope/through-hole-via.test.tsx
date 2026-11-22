@@ -1,35 +1,14 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { pcb_via } from "circuit-json"
-import {
-  scopeFor,
-  scopeTrace,
-  Wire,
-} from "../../../fixtures/copper-scope-board"
+import { scopeFor, scopeTrace } from "../../../fixtures/copper-scope-board"
+import { ThroughHoleViaBoard } from "../../../fixtures/copper-scope-cases"
 import { renderCoreSignals } from "../../../support/core-render"
 
 test("through-hole barrels reach layers beyond their connected copper", async () => {
   for (const allowBlindAndBuriedVias of [false, true]) {
     const circuit = await renderCoreSignals(
-      <board
-        width={18}
-        height={18}
-        layers={4}
-        allowBlindAndBuriedVias={allowBlindAndBuriedVias}
-        routeRemaining={false}
-        schematicDisabled
-      >
-        <Wire name="SELECTED" y={0} extent={3} layer="bottom" />
-        <Wire name="NEIGHBOR" y={5} extent={3} />
-        <trace from=".NEIGHBOR > .A" to="net.STUB" />
-        <via
-          pcbX={0}
-          pcbY={0.6}
-          fromLayer="top"
-          toLayer="inner1"
-          connectsTo="net.STUB"
-        />
-      </board>,
+      <ThroughHoleViaBoard allowBlindAndBuriedVias={allowBlindAndBuriedVias} />,
     )
     const via = circuit.find((record) => record.type === "pcb_via")
     assert(via)
