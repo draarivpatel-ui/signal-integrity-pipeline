@@ -12,11 +12,11 @@ import {
   RouteNetworkSolver,
 } from "../../src/simulation"
 import { routedRequest } from "../../src/simulation/route-transient"
+import { routedProblem } from "../fixtures/routed-fixture"
 import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
 import Single from "../fixtures/unit-single-ended"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
-import { routedProblem } from "../support/routed-fixture"
 
 /** The network stage produces one routed deck per admitted channel simulation. */
 type NetworkStage = RoutedStageSolver<RouteNetworkInput, RoutedDeck>

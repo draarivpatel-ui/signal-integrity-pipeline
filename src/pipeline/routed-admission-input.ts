@@ -17,6 +17,16 @@ export interface RoutedAdmissionInput {
   readonly materials?: RoutedCompileOptions["materials"]
 }
 
+/** Model bytes that serialize as exact UTF-8 when exported in solver constructor inputs. */
+class IbisModelBytes extends Uint8Array {
+  /** Decode only during an explicit JSON export of the captured model. */
+  toJSON(): string {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+      this,
+    )
+  }
+}
+
 /** Capture original bytes without decoding and give readers copies of byte views. */
 function captureIbisSources(
   sources: Readonly<IbisSources>,
@@ -34,7 +44,7 @@ function captureIbisSources(
     Object.defineProperty(ibisSources, assetPath, {
       enumerable: true,
       get() {
-        return new Uint8Array(capturedBytes)
+        return new IbisModelBytes(capturedBytes)
       },
     })
   }
