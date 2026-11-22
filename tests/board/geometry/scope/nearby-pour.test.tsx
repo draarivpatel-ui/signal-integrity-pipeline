@@ -54,7 +54,7 @@ test("a nearby non-reference pour retains its distant routed net", async () => {
   )
   assert(route?.type === "pcb_trace")
   const result = scopeFor({ circuit })
-  assert(result.pcbTraceIds.includes(route.pcb_trace_id))
+  assert(result.retainedPcbTraceIds.includes(route.pcb_trace_id))
 
   // Move the rendered pours two stack indices below the channel.
   const deeper = circuit.map((record) => {
@@ -62,6 +62,8 @@ test("a nearby non-reference pour retains its distant routed net", async () => {
     return pcb_copper_pour.parse({ ...record, layer: "inner2" })
   })
   assert(
-    !scopeFor({ circuit: deeper }).pcbTraceIds.includes(route.pcb_trace_id),
+    !scopeFor({ circuit: deeper }).retainedPcbTraceIds.includes(
+      route.pcb_trace_id,
+    ),
   )
 })
