@@ -1,7 +1,7 @@
-import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PcbTrace } from "circuit-json"
 import {
   type CircuitJson,
+  type CircuitJsonDb,
   type CopperScope,
   circuitJsonDb,
   getSourcePortConnectivityMapFromCircuitJson,
@@ -57,7 +57,7 @@ function ibisModelOverrides({
   db,
   driverReceiverChannels,
 }: {
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
 }): IbisModelOverrides {
   const modelNameBySourcePortId = new Map<SourcePortId, string>()
@@ -103,7 +103,7 @@ export function channelSimulationCircuit({
   channelSimulation,
   driverReceiverChannels,
 }: {
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
 }): CircuitJson {
@@ -295,7 +295,7 @@ function loadNodes({
   copperScope,
   pins,
 }: {
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
   copperScope: CopperScope
   pins: Map<SourcePortId, InspectedPin>
 }): LoadNodeIds {

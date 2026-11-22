@@ -1,4 +1,3 @@
-import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PcbPort, PcbTrace, SourceTrace } from "circuit-json"
 import {
   ConnectivityMap,
@@ -6,6 +5,7 @@ import {
 } from "circuit-json-to-connectivity-map"
 import {
   type CircuitJson,
+  type CircuitJsonDb,
   circuitJsonDb,
   type PassiveBridge,
   passiveBridges,
@@ -94,7 +94,7 @@ function selectCopper({
   topology,
   driverReceiverChannels,
 }: {
-  db: CircuitJsonUtilObjects
+  db: CircuitJsonDb
   topology: SignalTopology
   driverReceiverChannels: readonly SimulationPcbDriverReceiverChannel[]
 }): SelectedCopper {
@@ -240,7 +240,7 @@ function withPassiveBridges({
 }
 
 /** Describe the component-bound ports admitted by channel endpoint resolution. */
-function portNames(db: CircuitJsonUtilObjects): PortNames {
+function portNames(db: CircuitJsonDb): PortNames {
   const components = Object.fromEntries(
     db.source_component
       .list()
