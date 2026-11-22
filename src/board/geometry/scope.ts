@@ -118,22 +118,22 @@ function traceMembers({
 
 /** Copper layer names in top-to-bottom order. */
 function copperLayers(board: PcbBoard): LayerRef[] {
-  const layers = all_layers.slice(0, board.num_layers)
-  layers.push(...layers.splice(1, 1))
-  return layers
+  const boardLayers = all_layers.slice(0, board.num_layers)
+  boardLayers.push(...boardLayers.splice(1, 1))
+  return boardLayers
 }
 
 /** Attach a planar bound to the span of copper layers occupied by the feature. */
 function copperBox({
   xy,
-  names,
-  layers,
+  occupiedLayers,
+  boardLayers,
 }: {
   xy: Box
-  names: readonly LayerRef[]
-  layers: readonly LayerRef[]
+  occupiedLayers: readonly LayerRef[]
+  boardLayers: readonly LayerRef[]
 }): CopperBox {
-  const indices = names.map((name) => layers.indexOf(name))
+  const indices = occupiedLayers.map((layer) => boardLayers.indexOf(layer))
   return {
     xy,
     firstLayer: Math.min(...indices),
@@ -152,11 +152,11 @@ function wireRadius(point: RoutedPoint): number {
 function segmentBox({
   start,
   end,
-  layers,
+  boardLayers,
 }: {
   start: RoutedPoint
   end: RoutedPoint
-  layers: readonly LayerRef[]
+  boardLayers: readonly LayerRef[]
 }): CopperBox {
   const radius = Math.max(wireRadius(start), wireRadius(end))
   const xy = new Box(
@@ -165,30 +165,30 @@ function segmentBox({
     Math.max(start.x, end.x) + radius,
     Math.max(start.y, end.y) + radius,
   )
-  const names: LayerRef[] = []
+  const occupiedLayers: LayerRef[] = []
   if (end.route_type === "via") {
-    names.push(end.from_layer)
+    occupiedLayers.push(end.from_layer)
   } else {
-    names.push(end.layer)
-    if (start.route_type === "via") names.push(start.to_layer)
-    else names.push(start.layer)
+    occupiedLayers.push(end.layer)
+    if (start.route_type === "via") occupiedLayers.push(start.to_layer)
+    else occupiedLayers.push(start.layer)
   }
-  return copperBox({ xy, names, layers })
+  return copperBox({ xy, occupiedLayers, boardLayers })
 }
 
 /** Bound wire segments. Through-pad primitives are outside the routed solver’s geometry. */
 function traceBoxes({
   trace,
-  layers,
+  boardLayers,
 }: {
   trace: PcbTrace
-  layers: readonly LayerRef[]
+  boardLayers: readonly LayerRef[]
 }): TraceBoxes {
   const boxes = trace.route.slice(1).flatMap((end, index) => {
     const start = trace.route[index]
     if (start.route_type === "through_pad" || end.route_type === "through_pad")
       return []
-    return [segmentBox({ start, end, layers })]
+    return [segmentBox({ start, end, boardLayers })]
   })
   return [trace.pcb_trace_id, boxes]
 }
@@ -213,11 +213,11 @@ function viaMembers({
 /** The physical barrel span includes any inactive stubs. */
 function viaBox({
   via,
-  layers,
+  boardLayers,
   blindViasAllowed,
 }: {
   via: PcbVia
-  layers: readonly LayerRef[]
+  boardLayers: readonly LayerRef[]
   blindViasAllowed: boolean
 }): CopperBox {
   const { topmost_drill_layer: top, bottommost_drill_layer: bottom } = via
@@ -228,29 +228,29 @@ function viaBox({
     via.through_hole === true ||
     (!blindViasAllowed && top === undefined && bottom === undefined)
   )
-    return copperBox({ xy, names: layers, layers })
-  const names = [...via.layers]
-  if (top !== undefined) names.push(top)
-  if (bottom !== undefined) names.push(bottom)
-  return copperBox({ xy, names, layers })
+    return copperBox({ xy, occupiedLayers: boardLayers, boardLayers })
+  const occupiedLayers = [...via.layers]
+  if (top !== undefined) occupiedLayers.push(top)
+  if (bottom !== undefined) occupiedLayers.push(bottom)
+  return copperBox({ xy, occupiedLayers, boardLayers })
 }
 
 /** Bound component pad copper using the same outlines as routed topology. */
 function padBox({
   pad,
-  layers,
+  boardLayers,
 }: {
   pad: Pad
-  layers: readonly LayerRef[]
+  boardLayers: readonly LayerRef[]
 }): CopperBox {
   if (pad.type === "pcb_smtpad")
     return copperBox({
       xy: getSmtPadPolygon(pad).box,
-      names: [pad.layer],
-      layers,
+      occupiedLayers: [pad.layer],
+      boardLayers,
     })
   const xy = getPlatedHolePolygon(pad).box
-  return copperBox({ xy, names: pad.layers, layers })
+  return copperBox({ xy, occupiedLayers: pad.layers, boardLayers })
 }
 
 /** Euclidean distance between bounding boxes is a lower bound on copper distance. */
@@ -345,7 +345,7 @@ export function channelCopperScope({
     )
   }
   const board = circuit.find((record) => record.type === "pcb_board")!
-  const layers = copperLayers(board)
+  const boardLayers = copperLayers(board)
   const blindViasAllowed = board.allow_blind_and_buried_vias === true
   const traces = circuit.filter((record) => record.type === "pcb_trace")
   const vias = circuit.filter((record) => record.type === "pcb_via")
@@ -368,15 +368,17 @@ export function channelCopperScope({
     traces.map((trace) => [trace.pcb_trace_id, trace.source_trace_id]),
   )
   const associations = { sources, traceSources }
-  const boxes = new Map(traces.map((trace) => traceBoxes({ trace, layers })))
+  const boxes = new Map(
+    traces.map((trace) => traceBoxes({ trace, boardLayers })),
+  )
   const railIds = new Set([...rails, ...reference])
   const signalPours = pours.flatMap((pour): ScopedPour[] => {
     const net = pour.source_net_id
     if (!net || railIds.has(net)) return []
     const box = copperBox({
       xy: getPourPolygon(pour).box,
-      names: [pour.layer],
-      layers,
+      occupiedLayers: [pour.layer],
+      boardLayers,
     })
     return [{ net, box }]
   })
@@ -389,14 +391,14 @@ export function channelCopperScope({
   for (const pad of pads) {
     const sourcePort = pad.pcb_port_id && ports.get(pad.pcb_port_id)
     if (!sourcePort || !channelSourceIds.has(sourcePort)) continue
-    seeds.push(padBox({ pad, layers }))
+    seeds.push(padBox({ pad, boardLayers }))
   }
   for (const via of vias) {
     if (
       !viaMembers({ via, associations }).some((id) => channelSourceIds.has(id))
     )
       continue
-    seeds.push(viaBox({ via, layers, blindViasAllowed }))
+    seeds.push(viaBox({ via, boardLayers, blindViasAllowed }))
   }
   for (const { net, box } of signalPours) {
     if (channelSourceIds.has(net)) seeds.push(box)
@@ -423,7 +425,7 @@ export function channelCopperScope({
   for (const via of vias) {
     if (
       !isNearby({
-        candidate: viaBox({ via, layers, blindViasAllowed }),
+        candidate: viaBox({ via, boardLayers, blindViasAllowed }),
         proximity,
       })
     )
@@ -440,7 +442,7 @@ export function channelCopperScope({
     if (
       !port ||
       railIds.has(port) ||
-      !isNearby({ candidate: padBox({ pad, layers }), proximity })
+      !isNearby({ candidate: padBox({ pad, boardLayers }), proximity })
     )
       continue
     retain({ ids: [port], copper: retainedCopper })
