@@ -18,7 +18,7 @@ export function validate({
   validateSignalGraph({
     circuit,
     topology: signalTopology({ circuit, rails }),
-    signals: [signal],
+    driverReceiverChannels: [signal],
     allowUnroutedTraces,
   })
 }
