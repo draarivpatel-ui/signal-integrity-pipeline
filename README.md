@@ -7,7 +7,7 @@ Signal-integrity tools for tscircuit boards.
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
 `RoutedAdmissionSolver` reads PCB transient channel simulation records written by core from TSX. It checks
 channel endpoints, IBIS models, timing and patterns, including pseudo-random binary sequences (PRBS).
-Each declared block becomes immutable inputs for route sections and buffer binding.
+Each declared channel simulation becomes immutable inputs for route sections and buffer binding.
 RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
 
 ## General workflow

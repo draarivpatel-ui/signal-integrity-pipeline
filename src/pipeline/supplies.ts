@@ -16,13 +16,12 @@ interface ReferenceBias {
   voltage: number
 }
 
-interface BlockSupplyOptions {
+interface ChannelSimulationSupplyOptions {
   circuit: CircuitJson
   connectivity: ConnectivityMap
   pins: Map<SourcePortId, InspectedPin>
   retained: ReadonlySet<SourcePortId | SourceNetId>
   reference: SourcePortId
-  settings: SimulationModeling
 }
 
 /** Canonical connectivity-map net, or the original port/net for an isolated endpoint. */
@@ -49,7 +48,7 @@ function retainedVoltageSources({
   pins,
   retained,
   reference,
-}: BlockSupplyOptions): RetainedSupplies {
+}: ChannelSimulationSupplyOptions): RetainedSupplies {
   const candidates = cju([...circuit])
     .simulation_voltage_source.list()
     .map((source) => {
@@ -84,13 +83,19 @@ function retainedVoltageSources({
   return { sources, sourceNets }
 }
 
+/** Circuit with its retained sources and any inferred supplies. */
+interface ChannelSimulationSupplies {
+  circuit: CircuitJson
+  supplies: NonNullable<SimulationModeling["supplies"]>
+}
+
 /** Retain declared sources and infer a nominal supply only for an unpowered IBIS rail. */
-export function addBlockSupplies(options: BlockSupplyOptions): void {
-  const { circuit, connectivity, pins, reference, settings } = options
+export function withChannelSimulationSupplies(
+  options: ChannelSimulationSupplyOptions,
+): ChannelSimulationSupplies {
+  const { circuit, connectivity, pins, reference } = options
   const { sources, sourceNets } = retainedVoltageSources(options)
-  for (const source of cju([...circuit]).simulation_voltage_source.list()) {
-    if (!sources.has(source)) circuit.splice(circuit.indexOf(source), 1)
-  }
+  const supplies: ChannelSimulationSupplies["supplies"] = []
   const ground = netKey({ connectivity, id: reference })
   const netVoltages = new Map<string, ReferenceBias>()
   const externalPorts = new Set<SourcePortId>()
@@ -134,11 +139,17 @@ export function addBlockSupplies(options: BlockSupplyOptions): void {
     }
     if (key === ground) continue
     if (sourceNets.has(key)) continue
-    settings.supplies ??= []
-    settings.supplies.push({
+    supplies.push({
       positive: { sourcePortId: port },
       negative: { sourcePortId: reference },
       voltageV: voltage,
     })
+  }
+  return {
+    circuit: circuit.filter(
+      (record) =>
+        record.type !== "simulation_voltage_source" || sources.has(record),
+    ),
+    supplies,
   }
 }
