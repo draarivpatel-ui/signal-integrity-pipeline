@@ -200,7 +200,7 @@ model provenance, node maps, via/oblique policies and deck evidence remain visib
 The site's `Step` input starts at 0 for the initial board, then synchronizes to
 stages 1–6, matching table rows 01–06. Entering a number
 selects that retained stage until the next pipeline advance. Each flat stage
-retains its last completed block's domain solver and final drawing; selecting
+retains its last completed channel simulation's domain solver and final drawing; selecting
 an earlier stage never recomputes it. Each domain solver draws its physical input
 before its first step. Stage wrappers construct that domain solver when admitted,
 and root transitions preview the incoming immutable input before the next step.
@@ -208,7 +208,7 @@ Fields preview the first physical cross-section without solving coefficients.
 Pending transients show the board with probe marks and empty plot axes; curves
 appear only after complete samples arrive. Future stages whose inputs are
 incomplete draw the selected copper in neutral grey, and a problem with no admitted
-blocks shows the whole board with one quiet line. Values outside 0–6 are clamped silently; clicking
+channel simulations shows the whole board with one quiet line. Values outside 0–6 are clamped silently; clicking
 a table row also selects that stage. Selection lives in fixture component state.
 The page starts with this input and the debugger; local asset loading remains,
 while only blocking load, backend and solver errors appear inline.
