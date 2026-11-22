@@ -1,10 +1,11 @@
-import { cju } from "@tscircuit/circuit-json-util"
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PcbTrace } from "circuit-json"
 import {
   type CircuitJson,
   type CopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
   type SignalEndpoint,
+  type SimulationIbisModel,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
   type SourceNetId,
@@ -14,17 +15,11 @@ import {
 } from "../board"
 import type { InspectedPin } from "../buffers"
 import { voltageSourceTerminals } from "../simulation"
+import { circuitJsonDb } from "./circuit-json-db"
 import type { NumericalSettings } from "./modeling"
 import { endpointPorts } from "./signal-controls"
 import type { ScopedSignalPins, SignalPins } from "./signal-pins"
 import { withChannelSimulationSupplies } from "./supplies"
-
-/** Simulation records needed while lowering one selected channel simulation. */
-const PART_MODEL_RECORD_TYPES = [
-  "simulation_ibis_model",
-  "simulation_voltage_source",
-  "simulation_spice_subcircuit",
-]
 
 /** Source component variants with a functional model type and component ID. */
 type SourceComponent = Extract<
@@ -48,14 +43,17 @@ function selectedIbisModel({
   return endpoint.n_ibis_model_name
 }
 
-/** Copy the IBIS model records with each endpoint's model choice applied to its pins. */
-function withIbisModelOverrides({
-  circuit,
+/** Map each IBIS record that needs a copy with selected endpoint models. */
+type IbisModelOverrides = Map<CircuitJson[number], SimulationIbisModel>
+
+/** Collect model choices and prepare replacements for the matching IBIS records. */
+function ibisModelOverrides({
+  db,
   driverReceiverChannels,
 }: {
-  circuit: CircuitJson
+  db: CircuitJsonUtilObjects
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
-}): CircuitJson {
+}): IbisModelOverrides {
   const modelNameBySourcePortId = new Map<SourcePortId, string>()
   for (const signal of driverReceiverChannels) {
     for (const endpoint of [signal.driver, ...signal.receivers]) {
@@ -72,8 +70,8 @@ function withIbisModelOverrides({
       }
     }
   }
-  return circuit.map((record) => {
-    if (record.type !== "simulation_ibis_model") return record
+  const models: IbisModelOverrides = new Map()
+  for (const record of db.simulation_ibis_model.list()) {
     const overrides = Object.entries(
       record.ibis_pin_name_to_source_port_id,
     ).flatMap(([pin, sourcePortId]) => {
@@ -81,61 +79,50 @@ function withIbisModelOverrides({
       if (modelName === undefined) return []
       return [[pin, modelName] as const]
     })
-    if (!overrides.length) return record
-    return {
+    if (!overrides.length) continue
+    models.set(record, {
       ...record,
       ibis_pin_name_to_model_name: {
         ...record.ibis_pin_name_to_model_name,
         ...Object.fromEntries(overrides),
       },
-    }
-  })
+    })
+  }
+  return models
 }
 
 /** Keep the board and part models, then apply the selected simulation's endpoint choices. */
 export function channelSimulationCircuit({
   boardCircuitJson,
+  db,
   channelSimulation,
   driverReceiverChannels,
 }: {
   boardCircuitJson: CircuitJson
+  db: CircuitJsonUtilObjects
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
 }): CircuitJson {
-  const boardRecordsWithoutSimulations = boardCircuitJson.filter(
-    (record) =>
-      !record.type.startsWith("simulation_") ||
-      PART_MODEL_RECORD_TYPES.includes(record.type),
-  )
-  return withIbisModelOverrides({
-    circuit: [
-      ...boardRecordsWithoutSimulations,
-      channelSimulation,
-      ...driverReceiverChannels,
-    ],
-    driverReceiverChannels,
-  })
+  const models = ibisModelOverrides({ db, driverReceiverChannels })
+  const partModelRecords = new Set<CircuitJson[number]>([
+    ...db.simulation_ibis_model.list(),
+    ...db.simulation_voltage_source.list(),
+    ...db.simulation_spice_subcircuit.list(),
+  ])
+  const circuit = boardCircuitJson
+    .filter(
+      (record) =>
+        !record.type.startsWith("simulation_") || partModelRecords.has(record),
+    )
+    .map((record) => models.get(record) ?? record)
+  circuit.push(channelSimulation, ...driverReceiverChannels)
+  return circuit
 }
 
-/** A routed signal component can use a built-in passive or an explicit SPICE subcircuit. */
-function hasSupportedComponentModel({
-  component,
-  circuit,
-}: {
-  component: SourceComponent | undefined
-  circuit: CircuitJson
-}): boolean {
-  if (!component) return false
-  if (
-    ["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
-      component.ftype,
-    )
-  )
-    return true
-  return Boolean(
-    cju([...circuit]).simulation_spice_subcircuit.getWhere({
-      source_component_id: component.source_component_id,
-    }),
+/** A routed signal component can use a built-in passive model. */
+function hasBuiltInPassiveModel(component: SourceComponent): boolean {
+  return ["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
+    component.ftype,
   )
 }
 
@@ -149,16 +136,21 @@ export function validateComponentModels({
   topology: ReadonlyMap<SourcePortId | SourceNetId, string>
   pins: ReadonlyMap<SourcePortId, InspectedPin>
 }): void {
-  const db = cju([...circuit])
-  const circuitPorts = db.source_port.list()
-  const components = db.source_component.list()
-  for (const port of circuitPorts) {
+  const db = circuitJsonDb(circuit)
+  for (const port of db.source_port.list()) {
     if (!topology.has(port.source_port_id) || pins.has(port.source_port_id))
       continue
-    const component = components.find(
-      (component) => component.source_component_id === port.source_component_id,
+    const component = db.source_component.getWhere({
+      source_component_id: port.source_component_id,
+    })
+    if (
+      component &&
+      (hasBuiltInPassiveModel(component) ||
+        db.simulation_spice_subcircuit.getWhere({
+          source_component_id: component.source_component_id,
+        }))
     )
-    if (hasSupportedComponentModel({ component, circuit })) continue
+      continue
     const label = component?.name ?? port.source_port_id
     throw new Error(
       `${label} is on the signal and has no supported SPICE or IBIS model.`,
@@ -212,15 +204,16 @@ export function withUsedIbisModels({
   circuit: CircuitJson
   pins: Map<SourcePortId, InspectedPin>
 }): PrunedIbisModels {
-  const models = new Map<InspectedPin["model"], InspectedPin["model"]>()
-  for (const model of cju([...circuit]).simulation_ibis_model.list()) {
+  const db = circuitJsonDb(circuit)
+  const models = new Map<CircuitJson[number], SimulationIbisModel | undefined>()
+  for (const model of db.simulation_ibis_model.list()) {
     const used = [...pins.values()].filter((pin) => pin.model === model)
-    if (!used.length) continue
-    models.set(model, prunedIbisModel({ model, usedPins: used }))
+    if (used.length === 0) models.set(model, undefined)
+    else models.set(model, prunedIbisModel({ model, usedPins: used }))
   }
   return {
     circuit: circuit.flatMap((record): CircuitJson => {
-      if (record.type !== "simulation_ibis_model") return [record]
+      if (!models.has(record)) return [record]
       const model = models.get(record)
       if (model === undefined) return []
       return [model]
@@ -259,15 +252,14 @@ function routedLoadTraceIds({
 
 /** Find nodes that exist independently of the passive loads. */
 function loadNodes({
-  circuit,
+  db,
   copperScope,
   pins,
 }: {
-  circuit: CircuitJson
+  db: CircuitJsonUtilObjects
   copperScope: CopperScope
   pins: Map<SourcePortId, InspectedPin>
 }): LoadNodeIds {
-  const db = cju([...circuit])
   const routed = routedLoadTraceIds({
     pcbTraces: db.pcb_trace.list(),
     copperScope,
@@ -319,19 +311,16 @@ function retainedPassiveComponents({
   retained: ReadonlySet<SourcePortId | SourceNetId>
   rails: ReadonlySet<SourcePortId | SourceNetId>
 }): NonNullable<NumericalSettings["passiveComponents"]> {
-  const db = cju([...circuit])
-  const circuitPorts = db.source_port.list()
-  const components = db.source_component.list()
-  const nodes = loadNodes({ circuit, copperScope, pins })
-  const spiceModels = db.simulation_spice_subcircuit.list()
-  return components.flatMap((component) => {
-    if (!hasSupportedComponentModel({ component, circuit })) return []
+  const db = circuitJsonDb(circuit)
+  const nodes = loadNodes({ db, copperScope, pins })
+  return db.source_component.list().flatMap((component) => {
     const sourceComponentId = component.source_component_id
-    const model = spiceModels.find(
-      (record) => record.source_component_id === sourceComponentId,
-    )
-    let terminals = circuitPorts
-      .filter((port) => port.source_component_id === sourceComponentId)
+    const model = db.simulation_spice_subcircuit.getWhere({
+      source_component_id: sourceComponentId,
+    })
+    if (!model && !hasBuiltInPassiveModel(component)) return []
+    let terminals = db.source_port
+      .list({ source_component_id: sourceComponentId })
       .map((port) => port.source_port_id)
     if (model) terminals = Object.values(model.spice_pin_to_source_port_map)
     if (!terminals.some((port) => retained.has(port) && !rails.has(port)))
