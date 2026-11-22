@@ -21,9 +21,6 @@ import { compareNames, prepareChannelSimulation } from "./signals"
 /** Admission starts with the base route mesh resolution. */
 const BASE_REFINEMENT = 1
 
-/** Admission has no warnings before the downstream compilation stages. */
-const ADMISSION_WARNINGS: readonly string[] = Object.freeze([])
-
 /** Frozen section and binding inputs for one admitted transient channel simulation. */
 export interface RoutedChannelSimulationPlan {
   readonly simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
@@ -74,7 +71,7 @@ function planRoutedChannelSimulation({
   return Object.freeze({
     simulationPcbTransientChannelSimulationId,
     name: channelSimulation.name ?? simulationPcbTransientChannelSimulationId,
-    warnings: ADMISSION_WARNINGS,
+    warnings: snapshot(prepared.warnings ?? []),
     sections: Object.freeze({
       circuitJson,
       copperScope: modeling.copperScope,
