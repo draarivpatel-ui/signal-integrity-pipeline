@@ -17,6 +17,7 @@ import type {
   LaneMapping,
   SourceNetId,
   SourcePortId,
+  SourceTraceId,
 } from "../board"
 import { selectPort, subcircuitTree } from "../board"
 import type { ModelRunDefinition } from "../buffers"
@@ -76,6 +77,8 @@ const exactly = <T>({ items, label }: { items: T[]; label: string }): T => {
 interface CircuitNodesInput {
   circuit: CircuitJson
   mappings: readonly LaneMapping[]
+  routedTraceCuts?: readonly LaneMapping[]
+  additionalSourceTraceIds?: readonly SourceTraceId[]
   modeling: SimulationModeling
 }
 
@@ -178,6 +181,8 @@ function createCircuitNodeLookup({
 export function circuitNodes({
   circuit,
   mappings,
+  routedTraceCuts,
+  additionalSourceTraceIds = [],
   modeling,
 }: CircuitNodesInput): CircuitNodes {
   const parents: SourceParents = new Map()
@@ -187,11 +192,13 @@ export function circuitNodes({
     if (element.type === "source_net" && element.source_net_id)
       parents.set(element.source_net_id, element.source_net_id)
   }
-  const channelTraces = new Set(
-    mappings.flatMap(
+  const traceCuts = routedTraceCuts ?? mappings
+  const channelTraces = new Set([
+    ...traceCuts.flatMap(
       (mapping) => mapping.sourceTraceIds ?? [mapping.sourceTraceId],
     ),
-  )
+    ...additionalSourceTraceIds,
+  ])
   const db = cju([...circuit])
   const traces = db.source_trace.list()
   const nets = db.source_net.list()
@@ -215,7 +222,7 @@ export function circuitNodes({
       )
     }
   }
-  for (const mapping of mappings) {
+  for (const mapping of traceCuts) {
     const from = portNetBindings({
       port: mapping.from,
       traces,
@@ -288,14 +295,37 @@ export function circuitNodes({
   const node = createCircuitNodeLookup({ parents, splitNets, groundRoot })
   const ids = [...parents.keys()].filter((id) => !splitNets.has(id))
   for (const id of ids) node(id)
-  // Adjacent routed segments can share one physical endpoint, such as a receiver with a termination.
-  const endpoints = new Set(
-    mappings.flatMap((mapping) => [mapping.from, mapping.to]),
-  )
+  validateRoutedNodes({ mappings, routedTraceCuts, node })
+  return {
+    node,
+    groundSourcePortId: ground,
+    mapping: Object.fromEntries(ids.map((id) => [id, node(id)])),
+  }
+}
+
+/** Reject grounded or bypassed copper while allowing ideal connections between routed segments. */
+function validateRoutedNodes({
+  mappings,
+  routedTraceCuts,
+  node,
+}: Pick<CircuitNodesInput, "mappings" | "routedTraceCuts"> &
+  Pick<CircuitNodes, "node">): void {
+  if (routedTraceCuts) {
+    for (const { from, to } of routedTraceCuts) {
+      const fromNode = node(from)
+      const toNode = node(to)
+      if (fromNode === toNode || fromNode === "0" || toNode === "0")
+        fail(
+          "channel_short",
+          "Extracted endpoints are shorted by another ideal source trace or reference",
+        )
+    }
+    return
+  }
+  const endpoints = new Set(mappings.flatMap(({ from, to }) => [from, to]))
   const endpointNodes = [...endpoints].map(node)
-  const collapsedLane = mappings.some((mapping) => mapping.from === mapping.to)
   if (
-    collapsedLane ||
+    mappings.some(({ from, to }) => from === to) ||
     endpointNodes.includes("0") ||
     new Set(endpointNodes).size !== endpoints.size
   )
@@ -303,11 +333,6 @@ export function circuitNodes({
       "channel_short",
       "Extracted endpoints are shorted by another ideal source trace or reference",
     )
-  return {
-    node,
-    groundSourcePortId: ground,
-    mapping: Object.fromEntries(ids.map((id) => [id, node(id)])),
-  }
 }
 
 /** Finds a modeled component's subcircuit through its groups, or returns null at board level. */
@@ -348,6 +373,8 @@ function componentScope({
 export function generalDeclarations({
   circuit,
   mappings,
+  routedTraceCuts,
+  additionalSourceTraceIds,
   modeling,
   controls,
 }: CircuitNodesInput & {
@@ -395,7 +422,13 @@ export function generalDeclarations({
   }))
   if (!models.length)
     fail("ibis_model", "At least one serialized native IBIS model required")
-  const nodes = circuitNodes({ circuit, mappings, modeling })
+  const nodes = circuitNodes({
+    circuit,
+    mappings,
+    routedTraceCuts,
+    additionalSourceTraceIds,
+    modeling,
+  })
   const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
   const sourceNets = new Set(
     db.source_net.list().map((net) => net.source_net_id),

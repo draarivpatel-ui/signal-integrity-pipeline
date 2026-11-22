@@ -38,6 +38,7 @@ export type {
   RoutedCompileOptions,
   RoutedDeck,
   RouteNetworkInput,
+  ScopedRouteBindingsInput,
 } from "./routed-types"
 export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
 export type {

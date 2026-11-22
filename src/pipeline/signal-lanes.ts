@@ -3,14 +3,13 @@ import type { SourceTrace } from "circuit-json"
 import type {
   CircuitJson,
   CopperScope,
-  LaneModeling,
   SimulationPcbDriverReceiverChannel,
   SimulationPcbTransientChannelSimulation,
   SourceNetId,
   SourcePortId,
 } from "../board"
 import { Diagnostic } from "../kernel"
-import type { NumericalSettings } from "./modeling"
+import type { NumericalSettings, RoutedLane } from "./modeling"
 import { endpointPorts } from "./signal-controls"
 import type { SignalPins } from "./signal-pins"
 
@@ -29,7 +28,7 @@ function routedLane({
   trace: SourceTrace
   topology: ReadonlyMap<SourcePortId | SourceNetId, string>
   driven: ReadonlySet<SourcePortId>
-}): LaneModeling {
+}): RoutedLane {
   const ordered = trace.connected_source_port_ids.toSorted()
   if (driven.has(ordered[1]) && !driven.has(ordered[0])) ordered.reverse()
   const [from, to] = ordered
@@ -147,6 +146,6 @@ export function prepareRoutedLanes({
     )
   validateRoutedDrivers({ channelSimulation, driverReceiverChannels, lanes })
   return lanes.toSorted((a, b) =>
-    a.from.sourcePortId!.localeCompare(b.from.sourcePortId!),
+    a.from.sourcePortId.localeCompare(b.from.sourcePortId),
   )
 }

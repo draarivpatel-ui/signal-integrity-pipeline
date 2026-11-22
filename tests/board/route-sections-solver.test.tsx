@@ -12,7 +12,7 @@ async function sectionInput(): Promise<RouteSectionsInput> {
   const { circuitJson, scope } = await routedCopper()
   return {
     circuitJson,
-    scope,
+    copperScope: scope,
     requiredSourcePortIds: [],
     artifactPrefix: "test",
   }
@@ -20,7 +20,7 @@ async function sectionInput(): Promise<RouteSectionsInput> {
 
 test("sections process one route per step", async () => {
   const input = await sectionInput()
-  const { circuitJson, scope } = input
+  const { circuitJson, copperScope } = input
   const solver = new RouteSectionsSolver(input)
   solver.step()
   assert.equal(solver.solved, false)
@@ -28,7 +28,7 @@ test("sections process one route per step", async () => {
   solver.solve()
   assert.deepEqual(
     solver.getOutput().value.geometry,
-    segmentRoutes({ circuit: circuitJson, scope }),
+    segmentRoutes({ circuit: circuitJson, scope: copperScope }),
   )
 })
 
