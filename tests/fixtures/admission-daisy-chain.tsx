@@ -8,10 +8,14 @@ export function AdmissionDaisyChain({
   routeFinalLeg,
   namedNet = false,
   idealMiddleLeg = false,
+  branched = false,
+  placedLoad = false,
 }: {
   routeFinalLeg: boolean
   namedNet?: boolean
   idealMiddleLeg?: boolean
+  branched?: boolean
+  placedLoad?: boolean
 }): JSX.Element {
   const driver = ".TX > .Y"
   const middleReceiver = ".MID > .A"
@@ -20,6 +24,13 @@ export function AdmissionDaisyChain({
   if (idealMiddleLeg) finalLegStart = ".JOIN > .A"
   let finalPcbPath: TraceProps["pcbPath"]
   const receiverRefs = [middleReceiver]
+  const branchStart = ".BRANCH > .A"
+  const branchReceiver = ".RX2 > .A"
+  if (branched) receiverRefs.push(branchReceiver)
+  const namedPorts = [
+    ...new Set([driver, middleReceiver, finalLegStart, finalReceiver]),
+  ]
+  const loadPort = ".LOAD > .pin3"
   if (routeFinalLeg) finalPcbPath = [finalLegStart, finalReceiver]
   if (!routeFinalLeg || idealMiddleLeg) receiverRefs.push(finalReceiver)
 
@@ -56,8 +67,36 @@ export function AdmissionDaisyChain({
         width={0.2}
         pcbPath={finalPcbPath}
       />
+      {branched && (
+        <>
+          <Inverter name="BRANCH" x={0} y={1} driver={false} />
+          <Inverter name="RX2" x={5} y={1} driver={false} />
+          <trace from={middleReceiver} to={branchStart} />
+          <trace
+            from={branchStart}
+            to={branchReceiver}
+            width={0.2}
+            pcbPath={[branchStart, branchReceiver]}
+          />
+        </>
+      )}
+      {placedLoad && (
+        <>
+          <chip name="LOAD" pcbX={7} footprint="sot23">
+            <spicemodel
+              source={".subckt LOAD pin1 pin2\nR1 pin1 pin2 33\n.ends LOAD"}
+            />
+          </chip>
+          <trace
+            from={finalReceiver}
+            to={loadPort}
+            width={0.2}
+            pcbPath={[finalReceiver, loadPort]}
+          />
+        </>
+      )}
       {namedNet &&
-        [driver, middleReceiver, finalReceiver].map((port) => (
+        namedPorts.map((port) => (
           <Fragment key={port}>
             <trace from={port} to="net.DATA" />
           </Fragment>
