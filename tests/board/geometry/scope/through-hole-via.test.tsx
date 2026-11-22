@@ -18,8 +18,8 @@ test("through-hole barrels reach layers beyond their connected copper", async ()
       scope.extractedPcbTraceIds.includes(neighbor),
       !allowBlindAndBuriedVias,
     )
-    let expectedVias: typeof via.pcb_via_id[] = []
-    if (!allowBlindAndBuriedVias) expectedVias = [via.pcb_via_id]
+    const expectedVias = []
+    if (!allowBlindAndBuriedVias) expectedVias.push(via.pcb_via_id)
     assert.deepEqual(scope.extractedPcbViaIds, expectedVias)
   }
 })
