@@ -1,5 +1,4 @@
 import type {
-  CircuitJson,
   CircuitJsonSnapshot,
   SimulationPcbDriverReceiverChannel,
   SimulationPcbTransientChannelSimulation,
@@ -8,7 +7,7 @@ import type {
 } from "../board"
 import { circuitJsonDb } from "../board"
 import type { IbisSources, InspectedPin } from "../buffers"
-import { type SafeId, safeId } from "../kernel"
+import { type SafeId, safeId, type Snapshot } from "../kernel"
 import type { RunControls } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import {
@@ -45,8 +44,8 @@ export interface PreparedChannelSimulation {
   stepSeconds: number
   routedTopology: SignalPins["routedTopology"]
   channelSimulation: SimulationPcbTransientChannelSimulation
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
-  circuit: CircuitJson
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
+  circuit: CircuitJsonSnapshot
   controls: Record<string, RunControls>
   pins: Map<SourcePortId, InspectedPin>
   settings: NumericalSettings
@@ -159,9 +158,9 @@ export function compareNames({ a, b }: { a: string; b: string }): number {
 interface ChannelSelection {
   channelSimulation: SimulationPcbTransientChannelSimulation
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
-  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   durationSeconds: number
-  circuit: CircuitJson
+  circuit: CircuitJsonSnapshot
 }
 
 /** Require at least one channel with distinct names and record IDs. */

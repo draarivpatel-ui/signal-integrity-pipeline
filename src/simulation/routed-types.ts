@@ -35,18 +35,11 @@ export interface RoutedTraceCut {
   readonly toSourcePortId: SourcePortId
 }
 
-/** Distinct contacts connected by an explicit ideal segment between routed cuts. */
-export interface IdealRoutedJunction {
-  readonly fromSourcePortId: SourcePortId
-  readonly toSourcePortId: SourcePortId
-}
-
 /** Board, receiver paths and physical trace cuts for routed IBIS binding. */
 export interface RouteBindingsInput {
   readonly circuitJson: CircuitJsonSnapshot
   readonly mappings: readonly LaneMapping[]
   readonly routedTraceCuts: readonly RoutedTraceCut[]
-  readonly idealRoutedJunctions: readonly IdealRoutedJunction[]
   readonly modeling: Snapshot<SimulationModeling>
   readonly controls: Snapshot<Record<string, RunControls>>
   readonly ibisSources: Readonly<IbisSources>
