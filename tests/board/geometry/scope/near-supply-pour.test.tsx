@@ -20,5 +20,5 @@ test("a supply pour under the channel does not admit its distant trace", async (
   assert(circuit.some((record) => record.type === "pcb_copper_pour"))
   const result = scopeFor({ circuit, railNets: ["VDD"] })
   assert(!result.retainedSourceIds.includes(scopeNet({ circuit, name: "VDD" })))
-  assert.deepEqual(result.pcbTraceIds, result.selectedPcbTraceIds)
+  assert.deepEqual(result.retainedPcbTraceIds, result.selectedPcbTraceIds)
 })
