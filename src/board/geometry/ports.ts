@@ -14,9 +14,9 @@ export function resolveRouteVias({
   trace,
 }: {
   circuit: CircuitJsonSnapshot
-  trace: PcbTrace
+  trace: Snapshot<PcbTrace>
 }): RoutedPoint[] {
-  let vias: PcbVia[] | undefined
+  let vias: Snapshot<PcbVia>[] | undefined
   return trace.route.map((point) => {
     if (point.route_type === "through_pad")
       fail("route_type", "Only wire/via routed primitives supported")
