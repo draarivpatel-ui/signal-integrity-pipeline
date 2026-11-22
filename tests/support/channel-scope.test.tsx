@@ -135,7 +135,7 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
   const sources = { "models/sn74lvc1g04.ibs": routedVisualIbis }
   const [block] = prepareBlocks({ circuit, sources, distanceMm: 1 })
   assert.equal(block.settings.lanes.length, 1)
-  const retained = new Set(block.settings.copperScope.retainedPcbTraceIds)
+  const retained = new Set(block.settings.copperScope.extractedPcbTraceIds)
   const excluded = circuit.filter(
     (record) =>
       record.type === "pcb_trace" && !retained.has(record.pcb_trace_id),
@@ -151,9 +151,9 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
     1,
     "only the selected channel is a lane",
   )
-  const { retainedPcbTraceIds, selectedPcbTraceIds } = near.settings.copperScope
+  const { extractedPcbTraceIds, channelPcbTraceIds } = near.settings.copperScope
   assert.ok(
-    retainedPcbTraceIds.length > selectedPcbTraceIds.length,
+    extractedPcbTraceIds.length > channelPcbTraceIds.length,
     "the nearby quiet conductor stays in the copper scope",
   )
   const quiet = [...near.pins.values()].find((pin) => {
@@ -184,8 +184,8 @@ test("unrelated branched copper cannot reject a selected channel", async () => {
     "nearby branched copper is a scoped neighbour, not a rejected lane",
   )
   assert.ok(
-    branched.settings.copperScope.retainedPcbTraceIds.length >
-      branched.settings.copperScope.selectedPcbTraceIds.length,
+    branched.settings.copperScope.extractedPcbTraceIds.length >
+      branched.settings.copperScope.channelPcbTraceIds.length,
   )
 })
 
@@ -221,7 +221,9 @@ test("a shunt on retained quiet copper remains a modeled load", async () => {
   )
   assert.ok(route?.type === "pcb_trace")
   assert.ok(
-    block.settings.copperScope.retainedPcbTraceIds.includes(route.pcb_trace_id),
+    block.settings.copperScope.extractedPcbTraceIds.includes(
+      route.pcb_trace_id,
+    ),
   )
   assert.deepEqual(block.settings.passiveComponents, [
     { sourceComponentId: termination.source_component_id },
