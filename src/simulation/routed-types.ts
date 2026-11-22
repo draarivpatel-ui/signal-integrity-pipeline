@@ -60,7 +60,7 @@ export interface RoutedBindings {
 }
 /** Scoped geometry, field results and electrical bindings for a routed deck. */
 export interface RouteNetworkInput {
-  blockId: string
+  simulationPcbTransientChannelSimulationId: string
   name: string
   geometry: SectionGeometry
   extracted: ExtractedRoutes
@@ -72,7 +72,7 @@ export interface RouteNetworkInput {
 }
 /** Executable SPICE input and evidence for one routed transient. */
 export interface RoutedDeck {
-  blockId: string
+  simulationPcbTransientChannelSimulationId: string
   name: string
   deck: string
   requestSha256: string
