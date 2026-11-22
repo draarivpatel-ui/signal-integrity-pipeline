@@ -40,7 +40,7 @@ interface SignalIndexOptions {
 }
 
 /** Collect all ports and nets tied to declared rails or to IBIS reference pins. */
-export function collectRailIds({
+function collectRailIds({
   circuit,
   connectivity,
   pins,

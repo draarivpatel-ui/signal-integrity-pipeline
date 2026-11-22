@@ -12,7 +12,11 @@ import {
 import { convertPackaged } from "../../src/buffers/package"
 import { splitWords, subcircuitHeader } from "../../src/buffers/text"
 import { Board, source } from "../fixtures/coupled-package"
-import { vendorAvailable, vendorText } from "../fixtures/vendor-models"
+import {
+  loadVendorModelText,
+  vendorAvailable,
+  vendorModels,
+} from "../fixtures/vendor-models"
 import {
   energyFacts,
   isGroundedMaxwell,
@@ -348,7 +352,7 @@ test.skipIf(!vendorAvailable("sprm552c.ibs"))(coupledSelection, async () => {
   // Same physics as the full-matrix check (tests/buffers/package-matrix.test.ts), on the exact pin sets the DDR3
   // TSX declarations select (examples/routed/ddr3-signals.tsx). Schur reduction of floating unused pins preserves
   // definiteness (Horn & Johnson, Matrix Analysis, 2nd ed., Theorem 7.7.6), and ngspice K must satisfy |k| < 1.
-  const text = await vendorText("sprm552c.ibs")
+  const text = await loadVendorModelText(vendorModels.am335x)
   const component = parseIbis(text).components.am335x_zcz
   const sets = {
     addrCmd: addrCmdPins.map(([, pin]) => pin),
@@ -399,7 +403,7 @@ const scalarPackage =
   "golden invariants: Winbond DDR3 has no coupled package and every [Pin] R, L, C is non-negative"
 test.skipIf(!vendorAvailable("W631GG6MB-12.ibs"))(scalarPackage, async () => {
   // A scalar lumped package is passive iff each R, L and C is non-negative (1 x 1 energy matrices).
-  const text = await vendorText("W631GG6MB-12.ibs")
+  const text = await loadVendorModelText(vendorModels.ddr3)
   const component = parseIbis(text).components["W631GG6MB-12"]
   assert.equal(
     coupledPackage({ text, component, pins: Object.keys(component.pins) }),

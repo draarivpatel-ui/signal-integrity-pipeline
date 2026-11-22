@@ -37,9 +37,8 @@ export function vendorAvailable(file: string): boolean {
   }
 }
 
-/** Read original local vendor bytes; enabled tests never substitute synthetic assets. */
-export async function vendorText(file: string): Promise<string> {
-  if (!process.env.IBIS_MODEL_DIR)
-    throw new Error("Set IBIS_MODEL_DIR to the original local vendor models")
-  return readFile(join(process.env.IBIS_MODEL_DIR, file), "utf8")
+/** Decode the verified vendor bytes for tests that need to parse the model text directly. */
+export async function loadVendorModelText(model: VendorModel): Promise<string> {
+  const bytes = await loadVendorModel(model)
+  return new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes)
 }

@@ -6,12 +6,12 @@ import {
   type RoutedStageSolver,
 } from "../../src/pipeline"
 import {
-  type RouteBindingsInput,
+  type ScopedRouteBindingsInput,
   RouteBindingsSolver,
   type RoutedBindings,
 } from "../../src/simulation"
 import { vendorAvailable } from "../fixtures/vendor-models"
-import { routedProblem } from "../support/routed-fixture"
+import { routedProblem } from "../fixtures/routed-fixture"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
@@ -23,7 +23,7 @@ async function routeBindings(): Promise<RouteBindingsSolver> {
   sections.solve()
   return new RouteBindingsSolver({
     ...plan.bindings,
-    scope: sections.getOutput().value.scope,
+    copperScope: sections.getOutput().value.scope,
   })
 }
 
@@ -95,7 +95,7 @@ test("two-trace TSX route-bindings visual SVG snapshot", async () => {
 test("missing IBIS bytes mark physical endpoints and rejection reason red", async () => {
   const { root } = await routedVisualFixture()
   const stage = root.getSolver<
-    RoutedStageSolver<RouteBindingsInput, RoutedBindings>
+    RoutedStageSolver<ScopedRouteBindingsInput, RoutedBindings>
   >("RouteBindingsSolver")!
   const [[params]] = stage.getConstructorParams()
   const missing = new RouteBindingsSolver({ ...params, ibisSources: {} })
