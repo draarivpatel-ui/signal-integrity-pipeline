@@ -3,9 +3,9 @@ import type { CircuitJson } from "../../src/board"
 import type { IbisSources } from "../../src/buffers"
 import { RoutedPipelineSolver } from "../../src/pipeline"
 import {
-  type PreparedBlock,
-  prepareBlockById,
-  signalBlocks,
+  listChannelSimulations,
+  type PreparedChannelSimulation,
+  prepareChannelSimulationById,
 } from "../../src/pipeline/signals"
 import type { RouteBindingsInput } from "../../src/simulation"
 import { renderCoreSignals } from "../support/core-render"
@@ -38,8 +38,8 @@ export async function renderSignals({
   }
 }
 
-/** Lower every signal-integrity block in board order, as RoutedAdmissionSolver does one block per step. */
-export function prepareBlocks({
+/** Lower every transient channel simulation in board order, as RoutedAdmissionSolver does one channel simulation per step. */
+export function prepareChannelSimulations({
   circuit,
   sources,
   distanceMm,
@@ -47,18 +47,19 @@ export function prepareBlocks({
   circuit: CircuitJson
   sources: IbisSources
   distanceMm?: number
-}): PreparedBlock[] {
-  return signalBlocks(circuit).map((block) =>
-    prepareBlockById({
+}): PreparedChannelSimulation[] {
+  return listChannelSimulations(circuit).map((channelSimulation) =>
+    prepareChannelSimulationById({
       circuit,
       sources,
-      blockId: block.simulation_pcb_transient_channel_simulation_id,
+      simulationPcbTransientChannelSimulationId:
+        channelSimulation.simulation_pcb_transient_channel_simulation_id,
       distanceMm,
     }),
   )
 }
 
-/** Gets the first block's bindings through the same IBIS decoding path as the public solver. */
+/** Gets the first channel simulation's bindings through the same IBIS decoding path as the public solver. */
 export function admittedBindings({
   circuitJson,
   ibisSources,

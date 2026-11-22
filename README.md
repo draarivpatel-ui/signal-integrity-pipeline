@@ -3,7 +3,7 @@
 Native signal-integrity simulation for tscircuit boards. Describe each test with
 `<simulation.pcbtransientchannelsimulation>` and `<simulation.pcbdriverreceiverchannel>`. `RoutedPipelineSolver` consumes the
 resulting Circuit JSON, solves quasi-TEM 2D cross-sections along the actual routed copper (2.5D), assembles
-coupled ladders with the IBIS buffers, and runs one transient per block in ngspice.
+coupled ladders with the IBIS buffers, and runs one transient per channel simulation in ngspice.
 This draft implements the pipeline entry of [RFC #28](https://github.com/tscircuit/rfc/pull/28).
 
 ## How to use it?
@@ -29,16 +29,16 @@ const solver = new RoutedPipelineSolver({
   context: { runSolver: createNativeSolver({ timeoutMs: 600_000 }), progress: console.log },
 })
 await solver.solveAsync()
-const { blocks, files } = solver.getOutput()
+const { channelSimulations, files } = solver.getOutput()
 ```
 
 Circuit JSON is the electrical input. `ibisSources` and the `{ runSolver, progress }`
 context are IO ports. Circuit JSON durations and channel offsets are in milliseconds.
-Captured solver timestamps are in seconds. The board declares the simulation configuration. Each `blocks`
+Captured solver timestamps are in seconds. The board declares the simulation configuration. Each `channel simulations`
 entry holds its compiled ngspice deck with evidence and its completed probe capture.
 Captures are candidate evidence without independent convergence qualification.
 `files` maps every artifact path to its bytes; writing them is the caller's choice.
-A board with no SI blocks completes after admission without invoking a solver.
+A board with no channel simulations completes after admission without invoking a solver.
 
 Branched routes remain unsupported. Inline IBIS coupled package matrices are
 validated before the deck is built and lowered to a passive lumped package. Unlisted
@@ -62,17 +62,17 @@ Vendor IBIS files and board JSON remain local and ignored by git.
 
 ```mermaid
 flowchart TD
-  board[/"Your board<br/>(Circuit JSON with transient channel blocks)"/] --> s1["1. Admit each block: drivers, receivers, pin states, patterns and the copper scope<br/><small>pipeline</small>"]
+  board[/"Your board<br/>(Circuit JSON with transient channel simulations)"/] --> s1["1. Admit each channel simulation: drivers, receivers, pin states, patterns and the copper scope<br/><small>pipeline</small>"]
   chips[/"Chip models<br/>(IBIS files; coupled package admission)"/] --> s1
   s1 --> s2["2. Cut the scoped copper into straight sections over their reference planes<br/><small>board</small>"]
   s2 --> s3["3. Solve each unique cross-section's coupled R, L, G and C<br/><small>extraction</small>"]
   chips --> s4
   s3 --> s4["4. Bind IBIS buffers, probes, sources and passives to physical ports<br/><small>buffers, simulation</small>"]
   s4 --> s5["5. Assemble delay-bounded coupled ladders with via and oblique corrections into one deck<br/><small>simulation</small>"]
-  s5 --> s6["6. Run one transient per block and admit only complete probe vectors<br/><small>simulation</small>"]
+  s5 --> s6["6. Run one transient per channel simulation and admit only complete probe vectors<br/><small>simulation</small>"]
   s6 <-->|"RunSolver"| ng{{"ngspice"}}
   s6 --> out[/"Captures + deck and evidence artifacts"/]
-  s1 -->|"no SI blocks"| out
+  s1 -->|"no channel simulations"| out
 ```
 
 <!-- routed-stages:start -->
@@ -87,12 +87,12 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  s0["RoutedAdmissionSolver<br/>Admit one SI block per step"]
-  s1["RouteSectionsSolver<br/>All admitted blocks, one item per step"]
-  s2["RouteFieldsSolver<br/>All admitted blocks, one item per step"]
-  s3["RouteBindingsSolver<br/>All admitted blocks, one item per step"]
-  s4["RouteNetworkSolver<br/>All admitted blocks, one item per step"]
-  s5["RouteTransientSolver<br/>All admitted blocks, one item per step"]
+  s0["RoutedAdmissionSolver<br/>Admit one channel simulation per step"]
+  s1["RouteSectionsSolver<br/>All admitted channel simulations, one item per step"]
+  s2["RouteFieldsSolver<br/>All admitted channel simulations, one item per step"]
+  s3["RouteBindingsSolver<br/>All admitted channel simulations, one item per step"]
+  s4["RouteNetworkSolver<br/>All admitted channel simulations, one item per step"]
+  s5["RouteTransientSolver<br/>All admitted channel simulations, one item per step"]
   s0 --> s1
   s1 --> s2
   s2 --> s3
@@ -104,11 +104,11 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
   [*] --> RoutedAdmissionSolver
-  RoutedAdmissionSolver --> RouteSectionsSolver: all blocks completed
-  RouteSectionsSolver --> RouteFieldsSolver: all blocks completed
-  RouteFieldsSolver --> RouteBindingsSolver: all blocks completed
-  RouteBindingsSolver --> RouteNetworkSolver: all blocks completed
-  RouteNetworkSolver --> RouteTransientSolver: all blocks completed
+  RoutedAdmissionSolver --> RouteSectionsSolver: all channel simulations completed
+  RouteSectionsSolver --> RouteFieldsSolver: all channel simulations completed
+  RouteFieldsSolver --> RouteBindingsSolver: all channel simulations completed
+  RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
+  RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
   RoutedAdmissionSolver --> failed
   RouteSectionsSolver --> failed
@@ -121,12 +121,12 @@ stateDiagram-v2
 <!-- routed-stages:end -->
 
 Missing electrical facts fail explicitly. Numerical settings come from selected
-IBIS edge rates, bit rates, stackup and actual routes. Every block produces an
+IBIS edge rates, bit rates, stackup and actual routes. Every channel simulation produces an
 independent run. A differential endpoint drives opposite physical levels and
 measures P minus N. Quiet channels remain connected and are probed at the far
 receiver and at the near quiet driver. Single-ended probes always use their chip's
 local ground. Numeric offsets are seconds. Automatic duration adds 128 unit
-intervals at the slowest switching bit rate after startup. Quiet-only blocks use
+intervals at the slowest switching bit rate after startup. Quiet-only channel simulations use
 32 unit intervals at the slowest bit rate. Explicit durations are never extended.
 IBIS values always use the typical corner.
 

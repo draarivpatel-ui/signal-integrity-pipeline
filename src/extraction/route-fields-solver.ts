@@ -61,13 +61,8 @@ function maskThicknessSource(
 }
 
 /** Queue each conductor pair in slice order so cache population precedes coupling decisions. */
-function addCouplingPairs({
-  slices,
-  pairs,
-}: {
-  slices: RouteSlice[]
-  pairs: RouteSlice[]
-}): void {
+function couplingPairs(slices: RouteSlice[]): RouteSlice[] {
+  const pairs: RouteSlice[] = []
   for (const slice of slices) {
     const count = slice.wires.length
     if (count > MAX_SCREEN_CONDUCTORS) {
@@ -81,6 +76,7 @@ function addCouplingPairs({
       }
     }
   }
+  return pairs
 }
 
 /** One pair screen or one unique multiconductor BEM solve per synchronous step. */
@@ -162,13 +158,7 @@ export class RouteFieldsSolver extends BaseSolver {
   }
   /** Preserve the all-pairs-first ordering and routeCoupling's sole union predicate. */
   private solveNext(): void {
-    if (!this.pairs) {
-      this.pairs = []
-      addCouplingPairs({
-        slices: this.input.geometry.slices,
-        pairs: this.pairs,
-      })
-    }
+    this.pairs ??= couplingPairs(this.input.geometry.slices)
     if (this.pairIndex < this.pairs.length) {
       this.solveSlice(this.pairs[this.pairIndex++])
       return
