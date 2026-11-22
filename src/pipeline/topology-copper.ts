@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import {
   type Box,
   Point as PlanarPoint,
@@ -284,9 +285,10 @@ function copperRegions({
 }: CopperSelection): RegionCopper {
   const selectedPorts = new Map(ports.map((port) => [port.pcb_port_id, port]))
   const selectedTraces = new Set(traces.map((trace) => trace.pcb_trace_id))
+  const db = cju([...circuit])
   const rotations = new Map<PcbComponent["pcb_component_id"], number>(
-    circuit
-      .filter((record) => record.type === "pcb_component")
+    db.pcb_component
+      .list()
       .map((record) => [record.pcb_component_id, record.rotation]),
   )
   const regions: CopperRegion[] = []

@@ -1,4 +1,5 @@
 /* eslint-disable local/max-file-lines -- Stage drawings use the same intermediate state as network compilation. */
+import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
@@ -84,15 +85,12 @@ export class RouteNetworkSolver extends BaseSolver {
     const { geometry, extracted, bindings, options, materials } = this.input
     const { scope, models, mappings } = bindings
     const plan = structuredClone(bindings.plan)
-    const stackup = bindings.circuitJson.filter(
-      (record) => record.type === "pcb_stackup",
-    )[0]
+    const db = cju([...bindings.circuitJson])
+    const stackup = db.pcb_stackup.list()[0]
     const maskLayers = stackup.layers.filter(
       (layer) => layer.layer_type === "soldermask",
     )
-    const ports = bindings.circuitJson.filter(
-      (record) => record.type === "pcb_port",
-    )
+    const ports = db.pcb_port.list()
     const aliases: string[] = []
     const known = new Map<RouteContactKey, string>()
     for (const port of ports) {
@@ -561,8 +559,8 @@ export class RouteNetworkSolver extends BaseSolver {
     let transitions: Record<string, unknown>[] = []
     if (Array.isArray(records)) transitions = records
     const physical = new Map(
-      circuit
-        .filter((item) => item.type === "pcb_via")
+      cju([...circuit])
+        .pcb_via.list()
         .map((item) => [item.pcb_via_id, item]),
     )
     const { minX, maxX, minY, maxY } = view.focus
