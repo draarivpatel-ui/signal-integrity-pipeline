@@ -22,7 +22,11 @@ import {
   subcircuitHeader,
 } from "../../src/buffers/text"
 import { sha256 } from "../../src/kernel"
-import { vendorAvailable, vendorText } from "../fixtures/vendor-models"
+import {
+  loadVendorModelText,
+  vendorAvailable,
+  vendorModels,
+} from "../fixtures/vendor-models"
 import {
   crossingTime,
   ngspiceAvailable,
@@ -624,7 +628,11 @@ const skipReplay =
 test.skipIf(skipReplay)(fixtureReplay, async () => {
   const texts = new Map<string, string>()
   for (const file of new Set(replays.map((replay) => replay.file))) {
-    const text = await vendorText(file)
+    const vendorModel = Object.values(vendorModels).find(
+      (model) => model.file === file,
+    )
+    assert.ok(vendorModel, file)
+    const text = await loadVendorModelText(vendorModel)
     texts.set(file, text)
   }
   const documents = new Map<string, IbisDocument>(
