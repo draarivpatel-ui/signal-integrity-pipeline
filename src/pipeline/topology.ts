@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbPort, PcbTrace, SourceTrace } from "circuit-json"
 import {
   ConnectivityMap,
@@ -95,6 +96,7 @@ function selectCopper({
   topology: SignalTopology
   signals: readonly SimulationPcbDriverReceiverChannel[]
 }): SelectedCopper {
+  const db = cju([...circuit])
   const { connectivity, rails } = topology
   const selected = new Set(
     signals.flatMap(({ driver }) =>
@@ -104,8 +106,8 @@ function selectCopper({
     ),
   )
   const traceIds = new Set(
-    circuit
-      .filter((record) => record.type === "source_trace")
+    db.source_trace
+      .list()
       .filter((record) => {
         const ids = record.connected_source_port_ids.slice()
         if (record.connected_source_net_ids)
@@ -116,14 +118,14 @@ function selectCopper({
       })
       .map((trace) => trace.source_trace_id),
   )
-  const traces = circuit
-    .filter((record) => record.type === "pcb_trace")
+  const traces = db.pcb_trace
+    .list()
     .filter(
       ({ source_trace_id }) =>
         source_trace_id !== undefined && traceIds.has(source_trace_id),
     )
-  const ports = circuit
-    .filter((record) => record.type === "pcb_port")
+  const ports = db.pcb_port
+    .list()
     .filter(
       (port) =>
         selected.has(port.source_port_id) && !rails.has(port.source_port_id),
@@ -219,15 +221,15 @@ function joinPassiveBridges({
 
 /** Describe the component-bound ports admitted by channel endpoint resolution. */
 function portNames(circuit: CircuitJson): PortNames {
+  const db = cju([...circuit])
   const components = Object.fromEntries(
-    circuit
-      .filter((record) => record.type === "source_component")
+    db.source_component
+      .list()
       .map((record) => [record.source_component_id, record.name]),
   )
   const names: PortNames = {}
-  for (const port of circuit) {
-    if (port.type !== "source_port" || port.source_component_id === undefined)
-      continue
+  for (const port of db.source_port.list()) {
+    if (port.source_component_id === undefined) continue
     names[port.source_port_id] =
       `${components[port.source_component_id]}.${port.name}`
   }
