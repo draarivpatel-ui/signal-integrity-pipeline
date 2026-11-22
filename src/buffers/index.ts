@@ -30,7 +30,7 @@ export {
   pinCapabilities,
   referenceVoltages,
 } from "./inspect"
-export { loadModelSource, relativeFile } from "./source"
+export { invalidIbisSource, loadModelSource, relativeFile } from "./source"
 export type {
   AdmittedBuffers,
   AssemblyEntry,
