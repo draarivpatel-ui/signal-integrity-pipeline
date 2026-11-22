@@ -34,8 +34,8 @@ const { channelSimulations, files } = solver.getOutput()
 
 Circuit JSON is the electrical input. `ibisSources` and the `{ runSolver, progress }`
 context are IO ports. Circuit JSON durations and channel offsets are in milliseconds.
-Captured solver timestamps are in seconds. The board declares the simulation configuration. Each `channel simulations`
-entry holds its compiled ngspice deck with evidence and its completed probe capture.
+Captured solver timestamps are in seconds. Each entry in `channelSimulations` holds its compiled ngspice deck,
+evidence and completed probe capture.
 Captures are candidate evidence without independent convergence qualification.
 `files` maps every artifact path to its bytes; writing them is the caller's choice.
 A board with no channel simulations completes after admission without invoking a solver.
