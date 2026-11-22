@@ -40,6 +40,10 @@ Clarity beats brevity. More lines are fine when they are easier to read.
   - Keep signatures required by an interface, such as library callbacks. React components already receive a props object.
   - A pure arithmetic helper with two interchangeable operands may take them positionally, as in `times(a, b)`
     for complex multiplication.
+- **Return, never override.** Return new values when transforming inputs. Do not use `push`, `splice`, `sort`, or
+  field assignment on an argument or a record it contains, including Circuit JSON. Build and return a new array or
+  object, then bind the result at the call site (`const next = withX({ circuit })`). Arrays created inside the
+  function can be built up freely before returning.
 - **Early returns and `continue`** instead of nested `if`/`else`. No value ternaries that hide a branch. Write the `if` out.
 - **Top-level functions.** No nested closures or helpers defined inside other functions. The only exception is a factory whose job is to return a function.
 - **No conditional spreads** (`...(x ? { a } : {})`). Build the object, then set the field in an `if`.
