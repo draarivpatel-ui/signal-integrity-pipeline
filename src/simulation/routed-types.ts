@@ -72,7 +72,7 @@ export interface RouteNetworkInput {
   bindings: RoutedBindings
   materials: RouteMaterials
   options: RoutedCompileOptions
-  warnings: string[]
+  warnings: readonly string[]
   artifactPrefix: string
 }
 /** Executable SPICE input and evidence for one routed transient. */
