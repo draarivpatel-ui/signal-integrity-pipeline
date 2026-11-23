@@ -131,6 +131,7 @@ function drawRouteRun<Net extends RouteCopperNet>({
 }
 
 /** Selected copper as layer-aware strokes, one colour per electrical net. */
+/** @internal */
 export function routeNets<Net extends RouteCopperNet>({
   db,
   view,
@@ -246,6 +247,7 @@ export function routeMarks({
 }
 
 /** Put a net-coloured mark on copper contacts and a distinct mark on ideal-only signal contacts. */
+/** @internal */
 export function routeAdmissionMarks({
   db,
   mappings,
@@ -365,6 +367,7 @@ export function routeFailure({
 }
 
 /** Draw the scoped copper and the admitted driver and receiver marks. */
+/** @internal */
 export function scopedAdmissionDrawing({
   db,
   view,
