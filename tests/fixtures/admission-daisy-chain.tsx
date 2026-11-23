@@ -1,6 +1,6 @@
 import { simulation } from "@tscircuit/core"
 import type { TraceProps } from "@tscircuit/props"
-import { Fragment, type JSX } from "react"
+import { Fragment, type JSX, type ReactNode } from "react"
 import { Inverter, Reference } from "./signal-parts"
 
 /** Two modeled inputs on one straight signal with a routed or ideal final leg. */
@@ -11,13 +11,15 @@ export function AdmissionDaisyChain({
   idealMiddleLeg = false,
   branched = false,
   placedLoad = false,
+  children,
 }: {
   routeFinalLeg: boolean
-  namedNet?: boolean | "ends"
+  namedNet?: boolean | "ends" | "multipoint"
   bypassFinalLeg?: boolean
   idealMiddleLeg?: boolean
   branched?: boolean
   placedLoad?: boolean | "mapped"
+  children?: ReactNode
 }): JSX.Element {
   const driver = ".TX > .Y"
   const middleReceiver = ".MID > .A"
@@ -30,6 +32,7 @@ export function AdmissionDaisyChain({
   const branchReceiver = ".RX2 > .A"
   if (branched) receiverRefs.push(branchReceiver)
   let namedPorts = [driver, finalReceiver]
+  if (namedNet === "multipoint") namedPorts = [driver]
   if (namedNet === true)
     namedPorts = [
       ...new Set([driver, middleReceiver, finalLegStart, finalReceiver]),
@@ -55,10 +58,16 @@ export function AdmissionDaisyChain({
       <Inverter name="MID" x={0} y={0} driver={false} />
       <Inverter name="RX" x={5} y={0} driver={false} />
       <Reference />
+      {children}
       {idealMiddleLeg && (
         <>
           <Inverter name="JOIN" x={2.5} y={0} driver={false} />
-          <trace from={middleReceiver} to={finalLegStart} />
+          {namedNet === "multipoint" && (
+            <trace path={[middleReceiver, finalLegStart, "net.DATA"]} />
+          )}
+          {namedNet !== "multipoint" && (
+            <trace from={middleReceiver} to={finalLegStart} />
+          )}
         </>
       )}
       <trace
