@@ -12,6 +12,19 @@ RouteSectionsSolver divides scoped copper into straight slices and resolves phys
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
 RouteFieldsSolver screens nearby conductor pairs and extracts coupled coefficients for each unique section.
 
+Aggressors are output-capable pins retained by the copper scope that do not
+drive a declared channel in the simulation. This includes bidirectional
+receivers. Declare their state on the simulation. Use `aggressorPattern="0"`
+or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
+`"prbs7"` to switch at the simulation bit rate from time zero.
+`aggressorDisabled` takes precedence and requires every aggressor
+model to support high impedance. The selected channels keep their own
+`pattern` and `driverDisabled` settings. The pinned core preview emits the
+aggressor fields.
+
+Automatic duration covers a full pattern for every switching channel or
+aggressor, measured at its declared bit rate after its offset.
+
 ## General workflow
 
 ```mermaid

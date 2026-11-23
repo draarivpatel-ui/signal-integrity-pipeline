@@ -1,14 +1,20 @@
 import type {
   CircuitJsonSnapshot,
+  DriverPattern,
   SimulationPcbDriverReceiverChannel,
   SimulationPcbTransientChannelSimulation,
   SimulationPcbTransientChannelSimulationId,
   SourcePortId,
 } from "../board"
-import { circuitJsonDb } from "../board"
-import type { IbisSources, InspectedPin } from "../buffers"
-import { type SafeId, safeId, type Snapshot } from "../kernel"
+import { circuitJsonDb, isQuiet } from "../board"
+import {
+  edgeDurationSeconds,
+  type IbisSources,
+  type InspectedPin,
+} from "../buffers"
+import { type SafeId, type Snapshot, safeId } from "../kernel"
 import type { RunControls } from "../simulation"
+import { planAggressors } from "./aggressors"
 import type { NumericalSettings } from "./modeling"
 import {
   type ChannelSimulationControlOptions,
@@ -153,12 +159,11 @@ export function compareNames({ a, b }: { a: string; b: string }): number {
   return left.length - right.length
 }
 
-/** One channel simulation's validated records and recording duration. */
+/** One channel simulation's validated records. */
 interface ChannelSelection {
   channelSimulation: SimulationPcbTransientChannelSimulation
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
-  durationSeconds: number
   circuit: CircuitJsonSnapshot
 }
 
@@ -192,7 +197,7 @@ function validateChannelNames({
   }
 }
 
-/** Select the simulation's channels in stable name order and determine its duration. */
+/** Select the simulation's channels in stable name order. */
 function selectChannelSimulation({
   boardCircuitJson,
   channelSimulation,
@@ -216,10 +221,6 @@ function selectChannelSimulation({
     driverReceiverChannels,
     simulationPcbTransientChannelSimulationId,
   })
-  const durationSeconds = channelSimulationDurationSeconds({
-    channelSimulation,
-    driverReceiverChannels,
-  })
   const circuit = channelSimulationCircuit({
     db,
     channelSimulation,
@@ -230,7 +231,6 @@ function selectChannelSimulation({
     channelSimulation,
     simulationPcbTransientChannelSimulationId,
     driverReceiverChannels,
-    durationSeconds,
   }
 }
 
@@ -287,10 +287,22 @@ export function prepareChannelSimulation(
   const scopedPins = scopeSignalPins({ ...inspection, signalPins })
   const scoped = { ...selection, ...scopedPins, circuit, signalPins }
   validateSignalPins(scoped)
-  const timing = signalTiming({
-    ...selection,
-    edgeTimesSeconds: signalPins.edgeTimesSeconds,
+  const aggressors = planAggressors({
+    ...scoped,
+    driven: signalPins.driven,
   })
+  const patterns: DriverPattern[] = [...selection.driverReceiverChannels]
+  const edgeTimesSeconds = [...signalPins.edgeTimesSeconds]
+  for (const [port, signal] of aggressors) {
+    if (signal === null || isQuiet(signal)) continue
+    patterns.push(signal)
+    edgeTimesSeconds.push(edgeDurationSeconds(scoped.pins.get(port)!))
+  }
+  const durationSeconds = channelSimulationDurationSeconds({
+    channelSimulation: selection.channelSimulation,
+    patterns,
+  })
+  const timing = signalTiming({ patterns, durationSeconds, edgeTimesSeconds })
   validateComponentModels({ ...scoped, topology: signalPins.topology })
   const lanes = prepareRoutedLanes(scoped)
   const pruned = withUsedIbisModels(scoped)
@@ -304,6 +316,8 @@ export function prepareChannelSimulation(
     ...selection,
     ...timing,
     ...supplied,
+    durationSeconds,
+    aggressors,
     pins: pruned.pins,
     driven: signalPins.driven,
     routedTopology: signalPins.routedTopology,
