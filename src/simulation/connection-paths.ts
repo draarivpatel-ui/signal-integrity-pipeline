@@ -43,42 +43,27 @@ function oppositeNodeId<NodeId, Evidence>({
 /** Ordered connections traversed between two nodes. */
 type ConnectionPath<NodeId, Evidence> = Connection<NodeId, Evidence>[]
 
-/** One search queue, recording how each scheduled node would be reached. */
-type PathQueue<NodeId, Evidence> = Map<
-  NodeId,
-  Connection<NodeId, Evidence> | null
->
-
-/** Find a path, visiting routes with fewer discouraged connections first. */
+/** Find the shortest path in the selected connection graph. */
 export function connectionPath<NodeId, Evidence>({
   graph,
   fromNodeId,
   toNodeId,
   omitted,
-  discouraged,
 }: {
   graph: ConnectionGraph<NodeId, Evidence>
   fromNodeId: NodeId
   toNodeId: NodeId
   omitted?: Connection<NodeId, Evidence>
-  discouraged?: ReadonlySet<Connection<NodeId, Evidence>>
 }): ConnectionPath<NodeId, Evidence> | undefined {
-  const queues: PathQueue<NodeId, Evidence>[] = [new Map([[fromNodeId, null]])]
-  const reached: PathQueue<NodeId, Evidence> = new Map()
-  for (const [priority, queue] of queues.entries()) {
-    for (const [nodeId, predecessor] of queue) {
-      if (reached.has(nodeId)) continue
-      reached.set(nodeId, predecessor)
-      if (nodeId === toNodeId) return orderedPath({ reached, toNodeId })
-      for (const connection of graph.get(nodeId) ?? []) {
-        if (connection === omitted) continue
-        const nextNodeId = oppositeNodeId({ connection, nodeId })
-        if (reached.has(nextNodeId)) continue
-        let next = queue
-        if (discouraged?.has(connection))
-          next = queues[priority + 1] ??= new Map()
-        if (!next.has(nextNodeId)) next.set(nextNodeId, connection)
-      }
+  const reached = new Map<NodeId, Connection<NodeId, Evidence> | null>([
+    [fromNodeId, null],
+  ])
+  for (const nodeId of reached.keys()) {
+    if (nodeId === toNodeId) return orderedPath({ reached, toNodeId })
+    for (const connection of graph.get(nodeId) ?? []) {
+      if (connection === omitted) continue
+      const nextNodeId = oppositeNodeId({ connection, nodeId })
+      if (!reached.has(nextNodeId)) reached.set(nextNodeId, connection)
     }
   }
 }
@@ -107,7 +92,7 @@ interface CycleFrame<NodeId, Evidence> {
   nodeId: NodeId
   connections: Iterator<Connection<NodeId, Evidence>>
   earliestOrder: number
-  start: number
+  firstOpenConnectionIndex: number
 }
 
 /** Find a physical cut on a cycle with the collapsed receiver's ideal group. */
@@ -115,12 +100,10 @@ export function receiverCycle<NodeId, Evidence>({
   graph,
   rootNodeId,
   isCut,
-  discouraged,
 }: {
   graph: ConnectionGraph<NodeId, Evidence>
   rootNodeId: NodeId
   isCut: (evidence: Evidence) => boolean
-  discouraged: ReadonlySet<Connection<NodeId, Evidence>>
 }): ConnectionPath<NodeId, Evidence> | undefined {
   const orders = new Map([[rootNodeId, 0]])
   const open: ConnectionPath<NodeId, Evidence> = []
@@ -129,7 +112,7 @@ export function receiverCycle<NodeId, Evidence>({
       nodeId: rootNodeId,
       connections: (graph.get(rootNodeId) ?? []).values(),
       earliestOrder: 0,
-      start: 0,
+      firstOpenConnectionIndex: 0,
     },
   ]
   while (stack.length > 0) {
@@ -142,7 +125,7 @@ export function receiverCycle<NodeId, Evidence>({
       if (!parent) return
       parent.earliestOrder = Math.min(parent.earliestOrder, frame.earliestOrder)
       if (frame.earliestOrder < orders.get(parent.nodeId)!) continue
-      const component = open.splice(frame.start)
+      const component = open.splice(frame.firstOpenConnectionIndex)
       if (parent.nodeId !== rootNodeId || component.length < 2) continue
       const routed = component.find(({ evidence }) => isCut(evidence))
       if (!routed) continue
@@ -155,8 +138,7 @@ export function receiverCycle<NodeId, Evidence>({
       return [routed, ...path]
     }
     const connection = next.value
-    if (connection === open[frame.start] || discouraged.has(connection))
-      continue
+    if (connection === open[frame.firstOpenConnectionIndex]) continue
     const nextNodeId = oppositeNodeId({ connection, nodeId: frame.nodeId })
     const nextOrder = orders.get(nextNodeId)
     if (nextOrder !== undefined) {
@@ -166,14 +148,14 @@ export function receiverCycle<NodeId, Evidence>({
       }
       continue
     }
-    const start = open.length
+    const firstOpenConnectionIndex = open.length
     open.push(connection)
     orders.set(nextNodeId, orders.size)
     stack.push({
       nodeId: nextNodeId,
       connections: (graph.get(nextNodeId) ?? []).values(),
       earliestOrder: orders.get(nextNodeId)!,
-      start,
+      firstOpenConnectionIndex,
     })
   }
 }
