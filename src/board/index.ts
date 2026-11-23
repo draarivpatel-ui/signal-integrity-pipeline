@@ -8,11 +8,13 @@
 export { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
 export {
   type ConnectivityMap,
+  crossesDifferentialLegs,
   getSourcePortConnectivityMapFromCircuitJson,
   type PassiveBridge,
   passiveBridges,
   sourceConnections,
   sourceNetMembers,
+  sourcePinTies,
 } from "./connectivity"
 export { polygonContains } from "./geometry/polygon"
 export { resolveRouteVias, selectPort } from "./geometry/ports"
@@ -92,6 +94,7 @@ export type {
 export { recordSchema, validateCircuitRecords } from "./schema"
 export {
   type DriverPattern,
+  endpointPorts,
   isQuiet,
   type SignalEndpoint,
   type SimulationPcbDriverReceiverChannel,
