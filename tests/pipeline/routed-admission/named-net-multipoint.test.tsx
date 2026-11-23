@@ -13,7 +13,8 @@ test("a multipoint ideal trace can label the junction between routed cuts", asyn
     tree: (
       <AdmissionDaisyChain routeFinalLeg idealMiddleLeg namedNet="multipoint">
         <pcbnotetext
-          text="DATA labels TX.Y and the shared ideal junction MID.A / JOIN.A"
+          text="DATA labels TX.Y and joined MID.A / JOIN.A"
+          fontSize={0.45}
           pcbX={0}
           pcbY={4.8}
         />
