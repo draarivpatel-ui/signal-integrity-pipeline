@@ -8,10 +8,7 @@ import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import { formatSpiceVectors } from "../../src/observation"
 import { RoutedPipelineSolver } from "../../src/pipeline"
 import type { SolverContext } from "../../src/solver"
-import {
-  FixtureChannelSimulation,
-  renderCoreSignals,
-} from "../support/core-render"
+import { renderCoreSignals } from "../support/core-render"
 import {
   savedVectors,
   transientDurationSeconds,
@@ -48,7 +45,7 @@ function twoChannelSimulationBoard(
       child.type !== simulation.pcbtransientchannelsimulation,
   )
   const channelSimulations = [0, 1].map((i) => (
-    <FixtureChannelSimulation
+    <simulation.pcbtransientchannelsimulation
       key={i}
       name={`BLOCK${i}`}
       bitRate={FIXTURE_BIT_RATE}
@@ -61,7 +58,7 @@ function twoChannelSimulationBoard(
         receiverRef={`.RX${i} > .A`}
         pattern="01"
       />
-    </FixtureChannelSimulation>
+    </simulation.pcbtransientchannelsimulation>
   ))
   return React.cloneElement(board, {}, ...children, ...channelSimulations)
 }

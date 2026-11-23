@@ -1,4 +1,3 @@
-import { z } from "zod"
 import {
   type CircuitJsonDb,
   type CircuitJsonSnapshot,
@@ -10,12 +9,6 @@ import {
 import { type InspectedPin, pinCapabilities } from "../buffers"
 import type { SignalPins } from "./signal-pins"
 import { prbsPatterns } from "./timing"
-
-// The pinned Circuit JSON schema predates these fields: https://github.com/tscircuit/circuit-json/pull/1042
-const aggressorDeclaration = z.object({
-  aggressor_pattern: z.string().min(1).optional(),
-  aggressor_disabled: z.boolean().optional(),
-})
 
 /** An enabled pattern or a disabled output for each output-capable pin without a channel driver role. */
 export type Aggressors = Map<SourcePortId, DriverPattern | null>
@@ -51,10 +44,8 @@ export function planAggressors({
     .sort((a, b) => a.port.localeCompare(b.port, "en"))
   if (aggressorPins.length === 0) return aggressors
 
-  const { aggressor_pattern: pattern, aggressor_disabled: disabled } =
-    aggressorDeclaration.parse(channelSimulation)
   const db = circuitJsonDb(circuit)
-  if (disabled) {
+  if (channelSimulation.aggressor_disabled === true) {
     for (const pin of aggressorPins) {
       if (!pinCapabilities(pin).disable) {
         const name = aggressorName({ db, pin })
@@ -66,7 +57,8 @@ export function planAggressors({
     }
     return aggressors
   }
-  if (pattern === undefined) {
+  const pattern = channelSimulation.aggressor_pattern?.trim()
+  if (!pattern) {
     const names = aggressorPins.map((pin) => aggressorName({ db, pin }))
     throw new Error(
       `Aggressors ${names.join(", ")} need a declared state. Set aggressorPattern or aggressorDisabled.`,

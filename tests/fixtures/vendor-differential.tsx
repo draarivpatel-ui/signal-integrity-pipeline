@@ -7,7 +7,6 @@ import {
   type ReactElement,
 } from "react"
 import Differential from "../../examples/level1-differential/level1-differential"
-import { FixtureChannelSimulation } from "../support/core-render"
 
 /** Drive retained output pins low in the vendor example used by the routed tests. */
 export function VendorDifferential(): ReactElement {
@@ -18,7 +17,12 @@ export function VendorDifferential(): ReactElement {
       child.type !== simulation.pcbtransientchannelsimulation
     )
       return child
-    return <FixtureChannelSimulation {...child.props} aggressorPattern="0" />
+    return (
+      <simulation.pcbtransientchannelsimulation
+        {...child.props}
+        aggressorPattern="0"
+      />
+    )
   })
   return cloneElement(board, {}, children)
 }

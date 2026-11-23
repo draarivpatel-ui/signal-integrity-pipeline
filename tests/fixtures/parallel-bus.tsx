@@ -2,7 +2,6 @@ import { simulation } from "@tscircuit/core"
 import type React from "react"
 import { Fragment } from "react"
 import type { RunControls } from "../../src/simulation"
-import { FixtureChannelSimulation } from "../support/core-render"
 import { routedVisualIbis } from "./routed-visual-fixture"
 import { Reference } from "./signal-parts"
 import { prepareChannelSimulations, renderSignals } from "./signal-render"
@@ -152,7 +151,7 @@ export function ParallelBus({
           />
         </Fragment>
       ))}
-      <FixtureChannelSimulation
+      <simulation.pcbtransientchannelsimulation
         bitRate="20Mbps"
         aggressorPattern={aggressorPattern}
         aggressorDisabled={aggressorDisabled}
@@ -173,7 +172,7 @@ export function ParallelBus({
             pattern={neighbourPattern}
           />
         )}
-      </FixtureChannelSimulation>
+      </simulation.pcbtransientchannelsimulation>
     </board>
   )
 }

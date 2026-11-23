@@ -47,7 +47,7 @@ missing or invalid matrix definitions still fail.
 Die POWER/GND references always connect directly to perfect rails;
 vendor package R/L/C remains between every mapped pin and its die node.
 
-The TSX examples use the pinned `@tscircuit/core` release. Place transient
+The TSX examples use the pinned `@tscircuit/core` preview. Place transient
 simulations and eye diagrams directly under the board, including when it
 contains cached subcircuits. Core checks endpoint connectivity and routing,
 supplies preset via plating, and plans omitted pseudo-random binary sequence (PRBS) seeds by channel name.
@@ -59,7 +59,7 @@ or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
 `"prbs7"` to switch at the simulation bit rate from time zero.
 `aggressorDisabled` takes precedence and requires every aggressor
 model to support high impedance. The selected channels (victims) keep their
-own `pattern` and `driverDisabled` settings. TSX authors need a core release that
+own `pattern` and `driverDisabled` settings. TSX authors need a core build that
 emits the aggressor fields.
 
 ngspice must already be installed; `createNativeSolver({ tools: { ngspice } })`

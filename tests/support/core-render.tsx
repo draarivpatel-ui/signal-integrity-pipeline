@@ -1,80 +1,22 @@
-import { Circuit, simulation } from "@tscircuit/core"
-import type { PcbTransientChannelSimulationProps } from "@tscircuit/props"
-import { createContext, type ReactElement, useContext } from "react"
+import { Circuit } from "@tscircuit/core"
+import type { ReactElement } from "react"
 import type { CircuitJson } from "../../src/board"
-
-/** New simulation props exercised against the pipeline's pinned renderer. */
-interface AggressorProps {
-  aggressorPattern?: string
-  aggressorDisabled?: boolean
-}
-
-/** Aggressor declarations in the fixture, indexed by simulation name. */
-type FixtureDeclarations = Map<string | undefined, AggressorProps>
-
-const aggressorDeclarations = createContext<FixtureDeclarations | null>(null)
-
-/** Render the simulation with pinned core and capture its aggressor declaration. */
-export function FixtureChannelSimulation({
-  aggressorPattern,
-  aggressorDisabled,
-  ...props
-}: PcbTransientChannelSimulationProps & AggressorProps): ReactElement {
-  const declarations = useContext(aggressorDeclarations)
-  if (aggressorPattern !== undefined || aggressorDisabled !== undefined) {
-    if (!declarations) throw new Error("Render fixtures with renderCoreSignals")
-    declarations.set(props.name, { aggressorPattern, aggressorDisabled })
-  }
-  return <simulation.pcbtransientchannelsimulation {...props} />
-}
-
-/** Serialize the fixture's new props onto the corresponding run rendered by core. */
-function withFixtureDeclarations({
-  records,
-  declarations,
-}: {
-  records: CircuitJson
-  declarations: FixtureDeclarations
-}): CircuitJson {
-  for (const record of records) {
-    if (record.type !== "simulation_pcb_transient_channel_simulation") continue
-    const props = declarations.get(record.name)
-    if (!props) continue
-    if (props.aggressorPattern !== undefined)
-      Object.assign(record, {
-        aggressor_pattern: props.aggressorPattern,
-      })
-    if (props.aggressorDisabled !== undefined)
-      Object.assign(record, {
-        aggressor_disabled: props.aggressorDisabled,
-      })
-  }
-  return records
-}
 
 /** Render TSX through core and preserve partial records when it rejects the board. */
 export async function renderCoreSignals(
   tree: ReactElement,
 ): Promise<CircuitJson> {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
-  const declarations: FixtureDeclarations = new Map()
   try {
-    circuit.add(
-      <aggressorDeclarations.Provider value={declarations}>
-        {tree}
-      </aggressorDeclarations.Provider>,
-    )
+    circuit.add(tree)
     await circuit.renderUntilSettled()
     const records = circuit.getCircuitJson()
     const errors = records.filter((record) => record.type.endsWith("_error"))
     if (errors.length) throw new Error(JSON.stringify(errors))
-    return withFixtureDeclarations({ records, declarations })
+    return records
   } catch (error) {
-    throw Object.assign(error as Error, {
-      circuitJson: withFixtureDeclarations({
-        records: circuit.db.toArray(),
-        declarations,
-      }),
+    throw Object.assign(new Error((error as Error).message, { cause: error }), {
+      circuitJson: circuit.db.toArray(),
     })
   }
 }

@@ -22,7 +22,7 @@ test("retains a same-chip bus neighbor and uses its declared constant-high patte
   assert.ok(neighbor)
 
   const declared = await renderSignals({
-    tree: <ParallelBus neighbourPattern="1" />,
+    tree: <ParallelBus neighbourPattern="1" aggressorDisabled />,
   })
   const [prepared] = prepareChannelSimulations({
     circuit: declared,
