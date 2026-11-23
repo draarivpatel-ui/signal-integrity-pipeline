@@ -1,6 +1,6 @@
 import { type Theme, themeIds } from "./chrome"
 
-const themeKey = "tscircuit-si-workbench:chosen-theme"
+const themeKey = "tscircuit-si-workbench:theme"
 const recentKey = "si-workbench.recent"
 
 /** Read a locally stored value even when browser storage access is restricted. */
@@ -21,18 +21,14 @@ function store({ key, value }: { key: string; value: string }): void {
   }
 }
 
-/** Restore the theme the user last chose; Dark until they choose one. */
+/** Restore the last theme, or use Windows Classic on first launch. */
 export function loadTheme(): Theme {
-  return themeIds.find((id) => id === stored(themeKey)) ?? "dark"
+  return themeIds.find((id) => id === stored(themeKey)) ?? "classic"
 }
 
-/** Switch the root theme tokens. */
-export function applyTheme(theme: Theme): void {
+/** Keep the root token switch and persisted theme in sync. */
+export function setTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme
-}
-
-/** Remember a theme the user picked from the menu or toolbar. */
-export function saveTheme(theme: Theme): void {
   store({ key: themeKey, value: theme })
 }
 
