@@ -6,7 +6,7 @@ import { assertRouteVisual } from "../../fixtures/route-visual-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderCoreSignals } from "../../support/core-render"
 
-test("draws scoped copper, a driver dot and a receiver ring", async () => {
+test("admits a rendered daisy chain and visualizes the routed receiver path", async () => {
   const circuitJson = await renderCoreSignals(
     <AdmissionDaisyChain routeFinalLeg />,
   )
@@ -18,6 +18,24 @@ test("draws scoped copper, a driver dot and a receiver ring", async () => {
     solver.visualize().polygons?.some((polygon) => polygon.label === "board"),
   )
   solver.solve()
+  const { value, artifacts } = solver.getOutput()
+  assert.equal(value.length, 1)
+  const [{ name, sections, bindings }] = value
+  assert.equal(name, "DAISY")
+  assert.equal(sections.copperScope.channelPcbTraceIds.length, 2)
+  const [mapping] = bindings.mappings
+  assert.equal(bindings.mappings.length, 1)
+  assert.equal(mapping.port, "DATA")
+  assert.ok(
+    bindings.routedTraceCuts.some(
+      (cut) =>
+        cut.sourceTraceId === mapping.sourceTraceId &&
+        cut.fromSourcePortId === mapping.from &&
+        cut.toSourcePortId === mapping.to,
+    ),
+  )
+  assert.equal(bindings.routedTraceCuts.length, 2)
+  assert.equal(artifacts[0].path, "admission.json")
   const drawing = solver.visualize()
   assert.equal(drawing.polygons?.length, 4)
   assert.equal(drawing.lines?.length, 2)
