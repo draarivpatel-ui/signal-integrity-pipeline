@@ -36,6 +36,7 @@ export { routedControl } from "./routed-control"
 export { circuitNodes } from "./routed-nodes"
 export type {
   RouteBindingsInput,
+  RoutedBindings,
   RoutedCompileOptions,
   RoutedDeck,
   RoutedTraceCut,
