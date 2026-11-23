@@ -8,19 +8,14 @@ import {
   useState,
 } from "react"
 import { loadInput } from "../channel-inspector/input"
+import { AssignModels, type IbisFocus } from "./assign-models"
 import { useBoardSelection } from "./board-selection"
 import { BoardViewer, boardCoordinates } from "./board-viewer"
-import {
-  CommandButton,
-  Icon,
-  type Menu,
-  MenuBar,
-  Modal,
-  themeIds,
-  themes,
-} from "./chrome"
+import { CommandButton, Icon, MenuBar, Modal } from "./chrome"
 import { useDesignHistory } from "./design-history"
 import { Dock, Properties } from "./docks"
+import { IbisViewer } from "./ibis-viewer"
+import { type CommandActions, workbenchMenus } from "./menus"
 import { editNetRole, type NetRole } from "./model/net-roles"
 import {
   findProjectNode,
@@ -30,6 +25,7 @@ import {
 } from "./project"
 import { StackupEditor } from "./stackup-editor"
 import { loadRecent, loadTheme, saveRecent, setTheme } from "./storage"
+import { Toolbar } from "./toolbar"
 import { ChildWindow, useWindows, windowTitles } from "./windows"
 import "./workbench.css"
 
@@ -44,6 +40,11 @@ export function Workbench(): JSX.Element {
   const [showTree, setShowTree] = useState(true)
   const [showProperties, setShowProperties] = useState(true)
   const simulation = input?.simulations[simulationIndex]
+  const [assignment, setAssignment] = useState<{
+    port?: string
+    modelId?: string
+  }>()
+  const [ibisFocus, setIbisFocus] = useState<IbisFocus>()
   const [about, setAbout] = useState(false)
   const [status, setStatus] = useState("Ready")
   const [error, setError] = useState<string>()
@@ -83,6 +84,8 @@ export function Workbench(): JSX.Element {
   const openNode = (node: ProjectNode): void => {
     if (node.window === "board" || node.window === "stackup")
       windows.show(node.window)
+    else if (node.modelId)
+      setAssignment({ port: node.port, modelId: node.modelId })
   }
   useEffect(() => {
     if (!selection.context) return
@@ -156,108 +159,53 @@ export function Workbench(): JSX.Element {
   const openSample = (): void => {
     void load()
   }
-  const menus: Menu[] = [
-    {
-      label: "File",
-      items: [
-        { label: "Open Circuit JSON…", shortcut: "Ctrl+O", action: openFile },
-        { label: "Open Sample", action: openSample, shortcut: "Ctrl+Shift+O" },
-        {
-          label: "Open Recent",
-          items: recent.length
-            ? recent.map((name) => ({
-                label: name,
-                action: name === "Parallel bus sample" ? openSample : openFile,
-              }))
-            : [{ label: "(No recent files)" }],
-        },
-        { label: "file separator", separator: true },
-        { label: "Save Design As…" },
-      ],
-    },
-    {
-      label: "Edit",
-      items: [
-        { label: "Undo Design Edit", shortcut: "Ctrl+Z", action: design.undo },
-        { label: "Redo Design Edit", shortcut: "Ctrl+Y", action: design.redo },
-      ],
-    },
-    {
-      label: "View",
-      items: [
-        {
-          label: "Board Viewer",
-          action: input && (() => windows.show("board")),
-        },
-        {
-          label: "Project Explorer",
-          shortcut: "Ctrl+Alt+P",
-          checked: showTree,
-          action: () => setShowTree(!showTree),
-        },
-        {
-          label: "Properties Inspector",
-          shortcut: "Ctrl+Alt+R",
-          checked: showProperties,
-          action: () => setShowProperties(!showProperties),
-        },
-        { label: "theme separator", separator: true },
-        {
-          label: "Theme",
-          items: themeIds.map((id) => ({
-            label: themes[id],
-            checked: theme === id,
-            action: () => selectTheme(id),
-          })),
-        },
-      ],
-    },
-    {
-      label: "Setup",
-      items: [
-        {
-          label: "Stackup Editor",
-          shortcut: "Ctrl+K",
-          action: input && (() => windows.show("stackup")),
-        },
-        { label: "Stimulus / Aggressors…" },
-      ],
-    },
-    {
-      label: "Models",
-      items: [
-        { label: "Assign Models…" },
-        { label: "Visual IBIS Editor" },
-        { label: "Load External IBIS…", title: "Coming later" },
-      ],
-    },
-    {
-      label: "Simulate",
-      mnemonic: 1,
-      items: [{ label: "Run", shortcut: "F5" }],
-    },
-    {
-      label: "Tools",
-      items: [{ label: "Oscilloscope" }, { label: "Simulation Log" }],
-    },
-    {
-      label: "Window",
-      items: [
-        ...(["Cascade", "Tile", "Maximize"] as const).map((mode) => ({
-          label: mode,
-          action: () => windows.arrange(mode),
+  const actions: CommandActions = {
+    open: openFile,
+    sample: openSample,
+    undo: design.undo,
+    redo: design.redo,
+    reset: design.reset,
+    board: input && (() => windows.show("board")),
+    stackup: input && (() => windows.show("stackup")),
+    assign:
+      input &&
+      (() =>
+        setAssignment({
+          port: chosenNode?.port,
+          modelId: chosenNode?.modelId,
         })),
-        ...windows.frames.map(({ id }) => ({
-          label: windowTitles[id],
-          action: () => windows.show(id),
-        })),
-      ],
+    ibis: input && (() => windows.show("ibis")),
+    victim:
+      selection.selected?.record.type === "pcb_trace"
+        ? () => changeRole("selected")
+        : undefined,
+    aggressor:
+      selection.selected?.record.type === "pcb_trace"
+        ? () => changeRole("near")
+        : undefined,
+    exclude:
+      selection.selected?.record.type === "pcb_trace"
+        ? () => changeRole("excluded")
+        : undefined,
+    clear: () => {
+      selection.select(undefined)
+      setTreeId(undefined)
     },
-    {
-      label: "Help",
-      items: [{ label: "About SI Workbench", action: () => setAbout(true) }],
-    },
-  ]
+    about: () => setAbout(true),
+  }
+  const menus = workbenchMenus({
+    actions,
+    recent,
+    theme,
+    selectTheme,
+    showTree,
+    toggleTree: () => setShowTree(!showTree),
+    showProperties,
+    toggleProperties: () => setShowProperties(!showProperties),
+    frames: windows.frames,
+    showWindow: windows.show,
+    arrange: windows.arrange,
+  })
 
   return (
     <main
@@ -280,81 +228,18 @@ export function Workbench(): JSX.Element {
         </h1>
       </header>
       <MenuBar menus={menus} />
-      <div className="wb-toolbar" role="toolbar" aria-label="Workbench tools">
-        <i className="wb-rebar" aria-hidden="true" />
-        <button
-          title="Open Circuit JSON (Ctrl+O)"
-          aria-label="Open Circuit JSON"
-          onClick={openFile}
-        >
-          <Icon name="open" />
-        </button>
-        <button
-          title="Open Sample"
-          aria-label="Open Sample"
-          onClick={openSample}
-        >
-          <Icon name="sample" />
-        </button>
-        <span className="wb-separator" />
-        <button
-          title="Board Viewer"
-          aria-label="Board Viewer"
-          disabled={!input}
-          onClick={() => windows.show("board")}
-        >
-          <Icon name="board" />
-        </button>
-        <button
-          title="Stackup Editor (Ctrl+K)"
-          aria-label="Stackup Editor"
-          disabled={!input}
-          onClick={() => windows.show("stackup")}
-        >
-          <Icon name="stackup" />
-        </button>
-        {input && (
-          <label>
-            Sim:{" "}
-            <select
-              aria-label="Active simulation"
-              value={simulationIndex}
-              onChange={(event) => {
-                selection.select(undefined)
-                setTreeId(undefined)
-                setSimulationIndex(Number(event.target.value))
-              }}
-            >
-              {input.simulations.map((item, index) => (
-                <option
-                  key={item.simulation_pcb_transient_channel_simulation_id}
-                  value={index}
-                >
-                  {item.name ??
-                    item.simulation_pcb_transient_channel_simulation_id}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="wb-theme-switch">
-          Theme:{" "}
-          <select
-            aria-label="Theme"
-            value={theme}
-            onChange={(event) => {
-              const id = themeIds.find((value) => value === event.target.value)
-              if (id) selectTheme(id)
-            }}
-          >
-            {themeIds.map((id) => (
-              <option key={id} value={id}>
-                {themes[id]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <Toolbar
+        actions={actions}
+        simulations={input?.simulations}
+        index={simulationIndex}
+        selectSimulation={(index) => {
+          selection.select(undefined)
+          setTreeId(undefined)
+          setSimulationIndex(index)
+        }}
+        theme={theme}
+        selectTheme={selectTheme}
+      />
       <input
         type="file"
         ref={fileInput}
@@ -423,6 +308,14 @@ export function Workbench(): JSX.Element {
                   feature={selection.selected}
                   apply={design.edit}
                   close={() => windows.close("stackup")}
+                />
+              )}
+              {input && frame.id === "ibis" && (
+                <IbisViewer
+                  key={`${ibisFocus?.modelId ?? ""}:${ibisFocus?.buffer ?? ""}`}
+                  circuit={input.circuit}
+                  initial={ibisFocus}
+                  apply={design.edit}
                 />
               )}
             </ChildWindow>
@@ -509,6 +402,21 @@ export function Workbench(): JSX.Element {
             />
           ))}
         </div>
+      )}
+      {input && assignment && (
+        <AssignModels
+          circuit={input.circuit}
+          port={assignment.port}
+          componentId={assignment.modelId}
+          retained={selection.retained}
+          apply={design.edit}
+          close={() => setAssignment(undefined)}
+          showCurves={(focus) => {
+            setIbisFocus(focus)
+            setAssignment(undefined)
+            windows.show("ibis")
+          }}
+        />
       )}
       {about && (
         <Modal title="About SI Workbench" close={() => setAbout(false)}>

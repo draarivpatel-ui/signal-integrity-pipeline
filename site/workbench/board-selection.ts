@@ -24,6 +24,7 @@ export interface CopperContext {
 
 interface BoardSelection {
   features: InspectorFeature[]
+  retained: ReadonlySet<string>
   error?: string
   selected?: InspectorFeature
   hovered?: InspectorFeature
@@ -64,7 +65,10 @@ export function useBoardSelection({
         simulation,
         distanceMm: input.distanceMm,
       })
-      return { features: inspectorFeatures({ ...copper, board: input.board }) }
+      return {
+        features: inspectorFeatures({ ...copper, board: input.board }),
+        retained: copper.retainedSourceIds,
+      }
     } catch (cause) {
       return { features: [], error: (cause as Error).message }
     }
@@ -103,6 +107,7 @@ export function useBoardSelection({
   }
   return {
     features,
+    retained: scope.retained ?? new Set(),
     error: scope.error,
     selected,
     hovered,

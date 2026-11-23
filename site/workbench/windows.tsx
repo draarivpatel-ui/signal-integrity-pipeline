@@ -24,7 +24,7 @@ export interface Frame {
   maximized: boolean
 }
 
-export type Arrange = "Cascade" | "Tile" | "Maximize"
+export type Arrange = "Cascade" | "Tile" | "Tile Vertically" | "Maximize"
 
 /** Put a newly opened tool slightly below and right of the previous one. */
 function newFrame({ id, count }: { id: WindowId; count: number }): Frame {
@@ -82,7 +82,7 @@ export function useWindows(): {
             return { ...newFrame({ id: frame.id, count: index }), z: frame.z }
           if (mode === "Maximize")
             return { ...frame, maximized: index === visible.length - 1 }
-          const columns = Math.ceil(Math.sqrt(visible.length))
+          const columns = mode === "Tile Vertically" ? 1 : visible.length
           const rows = Math.ceil(visible.length / columns)
           return {
             ...frame,
