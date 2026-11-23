@@ -8,7 +8,7 @@ import "../../fixtures/extend-expect-circuit-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test.failing("a multipoint ideal trace can label the junction between routed cuts", async () => {
+test("a multipoint ideal trace can label the junction between routed cuts", async () => {
   const circuitJson = await renderSignals({
     tree: (
       <AdmissionDaisyChain routeFinalLeg idealMiddleLeg namedNet="multipoint">

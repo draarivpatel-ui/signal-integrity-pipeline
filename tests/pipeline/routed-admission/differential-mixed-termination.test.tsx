@@ -7,7 +7,7 @@ import { differentialIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 import Differential from "../../fixtures/unit-differential"
 
-test.failing("mixed routed and ideal terminations cannot carry an open differential leg", async () => {
+test("mixed routed and ideal terminations cannot carry an open differential leg", async () => {
   const circuitJson = await renderSignals({
     tree: (
       <Differential

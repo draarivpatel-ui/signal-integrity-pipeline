@@ -8,7 +8,7 @@ import "../../fixtures/extend-expect-circuit-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test.failing("rejects an ideal bypass across a receiver-side cut and series resistor", async () => {
+test("rejects an ideal bypass across a receiver-side cut and series resistor", async () => {
   const circuitJson = await renderSignals({
     tree: (
       <AdmissionChannel route="series">
