@@ -13,7 +13,7 @@ export function AdmissionDaisyChain({
   placedLoad = false,
 }: {
   routeFinalLeg: boolean
-  namedNet?: boolean | "ends"
+  namedNet?: boolean | "ends" | "multipoint"
   bypassFinalLeg?: boolean
   idealMiddleLeg?: boolean
   branched?: boolean
@@ -30,6 +30,7 @@ export function AdmissionDaisyChain({
   const branchReceiver = ".RX2 > .A"
   if (branched) receiverRefs.push(branchReceiver)
   let namedPorts = [driver, finalReceiver]
+  if (namedNet === "multipoint") namedPorts = [driver]
   if (namedNet === true)
     namedPorts = [
       ...new Set([driver, middleReceiver, finalLegStart, finalReceiver]),
@@ -58,7 +59,12 @@ export function AdmissionDaisyChain({
       {idealMiddleLeg && (
         <>
           <Inverter name="JOIN" x={2.5} y={0} driver={false} />
-          <trace from={middleReceiver} to={finalLegStart} />
+          {namedNet === "multipoint" && (
+            <trace path={[middleReceiver, finalLegStart, "net.DATA"]} />
+          )}
+          {namedNet !== "multipoint" && (
+            <trace from={middleReceiver} to={finalLegStart} />
+          )}
         </>
       )}
       <trace
