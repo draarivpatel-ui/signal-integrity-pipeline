@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { SourceComponentBase } from "circuit-json"
 import type { ConnectivityMap } from "circuit-json-to-connectivity-map"
 import type { SourceNetId, SourcePortId } from "./ids"
@@ -11,17 +12,17 @@ export {
   getSourcePortConnectivityMapFromCircuitJson,
 } from "circuit-json-to-connectivity-map"
 
-/** Resolve the seed's electrical net, including an isolated seed. */
+/** Return the electrical net members, including the given ID even when isolated. */
 export function sourceNetMembers({
   connectivity,
-  seed,
+  memberId,
 }: {
   connectivity: ConnectivityMap
-  seed: SourcePortId | SourceNetId
+  memberId: SourcePortId | SourceNetId
 }): SourceNetMembers {
-  const netId = connectivity.getNetConnectedToId(seed)
-  if (netId === undefined) return new Set([seed])
-  return new Set([seed, ...connectivity.getIdsConnectedToNet(netId)])
+  const netId = connectivity.getNetConnectedToId(memberId)
+  if (netId === undefined) return new Set([memberId])
+  return new Set([memberId, ...connectivity.getIdsConnectedToNet(netId)])
 }
 
 /** Ids the board wires together through a trace or a part's internally connected pins. */
@@ -62,10 +63,10 @@ export function passiveBridges({
   circuit: CircuitJson
   excluded: ReadonlySet<SourcePortId>
 }): PassiveBridge[] {
+  const db = cju([...circuit])
   const ports = new Map<SourceComponentId, SourcePortId[]>()
-  for (const port of circuit) {
-    if (port.type !== "source_port" || port.source_component_id === undefined)
-      continue
+  for (const port of db.source_port.list()) {
+    if (port.source_component_id === undefined) continue
     const pins = ports.get(port.source_component_id)
     if (!pins) {
       ports.set(port.source_component_id, [port.source_port_id])
@@ -79,8 +80,7 @@ export function passiveBridges({
     "simple_inductor",
   ]
   const connections: PassiveBridge[] = []
-  for (const component of circuit) {
-    if (component.type !== "source_component") continue
+  for (const component of db.source_component.list()) {
     if (!passiveTypes.includes(component.ftype)) continue
     const pins = ports.get(component.source_component_id)
     if (pins?.length === 2 && pins.every((pin) => !excluded.has(pin)))

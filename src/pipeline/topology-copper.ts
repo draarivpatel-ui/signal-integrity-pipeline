@@ -6,6 +6,7 @@ import {
 } from "@flatten-js/core"
 import {
   circlePolygon,
+  cju,
   getPlatedHolePolygon,
   getSmtPadPolygon,
   getTraceSegmentPolygon,
@@ -129,7 +130,7 @@ function outlineContact({ a, b }: { a: Polygon; b: Polygon }): PlanarPoint[] {
 }
 
 /** Project the actual area of copper contact onto the length of a wire. */
-function registerContact({
+function projectedContact({
   wire,
   key,
   points,
@@ -137,18 +138,24 @@ function registerContact({
   wire: CopperWire
   key: CopperPointKey
   points: PlanarPoint[]
-}): void {
+}): CopperContact {
   const positions = points.map((point) =>
     Math.max(
       0,
       Math.min(wire.length, new Vector(wire.origin, point).dot(wire.direction)),
     ),
   )
-  wire.contacts.push({
+  return {
     key,
     start: Math.min(...positions),
     end: Math.max(...positions),
-  })
+  }
+}
+
+/** Contacts in wire order and direct joins between regions. */
+interface OutlineContacts {
+  wireContacts: Map<CopperWire, CopperContact[]>
+  groups: CopperGroup[]
 }
 
 /** Find coplanar outline contacts with a sweep along each layer's x axis. */
@@ -158,7 +165,7 @@ function outlineContacts({
 }: {
   wires: CopperWire[]
   regions: CopperRegion[]
-}): CopperGroup[] {
+}): OutlineContacts {
   const features: CopperFeature[] = [...wires, ...regions]
     .map((copper) => ({
       copper,
@@ -168,6 +175,7 @@ function outlineContacts({
       (a, b) =>
         a.copper.layer.localeCompare(b.copper.layer) || a.box.xmin - b.box.xmin,
     )
+  const wireContacts = new Map(wires.map((wire) => [wire, [...wire.contacts]]))
   const groups: CopperGroup[] = []
   for (const [index, { copper: a, box }] of features.entries()) {
     const search = box.extend(COPPER_TOLERANCE_MM)
@@ -183,19 +191,24 @@ function outlineContacts({
       if (!points.length) continue
       if ("key" in a) {
         if ("key" in b) groups.push([a.key, b.key])
-        else registerContact({ wire: b, key: a.key, points })
+        else
+          wireContacts
+            .get(b)!
+            .push(projectedContact({ wire: b, key: a.key, points }))
         continue
       }
       if ("key" in b) {
-        registerContact({ wire: a, key: b.key, points })
+        wireContacts
+          .get(a)!
+          .push(projectedContact({ wire: a, key: b.key, points }))
         continue
       }
       const key = `contact:${index}:${otherIndex}`
-      registerContact({ wire: a, key, points })
-      registerContact({ wire: b, key, points })
+      wireContacts.get(a)!.push(projectedContact({ wire: a, key, points }))
+      wireContacts.get(b)!.push(projectedContact({ wire: b, key, points }))
     }
   }
-  return groups
+  return { wireContacts, groups }
 }
 
 /** Read a via's approached layer or the wire layer at a route point. */
@@ -284,9 +297,10 @@ function copperRegions({
 }: CopperSelection): RegionCopper {
   const selectedPorts = new Map(ports.map((port) => [port.pcb_port_id, port]))
   const selectedTraces = new Set(traces.map((trace) => trace.pcb_trace_id))
+  const db = cju([...circuit])
   const rotations = new Map<PcbComponent["pcb_component_id"], number>(
-    circuit
-      .filter((record) => record.type === "pcb_component")
+    db.pcb_component
+      .list()
       .map((record) => [record.pcb_component_id, record.rotation]),
   )
   const regions: CopperRegion[] = []
@@ -353,30 +367,15 @@ function wireJunctions(contacts: CopperContact[]): WireJunctions {
   return { route, groups }
 }
 
-/** Add an undirected edge between two distinct copper junctions. */
-export function joinCopperPoints({
-  graph,
-  a,
-  b,
-}: {
-  graph: CopperGraph
-  a: CopperPointKey
-  b: CopperPointKey
-}): void {
-  if (a === b) return
-  graph[a].add(b)
-  graph[b].add(a)
-}
-
 /** Resolve the copper junctions and connect each pair of consecutive stops on a trace. */
 export function buildRoutedCopper(selection: CopperSelection): RoutedCopper {
   const pads = copperRegions(selection)
   const { wires, regions, groups: barrels } = traceCopper(selection.traces)
-  const contacts = outlineContacts({
+  const { wireContacts, groups: contacts } = outlineContacts({
     wires,
     regions: [...pads.regions, ...regions],
   })
-  const ordered = wires.map(({ contacts }) => wireJunctions(contacts))
+  const ordered = Array.from(wireContacts.values(), wireJunctions)
   const terminalPoints = selection.ports.flatMap((port) =>
     port.layers.map((layer) => ({
       port: port.source_port_id,
@@ -406,7 +405,10 @@ export function buildRoutedCopper(selection: CopperSelection): RoutedCopper {
       const a = junctions[key]
       routed.add(a)
       if (index === 0) continue
-      joinCopperPoints({ graph, a, b: junctions[keys[index - 1]] })
+      const b = junctions[keys[index - 1]]
+      if (a === b) continue
+      graph[a].add(b)
+      graph[b].add(a)
     }
   }
   const terminals = new Map<SourcePortId, CopperPointKey[]>()

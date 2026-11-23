@@ -1,0 +1,302 @@
+import type {
+  CircuitJson,
+  DriverPattern,
+  SimulationPcbDriverReceiverChannel,
+  SimulationPcbTransientChannelSimulation,
+  SimulationPcbTransientChannelSimulationId,
+  SourcePortId,
+} from "../board"
+import { isQuiet } from "../board"
+import {
+  edgeDurationSeconds,
+  type IbisSources,
+  type InspectedPin,
+} from "../buffers"
+import { safeId } from "../kernel"
+import type { RunControls } from "../simulation"
+import { planAggressors } from "./aggressors"
+import { circuitJsonDb } from "./circuit-json-db"
+import type { NumericalSettings } from "./modeling"
+import {
+  type ChannelSimulationControlOptions,
+  channelSimulationDurationSeconds,
+  signalTiming,
+  withChannelSimulationControls,
+} from "./signal-controls"
+import { prepareRoutedLanes } from "./signal-lanes"
+import {
+  channelSimulationCircuit,
+  prepareSignalSettings,
+  validateComponentModels,
+  withUsedIbisModels,
+} from "./signal-models"
+import {
+  inspectSignalPins,
+  scopeSignalPins,
+  validateSignalPins,
+} from "./signal-pins"
+
+export { endpointPorts, probeEndpoints, signalBits } from "./signal-controls"
+export { routedLanes } from "./signal-lanes"
+
+/** Maximum and default lateral search distance for routed admission, in millimetres. */
+const MAX_COPPER_SCOPE_DISTANCE_MM = 32
+
+/** The lowered circuit and controls for a single transient channel simulation. */
+export interface PreparedChannelSimulation {
+  durationSeconds: number
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  circuit: CircuitJson
+  controls: Record<string, RunControls>
+  pins: Map<SourcePortId, InspectedPin>
+  settings: NumericalSettings
+}
+
+/** Validate the shared channel simulation namespace before any independent channel simulation work. */
+export function listChannelSimulations(
+  circuitJson: CircuitJson,
+): SimulationPcbTransientChannelSimulation[] {
+  const db = circuitJsonDb(circuitJson)
+  const channelSimulations =
+    db.simulation_pcb_transient_channel_simulation.list()
+  if (
+    channelSimulations.length > 1 &&
+    channelSimulations.some((channelSimulation) => !channelSimulation.name)
+  ) {
+    const element = "<simulation.pcbtransientchannelsimulation>"
+    throw new Error(
+      `This board has ${channelSimulations.length} ${element} declarations; give each a name.`,
+    )
+  }
+  const simulationPcbTransientChannelSimulationIds = new Set(
+    channelSimulations.map(
+      (channelSimulation) =>
+        channelSimulation.simulation_pcb_transient_channel_simulation_id,
+    ),
+  )
+  if (
+    simulationPcbTransientChannelSimulationIds.size !==
+    channelSimulations.length
+  )
+    throw new Error(
+      "Duplicate simulation_pcb_transient_channel_simulation identifier",
+    )
+  for (const signal of db.simulation_pcb_driver_receiver_channel.list()) {
+    if (
+      simulationPcbTransientChannelSimulationIds.has(
+        signal.simulation_pcb_transient_channel_simulation_id,
+      )
+    )
+      continue
+    throw new Error(`${signal.name}: unknown transient channel simulation`)
+  }
+  return channelSimulations
+}
+
+/** Validate one channel simulation and lower its test intent to the private routed declarations. */
+export function prepareChannelSimulationById({
+  circuit,
+  sources,
+  simulationPcbTransientChannelSimulationId,
+  distanceMm = MAX_COPPER_SCOPE_DISTANCE_MM,
+}: {
+  circuit: CircuitJson
+  sources: IbisSources
+  simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
+  distanceMm?: number
+}): PreparedChannelSimulation {
+  if (
+    !Number.isFinite(distanceMm) ||
+    distanceMm <= 0 ||
+    distanceMm > MAX_COPPER_SCOPE_DISTANCE_MM
+  ) {
+    throw new Error(
+      `Copper scope distance must be in (0,${MAX_COPPER_SCOPE_DISTANCE_MM}] mm`,
+    )
+  }
+  const channelSimulations = listChannelSimulations(circuit)
+  const matches = channelSimulations.filter(
+    (channelSimulation) =>
+      channelSimulation.simulation_pcb_transient_channel_simulation_id ===
+      simulationPcbTransientChannelSimulationId,
+  )
+  if (matches.length !== 1)
+    throw new Error(
+      `Expected exactly one transient channel simulation ${simulationPcbTransientChannelSimulationId}`,
+    )
+  return prepareChannelSimulation({
+    boardCircuitJson: circuit,
+    channelSimulation: matches[0],
+    sources,
+    distanceMm,
+  })
+}
+
+/** Unicode code point order, independent of locale and UTF-16 surrogate ordering. */
+export function compareNames({ a, b }: { a: string; b: string }): number {
+  const left = Array.from(a, (character) => character.codePointAt(0)!)
+  const right = Array.from(b, (character) => character.codePointAt(0)!)
+  const sharedLength = Math.min(left.length, right.length)
+  for (let i = 0; i < sharedLength; i++) {
+    if (left[i] !== right[i]) return left[i] - right[i]
+  }
+  return left.length - right.length
+}
+
+/** One channel simulation's validated records. */
+interface ChannelSelection {
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
+  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
+  circuit: CircuitJson
+}
+
+/** Require at least one channel with distinct names and record IDs. */
+function validateChannelNames({
+  channelSimulation,
+  driverReceiverChannels,
+  simulationPcbTransientChannelSimulationId,
+}: Pick<
+  ChannelSelection,
+  | "channelSimulation"
+  | "driverReceiverChannels"
+  | "simulationPcbTransientChannelSimulationId"
+>): void {
+  const signalNames = new Set(
+    driverReceiverChannels.map((signal) => signal.name),
+  )
+  const simulationPcbDriverReceiverChannelIds = new Set(
+    driverReceiverChannels.map(
+      (signal) => signal.simulation_pcb_driver_receiver_channel_id,
+    ),
+  )
+  if (
+    !driverReceiverChannels.length ||
+    signalNames.size !== driverReceiverChannels.length ||
+    simulationPcbDriverReceiverChannelIds.size !== driverReceiverChannels.length
+  ) {
+    throw new Error(
+      `${channelSimulation.name ?? simulationPcbTransientChannelSimulationId}: require distinct named signals`,
+    )
+  }
+}
+
+/** Select the simulation's channels in stable name order. */
+function selectChannelSimulation({
+  boardCircuitJson,
+  channelSimulation,
+}: {
+  boardCircuitJson: CircuitJson
+  channelSimulation: SimulationPcbTransientChannelSimulation
+}): ChannelSelection {
+  const simulationPcbTransientChannelSimulationId = safeId({
+    raw: channelSimulation.simulation_pcb_transient_channel_simulation_id,
+    field: "simulationPcbTransientChannelSimulationId",
+  })
+  const db = circuitJsonDb(boardCircuitJson)
+  const driverReceiverChannels = db.simulation_pcb_driver_receiver_channel.list(
+    {
+      simulation_pcb_transient_channel_simulation_id:
+        simulationPcbTransientChannelSimulationId,
+    },
+  )
+  driverReceiverChannels.sort((a, b) => compareNames({ a: a.name, b: b.name }))
+  validateChannelNames({
+    channelSimulation,
+    driverReceiverChannels,
+    simulationPcbTransientChannelSimulationId,
+  })
+  const circuit = channelSimulationCircuit({
+    boardCircuitJson,
+    db,
+    channelSimulation,
+    driverReceiverChannels,
+  })
+  return {
+    circuit,
+    channelSimulation,
+    simulationPcbTransientChannelSimulationId,
+    driverReceiverChannels,
+  }
+}
+
+interface ChannelSimulationOptions {
+  boardCircuitJson: CircuitJson
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  sources: IbisSources
+  distanceMm: number
+}
+
+/** Lower controls and assemble the prepared simulation. */
+function withPreparedChannelControls({
+  settings,
+  ...options
+}: ChannelSimulationControlOptions & {
+  settings: NumericalSettings
+}): PreparedChannelSimulation {
+  const { circuit, controls } = withChannelSimulationControls(options)
+  const {
+    channelSimulation,
+    driverReceiverChannels,
+    durationSeconds,
+    pins,
+    simulationPcbTransientChannelSimulationId,
+  } = options
+  return {
+    channelSimulation,
+    driverReceiverChannels,
+    circuit,
+    controls: { [simulationPcbTransientChannelSimulationId]: controls },
+    pins,
+    settings,
+    durationSeconds,
+  }
+}
+
+/** Prepare one channel simulation from its declarations through controls and probes. */
+function prepareChannelSimulation(
+  options: ChannelSimulationOptions,
+): PreparedChannelSimulation {
+  const { sources, distanceMm } = options
+  const { circuit, ...selection } = selectChannelSimulation(options)
+  const inspection = { ...selection, circuit, sources, distanceMm }
+  const signalPins = inspectSignalPins(inspection)
+  const scopedPins = scopeSignalPins({ ...inspection, signalPins })
+  const scoped = { ...selection, ...scopedPins, circuit, signalPins }
+  validateSignalPins(scoped)
+  const aggressors = planAggressors({
+    ...scoped,
+    driven: signalPins.driven,
+  })
+  const patterns: DriverPattern[] = [...selection.driverReceiverChannels]
+  const edgeTimesSeconds = [...signalPins.edgeTimesSeconds]
+  for (const [port, signal] of aggressors) {
+    if (signal === null || isQuiet(signal)) continue
+    patterns.push(signal)
+    edgeTimesSeconds.push(edgeDurationSeconds(scoped.pins.get(port)!))
+  }
+  const durationSeconds = channelSimulationDurationSeconds({
+    channelSimulation: selection.channelSimulation,
+    patterns,
+  })
+  const timing = signalTiming({ patterns, durationSeconds, edgeTimesSeconds })
+  validateComponentModels({ ...scoped, topology: signalPins.topology })
+  const lanes = prepareRoutedLanes(scoped)
+  const pruned = withUsedIbisModels(scoped)
+  const supplied = prepareSignalSettings({
+    pruned,
+    signalPins,
+    scopedPins,
+    lanes,
+  })
+  return withPreparedChannelControls({
+    ...selection,
+    ...timing,
+    ...supplied,
+    durationSeconds,
+    aggressors,
+    pins: pruned.pins,
+    driven: signalPins.driven,
+  })
+}

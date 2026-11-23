@@ -1,6 +1,7 @@
 /* eslint-disable local/max-file-lines -- Experiment declaration checks share Circuit JSON and IBIS plan types. */
 // Experiment declarations (circuitNodes, generalDeclarations, modelRunDefinition).
 
+import { cju } from "@tscircuit/circuit-json-util"
 import type {
   IbisModelDefinition,
   IbisReferencePorts,
@@ -84,32 +85,22 @@ type SourceNodeId = SourcePortId | SourceNetId
 /** Representatives used to join source ports and nets before SPICE nodes are numbered. */
 type SourceParents = Map<SourceNodeId, SourceNodeId>
 
-/** Registers any source port or net that has no representative yet. */
-function addSourceNode({
-  parents,
-  id,
-}: {
-  parents: SourceParents
-  id: SourceNodeId
-}): void {
-  if (id && !parents.has(id)) parents.set(id, id)
-}
-
-/** Finds the representative of an existing port or net and compresses its path. */
+/** Finds the representative of an existing port or net. */
 function sourceRoot({
   parents,
   id,
 }: {
-  parents: SourceParents
+  parents: ReadonlyMap<SourceNodeId, SourceNodeId>
   id: SourceNodeId
 }): SourceNodeId {
-  const parent = parents.get(id)
-  if (parent === undefined)
-    fail("simulation_reference", `Unknown source port/net ${id}`)
-  if (parent === id) return id
-  const root = sourceRoot({ parents, id: parent })
-  parents.set(id, root)
-  return root
+  let current = id
+  for (;;) {
+    const parent = parents.get(current)
+    if (parent === undefined)
+      fail("simulation_reference", `Unknown source port/net ${current}`)
+    if (parent === current) return current
+    current = parent
+  }
 }
 
 /** A net record's representative after joining net-only traces across subcircuits. */
@@ -117,14 +108,15 @@ function netGroupRoot({
   netGroup,
   id,
 }: {
-  netGroup: Map<SourceNetId, SourceNetId>
+  netGroup: ReadonlyMap<SourceNetId, SourceNetId>
   id: SourceNetId
 }): SourceNetId {
-  const parent = netGroup.get(id) ?? id
-  if (parent === id) return id
-  const root = netGroupRoot({ netGroup, id: parent })
-  netGroup.set(id, root)
-  return root
+  let current = id
+  for (;;) {
+    const parent = netGroup.get(current)
+    if (parent === undefined || parent === current) return current
+    current = parent
+  }
 }
 
 /** Logical source nets attached to a physical port by single-port traces. */
@@ -140,7 +132,7 @@ function portNetBindings({
   port: SourcePortId
   traces: readonly SourceTrace[]
   channelTraces: ReadonlySet<SourceTrace["source_trace_id"]>
-  netGroup: Map<SourceNetId, SourceNetId>
+  netGroup: ReadonlyMap<SourceNetId, SourceNetId>
 }): PortNetBindings {
   const bindings = traces.filter(
     (trace) =>
@@ -159,12 +151,13 @@ function portNetBindings({
 function createCircuitNodeLookup({
   parents,
   splitNets,
-  names,
+  groundRoot,
 }: {
-  parents: SourceParents
+  parents: ReadonlyMap<SourceNodeId, SourceNodeId>
   splitNets: ReadonlySet<SourceNetId>
-  names: Map<SourceNodeId, string>
+  groundRoot: SourceNodeId
 }): CircuitNodes["node"] {
+  const names = new Map([[groundRoot, "0"]])
   return (id) => {
     if (splitNets.has(id))
       fail(
@@ -189,18 +182,19 @@ export function circuitNodes({
 }: CircuitNodesInput): CircuitNodes {
   const parents: SourceParents = new Map()
   for (const element of circuit) {
-    if (element.type === "source_port")
-      addSourceNode({ parents, id: element.source_port_id })
-    if (element.type === "source_net")
-      addSourceNode({ parents, id: element.source_net_id })
+    if (element.type === "source_port" && element.source_port_id)
+      parents.set(element.source_port_id, element.source_port_id)
+    if (element.type === "source_net" && element.source_net_id)
+      parents.set(element.source_net_id, element.source_net_id)
   }
   const channelTraces = new Set(
     mappings.flatMap(
       (mapping) => mapping.sourceTraceIds ?? [mapping.sourceTraceId],
     ),
   )
-  const traces = circuit.filter((e) => e.type === "source_trace")
-  const nets = circuit.filter((e) => e.type === "source_net")
+  const db = cju([...circuit])
+  const traces = db.source_trace.list()
+  const nets = db.source_net.list()
   // A two-terminal channel can have redundant one-port-to-net declarations
   // from component connections at both ends. Cut only that unambiguous case.
   const splitNets = new Set<SourceNetId>()
@@ -276,7 +270,9 @@ export function circuitNodes({
         (id) => !splitNets.has(id),
       ),
     ]
-    for (const id of connected) addSourceNode({ parents, id })
+    for (const id of connected) {
+      if (id && !parents.has(id)) parents.set(id, id)
+    }
     for (const id of connected.slice(1)) {
       parents.set(
         sourceRoot({ parents, id }),
@@ -289,15 +285,20 @@ export function circuitNodes({
     selector: modeling.channelReference,
   }).source_port_id
   const groundRoot = sourceRoot({ parents, id: ground })
-  const names = new Map([[groundRoot, "0"]])
-  const node = createCircuitNodeLookup({ parents, splitNets, names })
+  const node = createCircuitNodeLookup({ parents, splitNets, groundRoot })
   const ids = [...parents.keys()].filter((id) => !splitNets.has(id))
   for (const id of ids) node(id)
-  const endpoints = mappings.flatMap((mapping) => [
-    node(mapping.from),
-    node(mapping.to),
-  ])
-  if (endpoints.includes("0") || new Set(endpoints).size !== endpoints.length)
+  // Adjacent routed segments can share one physical endpoint, such as a receiver with a termination.
+  const endpoints = new Set(
+    mappings.flatMap((mapping) => [mapping.from, mapping.to]),
+  )
+  const endpointNodes = [...endpoints].map(node)
+  const collapsedLane = mappings.some((mapping) => mapping.from === mapping.to)
+  if (
+    collapsedLane ||
+    endpointNodes.includes("0") ||
+    new Set(endpointNodes).size !== endpoints.size
+  )
     fail(
       "channel_short",
       "Extracted endpoints are shorted by another ideal source trace or reference",
@@ -360,9 +361,10 @@ export function generalDeclarations({
     "source_net",
     "source_component",
   ]
+  // Validate identifiers before cju initializes its identifier counters.
   for (const type of referencedTypes) {
     const seen = new Set<string>()
-    for (const record of circuit.filter((e) => e.type === type)) {
+    for (const record of circuit.filter((record) => record.type === type)) {
       const id: unknown = Reflect.get(record, `${type}_id`)
       if (typeof id !== "string" || !id)
         fail("simulation_reference", `${type}: nonempty identifier required`)
@@ -371,8 +373,9 @@ export function generalDeclarations({
       seen.add(id)
     }
   }
-  const errors = circuit
-    .filter((e) => e.type === "source_invalid_component_property_error")
+  const db = cju([...circuit])
+  const errors = db.source_invalid_component_property_error
+    .list()
     .filter((e) =>
       [
         "ibisModel",
@@ -386,26 +389,21 @@ export function generalDeclarations({
     )
   if (errors.length)
     fail("native_declaration", errors.map((e) => e.message).join("; "))
-  const models = circuit
-    .filter((e) => e.type === "simulation_ibis_model")
-    .map((model, i) => ({
-      ...model,
-      pipelineId: model.simulation_ibis_model_id ?? `model-${i}`,
-    }))
+  const models = db.simulation_ibis_model.list().map((model, i) => ({
+    ...model,
+    pipelineId: model.simulation_ibis_model_id ?? `model-${i}`,
+  }))
   if (!models.length)
     fail("ibis_model", "At least one serialized native IBIS model required")
   const nodes = circuitNodes({ circuit, mappings, modeling })
-  const ports = new Map(
-    circuit
-      .filter((e) => e.type === "source_port")
-      .map((e) => [e.source_port_id, e]),
+  const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
+  const sourceNets = new Set(
+    db.source_net.list().map((net) => net.source_net_id),
   )
   const groups = new Map(
-    circuit
-      .filter((e) => e.type === "source_group")
-      .map((e) => [e.source_group_id, e]),
+    db.source_group.list().map((e) => [e.source_group_id, e]),
   )
-  const components = circuit.filter((e) => e.type === "source_component")
+  const components = db.source_component.list()
   const subcircuits = subcircuitTree(circuit)
   for (const model of models) {
     const sourceComponent = exactly({
@@ -439,9 +437,7 @@ export function generalDeclarations({
           `${sourceComponent.name}: physical pin mapping points outside its chip`,
         )
   }
-  const declaredExperiments = circuit.filter(
-    (e) => e.type === "simulation_experiment",
-  )
+  const declaredExperiments = db.simulation_experiment.list()
   const experiments = declaredExperiments.filter(
     (experiment) => experiment.spice_engine === "pcb_spice",
   )
@@ -457,11 +453,9 @@ export function generalDeclarations({
     experiments.some(
       (experiment) => experiment.experiment_type !== "spice_transient_analysis",
     ) ||
-    circuit.some(
-      (e) =>
-        e.type === "simulation_parameter_sweep" &&
-        pcbExperimentIds.has(e.simulation_experiment_id),
-    )
+    db.simulation_parameter_sweep
+      .list()
+      .some((record) => pcbExperimentIds.has(record.simulation_experiment_id))
   )
     fail(
       "simulation_capability",
@@ -685,8 +679,8 @@ export function generalDeclarations({
           )
         }
       }
-      const probes = circuit
-        .filter((e) => e.type === "simulation_voltage_probe")
+      const probes = db.simulation_voltage_probe
+        .list()
         .filter((e) =>
           subcircuits.within({ inner: e.subcircuit_id, outer: scope }),
         )
@@ -699,15 +693,8 @@ export function generalDeclarations({
             probe.reference_input_source_net_id
           if (!signal)
             fail("probe_reference", `${probe.name}: signal port/net required`)
-          for (const source of [signal, reference].filter(Boolean)) {
-            const exists = circuit.some(
-              (record) =>
-                (record.type === "source_port" &&
-                  record.source_port_id === source) ||
-                (record.type === "source_net" &&
-                  record.source_net_id === source),
-            )
-            if (!exists)
+          for (const source of [signal, reference]) {
+            if (source && !ports.has(source) && !sourceNets.has(source))
               fail(
                 "probe_reference",
                 `${probe.name}: unknown signal/reference source`,

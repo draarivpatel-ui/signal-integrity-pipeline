@@ -5,19 +5,34 @@ Signal-integrity tools for tscircuit boards.
 ## How to use it?
 
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
+Internal preparation checks the endpoint pins, IBIS models, timing and patterns of the PCB transient channel
+simulation records that core writes from TSX. Patterns include pseudo-random binary sequences (PRBS).
+
+Aggressors are output-capable pins retained by the copper scope that do not
+drive a declared channel in the simulation. This includes bidirectional
+receivers. Declare their state on the simulation. Use `aggressorPattern="0"`
+or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
+`"prbs7"` to switch at the simulation bit rate from time zero.
+`aggressorDisabled` takes precedence and requires every aggressor
+model to support high impedance. The selected channels keep their own
+`pattern` and `driverDisabled` settings. The pinned core preview emits the
+aggressor fields.
+
+Automatic duration covers a full pattern for every switching channel or
+aggressor, measured at its declared bit rate after its offset.
 
 ## General workflow
 
 ```mermaid
 flowchart LR
-  input["Circuit JSON validation"] --> result["Stackup and stimulus helpers"]
+  input["Channel declarations"] --> result["Signal checks, pin selection and aggressor admission"]
 ```
 
 ```mermaid
 stateDiagram-v2
   [*] --> Ready
-  Ready --> Complete: Stackup and stimulus helpers
-  Ready --> Failed: invalid input
+  Ready --> Complete: Signal checks, pin selection and aggressor admission
+  Ready --> Failed: invalid input, conflicting IBIS model selections or undeclared aggressors
   Complete --> [*]
   Failed --> [*]
 ```

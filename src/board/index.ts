@@ -15,6 +15,7 @@ export {
 } from "./connectivity"
 export { polygonContains } from "./geometry/polygon"
 export { resolveRouteVias, selectPort } from "./geometry/ports"
+export { type CopperScope, channelCopperScope } from "./geometry/scope"
 export type {
   CopperPoint,
   CopperPolygon,
@@ -26,14 +27,25 @@ export type {
   RoutePoint,
   SourcePort,
 } from "./geometry/types"
-export type { SourceNetId, SourcePortId } from "./ids"
+export type {
+  SignalEndpointPortIds,
+  SimulationPcbTransientChannelSimulationId,
+  SourceNetId,
+  SourcePortId,
+} from "./ids"
 export type {
   CircuitJson,
   SimulationExperiment,
   SimulationIbisModel,
 } from "./schema"
 export { recordSchema, validateCircuitRecords } from "./schema"
-export { isQuiet, type SimulationPcbDriverReceiverChannel } from "./signals"
+export {
+  type DriverPattern,
+  isQuiet,
+  type SignalEndpoint,
+  type SimulationPcbDriverReceiverChannel,
+  type SimulationPcbTransientChannelSimulation,
+} from "./signals"
 export {
   type BoardStackup,
   type CopperLayer,

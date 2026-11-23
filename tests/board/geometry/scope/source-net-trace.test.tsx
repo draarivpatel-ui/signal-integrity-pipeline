@@ -1,0 +1,44 @@
+import { test } from "bun:test"
+import assert from "node:assert/strict"
+import { ConnectivityMap } from "circuit-json-to-connectivity-map"
+import { channelCopperScope } from "../../../../src/board"
+import {
+  scopeNet,
+  scopeTrace,
+  Wire,
+} from "../../../fixtures/copper-scope-board"
+import { renderCoreSignals } from "../../../support/core-render"
+
+test("a routed source trace can be selected by an explicit source net ID", async () => {
+  const circuit = await renderCoreSignals(
+    <board width={20} height={18} routeRemaining={false} schematicDisabled>
+      <Wire name="CHANNEL" y={0} extent={3} net="net.SIGNAL" />
+      <Wire name="FAR" y={5} extent={3} />
+      <trace from=".FAR > .A" to="net.SIGNAL" />
+    </board>,
+  )
+  const trace = scopeTrace({ circuit, name: "CHANNEL" })
+  const net = scopeNet({ circuit, name: "SIGNAL" })
+  const result = channelCopperScope({
+    circuit,
+    connectivity: new ConnectivityMap({}),
+    channelSourceIds: new Set([net]),
+    referenceSourceIds: new Set(),
+    railSourceIds: new Set(),
+    distanceMm: 0.5,
+  })
+  assert.deepEqual(result.channelPcbTraceIds, [trace.pcb_trace_id])
+  assert.deepEqual(result.extractedPcbTraceIds, [trace.pcb_trace_id])
+  assert.equal(result.nearbyGapMm, 0.5)
+  const channel = circuit.find(
+    (record) =>
+      record.type === "source_trace" &&
+      record.source_trace_id === trace.source_trace_id,
+  )
+  assert(channel?.type === "source_trace")
+  assert(channel.connected_source_net_ids?.includes(net))
+  assert.deepEqual(
+    new Set(result.extractedSourceIds),
+    new Set([net, ...channel.connected_source_port_ids]),
+  )
+})

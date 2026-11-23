@@ -35,7 +35,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 ### Functions
 - **Use one named object for multiple inputs.** Any named function, method, named arrow or constructor that would take more
   than one parameter takes a single named object with an inline or named type. For example, call
-  `sourceNetMembers({ connectivity, seed })`.
+  `sourceNetMembers({ connectivity, memberId })`.
   - Inline callbacks may use positional parameters, as in `xs.map((x, i) => …)`.
   - Keep signatures required by an interface, such as library callbacks. React components already receive a props object.
   - A pure arithmetic helper with two interchangeable operands may take them positionally, as in `times(a, b)`
@@ -86,7 +86,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 
 ## Tests
 
-- Reproductions and fixtures are **TSX source rendered through core**, not hand-written Circuit JSON (see `tests/fixtures/native-channel.tsx`).
+- Reproductions and fixtures are **TSX source rendered through core**, not hand-written Circuit JSON (`tests/fixtures/signal-parts.tsx`, `signal-render.tsx`).
 - Put one `test()` per file. Use a short, kebab-case filename that describes the behaviour in `tests/<module>/<source>/`. Put shared setup in `tests/fixtures/`.
 - For routed pipeline refactors that claim "no behaviour change", prove it before merge:
   - golden checks unchanged (27 pass, 2 TODO, 2 n/a; vendor waveform records identical);

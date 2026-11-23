@@ -1,4 +1,4 @@
-import { isQuiet, type SimulationPcbDriverReceiverChannel } from "../board"
+import { type DriverPattern, isQuiet } from "../board"
 
 /** Milliseconds in one second. */
 const MILLISECONDS_PER_SECOND = 1000
@@ -15,9 +15,7 @@ export const prbsPatterns = new Map([
 ])
 
 /** End time in seconds after one pattern period, or one unit interval for a quiet driver. */
-function channelEndSeconds(
-  channel: SimulationPcbDriverReceiverChannel,
-): number {
+function channelEndSeconds(channel: DriverPattern): number {
   const { bit_rate_bps: rate, offset_ms, pattern } = channel
   if (isQuiet(channel)) return QUIET_PERIOD_BITS / rate
 
@@ -37,7 +35,7 @@ function channelEndSeconds(
 
 /** Returns the latest end time after one pattern per channel, with quiet levels starting at t=0. */
 export function defaultDurationSeconds(
-  channels: SimulationPcbDriverReceiverChannel[],
+  channels: readonly DriverPattern[],
 ): number {
   return Math.max(...channels.map(channelEndSeconds))
 }
