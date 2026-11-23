@@ -24,12 +24,17 @@ export interface SimulationModeling {
   }[]
 }
 
+/** A SPICE node name in the generated circuit. */
+export type SpiceNodeName = string
+
 /** SPICE node names indexed by source port or net id. */
-type CircuitNodeNames = Record<SourcePortId | SourceNetId, string>
+type CircuitNodeNames = Readonly<
+  Record<SourcePortId | SourceNetId, SpiceNodeName>
+>
 
 /** The SPICE node lookup and mapping for an experiment's source connectivity. */
 export interface CircuitNodes {
-  node(id: SourcePortId | SourceNetId): string
+  node(id: SourcePortId | SourceNetId): SpiceNodeName
   groundSourcePortId: SourcePortId
   mapping: CircuitNodeNames
 }

@@ -7,6 +7,8 @@ import {
   type CircuitJsonDb,
   type CircuitJsonSnapshot,
   circuitJsonDb,
+  crossesDifferentialLegs,
+  endpointPorts,
   type PassiveBridge,
   passiveBridges,
   type SimulationPcbDriverReceiverChannel,
@@ -30,11 +32,6 @@ interface SignalTopology {
   bridges: PassiveBridge[]
   rails: ReadonlySet<SourcePortId | SourceNetId>
 }
-
-/** One driver's port per single-ended channel or differential leg. */
-type EndpointPorts =
-  | [single: SourcePortId]
-  | [positive: SourcePortId, negative: SourcePortId]
 
 /** Copper reachable from the declared endpoints on each side of a differential pair. */
 interface DifferentialCopper {
@@ -78,14 +75,6 @@ export function signalTopology({
     findConnectedNetworks([...sourceConnectionGroups, ...bridges]),
   )
   return { connectivity, bridges, rails }
-}
-
-/** Keep endpoint ports in positive-to-negative order for differential channels. */
-function endpointPorts(
-  endpoint: Snapshot<SimulationPcbDriverReceiverChannel>["driver"],
-): EndpointPorts {
-  if ("source_port_id" in endpoint) return [endpoint.source_port_id]
-  return [endpoint.p_source_port_id, endpoint.n_source_port_id]
 }
 
 /** Select ports and traces on the drivers' signal nets without admitting rail copper. */
@@ -186,26 +175,6 @@ function differentialLegs({
       },
     ]
   })
-}
-
-/** Check the same leg boundary for a physical or a source-level passive bridge. */
-export function crossesDifferentialLegs<T>({
-  from,
-  to,
-  differential,
-}: {
-  from: T
-  to: T
-  differential: readonly {
-    positive: ReadonlySet<T>
-    negative: ReadonlySet<T>
-  }[]
-}): boolean {
-  return differential.some(
-    ({ positive, negative }) =>
-      (positive.has(from) && negative.has(to)) ||
-      (positive.has(to) && negative.has(from)),
-  )
 }
 
 /** Add series connections through passives, leaving cross-leg loads outside the routed path. */
