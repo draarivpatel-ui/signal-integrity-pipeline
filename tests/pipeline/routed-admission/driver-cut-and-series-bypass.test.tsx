@@ -14,7 +14,8 @@ test("rejects an ideal bypass across a driver-side cut and series resistor", asy
       <AdmissionChannel route="series">
         <trace from=".TX > .Y" to=".RS > .pin2" />
         <pcbnotetext
-          text="Ideal TX.Y to RS.pin2 bypasses the left copper cut and RS"
+          text="Ideal TX.Y to RS.pin2 bypasses left cut + RS"
+          fontSize={0.45}
           pcbX={0}
           pcbY={4.8}
         />
