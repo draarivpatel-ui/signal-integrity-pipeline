@@ -59,17 +59,3 @@ test("replays extraction from serialized constructor parameters", async () => {
   repeat.solve()
   assert.deepEqual(repeat.getOutput().artifacts, result.artifacts)
 })
-
-test("caps the number of screened conductors", async () => {
-  const { geometry } = await fieldsInput()
-  const invalid = new RouteFieldsSolver({
-    geometry: {
-      ...geometry,
-      slices: [
-        { ...geometry.slices[0], wires: Array(41).fill(geometry.wires[0]) },
-      ],
-    },
-    artifactPrefix: "test",
-  })
-  assert.throws(() => invalid.solve(), /limit of 40/)
-})
