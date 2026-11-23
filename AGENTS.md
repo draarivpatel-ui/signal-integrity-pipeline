@@ -40,6 +40,11 @@ Clarity beats brevity. More lines are fine when they are easier to read.
   - Keep signatures required by an interface, such as library callbacks. React components already receive a props object.
   - A pure arithmetic helper with two interchangeable operands may take them positionally, as in `times(a, b)`
     for complex multiplication.
+- **Return, never override.** Return new values when transforming inputs. Do not use `push`, `splice`, `sort`, or
+  field assignment on an argument or a record it contains, including Circuit JSON. Build and return a new array or
+  object, then bind the result at the call site (`const next = withX({ circuit })`). Arrays created inside the
+  function can be built up freely before returning.
+- **Keep functions short.** Write long workflows as short orchestrators that call named stage functions.
 - **Early returns and `continue`** instead of nested `if`/`else`. No value ternaries that hide a branch. Write the `if` out.
 - **Top-level functions.** No nested closures or helpers defined inside other functions. The only exception is a factory whose job is to return a function.
 - **No conditional spreads** (`...(x ? { a } : {})`). Build the object, then set the field in an `if`.
@@ -71,6 +76,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 ### Reuse and size
 - **Prefer existing libraries.** Net membership comes from `circuit-json-to-connectivity-map`, so don't write another connectivity walk. Build its map with `new ConnectivityMap(findConnectedNetworks(groups))`, not `addConnections`: in 0.0.35, `addConnections` can overwrite an existing net id.
 - **Prefer deleting code to adding it.** No fallbacks, no "restore if missing" paths, no defensive checks that another layer already owns.
+- **Keep files under about 500 lines.** Split files by concern as they grow. This is a guideline.
 - Keep a PR to what its title says. Unrelated cleanups go in their own PR.
 
 ## Words
@@ -134,6 +140,7 @@ in `eslint.config.mjs` and `tools/eslint/rules.mjs`.
 
 Build names in `src/` from the words in `tools/vocabulary.yaml`. The checker splits every declared name into words (`foldProbeEye` → fold, probe, eye) and reports the share of names made only of dictionary words. It must stay at or above the file's `threshold` (85%). 100% is not the goal.
 
+- Give each subset of the same thing its own qualifier, as in `selectedPcbTraceIds` and `retainedPcbTraceIds`.
 - Prefer a word already in the dictionary. If it lists two words for one idea, use the listed one; `avoid` names the word to use instead.
 - Need a new concept? Add the word with a one-line plain-English meaning in the same PR as the code that uses it, so the reviewer sees the new word.
 - List base forms only: plurals and verb forms are accepted automatically (`ids` → id, `selected` → select).
