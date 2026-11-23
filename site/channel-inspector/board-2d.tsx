@@ -59,10 +59,14 @@ export function Board2d({
   selected,
   onHover,
   onSelect,
+  onCursor,
+  onContext,
+  themed,
 }: BoardInteraction & {
   board: InspectorBoard
   features: readonly InspectorFeature[]
   layers: ReadonlySet<LayerRef>
+  themed?: boolean
 }): React.JSX.Element {
   const { center, width, height } = board
   const viewBox = [
@@ -81,12 +85,23 @@ export function Board2d({
       viewBox={viewBox}
       aria-label="Top view of PCB copper"
       onClick={() => onSelect(undefined)}
+      onPointerMove={(event) => {
+        if (!onCursor) return
+        const matrix = event.currentTarget.getScreenCTM()
+        if (!matrix) return
+        const point = new DOMPoint(
+          event.clientX,
+          event.clientY,
+        ).matrixTransform(matrix.inverse())
+        onCursor({ x: point.x, y: -point.y })
+      }}
     >
       <g transform="scale(1 -1)">
         <path
           d={ringPath([board.outline])}
-          fill="#243648"
-          stroke="#67849d"
+          fill={themed ? "var(--glass)" : "#243648"}
+          fillOpacity={themed ? 0.19 : 1}
+          stroke={themed ? "var(--outline)" : "#67849d"}
           strokeWidth="0.04"
         />
         {board.components
@@ -99,13 +114,15 @@ export function Board2d({
               width={component.width}
               height={component.height}
               fill="none"
-              stroke="#7897b5"
+              stroke={themed ? "var(--outline)" : "#7897b5"}
               strokeWidth="0.04"
             />
           ))}
         {ordered.map((feature) => {
           const style = copperStyles[feature.category]
-          const active = feature === (hovered ?? selected)
+          const active = feature.id === (hovered ?? selected)?.id
+          let color = themed ? `var(--${feature.category})` : style.color
+          if (active) color = themed ? "var(--highlight)" : "#e9fcff"
           const shapes = feature.shapes.filter((shape) =>
             shape.layers.some((layer) => layers.has(layer)),
           )
@@ -114,6 +131,11 @@ export function Board2d({
             <g
               key={feature.id}
               data-copper-id={feature.id}
+              onContextMenu={(event) => {
+                if (!onContext) return
+                event.preventDefault()
+                onContext({ feature, x: event.clientX, y: event.clientY })
+              }}
               opacity={active ? 1 : style.opacity}
               onPointerEnter={() => onHover(feature)}
               onPointerLeave={() => onHover(undefined)}
@@ -127,7 +149,7 @@ export function Board2d({
                   // biome-ignore lint/suspicious/noArrayIndexKey: These stateless primitives are drawn in route order.
                   key={index}
                   shape={shape}
-                  color={active ? "#e9fcff" : style.color}
+                  color={color}
                 />
               ))}
             </g>

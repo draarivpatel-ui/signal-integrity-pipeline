@@ -22,18 +22,22 @@ interface InlineModel {
 /** Read only data embedded in Circuit JSON. No URL is requested. */
 function inlineModel(url: string): InlineModel {
   if (!isInlineIbis(url)) return {}
-  const comma = url.indexOf(",")
-  const data = url.slice(comma + 1)
   try {
-    let source = decodeURIComponent(data)
-    if (url.slice(0, comma).endsWith(";base64"))
-      source = new TextDecoder().decode(
-        Uint8Array.from(atob(source), (char) => char.charCodeAt(0)),
-      )
-    return { document: parseIbis(source) }
+    return { document: parseIbis(readInlineIbis(url)!) }
   } catch (cause) {
     return { error: (cause as Error).message }
   }
+}
+
+/** Decode the original bytes of an embedded model without contacting the network. */
+export function readInlineIbis(url: string): string | undefined {
+  if (!isInlineIbis(url)) return
+  const comma = url.indexOf(",")
+  const source = decodeURIComponent(url.slice(comma + 1))
+  if (!url.slice(0, comma).endsWith(";base64")) return source
+  return new TextDecoder().decode(
+    Uint8Array.from(atob(source), (char) => char.charCodeAt(0)),
+  )
 }
 
 /** Identify the inspector's inline text form without allowing network URLs. */
@@ -45,7 +49,7 @@ export function isInlineIbis(url: string): boolean {
 }
 
 /** Model names explicitly bound in Circuit JSON take precedence over a single file choice. */
-function pinModel({
+export function pinModel({
   model,
   document,
   pin,

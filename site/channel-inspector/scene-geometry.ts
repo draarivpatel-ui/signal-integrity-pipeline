@@ -1,7 +1,7 @@
 import type { Point } from "circuit-json"
 import * as THREE from "three"
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js"
-import { copperCategories } from "./copper"
+import { type CopperCategory, copperCategories } from "./copper"
 import {
   copperStyles,
   type InspectorBoard,
@@ -31,10 +31,22 @@ export interface InspectorSceneContent {
   faces: Map<CopperMesh, FeatureFaces[]>
 }
 
+/** Colors and dielectric opacity supplied by a host application. */
+export interface BoardAppearance {
+  background: string
+  grid: string
+  glass: string
+  outline: string
+  highlight: string
+  copper: Record<CopperCategory, string>
+  opacity: number
+}
+
 /** Shared positions for a board's geometry at one explosion setting. */
 interface SceneBoard {
   board: InspectorBoard
   exaggeration: number
+  appearance?: BoardAppearance
 }
 
 /** Convert a Circuit JSON polygon while preserving the cutouts. */
@@ -106,6 +118,7 @@ function addCopper({
   features,
   board,
   exaggeration,
+  appearance,
 }: InspectorSceneContent &
   SceneBoard & { features: readonly InspectorFeature[] }): void {
   for (const category of copperCategories) {
@@ -136,7 +149,7 @@ function addCopper({
     if (geometries.length === 0) continue
     const style = copperStyles[category]
     const material = new THREE.MeshBasicMaterial({
-      color: style.color,
+      color: appearance?.copper[category] ?? style.color,
       opacity: style.opacity,
       transparent: style.opacity < 1,
       depthWrite: style.opacity === 1,
@@ -157,16 +170,17 @@ function addBoard({
   root,
   board,
   exaggeration,
+  appearance,
 }: SceneBoard & { root: THREE.Group }): void {
   const shape = flatShape({ rings: [board.outline], center: board.center })
   const glass = new THREE.MeshBasicMaterial({
-    color: "#87b9dc",
+    color: appearance?.glass ?? "#87b9dc",
     transparent: true,
-    opacity: 0.045,
+    opacity: appearance?.opacity ?? 0.045,
     depthWrite: false,
   })
   const outline = new THREE.LineBasicMaterial({
-    color: "#7897b5",
+    color: appearance?.outline ?? "#7897b5",
     transparent: true,
     opacity: 0.36,
     depthWrite: false,
@@ -210,6 +224,7 @@ export function createInspectorSceneContent({
   board,
   features,
   exaggeration,
+  appearance,
 }: SceneBoard & {
   features: readonly InspectorFeature[]
 }): InspectorSceneContent {
@@ -218,8 +233,19 @@ export function createInspectorSceneContent({
     copper: [],
     faces: new Map(),
   }
-  addBoard({ root: content.root, board, exaggeration })
-  addCopper({ ...content, features, board, exaggeration })
+  if (appearance) {
+    const grid = new THREE.GridHelper(
+      Math.max(board.width, board.height) * 2,
+      20,
+      appearance.grid,
+      appearance.grid,
+    )
+    grid.rotateX(Math.PI / 2)
+    grid.position.z = (-board.thickness * exaggeration) / 2 - 0.4
+    content.root.add(grid)
+  }
+  addBoard({ root: content.root, board, exaggeration, appearance })
+  addCopper({ ...content, features, board, exaggeration, appearance })
   return content
 }
 
@@ -241,6 +267,7 @@ export function copperHighlight({
   feature,
   board,
   exaggeration,
+  appearance,
 }: SceneBoard & { feature: InspectorFeature }): THREE.LineSegments {
   const geometries = feature.shapes.map((shape) => {
     const solid = copperGeometry({ shape, board, exaggeration })
@@ -251,7 +278,7 @@ export function copperHighlight({
   const geometry = mergeGeometries(geometries)
   for (const edges of geometries) edges.dispose()
   const material = new THREE.LineBasicMaterial({
-    color: "#e9fcff",
+    color: appearance?.highlight ?? "#e9fcff",
     depthTest: false,
     depthWrite: false,
   })

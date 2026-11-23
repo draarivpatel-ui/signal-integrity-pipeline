@@ -1,6 +1,8 @@
 import type { CSSProperties, JSX, PointerEvent, ReactNode } from "react"
 import { useRef, useState } from "react"
 
+import { Icon } from "./chrome"
+
 export const windowTitles = {
   board: "Board Viewer",
   stackup: "Stackup Editor",
@@ -13,6 +15,7 @@ export type WindowId = keyof typeof windowTitles
 /** Position and activation state of one child window. */
 export interface Frame {
   id: WindowId
+  z: number
   x: number
   y: number
   width: number
@@ -28,6 +31,7 @@ function newFrame({ id, count }: { id: WindowId; count: number }): Frame {
   const offset = 2 + count * 3
   return {
     id,
+    z: 0,
     x: offset,
     y: offset,
     width: 95 - offset,
@@ -52,16 +56,21 @@ export function useWindows(): {
       setFrames((items) => {
         const existing = items.find((frame) => frame.id === id)
         const next = existing ?? newFrame({ id, count: items.length })
-        return [
-          ...items.filter((frame) => frame.id !== id),
-          { ...next, minimized: false },
-        ]
+        const activated = {
+          ...next,
+          minimized: false,
+          z: Math.max(0, ...items.map(({ z }) => z)) + 1,
+        }
+        if (!existing) return [...items, activated]
+        return items.map((frame) => (frame.id === id ? activated : frame))
       }),
     close: (id) =>
       setFrames((items) => items.filter((frame) => frame.id !== id)),
     change: (next) =>
       setFrames((items) =>
-        items.map((frame) => (next.id === frame.id ? next : frame)),
+        items.map((frame) =>
+          next.id === frame.id ? { ...next, z: frame.z } : frame,
+        ),
       ),
     arrange: (mode) =>
       setFrames((items) => {
@@ -70,7 +79,7 @@ export function useWindows(): {
           const index = visible.indexOf(frame)
           if (index < 0) return frame
           if (mode === "Cascade")
-            return newFrame({ id: frame.id, count: index })
+            return { ...newFrame({ id: frame.id, count: index }), z: frame.z }
           if (mode === "Maximize")
             return { ...frame, maximized: index === visible.length - 1 }
           const columns = Math.ceil(Math.sqrt(visible.length))
@@ -111,6 +120,7 @@ function startGesture({
   if (
     !workspace ||
     frame.maximized ||
+    frame.minimized ||
     event.button !== 0 ||
     (event.target as HTMLElement).closest("button")
   )
@@ -180,7 +190,7 @@ export function ChildWindow({
       className="wb-child"
       data-window={frame.id}
       data-active={active}
-      style={bounds}
+      style={{ ...bounds, zIndex: frame.z }}
       hidden={frame.minimized}
       onPointerDown={() => {
         if (!active) activate()
@@ -195,12 +205,21 @@ export function ChildWindow({
         onPointerDown={(event) => {
           gesture.current = startGesture({ event, frame, resize: false })
         }}
+        onPointerUp={() => {
+          gesture.current = undefined
+        }}
+        onPointerCancel={() => {
+          gesture.current = undefined
+        }}
         onPointerMove={(event) => {
           if (event.buttons === 1 && gesture.current)
             change(moveFrame({ event, gesture: gesture.current }))
         }}
       >
-        <span>{windowTitles[frame.id]}</span>
+        <span className="wb-caption">
+          <Icon name={frame.id === "ibis" ? "models" : frame.id} />
+          {windowTitles[frame.id]}
+        </span>
         <div>
           <button
             aria-label="Minimize window"
@@ -228,6 +247,12 @@ export function ChildWindow({
           aria-hidden="true"
           onPointerDown={(event) => {
             gesture.current = startGesture({ event, frame, resize: true })
+          }}
+          onPointerUp={() => {
+            gesture.current = undefined
+          }}
+          onPointerCancel={() => {
+            gesture.current = undefined
           }}
           onPointerMove={(event) => {
             if (event.buttons === 1 && gesture.current)

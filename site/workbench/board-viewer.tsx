@@ -1,0 +1,239 @@
+import type { LayerRef, Point } from "circuit-json"
+import { type JSX, useEffect, useMemo, useState } from "react"
+import { Board2d } from "../channel-inspector/board-2d"
+import {
+  Board3d,
+  type BoardInteraction,
+  type CameraView,
+  cameraViews,
+} from "../channel-inspector/board-3d"
+import { copperCategories } from "../channel-inspector/copper"
+import type {
+  InspectorBoard,
+  InspectorFeature,
+} from "../channel-inspector/geometry"
+import type { BoardAppearance } from "../channel-inspector/scene-geometry"
+import type { Theme } from "./chrome"
+
+const categories = {
+  selected: "Victim",
+  near: "Near / aggressor",
+  rail: "Rail",
+  far: "Far",
+}
+
+/** Read the root CSS palette for the WebGL renderer. */
+function boardAppearance(opacity: number): BoardAppearance {
+  const css = getComputedStyle(document.documentElement)
+  return {
+    background: css.getPropertyValue("--scene").trim(),
+    grid: css.getPropertyValue("--scene-grid").trim(),
+    glass: css.getPropertyValue("--glass").trim(),
+    outline: css.getPropertyValue("--outline").trim(),
+    highlight: css.getPropertyValue("--highlight").trim(),
+    copper: {
+      selected: css.getPropertyValue("--selected").trim(),
+      near: css.getPropertyValue("--near").trim(),
+      rail: css.getPropertyValue("--rail").trim(),
+      far: css.getPropertyValue("--far").trim(),
+    },
+    opacity,
+  }
+}
+
+/** View the same selected, neighboring and reference copper in 2D and 3D. */
+export function BoardViewer({
+  board,
+  features,
+  theme,
+  interaction,
+  error,
+}: {
+  board: InspectorBoard
+  features: InspectorFeature[]
+  theme: Theme
+  interaction: BoardInteraction
+  error?: string
+}): JSX.Element {
+  const [mode, setMode] = useState<"3D" | "2D">("3D")
+  const [camera, setCamera] = useState<CameraView>("Iso")
+  const [reset, setReset] = useState(0)
+  const [exaggeration, setExaggeration] = useState(3)
+  const [transparency, setTransparency] = useState(88)
+  const [hideFar, setHideFar] = useState(false)
+  const [hiddenLayers, setHiddenLayers] = useState<LayerRef[]>([])
+  const [appearance, setAppearance] = useState<BoardAppearance>(() =>
+    boardAppearance(0.12),
+  )
+  useEffect(
+    () => setAppearance(boardAppearance((100 - transparency) / 100)),
+    [theme, transparency],
+  )
+  const visibleLayers = useMemo(
+    () =>
+      new Set(board.layers.filter((layer) => !hiddenLayers.includes(layer))),
+    [board, hiddenLayers],
+  )
+  const visibleBoard = useMemo(
+    () => ({
+      ...board,
+      components: board.components.filter(({ layer }) =>
+        visibleLayers.has(layer),
+      ),
+    }),
+    [board, visibleLayers],
+  )
+  const visible = useMemo(
+    () =>
+      features
+        .filter(({ category }) => !hideFar || category !== "far")
+        .map((feature) => ({
+          ...feature,
+          shapes: feature.shapes.flatMap((shape) => {
+            const layers = shape.layers.filter((layer) =>
+              visibleLayers.has(layer),
+            )
+            if (!layers.length) return []
+            return [{ ...shape, layers }]
+          }),
+        })),
+    [features, hideFar, visibleLayers],
+  )
+  return (
+    <div className="wb-board">
+      <div className="wb-tool-row">
+        {(["3D", "2D"] as const).map((value) => (
+          <button
+            key={value}
+            aria-pressed={mode === value}
+            onClick={() => setMode(value)}
+          >
+            {value}
+          </button>
+        ))}
+        {mode === "3D" && (
+          <>
+            <span className="wb-separator" />
+            {cameraViews.map((view) => (
+              <button
+                key={view}
+                aria-pressed={camera === view}
+                onClick={() => {
+                  setCamera(view)
+                  setReset((count) => count + 1)
+                }}
+              >
+                {view}
+              </button>
+            ))}
+            <label>
+              Exaggeration{" "}
+              <input
+                type="range"
+                min="1"
+                max="14"
+                value={exaggeration}
+                onChange={(event) =>
+                  setExaggeration(event.target.valueAsNumber)
+                }
+              />{" "}
+              {exaggeration}×
+            </label>
+            <label>
+              Transparency{" "}
+              <input
+                type="range"
+                min="20"
+                max="100"
+                value={transparency}
+                onChange={(event) =>
+                  setTransparency(event.target.valueAsNumber)
+                }
+              />{" "}
+              {transparency}%
+            </label>
+          </>
+        )}
+      </div>
+      <div className="wb-tool-row wb-layer-strip">
+        <strong>Layers</strong>
+        {board.layers.map((layer) => (
+          <label key={layer}>
+            <input
+              type="checkbox"
+              checked={visibleLayers.has(layer)}
+              onChange={(event) => {
+                const checked = event.target.checked
+                setHiddenLayers((items) =>
+                  checked
+                    ? items.filter((item) => item !== layer)
+                    : [...items, layer],
+                )
+              }}
+            />{" "}
+            {layer}
+          </label>
+        ))}
+        <span className="wb-separator" />
+        <label>
+          <input
+            type="checkbox"
+            checked={hideFar}
+            onChange={(event) => setHideFar(event.target.checked)}
+          />{" "}
+          Hide far
+        </label>
+      </div>
+      {error && (
+        <div role="alert" className="wb-inline-error">
+          {error}
+        </div>
+      )}
+      <div className="wb-board-stage">
+        <div hidden={mode !== "3D"} className="wb-board-3d">
+          <Board3d
+            board={visibleBoard}
+            features={visible}
+            view={camera}
+            cameraReset={reset}
+            exaggeration={exaggeration}
+            appearance={appearance}
+            {...interaction}
+          />
+          <small className="wb-board-hint">
+            Drag to orbit · Scroll to zoom · Right-click copper
+          </small>
+        </div>
+        {mode === "2D" && (
+          <Board2d
+            themed
+            board={board}
+            features={visible}
+            layers={visibleLayers}
+            {...interaction}
+          />
+        )}
+      </div>
+      <div className="wb-tool-row wb-board-legend" aria-label="Copper legend">
+        {copperCategories.map((category) => (
+          <span className="wb-legend-item" key={category}>
+            <i style={{ background: `var(--${category})` }} />
+            {categories[category]}{" "}
+            <strong>
+              {
+                features.filter((feature) => feature.category === category)
+                  .length
+              }
+            </strong>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Format board coordinates consistently in the desktop status bar. */
+export function boardCoordinates(point?: Point): string {
+  if (!point) return "X — mm · Y — mm"
+  return `X ${point.x.toFixed(2)} · Y ${point.y.toFixed(2)} mm`
+}

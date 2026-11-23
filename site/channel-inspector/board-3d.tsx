@@ -1,9 +1,11 @@
+import type { Point } from "circuit-json"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import * as THREE from "three"
 import { OrbitControls } from "three/addons/controls/OrbitControls.js"
 import type { InspectorBoard, InspectorFeature } from "./geometry"
 import {
+  type BoardAppearance,
   copperHighlight,
   createInspectorSceneContent,
   disposeInspectorScene,
@@ -132,6 +134,12 @@ export interface BoardInteraction {
   selected: InspectorFeature | undefined
   onHover: (feature: InspectorFeature | undefined) => void
   onSelect: (feature: InspectorFeature | undefined) => void
+  onCursor?: (point: Point) => void
+  onContext?: (input: {
+    feature: InspectorFeature
+    x: number
+    y: number
+  }) => void
 }
 
 /** Raycast against merged copper, only when the user points at the scene. */
@@ -140,9 +148,13 @@ function attachPicking({
   content,
   onHover,
   onSelect,
-}: Pick<BoardInteraction, "onHover" | "onSelect"> & {
+  onCursor,
+  onContext,
+  board,
+}: Pick<BoardInteraction, "onHover" | "onSelect" | "onCursor" | "onContext"> & {
   viewport: Viewport
   content: InspectorSceneContent
+  board: InspectorBoard
 }): () => void {
   const { renderer, camera } = viewport
   const canvas = renderer.domElement
@@ -150,7 +162,7 @@ function attachPicking({
   let origin: THREE.Vector2 | undefined
 
   /** Pick the visible physical feature beneath the current pointer. */
-  const pick = (event: PointerEvent): InspectorFeature | undefined => {
+  const pick = (event: MouseEvent): InspectorFeature | undefined => {
     const rect = canvas.getBoundingClientRect()
     const x = ((event.clientX - rect.left) * 2) / rect.width - 1
     const y = 1 - ((event.clientY - rect.top) * 2) / rect.height
@@ -166,7 +178,15 @@ function attachPicking({
   }
   /** A drag belongs to the orbit controls. */
   const move = (event: PointerEvent): void => {
-    if (event.buttons === 0) onHover(pick(event))
+    if (event.buttons !== 0) return
+    onHover(pick(event))
+    if (!onCursor) return
+    const point = ray.ray.intersectPlane(
+      new THREE.Plane(new THREE.Vector3(0, 0, 1)),
+      new THREE.Vector3(),
+    )
+    if (point)
+      onCursor({ x: point.x + board.center.x, y: point.y + board.center.y })
   }
   /** Record the beginning of a possible click. */
   const down = (event: PointerEvent): void => {
@@ -189,12 +209,21 @@ function attachPicking({
   }
   /** Clear the tooltip when the pointer leaves. */
   const leave = (): void => onHover(undefined)
+  /** Select the feature under a context click before opening its actions. */
+  const context = (event: MouseEvent): void => {
+    if (!onContext) return
+    event.preventDefault()
+    const feature = pick(event)
+    if (feature) onContext({ feature, x: event.clientX, y: event.clientY })
+  }
+  canvas.addEventListener("contextmenu", context)
   canvas.addEventListener("pointermove", move)
   canvas.addEventListener("pointerdown", down)
   canvas.addEventListener("pointerup", up)
   canvas.addEventListener("pointerleave", leave)
   canvas.addEventListener("pointercancel", leave)
   return () => {
+    canvas.removeEventListener("contextmenu", context)
     canvas.removeEventListener("pointermove", move)
     canvas.removeEventListener("pointerdown", down)
     canvas.removeEventListener("pointerup", up)
@@ -214,12 +243,16 @@ export function Board3d({
   selected,
   onHover,
   onSelect,
+  onCursor,
+  onContext,
+  appearance,
 }: BoardInteraction & {
   board: InspectorBoard
   features: readonly InspectorFeature[]
   view: CameraView
   cameraReset: number
   exaggeration: number
+  appearance?: BoardAppearance
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null)
   const viewport = useRef<Viewport | undefined>(undefined)
@@ -245,10 +278,14 @@ export function Board3d({
   useEffect(() => {
     const instance = viewport.current
     if (!instance) return
+    instance.scene.background = appearance
+      ? new THREE.Color(appearance.background)
+      : null
     const content = createInspectorSceneContent({
       board,
       features,
       exaggeration,
+      appearance,
     })
     instance.scene.add(content.root)
     const detach = attachPicking({
@@ -256,27 +293,47 @@ export function Board3d({
       content,
       onHover,
       onSelect,
+      onCursor,
+      onContext,
+      board,
     })
     instance.render()
     return () => {
       detach()
       disposeInspectorScene(content.root)
     }
-  }, [board, features, exaggeration, onHover, onSelect])
+  }, [
+    board,
+    features,
+    exaggeration,
+    appearance,
+    onHover,
+    onSelect,
+    onCursor,
+    onContext,
+  ])
 
   useEffect(() => {
     const instance = viewport.current
     const feature = hovered ?? selected
     if (!instance) return
-    if (!feature?.shapes.length || !features.includes(feature)) {
+    if (
+      !feature?.shapes.length ||
+      !features.some(({ id }) => id === feature.id)
+    ) {
       instance.render()
       return
     }
-    const highlight = copperHighlight({ board, feature, exaggeration })
+    const highlight = copperHighlight({
+      board,
+      feature: features.find(({ id }) => id === feature.id)!,
+      exaggeration,
+      appearance,
+    })
     instance.scene.add(highlight)
     instance.render()
     return () => disposeInspectorScene(highlight)
-  }, [board, features, hovered, selected, exaggeration])
+  }, [board, features, hovered, selected, exaggeration, appearance])
 
   return (
     <div ref={host} className="inspector-canvas">

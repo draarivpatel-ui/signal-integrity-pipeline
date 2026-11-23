@@ -7,6 +7,8 @@ import {
   useState,
 } from "react"
 
+export { Icon, type IconName } from "./icons"
+
 export const themes = {
   classic: "Windows Classic",
   luna: "XP Luna",
@@ -21,10 +23,13 @@ export interface Command {
   shortcut?: string
   title?: string
   checked?: boolean
+  separator?: boolean
+  items?: Command[]
 }
 
 export interface Menu {
   label: string
+  mnemonic?: number
   items: Command[]
 }
 
@@ -40,8 +45,8 @@ function matches({
   return (
     key?.toLowerCase() === event.key.toLowerCase() &&
     shortcut.startsWith("Ctrl+") === (event.ctrlKey || event.metaKey) &&
-    !event.altKey &&
-    !event.shiftKey
+    shortcut.includes("Alt+") === event.altKey &&
+    shortcut.includes("Shift+") === event.shiftKey
   )
 }
 
@@ -61,9 +66,12 @@ export function MenuBar({ menus }: { menus: Menu[] }): JSX.Element {
         setOpen(undefined)
         return
       }
+      if ((event.target as HTMLElement).closest("input, textarea, select"))
+        return
       const menu = menus.find(
-        ({ label }) =>
-          event.altKey && event.key.toLowerCase() === label[0].toLowerCase(),
+        ({ label, mnemonic = 0 }) =>
+          event.altKey &&
+          event.key.toLowerCase() === label[mnemonic].toLowerCase(),
       )
       if (menu) {
         event.preventDefault()
@@ -92,7 +100,7 @@ export function MenuBar({ menus }: { menus: Menu[] }): JSX.Element {
   }, [menus])
   return (
     <nav className="wb-menu-bar" ref={bar} aria-label="Main menu">
-      {menus.map(({ label, items }) => (
+      {menus.map(({ label, items, mnemonic = 0 }) => (
         <div className="wb-menu" key={label}>
           <button
             aria-expanded={open === label}
@@ -102,8 +110,9 @@ export function MenuBar({ menus }: { menus: Menu[] }): JSX.Element {
             }}
             onClick={() => setOpen(open === label ? undefined : label)}
           >
-            <u>{label[0]}</u>
-            {label.slice(1)}
+            {label.slice(0, mnemonic)}
+            <u>{label[mnemonic]}</u>
+            {label.slice(mnemonic + 1)}
           </button>
           {open === label && (
             <div
@@ -129,7 +138,7 @@ export function MenuBar({ menus }: { menus: Menu[] }): JSX.Element {
               }}
             >
               {items.map((item) => (
-                <CommandButton
+                <CommandEntry
                   key={item.label}
                   command={item}
                   onInvoke={() => setOpen(undefined)}
@@ -140,6 +149,59 @@ export function MenuBar({ menus }: { menus: Menu[] }): JSX.Element {
         </div>
       ))}
     </nav>
+  )
+}
+
+/** Render a separator, command, or keyboard-accessible submenu. */
+function CommandEntry({
+  command,
+  onInvoke,
+}: {
+  command: Command
+  onInvoke: () => void
+}): JSX.Element {
+  const [expanded, expand] = useState(false)
+  if (command.separator)
+    return <div className="wb-menu-separator" role="separator" />
+  if (!command.items)
+    return <CommandButton command={command} onInvoke={onInvoke} />
+  return (
+    <div
+      className="wb-submenu"
+      onPointerEnter={() => expand(true)}
+      onPointerLeave={() => expand(false)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) expand(false)
+      }}
+    >
+      <button
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={expanded}
+        onClick={() => expand(!expanded)}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowRight") return
+          expand(true)
+          const entry = event.currentTarget.parentElement
+          requestAnimationFrame(() =>
+            entry
+              ?.querySelector<HTMLButtonElement>(".wb-popover button:enabled")
+              ?.focus(),
+          )
+        }}
+      >
+        <span />
+        <span>{command.label}</span>
+        <kbd>▸</kbd>
+      </button>
+      {expanded && (
+        <div className="wb-popover" role="menu">
+          {command.items.map((item) => (
+            <CommandEntry key={item.label} command={item} onInvoke={onInvoke} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -165,36 +227,6 @@ export function CommandButton({
       <span>{command.label}</span>
       <kbd>{command.shortcut}</kbd>
     </button>
-  )
-}
-
-const iconPaths = {
-  app: "M3 12h3V5h4v6h4V3M2 15h14",
-  open: "M2 5h5l2 2h7v8H2zM3 11h12",
-  sample: "M2 4h14v11H2zM5 7h3v4h5M12 7h2M5 13h2",
-  board: "M2 7l7-4 7 4-7 4zM2 7v4l7 4 7-4V7M9 11v4",
-  stackup: "M2 6l7-4 7 4-7 4zM2 9l7 4 7-4M2 12l7 4 7-4",
-  models: "M5 5h8v8H5zM7 2v3m4-3v3M7 13v3m4-3v3M2 7h3m-3 4h3m8-4h3m-3 4h3",
-  stimulus: "M2 12h3V5h4v7h4V5h3",
-  run: "M5 3l10 6-10 6z",
-  scope: "M2 3h14v12H2zM4 11l2-3 2 3 2-5 3 3h1",
-  log: "M4 2h7l3 3v11H4zM6 7h6m-6 3h6m-6 3h4",
-  save: "M3 2h10l2 2v12H3zM6 2v5h6V2M6 16v-5h6v5",
-} as const
-export type IconName = keyof typeof iconPaths
-
-/** Draw an original 16-pixel toolbar glyph. */
-export function Icon({ name }: { name: IconName }): JSX.Element {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-      <path
-        d={iconPaths[name]}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
   )
 }
 
