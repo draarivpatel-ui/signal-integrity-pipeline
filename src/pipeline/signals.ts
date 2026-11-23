@@ -49,7 +49,7 @@ export interface PreparedChannelSimulation {
   riseSeconds: number
   stepSeconds: number
   routedTopology: SignalPins["routedTopology"]
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   circuit: CircuitJsonSnapshot
   controls: Record<string, RunControls>
@@ -60,7 +60,7 @@ export interface PreparedChannelSimulation {
 /** Validate the shared channel simulation namespace before any independent channel simulation work. */
 export function listChannelSimulations(
   circuitJson: CircuitJsonSnapshot,
-): SimulationPcbTransientChannelSimulation[] {
+): Snapshot<SimulationPcbTransientChannelSimulation>[] {
   const db = circuitJsonDb(circuitJson)
   const channelSimulations =
     db.simulation_pcb_transient_channel_simulation.list()
@@ -100,7 +100,7 @@ export function listChannelSimulations(
 
 /** Normalize a caller's copper search radius at the preparation boundary. */
 export function validatedScopeDistanceMm(
-  distanceMm = MAX_COPPER_SCOPE_DISTANCE_MM,
+  distanceMm: number = MAX_COPPER_SCOPE_DISTANCE_MM,
 ): number {
   if (
     !Number.isFinite(distanceMm) ||
@@ -162,7 +162,7 @@ export function compareNames({ a, b }: { a: string; b: string }): number {
 
 /** One channel simulation's validated records. */
 interface ChannelSelection {
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   circuit: CircuitJsonSnapshot
@@ -238,7 +238,7 @@ function selectChannelSimulation({
 /** A board and one validated simulation declaration with its model sources and radius. */
 interface ChannelSimulationOptions {
   boardCircuitJson: CircuitJsonSnapshot
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   simulationPcbTransientChannelSimulationId: SafeId
   sources: IbisSources
   distanceMm: number
