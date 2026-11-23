@@ -4,7 +4,13 @@ import {
   validateCircuitRecords,
 } from "../board"
 import { type IbisSources, invalidIbisSource } from "../buffers"
-import { Diagnostic, type SafeId, safeId, snapshot } from "../kernel"
+import {
+  Diagnostic,
+  type SafeId,
+  type Snapshot,
+  safeId,
+  snapshot,
+} from "../kernel"
 import type { RoutedCompileOptions } from "../simulation"
 import { listChannelSimulations, validatedScopeDistanceMm } from "./signals"
 
@@ -59,7 +65,7 @@ function captureIbisSources(
 
 /** A named simulation declaration and its validated artifact ID. */
 export interface AdmittedChannelSimulation {
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   simulationPcbTransientChannelSimulationId: SafeId
 }
 

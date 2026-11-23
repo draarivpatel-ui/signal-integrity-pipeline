@@ -1,10 +1,12 @@
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
 import type {
   CircuitJsonDb,
+  CopperScope,
   SourceNetId,
   SourcePortId,
   SourceTraceId,
 } from "../board"
+import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import type { RoutedTraceCut } from "./routed-types"
 
@@ -26,6 +28,29 @@ export function sourceNodeGroups(
 }
 
 type SourceTrace = ReturnType<CircuitJsonDb["source_trace"]["list"]>[number]
+
+/** Resolve a source contact to its group, retaining the contact when it is isolated. */
+export function sourceGroupId({
+  groups,
+  sourcePortId,
+}: {
+  groups: SourceNodeGroups
+  sourcePortId: SourcePortId
+}): SourceNodeId {
+  return groups.get(sourcePortId) ?? sourcePortId
+}
+
+/** Index all physical traces by the electrical groups their ideal endpoints belong to. */
+export function cutSourceGroups(
+  cuts: readonly RoutedTraceCut[],
+): SourceNodeGroups {
+  return sourceNodeGroups(
+    cuts.map(({ fromSourcePortId, toSourcePortId }) => [
+      fromSourcePortId,
+      toSourcePortId,
+    ]),
+  )
+}
 
 /** Report a cut whose contacts connect without the extracted trace. */
 export function shortedCut({
@@ -53,35 +78,56 @@ function splitNamedNets({
   explicitGroups: SourceNodeGroups
   cuts: readonly RoutedTraceCut[]
 }): ReadonlySet<SourceNetId> {
-  const cutsByNet = new Map<SourceNetId, RoutedTraceCut[]>()
+  const cutGroups = sourceNodeGroups(
+    cuts.map(({ fromSourcePortId, toSourcePortId }) => [
+      sourceGroupId({ groups: explicitGroups, sourcePortId: fromSourcePortId }),
+      sourceGroupId({ groups: explicitGroups, sourcePortId: toSourcePortId }),
+    ]),
+  )
   const netGroups = sourceNodeGroups(
     ideal
       .filter((trace) => !trace.connected_source_port_ids.length)
       .map((trace) => [...(trace.connected_source_net_ids ?? [])]),
   )
-  const netsByPort = new Map<SourcePortId, Set<SourceNetId>>()
+  const portsByNet = new Map<SourceNetId, Set<SourcePortId>>()
   for (const trace of ideal) {
-    const ports = trace.connected_source_port_ids
-    if (ports.length !== 1) continue
-    const port = explicitGroups.get(ports[0]) ?? ports[0]
-    const nets = netsByPort.get(port) ?? new Set<SourceNetId>()
-    for (const id of trace.connected_source_net_ids ?? [])
-      nets.add(netGroups.get(id) ?? id)
-    netsByPort.set(port, nets)
-  }
-  for (const cut of cuts) {
-    const from =
-      explicitGroups.get(cut.fromSourcePortId) ?? cut.fromSourcePortId
-    const to = explicitGroups.get(cut.toSourcePortId) ?? cut.toSourcePortId
-    // An explicit short still survives when the redundant labels are removed.
-    if (from === to) continue
-    for (const net of netsByPort.get(from) ?? []) {
-      if (netsByPort.get(to)?.has(net))
-        cutsByNet.set(net, [...(cutsByNet.get(net) ?? []), cut])
+    const [sourcePortId] = trace.connected_source_port_ids
+    if (trace.connected_source_port_ids.length !== 1) continue
+    const contact = sourceGroupId({ groups: explicitGroups, sourcePortId })
+    for (const sourceNetId of trace.connected_source_net_ids ?? []) {
+      const net = netGroups.get(sourceNetId) ?? sourceNetId
+      const contacts = portsByNet.get(net) ?? new Set<SourcePortId>()
+      contacts.add(contact)
+      portsByNet.set(net, contacts)
     }
   }
   const splitNets = new Set<SourceNetId>()
-  for (const [net, cuts] of cutsByNet) {
+  for (const [net, contacts] of portsByNet) {
+    const joinedContacts = new Set<SourceNodeId>()
+    const routedGroups = new Set<SourceNodeId>()
+    for (const contact of contacts) {
+      const group = cutGroups.get(contact)
+      if (group === undefined) continue
+      if (joinedContacts.has(group)) routedGroups.add(group)
+      joinedContacts.add(group)
+    }
+    if (!routedGroups.size) continue
+    const namedCuts = cuts.filter(({ fromSourcePortId, toSourcePortId }) => {
+      const fromGroupId = sourceGroupId({
+        groups: explicitGroups,
+        sourcePortId: fromSourcePortId,
+      })
+      const toGroupId = sourceGroupId({
+        groups: explicitGroups,
+        sourcePortId: toSourcePortId,
+      })
+      const routedGroupId = cutGroups.get(fromGroupId)
+      return (
+        routedGroupId !== undefined &&
+        fromGroupId !== toGroupId &&
+        routedGroups.has(routedGroupId)
+      )
+    })
     const ids = new Set([
       net,
       ...[...netGroups].flatMap(([id, group]) => {
@@ -89,7 +135,7 @@ function splitNamedNets({
         return []
       }),
     ])
-    validateSplitNet({ db, ids, cuts, explicitGroups })
+    validateSplitNet({ db, ids, cuts: namedCuts, explicitGroups })
     for (const id of ids) splitNets.add(id)
   }
   return splitNets
@@ -157,6 +203,32 @@ function validateSplitNet({
 interface IdealSourceNodes {
   groups: SourceNodeGroups
   splitNets: ReadonlySet<SourceNetId>
+}
+
+/** Find all extracted nonrail traces using the same copper scope in admission and binding. */
+export function extractedNonrailSourceTraceIds({
+  db,
+  copperScope,
+}: {
+  db: CircuitJsonDb
+  copperScope: Pick<
+    Snapshot<CopperScope>,
+    "extractedPcbTraceIds" | "nearbyRailPcbTraceIds"
+  >
+}): SourceTraceId[] {
+  const extractedPcbTraceIds = new Set(copperScope.extractedPcbTraceIds)
+  const nearbyRailPcbTraceIds = new Set(copperScope.nearbyRailPcbTraceIds)
+  return db.pcb_trace
+    .list()
+    .flatMap(({ pcb_trace_id: pcbTraceId, source_trace_id: sourceTraceId }) => {
+      if (
+        sourceTraceId === undefined ||
+        !extractedPcbTraceIds.has(pcbTraceId) ||
+        nearbyRailPcbTraceIds.has(pcbTraceId)
+      )
+        return []
+      return [sourceTraceId]
+    })
 }
 
 /** Join source traces and internal pin ties, with routed copper removed. */
