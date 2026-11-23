@@ -22,6 +22,7 @@ domain:
   actual: read directly from the physical source-board records
   admission: validation and derivation of one declared transient channel simulation
   admit: the check that reads declared input (board records, IBIS bytes, transient channel simulations) before anything else uses it
+  aggressor: an output-capable pin coupled to a selected channel outside its endpoints
   allow: an explicit caller-selected modelling permission
   antipad: clearance opening in a plane around a signal via
   arc: distance measured along a routed polyline including its bends
