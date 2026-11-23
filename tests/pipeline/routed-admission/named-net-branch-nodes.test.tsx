@@ -1,9 +1,9 @@
-import { expect, test } from "bun:test"
+import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { AdmissionDaisyChain } from "../../fixtures/admission-daisy-chain"
-import "../../fixtures/extend-expect-circuit-snapshot"
+import { expectAdmissionPcbSnapshot } from "../../fixtures/admission-pcb-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
@@ -14,7 +14,6 @@ test("a named path leaves a separate unlabeled branch cut intact", async () => {
     ),
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
-  expect(circuitJson).toMatchPcbSnapshot(import.meta.path)
   const solver = new RoutedAdmissionSolver({
     circuitJson,
     ibisSources: { "models/sn74lvc1g04.ibs": routedVisualIbis },
@@ -28,6 +27,13 @@ test("a named path leaves a separate unlabeled branch cut intact", async () => {
   })
   assert.equal(bindings.routedTraceCuts.length, 3)
   assert.equal(new Set(plan.sections.requiredSourcePortIds.map(node)).size, 4)
+  expectAdmissionPcbSnapshot({
+    circuitJson,
+    plan,
+    expectedTraceCount: 3,
+    testPath: import.meta.path,
+    caption: "The unlabeled branch shares the ideal junction with DATA",
+  })
   assert.deepEqual(
     bindings.mappings.map(({ sourceTraceIds }) => sourceTraceIds?.length),
     [undefined, 2, 2],
