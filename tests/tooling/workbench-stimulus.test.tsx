@@ -10,10 +10,9 @@ test("editing the stimulus updates only the active simulation and its channel", 
   const circuit = await loadInspectorSample()
   const original = JSON.stringify(circuit)
   const db = circuitJsonDb(circuit)
-  const simulation = db.simulation_pcb_transient_channel_simulation.getWhere(
-    {},
-  )!
-  const channel = db.simulation_pcb_driver_receiver_channel.getWhere({})!
+  const simulation = db.simulation_pcb_transient_channel_simulation.getWhere({})
+  const channel = db.simulation_pcb_driver_receiver_channel.getWhere({})
+  if (!simulation || !channel) throw new Error("Expected a sample channel.")
   const id = simulation.simulation_pcb_transient_channel_simulation_id
   const edited = editStimulus({
     circuit,
@@ -37,13 +36,13 @@ test("editing the stimulus updates only the active simulation and its channel", 
   expect(
     updated.simulation_pcb_driver_receiver_channel.getWhere({})?.seed,
   ).toBe(1)
-  expect(
+  const editedSimulation =
     updated.simulation_pcb_transient_channel_simulation.get(id)
-      ?.aggressor_pattern,
-  ).toBe("clock")
+  if (!editedSimulation) throw new Error("Expected the edited simulation.")
+  expect(editedSimulation.aggressor_pattern).toBe("clock")
   expect(
     stimulusRadius({
-      simulation: updated.simulation_pcb_transient_channel_simulation.get(id),
+      simulation: editedSimulation,
       defaultMm: 1,
     }),
   ).toBe(2)
