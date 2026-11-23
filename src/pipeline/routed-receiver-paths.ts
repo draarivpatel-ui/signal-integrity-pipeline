@@ -1,7 +1,5 @@
 import { circuitJsonDb, endpointPorts, type LaneMapping } from "../board"
 import {
-  extractedNonrailSourceTraceIds,
-  idealSourceNodes,
   type RoutedTraceCut,
   receiverGraphs,
   receiverPath,
@@ -17,20 +15,14 @@ export function routedReceiverMappings({
   prepared: PreparedChannelSimulation
   cuts: readonly RoutedTraceCut[]
 }): LaneMapping[] {
-  const db = circuitJsonDb(prepared.circuit)
-  const { groups } = idealSourceNodes({
-    db,
-    cuts,
-    additionalSourceTraceIds: extractedNonrailSourceTraceIds({
-      db,
-      copperScope: prepared.settings.copperScope,
-    }),
-  })
+  const { circuit, settings, driverReceiverChannels } = prepared
   const graphs = receiverGraphs({
+    db: circuitJsonDb(circuit),
+    circuit,
+    groundSourcePortId: settings.channelReference.sourcePortId,
+    modeling: settings,
     cuts,
-    groups,
-    bridges: prepared.routedTopology.bridges,
-    channels: prepared.driverReceiverChannels,
+    channels: driverReceiverChannels,
   })
   const mappings: LaneMapping[] = []
   for (const { name, driver, receivers } of prepared.driverReceiverChannels) {

@@ -19,19 +19,14 @@ export {
   voltageSourceTerminals,
 } from "./netlist"
 export { receiverGraphs, receiverPath } from "./receiver-paths"
-export { RouteBindingsSolver } from "./route-bindings"
 export { circuitNodes } from "./routed-nodes"
 export type {
   RouteBindingsInput,
-  RoutedBindings,
   RoutedCompileOptions,
   RoutedTraceCut,
-  ScopedRouteBindingsInput,
 } from "./routed-types"
-export {
-  extractedNonrailSourceTraceIds,
-  idealSourceNodes,
-} from "./source-node-groups"
+export { type SignalRailIds, signalRailIds } from "./signal-rails"
+export { extractedNonrailSourceTraceIds } from "./source-node-groups"
 export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
 export type {
   CircuitNodes,
