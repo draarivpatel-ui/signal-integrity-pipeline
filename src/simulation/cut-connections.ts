@@ -1,4 +1,4 @@
-import type { SourcePortId } from "../board"
+import type { SourcePortId, SourceTraceId } from "../board"
 import {
   type Connection,
   type ConnectionGraph,
@@ -7,6 +7,13 @@ import {
 } from "./connection-paths"
 import { fail } from "./diagnostics"
 import type { RoutedTraceCut } from "./routed-types"
+
+/** The physical contacts of an extracted trace or series passive. */
+export interface ChannelSegment {
+  fromSourcePortId: SourcePortId
+  toSourcePortId: SourcePortId
+  sourceTraceId?: SourceTraceId
+}
 
 /** The physical cut paired with the nodes it now separates. */
 export type CutConnection<NodeId> = Connection<NodeId, RoutedTraceCut>
@@ -36,32 +43,24 @@ export function physicalCutGraph(
 }
 
 /** List the physical contacts that identify a closed path. */
-function cutPathDescription(cuts: readonly RoutedTraceCut[]): string {
-  return cuts
+function segmentPathDescription(segments: readonly ChannelSegment[]): string {
+  return segments
     .map(
       ({ sourceTraceId, fromSourcePortId, toSourcePortId }) =>
-        `${sourceTraceId} (${fromSourcePortId} to ${toSourcePortId})`,
+        `${sourceTraceId ?? "series passive"} (${fromSourcePortId} to ${toSourcePortId})`,
     )
     .join(", ")
 }
 
-/** Report the physical contacts on the path closed by an ideal connection. */
-export function shortedCutPath(cuts: readonly RoutedTraceCut[]): never {
-  return fail(
-    "channel_short",
-    `Ideal connections close a path across routed cuts: ${cutPathDescription(cuts)}`,
-  )
-}
-
 /** Require a connection to be a bridge and report its concrete cycle otherwise. */
-export function validateCutBridge<NodeId>({
+export function validateChannelBridge<NodeId>({
   graph,
   connection,
   physicalGraph,
 }: {
-  graph: ConnectionGraph<NodeId, RoutedTraceCut>
-  physicalGraph: ConnectionGraph<SourcePortId, RoutedTraceCut>
-  connection: CutConnection<NodeId>
+  graph: ConnectionGraph<NodeId, ChannelSegment>
+  physicalGraph: ConnectionGraph<SourcePortId, ChannelSegment>
+  connection: Connection<NodeId, ChannelSegment>
 }): void {
   const { fromNodeId, toNodeId, evidence } = connection
   const alternate = connectionPath({
@@ -72,6 +71,11 @@ export function validateCutBridge<NodeId>({
   })
   if (!alternate) return
   const { fromSourcePortId, toSourcePortId } = evidence
+  if (evidence.sourceTraceId === undefined)
+    fail(
+      "channel_short",
+      `Series passive contacts ${fromSourcePortId} and ${toSourcePortId} are bypassed`,
+    )
   const physicalAlternate = connectionPath({
     graph: physicalGraph,
     fromNodeId: fromSourcePortId,
@@ -83,7 +87,10 @@ export function validateCutBridge<NodeId>({
   if (physicalAlternate)
     fail(
       "channel_fanout",
-      `Routed cuts form a loop: ${cutPathDescription([...physicalAlternate.map((edge) => edge.evidence), evidence])}`,
+      `Routed cuts form a loop: ${segmentPathDescription([...physicalAlternate.map((edge) => edge.evidence), evidence])}`,
     )
-  shortedCutPath([...alternate.map((edge) => edge.evidence), evidence])
+  fail(
+    "channel_short",
+    `Ideal connections close a path across routed cuts: ${segmentPathDescription([...alternate.map((edge) => edge.evidence), evidence])}`,
+  )
 }

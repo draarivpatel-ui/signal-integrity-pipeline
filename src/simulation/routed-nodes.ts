@@ -1,33 +1,26 @@
 import {
+  type CircuitJsonDb,
   type CircuitJsonSnapshot,
   circuitJsonDb,
   endpointPorts,
   type LaneMapping,
-  type PassiveBridge,
   type SimulationPcbDriverReceiverChannel,
   type SourcePortId,
   type SourceTraceId,
   selectPort,
 } from "../board"
 import type { Snapshot } from "../kernel"
-import { connectionGraph } from "./connection-paths"
-import {
-  cutConnections,
-  physicalCutGraph,
-  shortedCutPath,
-  validateCutBridge,
-} from "./cut-connections"
+import { cutConnections, validateChannelBridge } from "./cut-connections"
 import { fail } from "./diagnostics"
 import { differentialContacts } from "./differential-contacts"
 import {
   type ReceiverGraphs,
-  receiverBypassCuts,
   receiverGraphs,
   receiverPath,
 } from "./receiver-paths"
 import type { RoutedTraceCut } from "./routed-types"
 import {
-  type idealSourceNodes,
+  type IdealSourceNodes,
   type NodeGroups,
   nodeGroups,
   type SourceNodeId,
@@ -49,7 +42,7 @@ function physicalCuts({
   db,
   mappings,
 }: {
-  db: ReturnType<typeof circuitJsonDb>
+  db: CircuitJsonDb
   mappings: readonly LaneMapping[]
 }): RoutedTraceCut[] {
   const cuts = new Map<SourceTraceId, RoutedTraceCut>()
@@ -178,7 +171,7 @@ function createCircuitNodeLookup({
   splitNets,
 }: {
   mapping: CircuitNodes["mapping"]
-  splitNets: ReturnType<typeof idealSourceNodes>["splitNets"]
+  splitNets: IdealSourceNodes["splitNets"]
 }): CircuitNodes["node"] {
   /** Resolve one physical source port or named net. */
   return function node(sourceId: SourceNodeId): SpiceNodeName {
@@ -218,72 +211,25 @@ function validateReceiverPaths({
   }
 }
 
-/** Reject a closed chain of physical cuts, including cuts beyond declared receivers. */
-function validateCutChains({
-  connections,
-  groups,
-}: {
-  connections: ReturnType<typeof cutConnections<SpiceNodeName>>
-  groups: SpiceNodeGroups
-}): void {
-  const nodesByGroup = new Map<SpiceNodeName, number>()
-  const cutsByGroup = new Map<SpiceNodeName, number>()
-  for (const group of groups.values())
-    nodesByGroup.set(group, (nodesByGroup.get(group) ?? 0) + 1)
-  for (const { fromNodeId } of connections) {
-    const group = groups.get(fromNodeId) ?? fromNodeId
-    cutsByGroup.set(group, (cutsByGroup.get(group) ?? 0) + 1)
-  }
-  const graph = connectionGraph(connections)
-  const physicalGraph = physicalCutGraph(
-    connections.map(({ evidence }) => evidence),
-  )
-  for (const connection of connections) {
-    const group = groups.get(connection.fromNodeId) ?? connection.fromNodeId
-    if ((cutsByGroup.get(group) ?? 0) >= (nodesByGroup.get(group) ?? 0))
-      validateCutBridge({ graph, connection, physicalGraph })
-  }
-}
-
-/** Check a collapsed receiver when no ordered extracted path survived admission. */
-function validateReceiverBypasses({
+/** Check declared signal contacts even when a channel has no routed cuts. */
+function validateSingleEndedGround({
   channels,
-  graphs,
   node,
 }: {
   channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
-  graphs: ReceiverGraphs
   node: CircuitNodes["node"]
 }): void {
-  const { groups } = graphs
   for (const { name, driver, receivers } of channels) {
-    const drivers = endpointPorts(driver)
-    if ("source_port_id" in driver) {
-      const groundedSourcePortId = [
-        ...drivers,
-        ...receivers.flatMap(endpointPorts),
-      ].find((sourcePortId) => node(sourcePortId) === "0")
-      if (groundedSourcePortId !== undefined)
-        fail(
-          "channel_short",
-          `${name}: contact ${groundedSourcePortId} is shorted to ground`,
-        )
-    }
-    for (const receiver of receivers) {
-      for (const [leg, toSourcePortId] of endpointPorts(receiver).entries()) {
-        const fromSourcePortId = drivers[leg]
-        if (
-          sourceGroupId({ groups, sourcePortId: fromSourcePortId }) !==
-          sourceGroupId({ groups, sourcePortId: toSourcePortId })
-        )
-          continue
-        const cuts = receiverBypassCuts({
-          graphs,
-          sourcePortId: fromSourcePortId,
-        })
-        if (cuts.length) shortedCutPath(cuts)
-      }
-    }
+    if (!("source_port_id" in driver)) continue
+    const groundedSourcePortId = [
+      driver.source_port_id,
+      ...receivers.flatMap(endpointPorts),
+    ].find((sourcePortId) => node(sourcePortId) === "0")
+    if (groundedSourcePortId !== undefined)
+      fail(
+        "channel_short",
+        `${name}: contact ${groundedSourcePortId} is shorted to ground`,
+      )
   }
 }
 
@@ -299,12 +245,12 @@ function numberCircuitNodes({
   graphs,
   groundSourcePortId,
 }: {
-  db: ReturnType<typeof circuitJsonDb>
+  db: CircuitJsonDb
   graphs: ReceiverGraphs
   groundSourcePortId: SourcePortId
 }): CircuitNodes {
   const { groups, splitNets } = graphs
-  const names = new Map([
+  const spiceNodeNameBySourceNodeGroupId = new Map([
     [sourceGroupId({ groups, sourcePortId: groundSourcePortId }), "0"],
   ])
   const sourceNodeIds = new Set([
@@ -314,12 +260,14 @@ function numberCircuitNodes({
   ])
   const mapping = Object.freeze(
     Object.fromEntries(
-      [...sourceNodeIds].flatMap((id) => {
-        if (splitNets.has(id)) return []
-        const group = groups.get(id) ?? id
-        const name = names.get(group) ?? `n${names.size}`
-        names.set(group, name)
-        return [[id, name]]
+      [...sourceNodeIds].flatMap((sourceNodeId) => {
+        if (splitNets.has(sourceNodeId)) return []
+        const sourceNodeGroupId = groups.get(sourceNodeId) ?? sourceNodeId
+        const spiceNodeName =
+          spiceNodeNameBySourceNodeGroupId.get(sourceNodeGroupId) ??
+          `n${spiceNodeNameBySourceNodeGroupId.size}`
+        spiceNodeNameBySourceNodeGroupId.set(sourceNodeGroupId, spiceNodeName)
+        return [[sourceNodeId, spiceNodeName]]
       }),
     ),
   )
@@ -330,7 +278,7 @@ function numberCircuitNodes({
   }
 }
 
-/** Check cut endpoints and return the SPICE nodes physically joined by routed cuts. */
+/** Reject grounded cuts and preserve the diagnostic for directly collapsed endpoints. */
 function validateCutEndpoints({
   cuts,
   node,
@@ -339,8 +287,7 @@ function validateCutEndpoints({
   cuts: readonly RoutedTraceCut[]
   node: CircuitNodes["node"]
   mappingOnly: boolean
-}): ReadonlySet<SpiceNodeName> {
-  const routedNodes = new Set<SpiceNodeName>()
+}): void {
   for (const cut of cuts) {
     const fromSpiceNode = node(cut.fromSourcePortId)
     const toSpiceNode = node(cut.toSourcePortId)
@@ -356,32 +303,6 @@ function validateCutEndpoints({
         )
       shortedCut({ cut, reason: "share an ideal node or are bound to ground" })
     }
-    routedNodes.add(fromSpiceNode)
-    routedNodes.add(toSpiceNode)
-  }
-  return routedNodes
-}
-
-/** Report a series passive bypassed at either side of a routed cut. */
-function validateSeriesBridges({
-  bridges,
-  node,
-  routedNodes,
-}: {
-  bridges: readonly PassiveBridge[]
-  node: CircuitNodes["node"]
-  routedNodes: ReadonlySet<SpiceNodeName>
-}): void {
-  for (const [fromSourcePortId, toSourcePortId] of bridges) {
-    const fromSpiceNode = node(fromSourcePortId)
-    if (
-      routedNodes.has(fromSpiceNode) &&
-      fromSpiceNode === node(toSourcePortId)
-    )
-      fail(
-        "channel_short",
-        `Series passive contacts ${fromSourcePortId} and ${toSourcePortId} share ideal node ${fromSpiceNode}`,
-      )
   }
 }
 
@@ -435,16 +356,20 @@ function validateRoutedNodes({
   node: CircuitNodes["node"]
   mappingOnly: boolean
 }): void {
-  const routedNodes = validateCutEndpoints({ cuts, node, mappingOnly })
+  validateCutEndpoints({ cuts, node, mappingOnly })
   const connections = cutConnections({ cuts, node })
   const legGroups = nodeGroups(
     connections.map(({ fromNodeId, toNodeId }) => [fromNodeId, toNodeId]),
   )
   validateDifferentialLegs({ channels, node, legGroups, graphs })
   validateReceiverPaths({ mappings, node })
-  validateCutChains({ connections, groups: legGroups })
-  validateReceiverBypasses({ channels, graphs, node })
-  validateSeriesBridges({ bridges: graphs.seriesBridges, node, routedNodes })
+  validateSingleEndedGround({ channels, node })
+  for (const connection of graphs.channelConnections)
+    validateChannelBridge({
+      graph: graphs.ideal,
+      physicalGraph: graphs.physical,
+      connection,
+    })
 }
 
 /** Resolve one SPICE node per ideal group. */
