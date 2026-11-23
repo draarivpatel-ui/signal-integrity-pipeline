@@ -10,18 +10,26 @@ export function AdmissionShunts({
 }): JSX.Element {
   return (
     <>
-      {["TX", "RX"].map((end, index) => (
-        <Fragment key={end}>
-          <resistor
-            name={`RSHUNT_${end}_${pin}`}
-            resistance="10k"
-            footprint="0402"
-            pcbX={pin === "A" ? index * 10 - 5 : index * 16 - 8}
-            pcbY={pin === "A" ? 3 : -4}
-            connections={{ pin1: `.${end} > .${pin}`, pin2: `net.${rail}` }}
-          />
-        </Fragment>
-      ))}
+      {["TX", "RX"].map((end, index) => {
+        let pcbX = index * 16 - 8
+        let pcbY = -4
+        if (pin === "A") {
+          pcbX = index * 10 - 5
+          pcbY = 3
+        }
+        return (
+          <Fragment key={end}>
+            <resistor
+              name={`RSHUNT_${end}_${pin}`}
+              resistance="10k"
+              footprint="0402"
+              pcbX={pcbX}
+              pcbY={pcbY}
+              connections={{ pin1: `.${end} > .${pin}`, pin2: `net.${rail}` }}
+            />
+          </Fragment>
+        )
+      })}
     </>
   )
 }
