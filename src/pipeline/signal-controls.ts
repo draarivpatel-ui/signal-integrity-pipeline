@@ -1,6 +1,7 @@
 import {
   type CircuitJsonSnapshot,
   circuitJsonDb,
+  type DriverPattern,
   isQuiet,
   type SignalEndpoint,
   type SignalEndpointPortIds,
@@ -10,9 +11,10 @@ import {
   type SimulationPcbTransientChannelSimulationId,
   type SourcePortId,
 } from "../board"
-import { type InspectedPin, pinCapabilities } from "../buffers"
+import type { InspectedPin } from "../buffers"
 import { Diagnostic, type Snapshot } from "../kernel"
 import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
+import type { Aggressors } from "./aggressors"
 import { defaultDurationSeconds, prbsPatterns } from "./timing"
 
 /** Milliseconds in one second. */
@@ -45,8 +47,8 @@ export interface ChannelSimulationControlOptions {
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   pins: Map<SourcePortId, InspectedPin>
   driven: Map<SourcePortId, Snapshot<SimulationPcbDriverReceiverChannel>>
+  aggressors: Aggressors
   durationSeconds: number
-  rate: number
   stepSeconds: number
 }
 
@@ -56,27 +58,24 @@ export function endpointPorts(endpoint: SignalEndpoint): SignalEndpointPortIds {
   return [endpoint.p_source_port_id, endpoint.n_source_port_id]
 }
 
-/** Fastest bit rate and maximum transient step for the recording. */
+/** Fastest edge and maximum transient step for the recording. */
 interface SignalTiming {
-  rate: number
   riseSeconds: number
   stepSeconds: number
 }
 
 /** Limit the step by the shortest bit, fastest edge and recording duration. */
 export function signalTiming({
-  driverReceiverChannels,
+  patterns,
   durationSeconds,
   edgeTimesSeconds,
 }: {
-  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
+  patterns: readonly Snapshot<DriverPattern>[]
   durationSeconds: number
   edgeTimesSeconds: number[]
 }): SignalTiming {
   const riseSeconds = Math.min(...edgeTimesSeconds)
-  const rate = Math.max(
-    ...driverReceiverChannels.map((signal) => signal.bit_rate_bps),
-  )
+  const rate = Math.max(...patterns.map((signal) => signal.bit_rate_bps))
   const stepSeconds = Math.min(
     1 / rate / STEPS_PER_BIT,
     riseSeconds / STEPS_PER_EDGE,
@@ -88,25 +87,25 @@ export function signalTiming({
       "simulation_timing",
       "The admitted experiment requires a finite positive time_per_step",
     )
-  return { rate, riseSeconds, stepSeconds }
+  return { riseSeconds, stepSeconds }
 }
 
 /** Choose the capture duration in seconds and check coverage of enabled stimuli. */
 export function channelSimulationDurationSeconds({
   channelSimulation,
-  driverReceiverChannels,
+  patterns,
 }: {
   channelSimulation: SimulationPcbTransientChannelSimulation
-  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
+  patterns: readonly Snapshot<DriverPattern>[]
 }): number {
   let durationSeconds: number
   if (channelSimulation.duration_ms === undefined)
-    durationSeconds = defaultDurationSeconds(driverReceiverChannels)
+    durationSeconds = defaultDurationSeconds(patterns)
   else durationSeconds = channelSimulation.duration_ms / MILLISECONDS_PER_SECOND
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     throw new Error("Recording duration must be finite and positive.")
   }
-  for (const signal of driverReceiverChannels) {
+  for (const signal of patterns) {
     if (signal.driver_disabled) continue
     const startSeconds = signal.offset_ms / MILLISECONDS_PER_SECOND
     if (!Number.isFinite(startSeconds) || startSeconds < 0)
@@ -143,7 +142,7 @@ export function signalBits({
   signal,
   durationSeconds,
 }: {
-  signal: Snapshot<SimulationPcbDriverReceiverChannel>
+  signal: Snapshot<DriverPattern>
   durationSeconds: number
 }): string {
   const prbs = prbsPatterns.get(signal.pattern)
@@ -200,6 +199,35 @@ export function signalBits({
   return bits
 }
 
+/** Lower a bit pattern to the converter's stimulus for one physical port. */
+function driverStimulus({
+  name,
+  signal,
+  port,
+  bits,
+  inverted,
+}: {
+  name: string
+  signal: Snapshot<DriverPattern>
+  port: SourcePortId
+  bits: string
+  inverted: boolean
+}): RunControls["stimuli"][number] {
+  let initialState: 0 | 1 = 0
+  if (bits[0] === "1") initialState = 1
+  let startTimeMs = signal.offset_ms
+  if (isQuiet(signal)) startTimeMs = 0
+  return {
+    name,
+    source_port_id: port,
+    bit_duration_ms: MILLISECONDS_PER_SECOND / signal.bit_rate_bps,
+    start_time_ms: startTimeMs,
+    initial_state: initialState,
+    inverted,
+    transmission_pattern: { transmission_type: "bits", bits, repeat: true },
+  }
+}
+
 /** Circuit with the lowered experiment and probes, plus their pin states and stimuli. */
 interface ChannelSimulationControls {
   circuit: CircuitJsonSnapshot
@@ -214,8 +242,8 @@ export function withChannelSimulationControls({
   driverReceiverChannels,
   pins,
   driven,
+  aggressors,
   durationSeconds,
-  rate,
   stepSeconds,
 }: ChannelSimulationControlOptions): ChannelSimulationControls {
   const controls: RunControls = { states: [], stimuli: [] }
@@ -236,51 +264,35 @@ export function withChannelSimulationControls({
   })
   for (const pin of pins.values()) {
     const signal = driven.get(pin.port)
-    const capabilities = pinCapabilities(pin)
-    const output = signal !== undefined || !capabilities.receive
-    let enabled =
-      capabilities.drive && !capabilities.disable && !capabilities.receive
-    if (signal) enabled = !signal.driver_disabled
+    const aggressor = aggressors.get(pin.port)
     const state: RunControls["states"][number] = {
       source_port_id: pin.port,
-      is_output: output,
+      is_output: signal !== undefined || aggressor !== undefined,
     }
-    if (output) state.is_output_enabled = enabled
+    if (signal) state.is_output_enabled = !signal.driver_disabled
+    else if (aggressor !== undefined)
+      state.is_output_enabled = aggressor !== null
     controls.states.push(state)
-    if (signal || !enabled) continue
-    controls.stimuli.push({
-      name: pin.port,
-      source_port_id: pin.port,
-      bit_duration_ms: MILLISECONDS_PER_SECOND / rate,
-      start_time_ms: 0,
-      initial_state: 0,
-      inverted: pin.buffer.polarity === "inverting",
-      transmission_pattern: {
-        transmission_type: "bits",
-        bits: "0",
-        repeat: true,
-      },
-    })
+    if (!aggressor) continue
+    controls.stimuli.push(
+      driverStimulus({
+        name: pin.port,
+        signal: aggressor,
+        port: pin.port,
+        bits: signalBits({ signal: aggressor, durationSeconds }),
+        inverted: pin.buffer.polarity === "inverting",
+      }),
+    )
   }
   for (const signal of driverReceiverChannels) {
     const bits = signalBits({ signal, durationSeconds })
     if (signal.driver_disabled) continue
-    let initialState: 0 | 1 = 0
-    if (bits[0] === "1") initialState = 1
-    let startTimeMs = signal.offset_ms
-    if (isQuiet(signal)) startTimeMs = 0
     for (const [index, port] of endpointPorts(signal.driver).entries()) {
       const pin = pins.get(port)!
-      const inversion = Boolean(index) !== (pin.buffer.polarity === "inverting")
-      controls.stimuli.push({
-        name: signal.name,
-        source_port_id: port,
-        bit_duration_ms: MILLISECONDS_PER_SECOND / signal.bit_rate_bps,
-        start_time_ms: startTimeMs,
-        initial_state: initialState,
-        inverted: inversion,
-        transmission_pattern: { transmission_type: "bits", bits, repeat: true },
-      })
+      const inverted = Boolean(index) !== (pin.buffer.polarity === "inverting")
+      controls.stimuli.push(
+        driverStimulus({ name: signal.name, signal, port, bits, inverted }),
+      )
     }
   }
   for (const signal of driverReceiverChannels) {
