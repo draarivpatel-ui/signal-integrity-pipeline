@@ -49,7 +49,7 @@ export function routedReceiverMappings({
             `${name}: no source path from ${fromSourcePortId} to ${toSourcePortId}`,
           )
         const sourceTraceIds = path.flatMap((edge) => {
-          if ("sourceTraceId" in edge) return [edge.sourceTraceId]
+          if (edge.sourceTraceId !== undefined) return [edge.sourceTraceId]
           return []
         })
         const [sourceTraceId] = sourceTraceIds
