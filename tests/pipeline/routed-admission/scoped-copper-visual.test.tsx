@@ -15,7 +15,9 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
     ibisSources: { "models/sn74lvc1g04.ibs": routedVisualIbis },
   })
   assert.ok(
-    solver.visualize().polygons?.some((polygon) => polygon.label === "board"),
+    solver
+      .visualizeCopper()
+      .polygons?.some((polygon) => polygon.label === "board"),
   )
   solver.solve()
   const { value, artifacts } = solver.getOutput()
@@ -36,7 +38,7 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
   )
   assert.equal(bindings.routedTraceCuts.length, 2)
   assert.equal(artifacts[0].path, "admission.json")
-  const drawing = solver.visualize()
+  const drawing = solver.visualizeCopper()
   assert.equal(drawing.polygons?.length, 4)
   assert.equal(drawing.lines?.length, 2)
   assertRouteVisual({

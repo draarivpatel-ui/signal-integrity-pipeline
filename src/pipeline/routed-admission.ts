@@ -4,9 +4,17 @@ import {
   admissionRouteView,
   circuitJsonDb,
   type RouteSectionsInput,
+  routeAdmissionMarks,
+  routeBoardBox,
+  routeBoardDrawing,
+  routeFailure,
+  routeLengths,
+  routeStrip,
+  routeView,
   type SimulationPcbTransientChannelSimulationId,
   scopedAdmissionDrawing,
   unscopedAdmissionDrawing,
+  withRouteDrawing,
 } from "../board"
 import type { IbisSources } from "../buffers"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
@@ -192,7 +200,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
     return [this.input]
   }
   /** Inspect the latest channel's copper and endpoints or the whole unscoped board. */
-  override visualize(): GraphicsObject {
+  visualizeCopper(): GraphicsObject {
     const circuit = this.input.circuitJson
     const plan = this.channelSimulationPlans.at(-1)
     if (plan === undefined)
@@ -212,5 +220,45 @@ export class RoutedAdmissionSolver extends BaseSolver {
       mappings,
       error: this.error,
     })
+  }
+  /** Add the stage camera and its routed-length pane to the shared copper drawing. */
+  override visualize(): GraphicsObject {
+    const circuit = this.input.circuitJson
+    const plan = this.channelSimulationPlans.at(-1)
+    const scope = plan?.sections.copperScope
+    const board = routeBoardDrawing({ circuit, scope })
+    if (plan === undefined || scope === undefined) {
+      if (this.error === null) return board
+      return {
+        ...board,
+        texts: routeFailure({
+          box: routeBoardBox(circuit),
+          message: this.error,
+        }),
+      }
+    }
+    const view = routeView({ circuit, scope })
+    const drawing = withRouteDrawing({
+      drawing: board,
+      overlay: routeStrip({
+        pane: view.pane,
+        rows: routeLengths({ circuit, view }),
+      }),
+    })
+    const marks = routeAdmissionMarks({
+      db: circuitJsonDb(circuit),
+      mappings: plan.bindings.mappings,
+      view,
+    })
+    const polygons = [...drawing.polygons, ...marks]
+    if (this.error === null) return { ...drawing, polygons }
+    return {
+      ...drawing,
+      polygons,
+      texts: [
+        ...drawing.texts,
+        ...routeFailure({ box: view.pane, message: this.error }),
+      ],
+    }
   }
 }

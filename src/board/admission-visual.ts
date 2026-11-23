@@ -13,7 +13,7 @@ import {
 } from "./admission-view"
 import { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
 import type { LaneMapping } from "./geometry/types"
-import type { SourcePortId } from "./ids"
+import type { SourcePortId, SourceTraceId } from "./ids"
 import type { CircuitJsonSnapshot } from "./schema"
 
 /** Colours for physical copper, endpoint outlines and admission diagnostics. */
@@ -108,38 +108,50 @@ interface RouteRun {
   width: number
 }
 
+/** A stage can derive a copper tone from a richer net style. */
+type RouteNetColor<Net extends RouteCopperNet> = (
+  net: Net | undefined,
+) => string
+
 /** Draw a contiguous run using its net, or neutral copper for an unassigned route. */
-function drawRouteRun({
+function drawRouteRun<Net extends RouteCopperNet>({
   run,
   net,
+  color,
 }: {
   run: RouteRun
-  net: RouteCopperNet | undefined
+  net: Net | undefined
+  color: RouteNetColor<Net> | undefined
 }): Line[] {
   if (run.points.length <= 1) return []
   let strokeColor: string = routeCopperTones.copper
   if (net !== undefined) strokeColor = net.color
+  if (color !== undefined) strokeColor = color(net)
   return routeStroke({ ...run, color: strokeColor, label: net?.label })
 }
 
 /** Selected copper as layer-aware strokes, one colour per electrical net. */
-export function routeNets({
+export function routeNets<Net extends RouteCopperNet>({
   db,
   view,
+  color,
 }: {
   db: CircuitJsonDb
-  view: Pick<RouteCopperView, "traces" | "sources">
+  view: Pick<RouteCopperView, "traces"> & {
+    sources: ReadonlyMap<SourceTraceId, Net>
+  }
+  color?: RouteNetColor<Net>
 }): RouteDrawing["lines"] {
   const lines: Line[] = []
   for (const trace of db.pcb_trace.list()) {
     if (!view.traces.has(trace.pcb_trace_id)) continue
-    let net: RouteCopperNet | undefined
+    let net: Net | undefined
     if (trace.source_trace_id !== undefined)
       net = view.sources.get(trace.source_trace_id)
     let run: RouteRun | undefined
     for (const point of trace.route) {
       if (point.route_type !== "wire") {
-        if (run) lines.push(...drawRouteRun({ run, net }))
+        if (run) lines.push(...drawRouteRun({ run, net, color }))
         run = undefined
         continue
       }
@@ -148,7 +160,7 @@ export function routeNets({
         continue
       }
       if (run.layer !== point.layer || run.width !== point.width) {
-        lines.push(...drawRouteRun({ run, net }))
+        lines.push(...drawRouteRun({ run, net, color }))
         run = {
           points: [...run.points.slice(-1), point],
           layer: point.layer,
@@ -158,7 +170,7 @@ export function routeNets({
       }
       run.points.push(point)
     }
-    if (run) lines.push(...drawRouteRun({ run, net }))
+    if (run) lines.push(...drawRouteRun({ run, net, color }))
   }
   return lines
 }
@@ -234,14 +246,14 @@ export function routeMarks({
 }
 
 /** Put a net-coloured mark on copper contacts and a distinct mark on ideal-only signal contacts. */
-function routeAdmissionMarks({
+export function routeAdmissionMarks({
   db,
   mappings,
   view,
 }: {
   db: CircuitJsonDb
   mappings: readonly LaneMapping[]
-  view: RouteCopperView
+  view: Pick<RouteCopperView, "ports" | "unit">
 }): RouteDrawing["polygons"] {
   const positions = new Map<SourcePortId, Point>()
   for (const port of db.pcb_port.list()) {
@@ -413,7 +425,7 @@ export function unscopedAdmissionDrawing({
 }
 
 /** Closest spacing between distinct points, so glyphs never overlap their neighbours. */
-function routePointSpacing(points: readonly Point[]): number {
+export function routePointSpacing(points: readonly Point[]): number {
   let closest = Infinity
   for (const [i, a] of points.entries())
     for (const b of points.slice(i + 1)) {

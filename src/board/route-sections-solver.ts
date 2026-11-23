@@ -12,20 +12,22 @@ import {
 } from "./route-sections"
 import {
   type RouteNet,
-  type RouteStripRow,
   routeCanvas,
   routeFailure,
   routeHue,
-  routeLengths,
   routeNets,
-  routeStrip,
   routeStroke,
   routeTones,
-  routeUnrolled,
   routeVia,
   routeView,
   withRouteDrawing,
 } from "./route-visual"
+import {
+  type RouteStripRow,
+  routeLengths,
+  routeStrip,
+  routeUnrolled,
+} from "./route-visual-strip"
 import type { CircuitJsonSnapshot } from "./schema"
 
 /** The board, copper scope and required ports passed to route sectioning. */

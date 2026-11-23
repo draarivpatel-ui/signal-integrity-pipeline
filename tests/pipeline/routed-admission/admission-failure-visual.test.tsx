@@ -29,7 +29,7 @@ test("draws the whole board with the open differential leg diagnostic in red", a
     code: "channel_net",
     message: /BUS: no source path/,
   })
-  const drawing = solver.visualize()
+  const drawing = solver.visualizeCopper()
   assert.ok(drawing.lines?.length)
   assert.ok(drawing.texts?.length)
   assert.ok(drawing.texts.every((text) => text.color === "#f87171"))
