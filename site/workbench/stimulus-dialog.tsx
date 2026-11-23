@@ -211,7 +211,6 @@ export function StimulusDialog({
                 <input
                   type="number"
                   min="0.001"
-                  max="32"
                   step="any"
                   value={radius || ""}
                   onChange={(event) =>
