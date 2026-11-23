@@ -5,170 +5,232 @@ import {
   type SourceTraceId,
 } from "../board"
 import {
+  cutSourceGroups,
+  differentialContacts,
+  differentialGroups,
   idealSourceNodes,
   type RoutedTraceCut,
   type SourceNodeGroups,
+  sourceGroupId,
   sourceNodeGroups,
 } from "../simulation"
 import { fail } from "./diagnostics"
 import { endpointPorts, type PreparedChannelSimulation } from "./signals"
 import { crossesDifferentialLegs } from "./topology"
 
-/** A physical cut between source groups, labelled with its extracted trace. */
+/** A connection whose physical contacts are separated by extracted copper. */
 interface RoutedEdge extends RoutedTraceCut {
   kind: "routed"
 }
 
-/** A path through a series component, which does not contribute a trace. */
+/** A connection through a series component, which contributes no trace. */
 interface SeriesEdge {
   kind: "series"
   fromSourcePortId: SourcePortId
   toSourcePortId: SourcePortId
 }
 
-type ReceiverEdge = RoutedEdge | SeriesEdge
+/** An edge indexed by its electrical groups while retaining its physical contacts. */
+interface ReceiverConnection {
+  fromSourceGroupId: SourcePortId
+  toSourceGroupId: SourcePortId
+  edge: RoutedEdge | SeriesEdge
+}
 
-/** Incident routed and series edges indexed by electrical node. */
-type ReceiverGraph = ReadonlyMap<SourcePortId, ReceiverEdge[]>
+/** Incident routed and series connections indexed by source group. */
+type ReceiverGraph = ReadonlyMap<SourcePortId, ReceiverConnection[]>
 
-/** Index routed and series edges at both ends. */
+/** Index each connection at both ends, excluding already-collapsed edges. */
 function receiverGraph({
-  edges,
+  connections,
   groups,
 }: {
-  edges: readonly ReceiverEdge[]
-  groups: SourceNodeGroups
+  connections: readonly (RoutedEdge | SeriesEdge)[]
+  groups?: SourceNodeGroups
 }): ReceiverGraph {
-  const graph = new Map<SourcePortId, ReceiverEdge[]>()
-  for (const edge of edges) {
-    const from = groups.get(edge.fromSourcePortId) ?? edge.fromSourcePortId
-    const to = groups.get(edge.toSourcePortId) ?? edge.toSourcePortId
-    if (from === to) continue
-    const joined = { ...edge, fromSourcePortId: from, toSourcePortId: to }
-    for (const port of [from, to]) {
-      const incident = graph.get(port)
-      if (incident) incident.push(joined)
-      else graph.set(port, [joined])
+  const graph = new Map<SourcePortId, ReceiverConnection[]>()
+  for (const edge of connections) {
+    let fromSourceGroupId = edge.fromSourcePortId
+    let toSourceGroupId = edge.toSourcePortId
+    if (groups) {
+      fromSourceGroupId = sourceGroupId({
+        groups,
+        sourcePortId: edge.fromSourcePortId,
+      })
+      toSourceGroupId = sourceGroupId({
+        groups,
+        sourcePortId: edge.toSourcePortId,
+      })
+    }
+    if (fromSourceGroupId === toSourceGroupId) continue
+    const connection = { fromSourceGroupId, toSourceGroupId, edge }
+    for (const sourceGroupId of [fromSourceGroupId, toSourceGroupId]) {
+      const incident = graph.get(sourceGroupId)
+      if (incident) incident.push(connection)
+      else graph.set(sourceGroupId, [connection])
     }
   }
   return graph
 }
 
-/** Find the other node of an edge incident to this one. */
-function otherNode({
-  edge,
-  port,
+/** Read the group at the opposite end of an incident connection. */
+function oppositeSourceGroupId({
+  connection,
+  sourceGroupId,
 }: {
-  edge: ReceiverEdge
-  port: SourcePortId
+  connection: ReceiverConnection
+  sourceGroupId: SourcePortId
 }): SourcePortId {
-  if (edge.fromSourcePortId === port) return edge.toSourcePortId
-  return edge.fromSourcePortId
+  if (connection.fromSourceGroupId === sourceGroupId)
+    return connection.toSourceGroupId
+  return connection.fromSourceGroupId
 }
 
-/** Ordered extracted trace IDs between two reachable nodes. */
+/** Extracted trace IDs in a receiver path's traversal order. */
 type ReceiverTraceIds = SourceTraceId[]
 
-/** Recover the ordered cut IDs from an already-validated connectivity graph. */
+/** Follow the shortest connected path through the routed cuts and series passives. */
 function receiverTraceIds({
   graph,
-  from,
-  to,
-  excluded,
+  fromSourceGroupId,
+  toSourceGroupId,
 }: {
   graph: ReceiverGraph
-  from: SourcePortId
-  to: SourcePortId
-  excluded?: ReceiverEdge
+  fromSourceGroupId: SourcePortId
+  toSourceGroupId: SourcePortId
 }): ReceiverTraceIds | undefined {
-  const reached = new Map<SourcePortId, ReceiverEdge | null>([[from, null]])
-  for (const [port] of reached) {
-    if (port === to) {
+  const reached = new Map<SourcePortId, ReceiverConnection | null>([
+    [fromSourceGroupId, null],
+  ])
+  for (const [sourceGroupId] of reached) {
+    if (sourceGroupId === toSourceGroupId) {
       const traceIds: ReceiverTraceIds = []
-      let current = port
-      let edge = reached.get(current)
-      while (edge) {
-        if (edge.kind === "routed") traceIds.push(edge.sourceTraceId)
-        current = otherNode({ edge, port: current })
-        edge = reached.get(current)
+      let currentSourceGroupId = sourceGroupId
+      let connection = reached.get(currentSourceGroupId)
+      while (connection) {
+        if (connection.edge.kind === "routed")
+          traceIds.push(connection.edge.sourceTraceId)
+        currentSourceGroupId = oppositeSourceGroupId({
+          connection,
+          sourceGroupId: currentSourceGroupId,
+        })
+        connection = reached.get(currentSourceGroupId)
       }
       return traceIds.reverse()
     }
-    for (const edge of graph.get(port) ?? []) {
-      if (edge === excluded) continue
-      const next = otherNode({ edge, port })
-      if (!reached.has(next)) reached.set(next, edge)
+    for (const connection of graph.get(sourceGroupId) ?? []) {
+      const nextSourceGroupId = oppositeSourceGroupId({
+        connection,
+        sourceGroupId,
+      })
+      if (!reached.has(nextSourceGroupId))
+        reached.set(nextSourceGroupId, connection)
     }
   }
 }
 
-/** Retain evidence of a routed receiver path which an ideal bypass closes into a loop. */
-function bypassedReceiverTraceIds({
-  graph,
-  port,
-}: {
+/** The depth-first state for finding cycles through a collapsed receiver contact. */
+interface ReceiverCycleSearch {
   graph: ReceiverGraph
-  port: SourcePortId
-}): ReceiverTraceIds {
-  for (const edge of graph.get(port) ?? []) {
-    const from = otherNode({ edge, port })
-    const traceIds = receiverTraceIds({ graph, from, to: port, excluded: edge })
-    if (!traceIds) continue
-    if (edge.kind === "routed") return [edge.sourceTraceId, ...traceIds]
-    if (traceIds.length) return traceIds
-  }
-  return []
+  rootSourceGroupId: SourcePortId
+  sourceGroupOrder: Map<SourcePortId, number>
+  openConnections: ReceiverConnection[]
+  routedCycleTraceIds: ReceiverTraceIds
 }
 
-/** Include series passives along a leg and leave differential terminations outside it. */
+/** Close each biconnected component and keep its routed evidence when it contains the root. */
+function visitReceiverCycles({
+  search,
+  sourceGroupId,
+  parentConnection,
+}: {
+  search: ReceiverCycleSearch
+  sourceGroupId: SourcePortId
+  parentConnection?: ReceiverConnection
+}): number {
+  const { graph, rootSourceGroupId, sourceGroupOrder, openConnections } = search
+  const order = sourceGroupOrder.size
+  sourceGroupOrder.set(sourceGroupId, order)
+  let earliestOrder = order
+  for (const connection of graph.get(sourceGroupId) ?? []) {
+    if (connection === parentConnection) continue
+    const nextSourceGroupId = oppositeSourceGroupId({
+      connection,
+      sourceGroupId,
+    })
+    const nextOrder = sourceGroupOrder.get(nextSourceGroupId)
+    if (nextOrder !== undefined) {
+      if (nextOrder < order) {
+        openConnections.push(connection)
+        earliestOrder = Math.min(earliestOrder, nextOrder)
+      }
+      continue
+    }
+    const start = openConnections.length
+    openConnections.push(connection)
+    const reachableOrder = visitReceiverCycles({
+      search,
+      sourceGroupId: nextSourceGroupId,
+      parentConnection: connection,
+    })
+    earliestOrder = Math.min(earliestOrder, reachableOrder)
+    if (reachableOrder < order) continue
+    const component = openConnections.splice(start)
+    if (sourceGroupId !== rootSourceGroupId || component.length < 2) continue
+    for (const { edge } of component) {
+      if (edge.kind === "routed")
+        search.routedCycleTraceIds.push(edge.sourceTraceId)
+    }
+  }
+  return earliestOrder
+}
+
+/** Keep cut evidence even when a nearer cycle consists only of parallel passives. */
+function bypassedReceiverTraceIds({
+  graph,
+  sourceGroupId,
+}: {
+  graph: ReceiverGraph
+  sourceGroupId: SourcePortId
+}): ReceiverTraceIds {
+  const search: ReceiverCycleSearch = {
+    graph,
+    rootSourceGroupId: sourceGroupId,
+    sourceGroupOrder: new Map(),
+    openConnections: [],
+    routedCycleTraceIds: [],
+  }
+  visitReceiverCycles({ search, sourceGroupId })
+  return search.routedCycleTraceIds
+}
+
+/** Include series passives within a leg and exclude the differential terminations. */
 function receiverEdges({
   prepared,
   cuts,
-  groups,
+  legGroups,
 }: {
   prepared: PreparedChannelSimulation
   cuts: readonly RoutedTraceCut[]
-  groups: SourceNodeGroups
-}): ReceiverEdge[] {
-  const legGroups = sourceNodeGroups([
-    ...[...groups].map(([id, group]) => [id, group]),
-    ...cuts.map(({ fromSourcePortId, toSourcePortId }) => [
-      fromSourcePortId,
-      toSourcePortId,
-    ]),
-  ])
-  const differential = prepared.driverReceiverChannels.flatMap(
-    ({ driver, receivers }) => {
-      if ("source_port_id" in driver) return []
-      const endpoints = [
-        driver,
-        ...receivers.filter((end) => "p_source_port_id" in end),
-      ]
-      return [
-        {
-          positive: new Set(
-            endpoints.map(
-              (end) =>
-                legGroups.get(end.p_source_port_id) ?? end.p_source_port_id,
-            ),
-          ),
-          negative: new Set(
-            endpoints.map(
-              (end) =>
-                legGroups.get(end.n_source_port_id) ?? end.n_source_port_id,
-            ),
-          ),
-        },
-      ]
-    },
-  )
-  const edges: ReceiverEdge[] = cuts.map((cut) => ({ ...cut, kind: "routed" }))
+  legGroups: SourceNodeGroups
+}): (RoutedEdge | SeriesEdge)[] {
+  const differential = differentialGroups({
+    contacts: differentialContacts(prepared.driverReceiverChannels),
+    groups: legGroups,
+  })
+  const edges: (RoutedEdge | SeriesEdge)[] = cuts.map((cut) => ({
+    ...cut,
+    kind: "routed",
+  }))
   for (const [fromSourcePortId, toSourcePortId] of prepared.routedTopology
     .bridges) {
     if (
       crossesDifferentialLegs({
-        from: legGroups.get(fromSourcePortId) ?? fromSourcePortId,
-        to: legGroups.get(toSourcePortId) ?? toSourcePortId,
+        from: sourceGroupId({
+          groups: legGroups,
+          sourcePortId: fromSourcePortId,
+        }),
+        to: sourceGroupId({ groups: legGroups, sourcePortId: toSourcePortId }),
         differential,
       })
     )
@@ -176,6 +238,58 @@ function receiverEdges({
     edges.push({ kind: "series", fromSourcePortId, toSourcePortId })
   }
   return edges
+}
+
+/** Find the ordered path or any routed cycle that an ideal bypass closed at the receiver. */
+function mappedTraceIds({
+  graph,
+  physical,
+  groups,
+  fromSourcePortId,
+  toSourcePortId,
+  allowUnroutedTraces,
+  channelName,
+}: {
+  graph: ReceiverGraph
+  physical: ReceiverGraph
+  groups: SourceNodeGroups
+  fromSourcePortId: SourcePortId
+  toSourcePortId: SourcePortId
+  allowUnroutedTraces: boolean
+  channelName: string
+}): ReceiverTraceIds {
+  const fromSourceGroupId = sourceGroupId({
+    groups,
+    sourcePortId: fromSourcePortId,
+  })
+  const toSourceGroupId = sourceGroupId({
+    groups,
+    sourcePortId: toSourcePortId,
+  })
+  if (!allowUnroutedTraces || fromSourceGroupId === toSourceGroupId) {
+    const physicalTraceIds = receiverTraceIds({
+      graph: physical,
+      fromSourceGroupId: fromSourcePortId,
+      toSourceGroupId: toSourcePortId,
+    })
+    if (physicalTraceIds) return physicalTraceIds
+    if (allowUnroutedTraces)
+      return bypassedReceiverTraceIds({
+        graph,
+        sourceGroupId: fromSourceGroupId,
+      })
+  } else {
+    const idealTraceIds = receiverTraceIds({
+      graph,
+      fromSourceGroupId,
+      toSourceGroupId,
+    })
+    if (idealTraceIds) return idealTraceIds
+  }
+  return fail(
+    "channel_net",
+    `${channelName}: no source path from ${fromSourcePortId} to ${toSourcePortId}`,
+  )
 }
 
 /** Resolve each declared receiver against the cut graph of ideal electrical groups. */
@@ -190,34 +304,46 @@ export function routedReceiverMappings({
     db: circuitJsonDb(prepared.circuit),
     cuts,
   })
-  const edges = receiverEdges({ prepared, cuts, groups })
-  const physical = receiverGraph({ edges, groups: new Map() })
-  const graph = receiverGraph({ edges, groups })
+  const physicalCutGroups = cutSourceGroups(cuts)
+  const idealCutGroups = sourceNodeGroups([
+    ...[...groups],
+    ...[...physicalCutGroups],
+  ])
+  const physical = receiverGraph({
+    connections: receiverEdges({
+      prepared,
+      cuts,
+      legGroups: physicalCutGroups,
+    }),
+  })
+  const graph = receiverGraph({
+    connections: receiverEdges({ prepared, cuts, legGroups: idealCutGroups }),
+    groups,
+  })
   const mappings: LaneMapping[] = []
   for (const { name, driver, receivers } of prepared.driverReceiverChannels) {
     const driverPorts = endpointPorts(driver)
     for (const receiver of receivers) {
-      for (const [leg, to] of endpointPorts(receiver).entries()) {
-        const from = driverPorts[leg]
-        const fromNode = groups.get(from) ?? from
-        const toNode = groups.get(to) ?? to
-        let traceIds = receiverTraceIds({ graph, from: fromNode, to: toNode })
-        if (
-          !prepared.channelSimulation.allow_unrouted_traces ||
-          fromNode === toNode
-        ) {
-          traceIds = receiverTraceIds({ graph: physical, from, to })
-          if (!traceIds && prepared.channelSimulation.allow_unrouted_traces)
-            traceIds = bypassedReceiverTraceIds({ graph, port: fromNode })
-        }
-        if (!traceIds)
-          return fail(
-            "channel_net",
-            `${name}: no source path from ${from} to ${to}`,
-          )
+      for (const [leg, toSourcePortId] of endpointPorts(receiver).entries()) {
+        const fromSourcePortId = driverPorts[leg]
+        const traceIds = mappedTraceIds({
+          graph,
+          physical,
+          groups,
+          fromSourcePortId,
+          toSourcePortId,
+          channelName: name,
+          allowUnroutedTraces:
+            prepared.channelSimulation.allow_unrouted_traces === true,
+        })
         const [sourceTraceId] = traceIds
         if (sourceTraceId === undefined) continue
-        const mapping = { port: name, from, to, sourceTraceId }
+        const mapping = {
+          port: name,
+          from: fromSourcePortId,
+          to: toSourcePortId,
+          sourceTraceId,
+        }
         if (traceIds.length > 1)
           mappings.push({ ...mapping, sourceTraceIds: traceIds })
         else mappings.push(mapping)
