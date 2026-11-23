@@ -7,15 +7,17 @@ import { Inverter, Reference } from "./signal-parts"
 export function AdmissionDaisyChain({
   routeFinalLeg,
   namedNet = false,
+  bypassFinalLeg = false,
   idealMiddleLeg = false,
   branched = false,
   placedLoad = false,
 }: {
   routeFinalLeg: boolean
-  namedNet?: boolean
+  namedNet?: boolean | "ends"
+  bypassFinalLeg?: boolean
   idealMiddleLeg?: boolean
   branched?: boolean
-  placedLoad?: boolean
+  placedLoad?: boolean | "mapped"
 }): JSX.Element {
   const driver = ".TX > .Y"
   const middleReceiver = ".MID > .A"
@@ -27,12 +29,16 @@ export function AdmissionDaisyChain({
   const branchStart = ".BRANCH > .A"
   const branchReceiver = ".RX2 > .A"
   if (branched) receiverRefs.push(branchReceiver)
-  const namedPorts = [
-    ...new Set([driver, middleReceiver, finalLegStart, finalReceiver]),
-  ]
-  const loadPort = ".LOAD > .pin3"
+  let namedPorts = [driver, finalReceiver]
+  if (namedNet === true)
+    namedPorts = [
+      ...new Set([driver, middleReceiver, finalLegStart, finalReceiver]),
+    ]
+  let loadPort = ".LOAD > .pin3"
+  if (placedLoad === "mapped") loadPort = ".LOAD > .pin1"
   if (routeFinalLeg) finalPcbPath = [finalLegStart, finalReceiver]
-  if (!routeFinalLeg || idealMiddleLeg) receiverRefs.push(finalReceiver)
+  if (!routeFinalLeg || idealMiddleLeg || namedNet === "ends")
+    receiverRefs.push(finalReceiver)
 
   return (
     <board
@@ -67,6 +73,16 @@ export function AdmissionDaisyChain({
         width={0.2}
         pcbPath={finalPcbPath}
       />
+      {bypassFinalLeg && (
+        <>
+          <trace from={driver} to={finalReceiver} />
+          <pcbnotetext
+            text="TX.Y and RX.A joined by an ideal bypass across both cuts"
+            pcbX={0}
+            pcbY={4.8}
+          />
+        </>
+      )}
       {branched && (
         <>
           <Inverter name="BRANCH" x={0} y={1} driver={false} />
@@ -135,7 +151,7 @@ export function AdmissionDaisyChain({
       <simulation.pcbtransientchannelsimulation
         name="DAISY"
         bitRate="20Mbps"
-        allowUnroutedTraces={!routeFinalLeg || idealMiddleLeg}
+        allowUnroutedTraces={!routeFinalLeg || idealMiddleLeg || bypassFinalLeg}
       >
         <simulation.pcbdriverreceiverchannel
           name="DATA"

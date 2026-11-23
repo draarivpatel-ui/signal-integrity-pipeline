@@ -94,7 +94,7 @@ function validateRoutedDrivers({
   driverReceiverChannels,
   lanes,
 }: {
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   lanes: NumericalSettings["lanes"]
 }): void {
@@ -127,7 +127,7 @@ export function prepareRoutedLanes({
 }: {
   circuit: CircuitJsonSnapshot
   copperScope: CopperScope
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   signalPins: Pick<SignalPins, "topology" | "driven" | "rails">
 }): NumericalSettings["lanes"] {
