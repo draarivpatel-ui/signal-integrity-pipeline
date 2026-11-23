@@ -1,6 +1,6 @@
 import type { Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
-import { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
+import type { CircuitJsonDb } from "./circuit-json-db"
 import {
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
@@ -12,7 +12,6 @@ import type {
   SourcePortId,
   SourceTraceId,
 } from "./ids"
-import type { CircuitJsonSnapshot } from "./schema"
 
 /** The label and colour of an electrical net. */
 export interface RouteCopperNet {
@@ -117,8 +116,8 @@ export function routeSourceNets({
 }
 
 /** The board's physical extent, including unscoped copper on boards without a boundary. */
-export function routeBoardBox(circuit: CircuitJsonSnapshot): Viewbox {
-  const board = circuitJsonDb(circuit).pcb_board.getWhere({})
+export function routeBoardBox(db: CircuitJsonDb): Viewbox {
+  const board = db.pcb_board.getWhere({})
   if (board?.outline) {
     const outline = routeBounds(board.outline)
     if (outline !== undefined) return outline
@@ -130,7 +129,7 @@ export function routeBoardBox(circuit: CircuitJsonSnapshot): Viewbox {
       minY: board.center.y - board.height / 2,
       maxY: board.center.y + board.height / 2,
     }
-  const points = circuit.flatMap<Point>((record) => {
+  const points = db.toArray().flatMap<Point>((record) => {
     if (record.type === "pcb_trace")
       return record.route.flatMap<Point>((point) => {
         if (point.route_type === "through_pad") return [point.start, point.end]
@@ -178,15 +177,14 @@ export function routeCopperStyles({
 
 /** Fit the standalone drawing to the scoped trace points and the placed driver and receiver ports. */
 export function admissionRouteView({
-  circuit,
+  db,
   scope,
   endpointSourcePortIds,
 }: {
-  circuit: CircuitJsonSnapshot
+  db: CircuitJsonDb
   scope: Snapshot<CopperScope>
   endpointSourcePortIds: ReadonlySet<SourcePortId>
 }): RouteCopperView {
-  const db = circuitJsonDb(circuit)
   const traces = new Set(scope.channelPcbTraceIds)
   const pcbTracePoints = db.pcb_trace.list().flatMap((trace) => {
     if (!traces.has(trace.pcb_trace_id)) return []
@@ -200,7 +198,7 @@ export function admissionRouteView({
         endpointSourcePortIds.has(port.source_port_id),
     )
   let box = routeBounds([...pcbTracePoints, ...pcbPorts])
-  if (box === undefined) box = routeBoardBox(circuit)
+  if (box === undefined) box = routeBoardBox(db)
   const span = Math.max(box.maxX - box.minX, box.maxY - box.minY, 1e-3)
   // Keep the endpoint circles from touching the standalone camera border.
   const margin = span * 0.06

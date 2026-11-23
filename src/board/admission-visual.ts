@@ -11,9 +11,9 @@ import {
   routeBoardBox,
   routeCopperStyles,
 } from "./admission-view"
-import { circuitJsonDb } from "./circuit-json-db"
+import { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
 import type { LaneMapping } from "./geometry/types"
-import type { PcbTraceId, SourcePortId } from "./ids"
+import type { SourcePortId } from "./ids"
 import type { CircuitJsonSnapshot } from "./schema"
 
 /** Colours for physical copper, endpoint outlines and admission diagnostics. */
@@ -108,48 +108,38 @@ interface RouteRun {
   width: number
 }
 
-/** Choose a custom stroke colour for a stage's copper. */
-export type RouteNetColor = (net: RouteCopperNet | undefined) => string
-
 /** Draw a contiguous run using its net, or neutral copper for an unassigned route. */
 function drawRouteRun({
   run,
   net,
-  color,
 }: {
   run: RouteRun
   net: RouteCopperNet | undefined
-  color: RouteNetColor | undefined
 }): Line[] {
   if (run.points.length <= 1) return []
   let strokeColor: string = routeCopperTones.copper
   if (net !== undefined) strokeColor = net.color
-  if (color !== undefined) strokeColor = color(net)
   return routeStroke({ ...run, color: strokeColor, label: net?.label })
 }
 
 /** Selected copper as layer-aware strokes, one colour per electrical net. */
 export function routeNets({
-  circuit,
+  db,
   view,
-  traceIds = view.traces,
-  color,
 }: {
-  circuit: CircuitJsonSnapshot
+  db: CircuitJsonDb
   view: Pick<RouteCopperView, "traces" | "sources">
-  traceIds?: ReadonlySet<PcbTraceId>
-  color?: RouteNetColor
 }): RouteDrawing["lines"] {
   const lines: Line[] = []
-  for (const trace of circuitJsonDb(circuit).pcb_trace.list()) {
-    if (!traceIds.has(trace.pcb_trace_id)) continue
+  for (const trace of db.pcb_trace.list()) {
+    if (!view.traces.has(trace.pcb_trace_id)) continue
     let net: RouteCopperNet | undefined
     if (trace.source_trace_id !== undefined)
       net = view.sources.get(trace.source_trace_id)
     let run: RouteRun | undefined
     for (const point of trace.route) {
       if (point.route_type !== "wire") {
-        if (run) lines.push(...drawRouteRun({ run, net, color }))
+        if (run) lines.push(...drawRouteRun({ run, net }))
         run = undefined
         continue
       }
@@ -158,7 +148,7 @@ export function routeNets({
         continue
       }
       if (run.layer !== point.layer || run.width !== point.width) {
-        lines.push(...drawRouteRun({ run, net, color }))
+        lines.push(...drawRouteRun({ run, net }))
         run = {
           points: [...run.points.slice(-1), point],
           layer: point.layer,
@@ -168,7 +158,7 @@ export function routeNets({
       }
       run.points.push(point)
     }
-    if (run) lines.push(...drawRouteRun({ run, net, color }))
+    if (run) lines.push(...drawRouteRun({ run, net }))
   }
   return lines
 }
@@ -245,16 +235,16 @@ export function routeMarks({
 
 /** Put a net-coloured mark on copper contacts and a distinct mark on ideal-only signal contacts. */
 function routeAdmissionMarks({
-  circuit,
+  db,
   mappings,
   view,
 }: {
-  circuit: CircuitJsonSnapshot
+  db: CircuitJsonDb
   mappings: readonly LaneMapping[]
   view: RouteCopperView
 }): RouteDrawing["polygons"] {
   const positions = new Map<SourcePortId, Point>()
-  for (const port of circuitJsonDb(circuit).pcb_port.list()) {
+  for (const port of db.pcb_port.list()) {
     const id = port.source_port_id
     if (id !== undefined && !positions.has(id)) positions.set(id, port)
   }
@@ -364,12 +354,12 @@ export function routeFailure({
 
 /** Draw the scoped copper and the admitted driver and receiver marks. */
 export function scopedAdmissionDrawing({
-  circuit,
+  db,
   view,
   mappings,
   error,
 }: {
-  circuit: CircuitJsonSnapshot
+  db: CircuitJsonDb
   view: RouteCopperView
   mappings: readonly LaneMapping[]
   error: string | null
@@ -377,8 +367,8 @@ export function scopedAdmissionDrawing({
   const texts = admissionFailureTexts({ box: view.camera, error })
   return {
     ...routeCanvas({ camera: view.camera }),
-    lines: routeNets({ circuit, view }),
-    polygons: routeAdmissionMarks({ circuit, mappings, view }),
+    lines: routeNets({ db, view }),
+    polygons: routeAdmissionMarks({ db, mappings, view }),
     texts,
   }
 }
@@ -393,7 +383,7 @@ export function unscopedAdmissionDrawing({
 }): RouteDrawing {
   const db = circuitJsonDb(circuit)
   const traces = new Set(db.pcb_trace.list().map((trace) => trace.pcb_trace_id))
-  const box = routeBoardBox(circuit)
+  const box = routeBoardBox(db)
   const { minX, minY, maxX, maxY } = box
   const border = Math.max(maxX - minX, maxY - minY) * 0.004
   const board = db.pcb_board.getWhere({})
@@ -407,7 +397,7 @@ export function unscopedAdmissionDrawing({
   return {
     ...routeCanvas(),
     lines: routeNets({
-      circuit,
+      db,
       view: routeCopperStyles({ db, traces }),
     }),
     polygons: [
@@ -423,7 +413,7 @@ export function unscopedAdmissionDrawing({
 }
 
 /** Closest spacing between distinct points, so glyphs never overlap their neighbours. */
-export function routePointSpacing(points: readonly Point[]): number {
+function routePointSpacing(points: readonly Point[]): number {
   let closest = Infinity
   for (const [i, a] of points.entries())
     for (const b of points.slice(i + 1)) {
@@ -434,7 +424,7 @@ export function routePointSpacing(points: readonly Point[]): number {
 }
 
 /** A pending or successful admission has no diagnostic text. */
-export function admissionFailureTexts({
+function admissionFailureTexts({
   box,
   error,
 }: {

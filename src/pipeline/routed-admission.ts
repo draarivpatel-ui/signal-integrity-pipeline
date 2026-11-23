@@ -2,6 +2,7 @@ import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
   admissionRouteView,
+  circuitJsonDb,
   type RouteSectionsInput,
   type SimulationPcbTransientChannelSimulationId,
   scopedAdmissionDrawing,
@@ -199,15 +200,16 @@ export class RoutedAdmissionSolver extends BaseSolver {
     if (plan === undefined)
       return unscopedAdmissionDrawing({ circuit, error: this.error })
     const { mappings } = plan.bindings
+    const db = circuitJsonDb(circuit)
     const view = admissionRouteView({
-      circuit,
+      db,
       scope: plan.sections.copperScope,
       endpointSourcePortIds: new Set(
         mappings.flatMap(({ from, to }) => [from, to]),
       ),
     })
     return scopedAdmissionDrawing({
-      circuit,
+      db,
       view,
       mappings,
       error: this.error,
