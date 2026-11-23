@@ -33,7 +33,9 @@ export interface CircuitNodes {
   groundSourcePortId: SourcePortId
   mapping: CircuitNodeNames
 }
-export type PipelineIbisModel = SimulationIbisModel & { pipelineId: string }
+export type PipelineIbisModel = Snapshot<SimulationIbisModel> & {
+  pipelineId: string
+}
 export interface VoltageProbePlan {
   simulationVoltageProbeId: string
   name: string
@@ -71,7 +73,7 @@ export interface SimulationPlan extends RunControls {
   durationSeconds: number
   startTimeSeconds: number
   maxStepSeconds: number
-  experiment: SimulationExperiment
+  experiment: Snapshot<SimulationExperiment>
   probes: VoltageProbePlan[]
   models: PipelineIbisModel[]
 }

@@ -21,6 +21,7 @@ import type {
   RoutedBindings,
   ScopedRouteBindingsInput,
 } from "./routed-types"
+import { extractedNonrailSourceTraceIds } from "./source-node-groups"
 import type { Declarations, SimulationPlan } from "./types"
 
 /** Bind one vendor buffer per step; electrical names retain source-record order. */
@@ -52,20 +53,10 @@ export class RouteBindingsSolver extends BaseSolver {
     } = this.input
     if (!routedTraceCuts.length)
       throw new Error("Routed compilation requires physical signal mappings")
-    const { extractedPcbTraceIds, nearbyRailPcbTraceIds } = copperScope
-    const additionalSourceTraceIds = circuitJsonDb(circuitJson)
-      .pcb_trace.list()
-      .flatMap(
-        ({ pcb_trace_id: pcbTraceId, source_trace_id: sourceTraceId }) => {
-          if (
-            sourceTraceId === undefined ||
-            !extractedPcbTraceIds.includes(pcbTraceId) ||
-            nearbyRailPcbTraceIds.includes(pcbTraceId)
-          )
-            return []
-          return [sourceTraceId]
-        },
-      )
+    const additionalSourceTraceIds = extractedNonrailSourceTraceIds({
+      db: circuitJsonDb(circuitJson),
+      copperScope,
+    })
     const declarations = generalDeclarations({
       circuit: circuitJson,
       mappings,

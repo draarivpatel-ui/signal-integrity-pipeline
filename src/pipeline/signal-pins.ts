@@ -1,4 +1,3 @@
-import type { Snapshot } from "../kernel"
 import {
   type CircuitJsonSnapshot,
   type ConnectivityMap,
@@ -20,6 +19,7 @@ import {
   inspectPins,
   pinCapabilities,
 } from "../buffers"
+import type { Snapshot } from "../kernel"
 import { safeId } from "../kernel"
 import { endpointPorts } from "./signal-controls"
 import { signalTopology, validateSignalGraph } from "./topology"
@@ -304,7 +304,7 @@ export function validateSignalPins({
   signalPins: SignalPins
   pins: ScopedSignalPins["pins"]
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
 }): void {
   const { topology, driven, routedTopology } = signalPins
   for (const [port, name] of topology) {
