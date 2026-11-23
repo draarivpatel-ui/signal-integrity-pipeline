@@ -675,3 +675,14 @@ body {
     display: none;
   }
 }
+.wb-about {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 320px;
+}
+.wb-about > svg {
+  width: 42px;
+  height: 42px;
+  flex: none;
+}

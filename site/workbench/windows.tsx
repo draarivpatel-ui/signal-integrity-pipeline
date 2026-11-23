@@ -28,6 +28,17 @@ export type Arrange = "Cascade" | "Tile" | "Tile Vertically" | "Maximize"
 
 /** Put a newly opened tool slightly below and right of the previous one. */
 function newFrame({ id, count }: { id: WindowId; count: number }): Frame {
+  if (id === "log")
+    return {
+      id,
+      z: 0,
+      x: 2,
+      y: 69,
+      width: 95,
+      height: 29,
+      minimized: false,
+      maximized: false,
+    }
   const offset = 2 + count * 3
   return {
     id,
@@ -261,5 +272,44 @@ export function ChildWindow({
         />
       )}
     </section>
+  )
+}
+
+/** Keep minimized tools discoverable without remounting their contents. */
+export function MinimizedWindows({
+  frames,
+  restore,
+  close,
+}: {
+  frames: Frame[]
+  restore: (id: WindowId) => void
+  close: (id: WindowId) => void
+}): JSX.Element {
+  return (
+    <div className="wb-minimized-strip">
+      {frames
+        .filter(({ minimized }) => minimized)
+        .map(({ id }) => (
+          <div key={id} className="wb-child-title">
+            <span>{windowTitles[id]}</span>
+            <div>
+              <button
+                title="Restore"
+                aria-label={`Restore ${windowTitles[id]}`}
+                onClick={() => restore(id)}
+              >
+                ❐
+              </button>
+              <button
+                title="Close"
+                aria-label={`Close ${windowTitles[id]}`}
+                onClick={() => close(id)}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        ))}
+    </div>
   )
 }

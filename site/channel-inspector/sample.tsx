@@ -13,15 +13,22 @@ export const sampleScopeDistanceMm = 1
 export async function loadInspectorSample(): Promise<CircuitJson> {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
   circuit.add(
-    <ParallelBus simulationName="Parallel bus" aggressorPattern="0101">
+    <ParallelBus
+      simulationName="Parallel bus"
+      aggressorPattern="0101"
+      duration="300ns"
+    >
       <Wire name="SPARE" y={-4.5} extent={7} width={0.25} />
     </ParallelBus>,
   )
   await circuit.renderUntilSettled()
   return circuit.getCircuitJson().map((record) => {
     if (record.type !== "simulation_ibis_model") return record
-    const text =
-      parallelBusSources[record.ibis_model_asset.project_relative_path]
+    const text = parallelBusSources[
+      record.ibis_model_asset.project_relative_path
+    ]
+      // Finite package supply resistance avoids a loop of ideal voltage sources in ngspice.
+      .replace("R_pkg 0 0 0", "R_pkg 0.05 0.05 0.05")
     return {
       ...record,
       ibis_model_asset: {

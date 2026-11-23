@@ -240,6 +240,8 @@ interface ChannelSimulationOptions {
   simulationPcbTransientChannelSimulationId: SafeId
   sources: IbisSources
   distanceMm: number
+  captureDrivers?: boolean
+  disabledAggressorPorts?: readonly SourcePortId[]
 }
 
 /** Lower controls and assemble the prepared simulation. */
@@ -280,7 +282,8 @@ function withPreparedChannelControls({
 export function prepareChannelSimulation(
   options: ChannelSimulationOptions,
 ): PreparedChannelSimulation {
-  const { sources, distanceMm } = options
+  const { sources, distanceMm, captureDrivers, disabledAggressorPorts } =
+    options
   const { circuit, ...selection } = selectChannelSimulation(options)
   const inspection = { ...selection, circuit, sources, distanceMm }
   const signalPins = inspectSignalPins(inspection)
@@ -290,6 +293,7 @@ export function prepareChannelSimulation(
   const aggressors = planAggressors({
     ...scoped,
     driven: signalPins.driven,
+    disabledPorts: disabledAggressorPorts,
   })
   const patterns: DriverPattern[] = [...selection.driverReceiverChannels]
   const edgeTimesSeconds = [...signalPins.edgeTimesSeconds]
@@ -319,6 +323,7 @@ export function prepareChannelSimulation(
     ...supplied,
     durationSeconds,
     aggressors,
+    captureDrivers,
     pins: pruned.pins,
     driven: signalPins.driven,
   })

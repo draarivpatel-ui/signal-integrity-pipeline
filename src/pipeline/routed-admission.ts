@@ -68,6 +68,8 @@ function planRoutedChannelSimulation({
     sources: input.ibisSources,
     ...admittedChannelSimulation,
     distanceMm: scopeDistanceMm,
+    captureDrivers: input.captureDrivers,
+    disabledAggressorPorts: input.disabledAggressorPorts,
   })
   const artifactPrefix = `channelSimulations/${simulationPcbTransientChannelSimulationId}`
   const circuitJson = snapshot(prepared.circuit)

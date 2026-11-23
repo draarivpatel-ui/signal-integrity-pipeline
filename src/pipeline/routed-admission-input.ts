@@ -1,6 +1,7 @@
 import {
   type CircuitJsonSnapshot,
   type SimulationPcbTransientChannelSimulation,
+  type SourcePortId,
   validateCircuitRecords,
 } from "../board"
 import { type IbisSources, invalidIbisSource } from "../buffers"
@@ -19,6 +20,8 @@ export interface RoutedAdmissionInput {
   readonly circuitJson: CircuitJsonSnapshot
   readonly ibisSources: Readonly<IbisSources>
   readonly scopeDistanceMm?: number
+  readonly captureDrivers?: boolean
+  readonly disabledAggressorPorts?: readonly SourcePortId[]
   readonly materials?: RoutedCompileOptions["materials"]
 }
 
@@ -113,6 +116,8 @@ export function captureRoutedAdmissionInput(
   return Object.freeze({
     circuitJson: snapshot(input.circuitJson),
     scopeDistanceMm: input.scopeDistanceMm,
+    captureDrivers: input.captureDrivers,
+    disabledAggressorPorts: snapshot(input.disabledAggressorPorts),
     materials: snapshot(input.materials),
     ibisSources: captureIbisSources(input.ibisSources),
   })

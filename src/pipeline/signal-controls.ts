@@ -50,6 +50,7 @@ export interface ChannelSimulationControlOptions {
   aggressors: Aggressors
   durationSeconds: number
   stepSeconds: number
+  captureDrivers?: boolean
 }
 
 /** Fastest edge and maximum transient step for the recording. */
@@ -239,6 +240,7 @@ export function withChannelSimulationControls({
   aggressors,
   durationSeconds,
   stepSeconds,
+  captureDrivers,
 }: ChannelSimulationControlOptions): ChannelSimulationControls {
   const controls: RunControls = { states: [], stimuli: [] }
   const db = circuitJsonDb(circuit)
@@ -290,7 +292,10 @@ export function withChannelSimulationControls({
     }
   }
   for (const signal of driverReceiverChannels) {
-    for (const [index, endpoint] of probeEndpoints(signal).entries()) {
+    const endpoints = captureDrivers
+      ? [...signal.receivers, signal.driver]
+      : probeEndpoints(signal)
+    for (const [index, endpoint] of endpoints.entries()) {
       const ports = endpointPorts(endpoint)
       let ref = ports[1]
       if (!("p_source_port_id" in endpoint))
