@@ -6,28 +6,22 @@ import { differentialIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 import Differential from "../../fixtures/unit-differential"
 
-test.failing(
-  "rejects a short from an interior series contact to the opposite leg",
-  async () => {
-    const circuitJson = await renderSignals({
-      tree: <Differential seriesPositive short="series" />,
-      expectedErrors: [
-        "pcb_trace_missing_error",
-        "pcb_port_not_connected_error",
-      ],
-    })
-    const solver = new RoutedAdmissionSolver({
-      circuitJson,
-      ibisSources: { "models/sn65hvd72.ibs": differentialIbis },
-    })
-    solver.solve()
-    const [plan] = solver.getOutput().value
-    const { bindings } = plan
-    assert.equal(bindings.routedTraceCuts.length, 6)
-    assert.equal(bindings.mappings[0].sourceTraceIds?.length, 5)
-    assert.throws(
-      () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
-      { domain: "simulation", code: "channel_short" },
-    )
-  },
-)
+test("rejects a short from an interior series contact to the opposite leg", async () => {
+  const circuitJson = await renderSignals({
+    tree: <Differential seriesPositive short="series" />,
+    expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
+  })
+  const solver = new RoutedAdmissionSolver({
+    circuitJson,
+    ibisSources: { "models/sn65hvd72.ibs": differentialIbis },
+  })
+  solver.solve()
+  const [plan] = solver.getOutput().value
+  const { bindings } = plan
+  assert.equal(bindings.routedTraceCuts.length, 6)
+  assert.equal(bindings.mappings[0].sourceTraceIds?.length, 5)
+  assert.throws(
+    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    { domain: "simulation", code: "channel_short" },
+  )
+})

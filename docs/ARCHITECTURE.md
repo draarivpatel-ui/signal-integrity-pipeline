@@ -10,7 +10,14 @@ Each cut keeps both physical contacts for sectioning even when one contact share
 
 ```mermaid
 flowchart LR
-  input["Channel declarations"] --> result["RoutedAdmissionSolver<br/>Declared aggressor states"]
+  board["Circuit JSON and channel declarations"] --> prepare["Prepare channel and aggressor states"]
+  ibis["IBIS sources"] --> prepare
+  prepare --> cuts["Find physical trace cuts"]
+  cuts --> groups["Group ideal source contacts"]
+  groups --> paths["Map driver-to-receiver paths"]
+  cuts --> sections["Route sectioning inputs"]
+  paths --> bindings["Binding inputs for contact and short checks"]
+  paths --> manifest["Admission manifest"]
 ```
 
 ```mermaid
