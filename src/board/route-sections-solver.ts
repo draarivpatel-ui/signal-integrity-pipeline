@@ -27,6 +27,7 @@ export interface RoutedSections {
 
 /** Segment one real route per step, then admit selected endpoint contacts. */
 export class RouteSectionsSolver extends BaseSolver {
+  override MAX_ITERATIONS = Infinity
   private steps?: Generator<SectionGeometry, SectionGeometry>
   private output?: Produced<RoutedSections>
   /** Capture the board and its prepared copper scope. */
