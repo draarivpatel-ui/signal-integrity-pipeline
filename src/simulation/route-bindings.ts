@@ -26,6 +26,7 @@ import type { Declarations, SimulationPlan } from "./types"
 
 /** Bind one vendor buffer per step; electrical names retain source-record order. */
 export class RouteBindingsSolver extends BaseSolver {
+  override MAX_ITERATIONS = Infinity
   private declarations?: Declarations
   private admitted?: AdmittedBuffers
   private plan?: SimulationPlan
