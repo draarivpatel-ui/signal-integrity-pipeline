@@ -7,6 +7,7 @@ import {
   passiveBridges,
   type SimulationPcbDriverReceiverChannel,
   type SourcePortId,
+  type SourceTraceId,
   selectPort,
 } from "../board"
 import type { Snapshot } from "../kernel"
@@ -113,6 +114,7 @@ export function receiverGraphs({
   groundSourcePortId,
   modeling,
   cuts,
+  additionalSourceTraceIds,
   channels,
 }: {
   db: CircuitJsonDb
@@ -120,9 +122,10 @@ export function receiverGraphs({
   groundSourcePortId: SourcePortId
   modeling: Snapshot<SimulationModeling>
   cuts: readonly RoutedTraceCut[]
+  additionalSourceTraceIds?: readonly SourceTraceId[]
   channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
 }): ReceiverGraphs {
-  const idealNodes = idealSourceNodes({ db, cuts })
+  const idealNodes = idealSourceNodes({ db, cuts, additionalSourceTraceIds })
   const physicalCuts = cutConnections({
     cuts,
     node: (sourcePortId) => sourcePortId,

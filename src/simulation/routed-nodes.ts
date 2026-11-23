@@ -391,6 +391,7 @@ export function resolveRoutedNodes({
   circuit,
   mappings,
   routedTraceCuts,
+  additionalSourceTraceIds,
   modeling,
 }: CircuitNodesInput): ResolvedRoutedNodes {
   const db = circuitJsonDb(circuit)
@@ -406,6 +407,7 @@ export function resolveRoutedNodes({
     cuts,
     channels,
     groundSourcePortId,
+    additionalSourceTraceIds,
     modeling,
   })
   const nodes = numberCircuitNodes({ db, graphs, groundSourcePortId })
