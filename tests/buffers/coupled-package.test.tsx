@@ -275,7 +275,7 @@ V2 NC VDD NC NC
     ".end",
   ].join("\n")
   const ngspice = process.env.NGSPICE_BIN ?? "/opt/homebrew/bin/ngspice"
-  const solve = createNativeSolver({ timeoutMs: 10000, tools: { ngspice } })
+  const solve = createNativeSolver({ tools: { ngspice } })
   const result = await solve({
     solver: "ngspice",
     files: { "package.cir": deck },
