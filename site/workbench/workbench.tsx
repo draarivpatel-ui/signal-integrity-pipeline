@@ -28,6 +28,7 @@ import {
   ProjectTree,
   projectNodes,
 } from "./project"
+import { StackupEditor } from "./stackup-editor"
 import { loadRecent, loadTheme, saveRecent, setTheme } from "./storage"
 import { ChildWindow, useWindows, windowTitles } from "./windows"
 import "./workbench.css"
@@ -80,7 +81,8 @@ export function Workbench(): JSX.Element {
   }
   /** Focus the window associated with a project branch. */
   const openNode = (node: ProjectNode): void => {
-    if (node.window === "board") windows.show(node.window)
+    if (node.window === "board" || node.window === "stackup")
+      windows.show(node.window)
   }
   useEffect(() => {
     if (!selection.context) return
@@ -212,7 +214,14 @@ export function Workbench(): JSX.Element {
     },
     {
       label: "Setup",
-      items: [{ label: "Stackup Editor" }, { label: "Stimulus / Aggressors…" }],
+      items: [
+        {
+          label: "Stackup Editor",
+          shortcut: "Ctrl+K",
+          action: input && (() => windows.show("stackup")),
+        },
+        { label: "Stimulus / Aggressors…" },
+      ],
     },
     {
       label: "Models",
@@ -295,6 +304,14 @@ export function Workbench(): JSX.Element {
           onClick={() => windows.show("board")}
         >
           <Icon name="board" />
+        </button>
+        <button
+          title="Stackup Editor (Ctrl+K)"
+          aria-label="Stackup Editor"
+          disabled={!input}
+          onClick={() => windows.show("stackup")}
+        >
+          <Icon name="stackup" />
         </button>
         {input && (
           <label>
@@ -391,13 +408,21 @@ export function Workbench(): JSX.Element {
               close={() => windows.close(frame.id)}
               change={windows.change}
             >
-              {input && (
+              {input && frame.id === "board" && (
                 <BoardViewer
                   board={input.board}
                   features={selection.features}
                   theme={theme}
                   interaction={selection.interaction}
                   error={selection.error}
+                />
+              )}
+              {input && frame.id === "stackup" && (
+                <StackupEditor
+                  circuit={input.circuit}
+                  feature={selection.selected}
+                  apply={design.edit}
+                  close={() => windows.close("stackup")}
                 />
               )}
             </ChildWindow>

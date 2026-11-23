@@ -1,0 +1,89 @@
+.wb-editor {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-editor-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.wb-editor-scroll {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  background: var(--surface);
+}
+.wb-editor-grid td,
+.wb-editor-grid th {
+  white-space: nowrap;
+}
+.wb-editor-grid thead th {
+  position: sticky;
+  top: 0;
+}
+.wb-editor-grid input,
+.wb-fields input[type="number"] {
+  width: 68px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 3px;
+}
+.wb-probe-pane {
+  width: 189px;
+  flex: none;
+  border-left: 1px solid var(--shadow);
+  padding: 5px;
+  overflow: auto;
+}
+.wb-probe-pane svg {
+  display: block;
+  width: 100%;
+  background: var(--scene);
+  border: 1px solid var(--shadow);
+  margin-bottom: 7px;
+}
+.wb-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--shadow);
+  box-shadow: inset 1px 1px var(--light);
+}
+.wb-fields legend {
+  font-weight: bold;
+  padding-inline: 3px;
+}
+.wb-fields label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.wb-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  border-top: 1px solid var(--shadow);
+  background: var(--face);
+}
+.wb-editor-actions > span {
+  flex: 1;
+}
+.wb-editor-actions button {
+  min-width: 67px;
+}
+.wb-readout {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px;
+}
+.wb-readout dd {
+  margin: 0;
+  font-family: "Lucida Console", ui-monospace, monospace;
+}
