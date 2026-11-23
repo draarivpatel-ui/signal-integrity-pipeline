@@ -144,6 +144,7 @@ function finalizeAdmission({
 
 /** Root admission performs exactly one channel simulation's lowering per step. */
 export class RoutedAdmissionSolver extends BaseSolver {
+  override MAX_ITERATIONS = Infinity
   private readonly input: RoutedAdmissionInput
   private admittedBoard?: AdmittedBoard
   private readonly channelSimulationPlans: RoutedChannelSimulationPlan[] = []
