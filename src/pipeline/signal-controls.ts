@@ -43,7 +43,7 @@ const MIN_STEPS_PER_RECORDING = 2
 export interface ChannelSimulationControlOptions {
   circuit: CircuitJsonSnapshot
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   pins: Map<SourcePortId, InspectedPin>
   driven: Map<SourcePortId, Snapshot<SimulationPcbDriverReceiverChannel>>
@@ -95,7 +95,7 @@ export function channelSimulationDurationSeconds({
   channelSimulation,
   patterns,
 }: {
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   patterns: readonly Snapshot<DriverPattern>[]
 }): number {
   let durationSeconds: number
