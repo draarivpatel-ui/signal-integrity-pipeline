@@ -29,6 +29,7 @@ export function routedRequest(
 
 /** One async step invokes ngspice once and admits only complete real probe waveforms. */
 export class RouteTransientSolver extends BaseSolver {
+  override MAX_ITERATIONS = Infinity
   private output?: Produced<RoutedCapture>
   /** Execution is an injected capability, separate from the immutable deck input. */
   constructor(private readonly input: RouteTransientInput) {
