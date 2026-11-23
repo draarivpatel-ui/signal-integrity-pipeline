@@ -8,7 +8,9 @@ import {
 } from "../../fixtures/signal-render"
 
 test("retains a same-chip bus neighbor and uses its declared constant-high pattern", async () => {
-  const unlisted = await renderSignals({ tree: <ParallelBus /> })
+  const unlisted = await renderSignals({
+    tree: <ParallelBus aggressorPattern="0" />,
+  })
   const [unlistedNeighbor] = prepareChannelSimulations({
     circuit: unlisted,
     sources: parallelBusSources,
@@ -20,7 +22,7 @@ test("retains a same-chip bus neighbor and uses its declared constant-high patte
   assert.ok(neighbor)
 
   const declared = await renderSignals({
-    tree: <ParallelBus neighbourPattern="1" />,
+    tree: <ParallelBus neighbourPattern="1" aggressorDisabled />,
   })
   const [prepared] = prepareChannelSimulations({
     circuit: declared,

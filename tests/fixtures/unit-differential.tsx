@@ -124,6 +124,7 @@ export default function ({
       {short === "RTERM" && <trace from=".RTERM > .pin1" to=".RTERM > .pin2" />}
       <simulation.pcbtransientchannelsimulation
         name="RS485"
+        aggressorDisabled
         bitRate={BIT_RATE_BPS}
         duration={CAPTURE_BITS / BIT_RATE_BPS}
       >
