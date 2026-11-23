@@ -187,6 +187,21 @@ export async function runLocalSimulation({
       level: "Info",
       message: status.version ?? "Local ngspice available",
     })
+    const db = circuitJsonDb(input.circuit)
+    for (const issue of db.pcb_trace_error.list()) {
+      log({
+        stage: "Board",
+        level: issue.is_fatal ? "Error" : "Warning",
+        message: issue.message,
+        targets: [
+          issue.pcb_trace_id,
+          ...issue.pcb_port_ids.flatMap((id) => {
+            const port = db.pcb_port.get(id)?.source_port_id
+            return port ? [port] : []
+          }),
+        ],
+      })
+    }
     const problem = localProblem({ input, simulation })
     const solver = new RoutedPipelineSolver({
       input: {

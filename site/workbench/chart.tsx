@@ -1,4 +1,11 @@
-import { type JSX, type PointerEvent, useId, useState } from "react"
+import {
+  type JSX,
+  type PointerEvent,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react"
 import "./chart.css"
 
 export type Datum = [x: number, y: number]
@@ -113,13 +120,35 @@ export function Chart({
   onHover?: (x?: number) => void
 }): JSX.Element {
   const clip = useId()
+  const element = useRef<SVGSVGElement>(null)
+  const [viewport, setViewport] = useState({
+    width: dimensions.width,
+    height: dimensions.height,
+  })
+  const hasData =
+    bounds !== undefined || series.some(({ points }) => points.length > 0)
+  useEffect(() => {
+    if (!hasData || !element.current) return
+    const observer = new ResizeObserver(([{ contentRect }]) => {
+      if (contentRect.width > 0 && contentRect.height > 0)
+        setViewport({
+          width: Math.max(240, contentRect.width),
+          height: Math.max(170, contentRect.height),
+        })
+    })
+    observer.observe(element.current)
+    return () => observer.disconnect()
+  }, [hasData])
   const [zoom, setZoom] = useState<[number, number]>()
   const [drag, setDrag] = useState<{ start: number; end: number }>()
   const [marker, setMarker] = useState<number>()
   const [activeCursor, setActiveCursor] = useState<ChartCursor["label"]>()
   const domain = bounds ?? seriesBounds(series)
   if (!domain) return <p className="wb-plot-empty">No samples for {title}.</p>
-  const { width, height, left, right, top, bottom } = dimensions
+  const { width, height } = viewport
+  const { left, top } = dimensions
+  const right = width - (dimensions.width - dimensions.right)
+  const bottom = height - (dimensions.height - dimensions.bottom)
   const [xMin, xMax] = zoom ?? [domain.xMin, domain.xMax]
   const { yMin, yMax } = domain
   /** Project one data coordinate onto the graticule. */
@@ -141,6 +170,7 @@ export function Chart({
   return (
     <svg
       className="wb-chart"
+      ref={element}
       data-scope={scope}
       viewBox={`0 0 ${width} ${height}`}
       role="img"

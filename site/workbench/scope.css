@@ -6,6 +6,7 @@
 }
 .wb-scope-content > *,
 .wb-scope-plot {
+  position: relative;
   flex: 1;
   min-width: 0;
 }
@@ -58,4 +59,9 @@
 }
 .wb-cursor-reading {
   margin-right: 12px;
+}
+
+.wb-scope-plot > .wb-chart {
+  position: absolute;
+  inset: 0;
 }

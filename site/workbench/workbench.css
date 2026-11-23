@@ -297,13 +297,13 @@ body {
 .wb-status {
   grid-row: 6;
   display: grid;
-  grid-template-columns: 1fr 145px 96px minmax(90px, 170px) 106px;
+  grid-template-columns: minmax(100px, 1fr) 128px 84px minmax(75px, 170px) 118px 107px 14px;
   align-items: stretch;
   gap: 3px;
   padding: 3px;
   min-width: 0;
 }
-.wb-status > * {
+.wb-status > :not(.wb-status-grip) {
   min-width: 0;
   width: 100%;
   overflow: hidden;
@@ -314,17 +314,26 @@ body {
   border-bottom-color: var(--light);
   padding: 1px 5px;
 }
-.wb-status progress {
-  appearance: none;
-  background: var(--panel);
-  height: 100%;
-  padding: 2px;
+.wb-status-grip {
+  align-self: end;
+  height: 13px;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 2px,
+    var(--shadow) 2px 3px,
+    var(--light) 3px 4px
+  );
+  clip-path: polygon(100% 0, 0 100%, 100% 100%);
 }
-.wb-status progress::-webkit-progress-bar {
-  background: var(--panel);
+.wb-status-coords {
+  font-family: "Lucida Console", monospace;
+  font-size: 10px;
 }
-.wb-status progress::-webkit-progress-value {
-  background: var(--select);
+.wb-title-buttons {
+  margin-left: auto;
+  display: flex;
+  background: transparent;
+  padding: 0;
 }
 .wb-modal {
   padding: 2px;
@@ -377,7 +386,7 @@ body {
     display: none;
   }
   .wb-status {
-    grid-template-columns: 1fr 95px 62px;
+    grid-template-columns: minmax(95px, 1fr) 95px 92px 54px 12px;
   }
   .wb-status > :nth-child(3),
   .wb-status > :nth-child(4) {

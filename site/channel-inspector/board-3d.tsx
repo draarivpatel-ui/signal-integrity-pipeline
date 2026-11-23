@@ -86,11 +86,17 @@ function resizeCamera({
 function createViewport({
   host,
   board,
+  capture,
 }: {
   host: HTMLDivElement
   board: InspectorBoard
+  capture: boolean
 }): Viewport {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    preserveDrawingBuffer: capture,
+  })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   const span = Math.max(board.width, board.height, board.thickness * 20)
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, span * 8)
@@ -255,11 +261,12 @@ export function Board3d({
   appearance?: BoardAppearance
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null)
+  const capture = appearance !== undefined
   const viewport = useRef<Viewport | undefined>(undefined)
   const [error, setError] = useState<string>()
   useEffect(() => {
     try {
-      viewport.current = createViewport({ host: host.current!, board })
+      viewport.current = createViewport({ host: host.current!, board, capture })
     } catch (cause) {
       setError((cause as Error).message)
       return
@@ -269,7 +276,7 @@ export function Board3d({
       viewport.current?.dispose()
       viewport.current = undefined
     }
-  }, [board])
+  }, [board, capture])
 
   useEffect(() => {
     if (viewport.current) aimCamera({ viewport: viewport.current, view, board })

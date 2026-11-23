@@ -30,9 +30,6 @@
 .wb-log-grid tr[data-level="OK"] td:nth-child(2) {
   color: var(--ok);
 }
-.wb-status {
-  grid-template-columns: minmax(140px, 1fr) 128px 84px minmax(65px, 170px) 118px 107px;
-}
 .wb-status > span {
   display: flex;
   align-items: center;
@@ -54,7 +51,7 @@
 .wb-solver-indicator[data-solver="offline"] i {
   background: var(--error);
 }
-.wb-progress {
+.wb-status > .wb-progress {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 2px;
@@ -73,13 +70,4 @@
   font:
     11px "Lucida Console",
     monospace;
-}
-@media (max-width: 690px) {
-  .wb-status {
-    grid-template-columns: minmax(110px, 1fr) 96px 104px 62px;
-  }
-  .wb-status > :nth-child(3),
-  .wb-status > :nth-child(4) {
-    display: none;
-  }
 }

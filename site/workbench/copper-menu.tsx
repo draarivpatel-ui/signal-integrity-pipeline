@@ -1,4 +1,4 @@
-import type { JSX } from "react"
+import { type JSX, useEffect } from "react"
 import type { CopperContext } from "./board-selection"
 import { CommandButton } from "./chrome"
 import type { NetRole } from "./model/net-roles"
@@ -39,4 +39,34 @@ export function CopperMenu({
       ))}
     </div>
   )
+}
+
+/** Dismiss the active context menu when the user clicks elsewhere or presses Escape. */
+export function useCopperContextDismiss({
+  context,
+  closeContext,
+}: {
+  context?: CopperContext
+  closeContext: () => void
+}): void {
+  useEffect(() => {
+    if (!context) return
+    const listener = new AbortController()
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!(event.target as HTMLElement).closest(".wb-context"))
+          closeContext()
+      },
+      { signal: listener.signal },
+    )
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Escape") closeContext()
+      },
+      { signal: listener.signal },
+    )
+    return () => listener.abort()
+  }, [context])
 }

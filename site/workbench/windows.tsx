@@ -55,6 +55,7 @@ function newFrame({ id, count }: { id: WindowId; count: number }): Frame {
 /** Keep activation order and percentage bounds independent of the tool contents. */
 export function useWindows(): {
   frames: Frame[]
+  reset: () => void
   show: (id: WindowId) => void
   close: (id: WindowId) => void
   change: (frame: Frame) => void
@@ -63,6 +64,7 @@ export function useWindows(): {
   const [frames, setFrames] = useState<Frame[]>([])
   return {
     frames,
+    reset: () => setFrames([]),
     show: (id) =>
       setFrames((items) => {
         const existing = items.find((frame) => frame.id === id)

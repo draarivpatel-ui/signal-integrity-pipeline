@@ -130,11 +130,16 @@
   background: var(--face);
 }
 .wb-ibis-chart {
+  position: relative;
   min-height: 140px;
   flex: 1;
   display: grid;
   align-items: center;
   background: var(--plot);
+}
+.wb-ibis-chart > .wb-chart {
+  position: absolute;
+  inset: 0;
 }
 .wb-plot-legend {
   display: flex;

@@ -62,7 +62,7 @@ export function MenuBar({ menus }: { menus: Menu[] }): JSX.Element {
     /** Activate a menu by its mnemonic or run a named command. */
     const onKey = (event: KeyboardEvent): void => {
       if (document.querySelector("dialog[open]")) return
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && open) {
         setOpen(undefined)
         return
       }
@@ -97,7 +97,7 @@ export function MenuBar({ menus }: { menus: Menu[] }): JSX.Element {
       document.removeEventListener("pointerdown", onPointer)
       document.removeEventListener("keydown", onKey)
     }
-  }, [menus])
+  }, [menus, open])
   return (
     <nav className="wb-menu-bar" ref={bar} aria-label="Main menu">
       {menus.map(({ label, items, mnemonic = 0 }) => (
@@ -237,11 +237,13 @@ export function Modal({
   title,
   close,
   apply,
+  confirm,
   children,
 }: {
   title: string
   close: () => void
   apply?: () => boolean
+  confirm?: () => void
   children: ReactNode
 }): JSX.Element {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -269,12 +271,13 @@ export function Modal({
       <div className="wb-dialog-actions">
         <button
           onClick={() => {
+            if (confirm) confirm()
             if (!apply || apply()) close()
           }}
         >
           OK
         </button>
-        {apply && <button onClick={close}>Cancel</button>}
+        {(apply || confirm) && <button onClick={close}>Cancel</button>}
         {apply && <button onClick={apply}>Apply</button>}
       </div>
     </dialog>

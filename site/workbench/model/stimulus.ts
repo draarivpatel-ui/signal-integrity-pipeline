@@ -45,6 +45,20 @@ export function stimulusRadius({
   )
 }
 
+/** Store the effective radius with an exported simulation so reopening preserves its scope. */
+export function withStimulusRadius({
+  simulation,
+  defaultMm,
+}: {
+  simulation: SimulationPcbTransientChannelSimulation
+  defaultMm: number
+}): TransientWithRadius {
+  return {
+    ...simulation,
+    workbench_scope_distance_mm: stimulusRadius({ simulation, defaultMm }),
+  }
+}
+
 /** Apply timing and stimulus edits immutably using the pipeline's signal validators. */
 export function editStimulus({
   circuit,

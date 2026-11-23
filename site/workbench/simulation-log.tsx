@@ -94,7 +94,16 @@ export function SimulationLog({
                   <td>{new Date(entry.time).toLocaleTimeString("en-GB")}</td>
                   <td title={entry.level}>{logIcons[entry.level]}</td>
                   <td>{entry.stage}</td>
-                  <td>{entry.message}</td>
+                  <td>
+                    {entry.message.length > 250 ? (
+                      <details>
+                        <summary>{entry.message.slice(0, 180)}…</summary>
+                        {entry.message}
+                      </details>
+                    ) : (
+                      entry.message
+                    )}
+                  </td>
                   <td>
                     {target && (
                       <button onClick={() => showOnBoard(target)}>

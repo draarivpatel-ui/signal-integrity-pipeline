@@ -1,23 +1,22 @@
 import {
   type JSX,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react"
 import { loadInput } from "../channel-inspector/input"
-import { AssignModels, type IbisFocus } from "./assign-models"
+import type { IbisFocus } from "./assign-models"
 import { useBoardSelection } from "./board-selection"
-import { BoardViewer, boardCoordinates } from "./board-viewer"
+import { BoardViewer } from "./board-viewer"
 import { Icon, MenuBar } from "./chrome"
-import { CopperMenu } from "./copper-menu"
+import { CopperMenu, useCopperContextDismiss } from "./copper-menu"
 import { useDesignHistory } from "./design-history"
+import { DesktopStatus, DesktopTitle } from "./desktop-frame"
 import { Dock, Properties } from "./docks"
+import { exportDesign, exportWaveforms, exportWindow } from "./exports"
 import { IbisViewer } from "./ibis-viewer"
-import { AboutDialog, DeckDialog } from "./info-dialogs"
-import { stageCount } from "./local-run"
 import { type CommandActions, workbenchMenus } from "./menus"
 import { editNetRole, type NetRole } from "./model/net-roles"
 import { Oscilloscope, type ScopeTab } from "./oscilloscope"
@@ -28,13 +27,13 @@ import {
   projectNodes,
 } from "./project"
 import { captureNodes, diagnosticNode } from "./run-project"
-import { SimulationLog, SolverIndicator } from "./simulation-log"
+import { SimulationLog } from "./simulation-log"
 import { useSimulation } from "./simulation-state"
 import { StackupEditor } from "./stackup-editor"
-import { StimulusDialog } from "./stimulus-dialog"
 import { loadRecent, loadTheme, saveRecent, setTheme } from "./storage"
 import { Toolbar } from "./toolbar"
 import { ChildWindow, MinimizedWindows, useWindows } from "./windows"
+import { type ActiveDialog, WorkbenchDialogs } from "./workbench-dialogs"
 import "./workbench.css"
 
 /** Desktop entry point for offline Circuit JSON inspection and simulation. */
@@ -46,20 +45,14 @@ export function Workbench(): JSX.Element {
   const [selectedRun, setSelectedRun] = useState<number>()
   const [scopeTab, setScopeTab] = useState<ScopeTab>("Waveforms")
   const [compare, setCompare] = useState(false)
-  const [deckOpen, setDeckOpen] = useState(false)
+  const [dialog, setDialog] = useState<ActiveDialog>()
   const { input } = design
   const [simulationIndex, setSimulationIndex] = useState(0)
   const [treeId, setTreeId] = useState<string>()
   const [showTree, setShowTree] = useState(true)
   const [showProperties, setShowProperties] = useState(true)
   const simulation = input?.simulations[simulationIndex]
-  const [assignment, setAssignment] = useState<{
-    port?: string
-    modelId?: string
-  }>()
   const [ibisFocus, setIbisFocus] = useState<IbisFocus>()
-  const [stimulusOpen, setStimulusOpen] = useState(false)
-  const [about, setAbout] = useState(false)
   const [status, setStatus] = useState("Ready")
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState(false)
@@ -99,7 +92,7 @@ export function Workbench(): JSX.Element {
     setTreeId(node.id)
     selection.select(node.copper?.id)
   }
-  /** Focus the window associated with a project branch. */
+  /** Open the selected project editor or result. */
   const openNode = (node: ProjectNode): void => {
     if (node.window === "scope") {
       setSelectedRun(node.run)
@@ -110,28 +103,9 @@ export function Workbench(): JSX.Element {
     if (node.window === "board" || node.window === "stackup")
       windows.show(node.window)
     else if (node.modelId)
-      setAssignment({ port: node.port, modelId: node.modelId })
+      setDialog({ kind: "assign", port: node.port, modelId: node.modelId })
   }
-  useEffect(() => {
-    if (!selection.context) return
-    const end = new AbortController()
-    document.addEventListener(
-      "pointerdown",
-      (event) => {
-        if (!(event.target as HTMLElement).closest(".wb-context"))
-          selection.closeContext()
-      },
-      { signal: end.signal },
-    )
-    document.addEventListener(
-      "keydown",
-      (event) => {
-        if (event.key === "Escape") selection.closeContext()
-      },
-      { signal: end.signal },
-    )
-    return () => end.abort()
-  }, [selection.context])
+  useCopperContextDismiss(selection)
 
   /** Apply a role to source copper through a new channel design. */
   const changeRole = (role: NetRole): void => {
@@ -203,14 +177,45 @@ export function Workbench(): JSX.Element {
       (item) =>
         item.id < activeRun.id && item.simulationId === activeRun.simulationId,
     )
-  /** Prompt for a local Circuit JSON file. */
+  /** Close this local design and its run history. */
+  const closeBoard = (): void => {
+    design.open()
+    selection.reset()
+    runner.reset()
+    windows.reset()
+    setTreeId(undefined)
+    setSelectedRun(undefined)
+    setCompare(false)
+    setError(undefined)
+    setStatus("Ready")
+    setDialog(undefined)
+  }
+  const activeFrame = windows.frames.find(
+    ({ z, minimized }) => z === activeZ && !minimized,
+  )
+  /** Prompt for a local file. */
   const openFile = (): void => fileInput.current?.click()
-  /** Render the bundled parallel-bus fixture. */
+  /** Render the bundled TSX board. */
   const openSample = (): void => {
     void load()
   }
   const actions: CommandActions = {
     open: runner.solver !== "running" ? openFile : undefined,
+    save: input && (() => exportDesign(input)),
+    csv: activeRun && (() => exportWaveforms(activeRun)),
+    png:
+      activeFrame &&
+      (() =>
+        void exportWindow(activeFrame.id).catch((cause: Error) =>
+          setError(cause.message),
+        )),
+    close:
+      input && runner.solver !== "running"
+        ? () => {
+            if (design.dirty) setDialog({ kind: "discard" })
+            else closeBoard()
+          }
+        : undefined,
     sample: runner.solver !== "running" ? openSample : undefined,
     undo: design.undo,
     redo: design.redo,
@@ -238,13 +243,14 @@ export function Workbench(): JSX.Element {
       windows.show("log")
       void runner.check(true)
     },
-    deck: lastRun && (() => setDeckOpen(true)),
-    stimulus: simulation && (() => setStimulusOpen(true)),
+    deck: lastRun && (() => setDialog({ kind: "deck" })),
+    stimulus: simulation && (() => setDialog({ kind: "stimulus" })),
 
     assign:
       input &&
       (() =>
-        setAssignment({
+        setDialog({
+          kind: "assign",
           port: chosenNode?.port,
           modelId: chosenNode?.modelId,
         })),
@@ -265,7 +271,7 @@ export function Workbench(): JSX.Element {
       selection.select(undefined)
       setTreeId(undefined)
     },
-    about: () => setAbout(true),
+    about: () => setDialog({ kind: "about" }),
   }
   const menus = workbenchMenus({
     actions,
@@ -281,7 +287,6 @@ export function Workbench(): JSX.Element {
     showWindow: windows.show,
     arrange: windows.arrange,
   })
-
   return (
     <main
       className="wb-desktop"
@@ -292,16 +297,23 @@ export function Workbench(): JSX.Element {
         if (file) void load(file)
       }}
     >
-      <header className="wb-title">
-        <Icon name="app" />
-        <h1>
-          tscircuit SI Workbench - [
-          {input
-            ? `${input.name} | ${simulation?.name ?? "Simulation"}`
-            : "No Board Loaded"}
-          ]{design.dirty && "*"}
-        </h1>
-      </header>
+      <DesktopTitle
+        board={input?.name}
+        simulation={simulation?.name}
+        dirty={design.dirty}
+        close={actions.close}
+        toggleDocks={() => {
+          const next = !showTree && !showProperties
+          setShowTree(next)
+          setShowProperties(next)
+        }}
+        toggleFullscreen={() => {
+          const pending = document.fullscreenElement
+            ? document.exitFullscreen()
+            : document.documentElement.requestFullscreen()
+          void pending.catch((cause: Error) => setError(cause.message))
+        }}
+      />
       <MenuBar menus={menus} />
       <Toolbar
         actions={actions}
@@ -415,6 +427,12 @@ export function Workbench(): JSX.Element {
                   selectTab={setScopeTab}
                   compare={compare}
                   toggleCompare={() => setCompare(!compare)}
+                  exportCsv={actions.csv}
+                  exportPng={() =>
+                    void exportWindow("scope").catch((cause: Error) =>
+                      setError(cause.message),
+                    )
+                  }
                 />
               )}
             </ChildWindow>
@@ -443,24 +461,13 @@ export function Workbench(): JSX.Element {
           {error}
         </div>
       )}
-      <footer className="wb-status">
-        <span role="status">
-          {runner.solver === "running"
-            ? `Stage ${Math.min(stageCount, runner.completed + 1)}/${stageCount} · ${runner.stage}`
-            : runner.summary || status}
-        </span>
-        <span>{boardCoordinates(selection.cursor)}</span>
-        <span>
-          Layer{" "}
-          {(selection.hovered ?? selection.selected)?.layers.join(", ") || "—"}
-        </span>
-        <span>{selection.selected?.id ?? "No selection"}</span>
-        <SolverIndicator
-          solver={runner.solver}
-          version={runner.version}
-          completed={runner.completed}
-        />
-      </footer>
+      <DesktopStatus
+        runner={runner}
+        status={status}
+        cursor={selection.cursor}
+        picked={selection.selected}
+        hovered={selection.hovered}
+      />
       {selection.context && (
         <CopperMenu
           context={selection.context}
@@ -472,40 +479,22 @@ export function Workbench(): JSX.Element {
           close={selection.closeContext}
         />
       )}
-      {input && assignment && (
-        <AssignModels
-          circuit={input.circuit}
-          port={assignment.port}
-          componentId={assignment.modelId}
-          retained={selection.retained}
-          apply={design.edit}
-          close={() => setAssignment(undefined)}
-          showCurves={(focus) => {
-            setIbisFocus(focus)
-            setAssignment(undefined)
-            windows.show("ibis")
-          }}
-        />
-      )}
-      {input && simulation && stimulusOpen && (
-        <StimulusDialog
-          circuit={input.circuit}
-          simulation={simulation}
-          retained={selection.retained}
-          radiusMm={input.distanceMm}
-          apply={design.edit}
-          close={() => setStimulusOpen(false)}
-        />
-      )}
-      {deckOpen && lastRun && (
-        <DeckDialog
-          deck={lastRun.compiled.deck}
-          close={() => setDeckOpen(false)}
-        />
-      )}
-      {about && (
-        <AboutDialog version={runner.version} close={() => setAbout(false)} />
-      )}
+      <WorkbenchDialogs
+        dialog={dialog}
+        input={input}
+        simulation={simulation}
+        retained={selection.retained}
+        apply={design.edit}
+        close={() => setDialog(undefined)}
+        closeBoard={closeBoard}
+        lastRun={lastRun}
+        version={runner.version}
+        showCurves={(focus) => {
+          setIbisFocus(focus)
+          setDialog(undefined)
+          windows.show("ibis")
+        }}
+      />
     </main>
   )
 }

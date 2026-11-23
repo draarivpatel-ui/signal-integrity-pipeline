@@ -10,6 +10,7 @@ export default defineConfig({
       name: "local-ngspice",
       // Cosmos 6 passes host=0.0.0.0 inline, so enforce loopback after that merge.
       config: (): UserConfig => ({
+        preview: { host: "127.0.0.1", cors: false, strictPort: true },
         server: {
           host: "127.0.0.1",
           open: "http://127.0.0.1:5000",
@@ -27,6 +28,9 @@ export default defineConfig({
         },
       }),
       configureServer: (server) => {
+        server.middlewares.use(createSolverMiddleware())
+      },
+      configurePreviewServer: (server) => {
         server.middlewares.use(createSolverMiddleware())
       },
     },

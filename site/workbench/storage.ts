@@ -1,6 +1,6 @@
 import { type Theme, themeIds } from "./chrome"
 
-const themeKey = "si-workbench.theme"
+const themeKey = "tscircuit-si-workbench:theme"
 const recentKey = "si-workbench.recent"
 
 /** Read a locally stored value even when browser storage access is restricted. */

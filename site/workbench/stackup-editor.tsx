@@ -36,7 +36,18 @@ export function StackupEditor({
   const [probeWidth, setProbeWidth] = useState<number>()
   const [selected, setSelected] = useState(0)
   const [error, setError] = useState<string>()
-  const wire = feature?.shapes.find((shape) => shape.shape === "wire")
+  const wires = feature?.shapes.filter((shape) => shape.shape === "wire") ?? []
+  const wire = wires[0]
+  const uniformTrace =
+    wire &&
+    wires.every(
+      ({ layers, width }) =>
+        layers[0] === wire.layers[0] && width === wire.width,
+    )
+  const traceLength = wires.reduce(
+    (sum, { start, end }) => sum + Math.hypot(end.x - start.x, end.y - start.y),
+    0,
+  )
   const signal = signalLayer ?? wire?.layers[0] ?? "top"
   const width = probeWidth ?? wire?.width ?? 0.2
   const copper = original.filter((layer) => layer.layer_type === "copper")
@@ -163,7 +174,7 @@ export function StackupEditor({
                       )}
                     </td>
                     <td>
-                      {"relative_permittivity" in layer && (
+                      {layer.layer_type !== "copper" && (
                         <input
                           aria-label={`${label} Dk`}
                           type="number"
@@ -284,6 +295,17 @@ export function StackupEditor({
                 <dd>{readout.data.ohms.toFixed(1)} Ω</dd>
                 <dt>Propagation delay</dt>
                 <dd>{readout.data.delayPsPerMm.toFixed(2)} ps/mm</dd>
+                {uniformTrace &&
+                  signal === wire.layers[0] &&
+                  width === wire.width && (
+                    <>
+                      <dt>Trace delay</dt>
+                      <dd>
+                        {(traceLength * readout.data.delayPsPerMm).toFixed(2)}{" "}
+                        ps
+                      </dd>
+                    </>
+                  )}
                 <dt>Effective Dk</dt>
                 <dd>{readout.data.effectiveDk.toFixed(2)}</dd>
               </dl>

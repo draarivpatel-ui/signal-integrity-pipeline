@@ -29,8 +29,12 @@ export function diagnosticNode({
     if (!node.port && !node.copper) continue
     if (
       entry.targets?.includes(node.id) ||
-      (node.copper && entry.message.includes(node.copper.id)) ||
-      (node.port && entry.message.includes(node.port)) ||
+      (node.copper &&
+        (entry.targets?.includes(node.copper.id) ||
+          entry.message.includes(node.copper.id))) ||
+      (node.port &&
+        (entry.targets?.includes(node.port) ||
+          entry.message.includes(node.port))) ||
       (node.label.includes(".") && entry.message.includes(node.label))
     )
       return node.id
