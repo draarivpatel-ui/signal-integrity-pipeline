@@ -46,7 +46,6 @@ const PROGRESS_INTERVAL_MS = 15_000
 /** Rendering uses a common canvas for every stage of the same board. */
 const RENDER_WIDTH = 1600
 const RENDER_HEIGHT = 1100
-/** Time limit for the optional two-trace native capture. */
 /** Include nearby copper in the two-trace stage views. */
 const TWO_TRACE_SCOPE_DISTANCE_MM = 1
 
