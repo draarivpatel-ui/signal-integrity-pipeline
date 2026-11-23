@@ -19,6 +19,7 @@ export {
   namespaceSpice,
   voltageSourceTerminals,
 } from "./netlist"
+/** @internal */
 export { receiverGraphs, receiverPath } from "./receiver-paths"
 export { RouteBindingsSolver } from "./route-bindings"
 export { type RouteLadder, routeLadder } from "./route-ladder"
@@ -44,9 +45,11 @@ export type {
   RouteNetworkInput,
   ScopedRouteBindingsInput,
 } from "./routed-types"
+/** @internal */
 export { type SignalRailIds, signalRailIds } from "./signal-rails"
+/** @internal */
 export { extractedNonrailSourceTraceIds } from "./source-node-groups"
-export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
+export { transmittedBits } from "./stimulus"
 export type {
   CircuitNodes,
   Declarations,
