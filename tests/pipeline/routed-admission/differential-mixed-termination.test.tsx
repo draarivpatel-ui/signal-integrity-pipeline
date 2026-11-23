@@ -30,7 +30,8 @@ test("mixed routed and ideal terminations cannot carry an open differential leg"
         />
         <trace from=".TX > .B" to=".RDRV > .pin2" />
         <pcbnotetext
-          text="A is open. Both terminations connect A by copper and B by ideal wire."
+          text="A open. Both loads use A copper and B ideal."
+          fontSize={0.45}
           pcbX={0}
           pcbY={4.8}
         />
