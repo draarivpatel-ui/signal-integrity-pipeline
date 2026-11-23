@@ -1,7 +1,12 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
-import type {
-  RouteSectionsInput,
-  SimulationPcbTransientChannelSimulationId,
+import type { GraphicsObject } from "graphics-debug"
+import {
+  admissionRouteView,
+  circuitJsonDb,
+  type RouteSectionsInput,
+  type SimulationPcbTransientChannelSimulationId,
+  scopedAdmissionDrawing,
+  unscopedAdmissionDrawing,
 } from "../board"
 import type { IbisSources } from "../buffers"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
@@ -136,6 +141,7 @@ function finalizeAdmission({
 
 /** Root admission performs exactly one channel simulation's lowering per step. */
 export class RoutedAdmissionSolver extends BaseSolver {
+  override MAX_ITERATIONS = Infinity
   private readonly input: RoutedAdmissionInput
   private admittedBoard?: AdmittedBoard
   private readonly channelSimulationPlans: RoutedChannelSimulationPlan[] = []
@@ -184,5 +190,27 @@ export class RoutedAdmissionSolver extends BaseSolver {
     typeof RoutedAdmissionSolver
   > {
     return [this.input]
+  }
+  /** Inspect the latest channel's copper and endpoints or the whole unscoped board. */
+  override visualize(): GraphicsObject {
+    const circuit = this.input.circuitJson
+    const plan = this.channelSimulationPlans.at(-1)
+    if (plan === undefined)
+      return unscopedAdmissionDrawing({ circuit, error: this.error })
+    const { mappings } = plan.bindings
+    const db = circuitJsonDb(circuit)
+    const view = admissionRouteView({
+      db,
+      scope: plan.sections.copperScope,
+      endpointSourcePortIds: new Set(
+        mappings.flatMap(({ from, to }) => [from, to]),
+      ),
+    })
+    return scopedAdmissionDrawing({
+      db,
+      view,
+      mappings,
+      error: this.error,
+    })
   }
 }

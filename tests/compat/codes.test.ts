@@ -45,7 +45,6 @@ const RAISED = [
   "native_geometry",
   "native_output",
   "native_solver",
-  "native_timeout",
   "passive_capability",
   "passive_reference",
   "passivity",
