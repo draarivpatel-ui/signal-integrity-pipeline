@@ -1,5 +1,12 @@
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
-import type { CircuitJsonDb, SourceNetId, SourcePortId } from "../board"
+import type {
+  CircuitJsonDb,
+  CopperScope,
+  SourceNetId,
+  SourcePortId,
+  SourceTraceId,
+} from "../board"
+import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import type { RoutedTraceCut } from "./routed-types"
 
@@ -198,15 +205,46 @@ interface IdealSourceNodes {
   splitNets: ReadonlySet<SourceNetId>
 }
 
+/** Find all extracted nonrail traces using the same copper scope in admission and binding. */
+export function extractedNonrailSourceTraceIds({
+  db,
+  copperScope,
+}: {
+  db: CircuitJsonDb
+  copperScope: Pick<
+    Snapshot<CopperScope>,
+    "extractedPcbTraceIds" | "nearbyRailPcbTraceIds"
+  >
+}): SourceTraceId[] {
+  const extractedPcbTraceIds = new Set(copperScope.extractedPcbTraceIds)
+  const nearbyRailPcbTraceIds = new Set(copperScope.nearbyRailPcbTraceIds)
+  return db.pcb_trace
+    .list()
+    .flatMap(({ pcb_trace_id: pcbTraceId, source_trace_id: sourceTraceId }) => {
+      if (
+        sourceTraceId === undefined ||
+        !extractedPcbTraceIds.has(pcbTraceId) ||
+        nearbyRailPcbTraceIds.has(pcbTraceId)
+      )
+        return []
+      return [sourceTraceId]
+    })
+}
+
 /** Join source traces and internal pin ties, with routed copper removed. */
 export function idealSourceNodes({
   db,
   cuts,
+  additionalSourceTraceIds = [],
 }: {
   db: CircuitJsonDb
   cuts: readonly RoutedTraceCut[]
+  additionalSourceTraceIds?: readonly SourceTraceId[]
 }): IdealSourceNodes {
-  const extracted = new Set(cuts.map((cut) => cut.sourceTraceId))
+  const extracted = new Set([
+    ...cuts.map((cut) => cut.sourceTraceId),
+    ...additionalSourceTraceIds,
+  ])
   const ideal = db.source_trace
     .list()
     .filter((trace) => !extracted.has(trace.source_trace_id))

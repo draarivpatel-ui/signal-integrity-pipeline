@@ -25,6 +25,7 @@ export interface CircuitNodesInput {
   circuit: CircuitJsonSnapshot
   mappings: readonly LaneMapping[]
   routedTraceCuts?: readonly RoutedTraceCut[]
+  additionalSourceTraceIds?: readonly SourceTraceId[]
   modeling: Snapshot<SimulationModeling>
 }
 
@@ -278,6 +279,7 @@ export function circuitNodes({
   circuit,
   mappings,
   routedTraceCuts,
+  additionalSourceTraceIds,
   modeling,
 }: CircuitNodesInput): CircuitNodes {
   const db = circuitJsonDb(circuit)
@@ -285,6 +287,7 @@ export function circuitNodes({
   const { groups, splitNets } = idealSourceNodes({
     db,
     cuts,
+    additionalSourceTraceIds,
   })
   const ground = selectPort({
     circuit,

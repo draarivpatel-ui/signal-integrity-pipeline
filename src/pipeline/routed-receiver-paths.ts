@@ -8,6 +8,7 @@ import {
   cutSourceGroups,
   differentialContacts,
   differentialGroups,
+  extractedNonrailSourceTraceIds,
   idealSourceNodes,
   type RoutedTraceCut,
   type SourceNodeGroups,
@@ -300,9 +301,14 @@ export function routedReceiverMappings({
   prepared: PreparedChannelSimulation
   cuts: readonly RoutedTraceCut[]
 }): LaneMapping[] {
+  const db = circuitJsonDb(prepared.circuit)
   const { groups } = idealSourceNodes({
-    db: circuitJsonDb(prepared.circuit),
+    db,
     cuts,
+    additionalSourceTraceIds: extractedNonrailSourceTraceIds({
+      db,
+      copperScope: prepared.settings.copperScope,
+    }),
   })
   const physicalCutGroups = cutSourceGroups(cuts)
   const idealCutGroups = sourceNodeGroups([

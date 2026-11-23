@@ -33,6 +33,7 @@ export type {
 } from "./routed-types"
 export {
   cutSourceGroups,
+  extractedNonrailSourceTraceIds,
   idealSourceNodes,
   type SourceNodeGroups,
   sourceGroupId,
