@@ -1,2 +1,4 @@
-// react-cosmos-plugin-vite replaces this entry with its fixture renderer.
-export {}
+import { createRoot } from "react-dom/client"
+import { Workbench } from "./site/workbench/workbench"
+
+createRoot(document.getElementById("root")!).render(<Workbench />)
