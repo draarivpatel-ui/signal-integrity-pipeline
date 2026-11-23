@@ -11,20 +11,23 @@ import { loadInput } from "../channel-inspector/input"
 import { AssignModels, type IbisFocus } from "./assign-models"
 import { useBoardSelection } from "./board-selection"
 import { BoardViewer, boardCoordinates } from "./board-viewer"
-import { CommandButton, Icon, MenuBar } from "./chrome"
+import { Icon, MenuBar } from "./chrome"
+import { CopperMenu } from "./copper-menu"
 import { useDesignHistory } from "./design-history"
 import { Dock, Properties } from "./docks"
 import { IbisViewer } from "./ibis-viewer"
 import { AboutDialog, DeckDialog } from "./info-dialogs"
-import { type LogEntry, stageCount } from "./local-run"
+import { stageCount } from "./local-run"
 import { type CommandActions, workbenchMenus } from "./menus"
 import { editNetRole, type NetRole } from "./model/net-roles"
+import { Oscilloscope, type ScopeTab } from "./oscilloscope"
 import {
   findProjectNode,
   type ProjectNode,
   ProjectTree,
   projectNodes,
 } from "./project"
+import { captureNodes, diagnosticNode } from "./run-project"
 import { SimulationLog, SolverIndicator } from "./simulation-log"
 import { useSimulation } from "./simulation-state"
 import { StackupEditor } from "./stackup-editor"
@@ -40,6 +43,9 @@ export function Workbench(): JSX.Element {
   const [recent, setRecent] = useState(loadRecent)
   const design = useDesignHistory()
   const runner = useSimulation()
+  const [selectedRun, setSelectedRun] = useState<number>()
+  const [scopeTab, setScopeTab] = useState<ScopeTab>("Waveforms")
+  const [compare, setCompare] = useState(false)
   const [deckOpen, setDeckOpen] = useState(false)
   const { input } = design
   const [simulationIndex, setSimulationIndex] = useState(0)
@@ -76,16 +82,7 @@ export function Workbench(): JSX.Element {
         input,
         active: simulation,
         features: selection.features,
-        results: runner.runs.map((run) => ({
-          id: run.id,
-          label: `Run #${run.id} — ${new Date(run.timestamp).toLocaleTimeString("en-GB")}`,
-          fields: [
-            ["Experiment", run.name],
-            ["Samples", run.capture.timestampsSeconds.length],
-            ["Probes", run.capture.probes.length],
-            ["Qualification", run.capture.qualification],
-          ],
-        })),
+        results: captureNodes(runner.runs),
       }),
     [input, simulation, selection.features, runner.runs],
   )
@@ -104,6 +101,12 @@ export function Workbench(): JSX.Element {
   }
   /** Focus the window associated with a project branch. */
   const openNode = (node: ProjectNode): void => {
+    if (node.window === "scope") {
+      setSelectedRun(node.run)
+      setScopeTab("Waveforms")
+      windows.show("scope")
+      return
+    }
     if (node.window === "board" || node.window === "stackup")
       windows.show(node.window)
     else if (node.modelId)
@@ -163,6 +166,8 @@ export function Workbench(): JSX.Element {
       const next = await loadInput(file)
       selection.reset()
       runner.reset()
+      setSelectedRun(undefined)
+      setCompare(false)
       setSimulationIndex(0)
       setTreeId("board")
       design.open(next)
@@ -180,24 +185,24 @@ export function Workbench(): JSX.Element {
   const run = (): void => {
     if (!input || !simulation || busy || runner.solver === "running") return
     windows.show("log")
-    void runner.start({ input, simulation, onCapture: () => {} })
-  }
-  /** Resolve native diagnostic names and IDs to the project tree. */
-  const logTarget = (entry: LogEntry): string | undefined => {
-    const queue = root ? [root] : []
-    for (const node of queue) {
-      if (node.children) queue.push(...node.children)
-      if (!node.port && !node.copper) continue
-      if (
-        entry.targets?.includes(node.id) ||
-        (node.copper && entry.message.includes(node.copper.id)) ||
-        (node.port && entry.message.includes(node.port)) ||
-        (node.label.includes(".") && entry.message.includes(node.label))
-      )
-        return node.id
-    }
+    void runner.start({
+      input,
+      simulation,
+      onCapture: () => {
+        setSelectedRun(undefined)
+        setScopeTab("Waveforms")
+        windows.show("scope")
+      },
+    })
   }
   const lastRun = runner.runs.at(-1)
+  const activeRun = runner.runs.find(({ id }) => id === selectedRun) ?? lastRun
+  const canCompare =
+    activeRun &&
+    runner.runs.some(
+      (item) =>
+        item.id < activeRun.id && item.simulationId === activeRun.simulationId,
+    )
   /** Prompt for a local Circuit JSON file. */
   const openFile = (): void => fileInput.current?.click()
   /** Render the bundled parallel-bus fixture. */
@@ -214,6 +219,20 @@ export function Workbench(): JSX.Element {
     stackup: input && (() => windows.show("stackup")),
     run: simulation && !busy && runner.solver !== "running" ? run : undefined,
     stop: runner.stop,
+    scope: () => {
+      setScopeTab("Waveforms")
+      windows.show("scope")
+    },
+    eye: () => {
+      setScopeTab("Eye Diagram")
+      windows.show("scope")
+    },
+    compare: canCompare
+      ? () => {
+          setCompare(!compare)
+          windows.show("scope")
+        }
+      : undefined,
     log: () => windows.show("log"),
     solver: () => {
       windows.show("log")
@@ -250,6 +269,7 @@ export function Workbench(): JSX.Element {
   }
   const menus = workbenchMenus({
     actions,
+    comparing: compare && canCompare,
     recent,
     theme,
     selectTheme,
@@ -377,13 +397,24 @@ export function Workbench(): JSX.Element {
                 <SimulationLog
                   entries={runner.entries}
                   clear={runner.clearLog}
-                  targets={logTarget}
+                  targets={(entry) => diagnosticNode({ root, entry })}
                   showDeck={actions.deck}
                   showOnBoard={(id) => {
                     const node = findProjectNode({ root, id })
                     if (node) pickNode(node)
                     windows.show("board")
                   }}
+                />
+              )}
+              {frame.id === "scope" && (
+                <Oscilloscope
+                  runs={runner.runs}
+                  run={activeRun}
+                  selectRun={setSelectedRun}
+                  tab={scopeTab}
+                  selectTab={setScopeTab}
+                  compare={compare}
+                  toggleCompare={() => setCompare(!compare)}
                 />
               )}
             </ChildWindow>
@@ -431,29 +462,15 @@ export function Workbench(): JSX.Element {
         />
       </footer>
       {selection.context && (
-        <div
-          role="menu"
-          className="wb-popover wb-context"
-          style={{
-            left: Math.min(selection.context.x, window.innerWidth - 195),
-            top: Math.min(selection.context.y, window.innerHeight - 88),
-          }}
-        >
-          {(["selected", "near", "excluded"] as const).map((role, index) => (
-            <CommandButton
-              key={role}
-              command={{
-                label: ["Make victim", "Make aggressor", "Exclude"][index],
-                action:
-                  selection.selected?.record.type === "pcb_trace" &&
-                  selection.selected.category !== "rail"
-                    ? () => changeRole(role)
-                    : undefined,
-              }}
-              onInvoke={selection.closeContext}
-            />
-          ))}
-        </div>
+        <CopperMenu
+          context={selection.context}
+          editable={
+            selection.selected?.record.type === "pcb_trace" &&
+            selection.selected.category !== "rail"
+          }
+          edit={changeRole}
+          close={selection.closeContext}
+        />
       )}
       {input && assignment && (
         <AssignModels
