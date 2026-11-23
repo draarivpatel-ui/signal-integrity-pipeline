@@ -19,11 +19,14 @@ export {
   voltageSourceTerminals,
 } from "./netlist"
 export { receiverGraphs, receiverPath } from "./receiver-paths"
+export { RouteBindingsSolver } from "./route-bindings"
 export { circuitNodes } from "./routed-nodes"
 export type {
   RouteBindingsInput,
+  RoutedBindings,
   RoutedCompileOptions,
   RoutedTraceCut,
+  ScopedRouteBindingsInput,
 } from "./routed-types"
 export { type SignalRailIds, signalRailIds } from "./signal-rails"
 export { extractedNonrailSourceTraceIds } from "./source-node-groups"
