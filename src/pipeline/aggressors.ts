@@ -7,6 +7,7 @@ import {
   type SourcePortId,
 } from "../board"
 import { type InspectedPin, pinCapabilities } from "../buffers"
+import type { Snapshot } from "../kernel"
 import type { SignalPins } from "./signal-pins"
 import { prbsPatterns } from "./timing"
 
@@ -34,7 +35,7 @@ export function planAggressors({
   driven,
 }: {
   circuit: CircuitJsonSnapshot
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   pins: Map<SourcePortId, InspectedPin>
   driven: SignalPins["driven"]
 }): Aggressors {

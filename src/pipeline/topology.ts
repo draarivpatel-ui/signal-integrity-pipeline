@@ -1,12 +1,11 @@
-import type { Snapshot } from "../kernel"
 import type { PcbPort, PcbTrace, SourceTrace } from "circuit-json"
 import {
   ConnectivityMap,
   findConnectedNetworks,
 } from "circuit-json-to-connectivity-map"
 import {
-  type CircuitJsonSnapshot,
   type CircuitJsonDb,
+  type CircuitJsonSnapshot,
   circuitJsonDb,
   type PassiveBridge,
   passiveBridges,
@@ -16,6 +15,7 @@ import {
   sourceConnections,
   sourceNetMembers,
 } from "../board"
+import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import {
   buildRoutedCopper,

@@ -1,7 +1,12 @@
 /* eslint-disable local/max-file-lines -- SPICE source generation and its shared deck namespacing stay together. */
 // Electrical sources and SPICE namespacing for the routed deck.
 import type { SimulationVoltageSource } from "circuit-json"
-import type { CircuitJsonSnapshot, SourceNetId, SourcePortId } from "../board"
+import type {
+  CircuitJsonDb,
+  CircuitJsonSnapshot,
+  SourceNetId,
+  SourcePortId,
+} from "../board"
 import { circuitJsonDb, selectPort } from "../board"
 import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
@@ -337,6 +342,37 @@ function voltageSourceExpression(source: SimulationVoltageSource): string {
   return `PULSE(${lowValue} ${highValue} ${delay} ${riseValue} ${fallValue} ${width} ${periodValue})`
 }
 
+type PassiveSourceComponent = ReturnType<
+  CircuitJsonDb["source_component"]["list"]
+>[number]
+type PassiveSelection = NonNullable<
+  SimulationModeling["passiveComponents"]
+>[number]
+
+/** Match the same explicit passive selection during contact validation and deck generation. */
+export function passiveSelectionComponents({
+  components,
+  selection,
+}: {
+  components: readonly PassiveSourceComponent[]
+  selection: PassiveSelection
+}): PassiveSourceComponent[] {
+  return components.filter((component) => {
+    if (selection.sourceComponentId)
+      return component.source_component_id === selection.sourceComponentId
+    return component.name === selection.component
+  })
+}
+
+/** Identify the components that have built-in passive deck models. */
+export function hasBuiltInPassiveModel(
+  component: PassiveSourceComponent,
+): boolean {
+  return ["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
+    component.ftype,
+  )
+}
+
 /**
  * Turns physical voltage sources, declared supplies and selected passives into SPICE lines.
  * Fails when a source is shorted, floating or unsupported, because this backend never invents rails.
@@ -404,10 +440,9 @@ export function electricalSources({
     dcConnections.push([pos, neg])
   }
   for (const [i, selection] of (modeling.passiveComponents ?? []).entries()) {
-    const components = sourceComponents.filter((component) => {
-      if (selection.sourceComponentId)
-        return component.source_component_id === selection.sourceComponentId
-      return component.name === selection.component
+    const components = passiveSelectionComponents({
+      components: sourceComponents,
+      selection,
     })
     if (components.length !== 1)
       fail(
