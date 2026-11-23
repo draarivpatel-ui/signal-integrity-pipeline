@@ -15,9 +15,11 @@ export function AdmissionChannel({
   route,
   namedNets = false,
   short,
+  children,
 }: {
   route: Route
   namedNets?: boolean
+  children?: React.ReactNode
   short?: "resistor" | "channel" | "junction"
 }): React.JSX.Element {
   const driver = ".TX > .Y"
@@ -46,6 +48,7 @@ export function AdmissionChannel({
       <Inverter name="TX" x={-5} y={0} driver />
       <Inverter name="RX" x={5} y={0} driver={false} />
       <Reference />
+      {children}
       {route === "unrouted" && <trace from={driver} to={receiver} />}
       {route === "parallel-passives" && (
         <ParallelPassives driver={driver} receiver={receiver} />
