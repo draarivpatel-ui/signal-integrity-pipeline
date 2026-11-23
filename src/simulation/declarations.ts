@@ -1,5 +1,5 @@
 /* eslint-disable local/max-file-lines -- Experiment declaration checks share Circuit JSON and IBIS plan types. */
-// Experiment declarations (circuitNodes, generalDeclarations, modelRunDefinition).
+// Experiment declarations and IBIS run definitions.
 
 import type {
   IbisModelDefinition,
@@ -7,23 +7,21 @@ import type {
   IbisRunConfig,
 } from "@tscircuit/ibis-to-spice"
 import type { SourceComponentBase, SourceGroup } from "circuit-json"
-import type { SourcePortId } from "../board"
 import { circuitJsonDb, subcircuitTree } from "../board"
 import type { ModelRunDefinition } from "../buffers"
 import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
-import { placedSubcircuitPins } from "./netlist"
 import {
-  channelEndpoints,
-  circuitNodes,
-  type CircuitNodesInput,
-} from "./routed-nodes"
+  passiveModelContacts,
+  requiredContacts,
+  validateRoutedContacts,
+} from "./routed-contacts"
+import { type CircuitNodesInput, circuitNodes } from "./routed-nodes"
 import { transmittedBits } from "./stimulus"
 import type {
   Declarations,
   PipelineIbisModel,
   RunControls,
-  SimulationModeling,
   SimulationPlan,
   VoltageProbePlan,
 } from "./types"
@@ -108,7 +106,6 @@ export function generalDeclarations({
   circuit,
   mappings,
   routedTraceCuts,
-  additionalSourceTraceIds,
   modeling,
   controls,
 }: CircuitNodesInput & {
@@ -160,17 +157,10 @@ export function generalDeclarations({
     circuit,
     mappings,
     routedTraceCuts,
-    additionalSourceTraceIds,
     modeling,
   })
-  const endpoints = new Map<SourcePortId, string>()
-  for (const { fromSourcePortId, toSourcePortId, label } of channelEndpoints({
-    mappings,
-    routedTraceCuts,
-  })) {
-    if (!endpoints.has(fromSourcePortId)) endpoints.set(fromSourcePortId, label)
-    if (!endpoints.has(toSourcePortId)) endpoints.set(toSourcePortId, label)
-  }
+  const endpoints = requiredContacts({ mappings, routedTraceCuts })
+  const passiveContacts = passiveModelContacts({ db, modeling })
   const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
   const sourceNets = new Set(
     db.source_net.list().map((net) => net.source_net_id),
@@ -349,46 +339,14 @@ export function generalDeclarations({
             `${experiment.name}: run state must select exactly one modeled pin`,
           )
       }
-      const passiveTypes = [
-        "simple_resistor",
-        "simple_capacitor",
-        "simple_inductor",
-      ]
-      const modelsByPort = new Map<SourcePortId, number>()
-      for (const model of scopedModels) {
-        for (const port of Object.values(model.ibis_pin_name_to_source_port_id))
-          modelsByPort.set(port, (modelsByPort.get(port) ?? 0) + 1)
-      }
-      for (const [endpoint, label] of endpoints) {
-        const bindingCount = modelsByPort.get(endpoint) ?? 0
-        if (bindingCount === 1 && stateIds.has(endpoint)) continue
-        if (bindingCount === 0) {
-          const sourceComponentId = ports.get(endpoint)?.source_component_id
-          const isPassive = components.some(
-            (component) =>
-              component.source_component_id === sourceComponentId &&
-              passiveTypes.includes(component.ftype),
-          )
-          const placed = db.simulation_spice_subcircuit.getWhere({
-            source_component_id: sourceComponentId,
-          })
-          if (placed) {
-            const terminals = placedSubcircuitPins(placed.subcircuit_source)
-            if (
-              terminals?.some(
-                (pin) => placed.spice_pin_to_source_port_map[pin] === endpoint,
-              )
-            )
-              continue
-          } else if (isPassive) continue
-        }
-        const requirement =
-          "requires exactly one modeled physical pin and an explicit run state"
-        fail(
-          "channel_model",
-          `${experiment.name} ${label}: endpoint ${endpoint} ${requirement}`,
-        )
-      }
+      validateRoutedContacts({
+        db,
+        experimentName: experiment.name,
+        endpoints,
+        scopedModels,
+        stateIds,
+        passiveContacts,
+      })
       for (const stimulus of stimuli) {
         if (stimulusIds.has(stimulus.source_port_id))
           fail(
