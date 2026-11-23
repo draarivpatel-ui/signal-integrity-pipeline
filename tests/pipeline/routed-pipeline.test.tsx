@@ -3,7 +3,6 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { BasePipelineSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
-import Differential from "../../examples/level1-differential/level1-differential"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import type { CircuitJson, CircuitJsonSnapshot } from "../../src/board"
 import { boardPictureView } from "../../src/board/board-picture"
@@ -30,6 +29,7 @@ import {
   voltageNames,
 } from "../fixtures/routed-deck"
 import { routedAdmissionInput } from "../fixtures/routed-fixture"
+import { VendorDifferential } from "../fixtures/vendor-differential"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 
@@ -362,7 +362,7 @@ async function drawingInput(
     return (await routedVisualFixture()).root.inputProblem
   const modelDirectory = process.env.IBIS_MODEL_DIR
   return {
-    circuitJson: await renderCoreSignals(<Differential />),
+    circuitJson: await renderCoreSignals(<VendorDifferential />),
     ibisSources: {
       "models/sn65hvd72.ibs": await readFile(
         `${modelDirectory}/sn65hvd72.ibs`,
