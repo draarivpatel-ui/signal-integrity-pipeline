@@ -2,9 +2,9 @@ import {
   type CircuitJsonSnapshot,
   circuitJsonDb,
   type DriverPattern,
+  endpointPorts,
   isQuiet,
   type SignalEndpoint,
-  type SignalEndpointPortIds,
   type SimulationExperiment,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
@@ -50,12 +50,6 @@ export interface ChannelSimulationControlOptions {
   aggressors: Aggressors
   durationSeconds: number
   stepSeconds: number
-}
-
-/** Ordered physical ports. The sign of a differential signal is P minus N. */
-export function endpointPorts(endpoint: SignalEndpoint): SignalEndpointPortIds {
-  if ("source_port_id" in endpoint) return [endpoint.source_port_id]
-  return [endpoint.p_source_port_id, endpoint.n_source_port_id]
 }
 
 /** Fastest edge and maximum transient step for the recording. */
