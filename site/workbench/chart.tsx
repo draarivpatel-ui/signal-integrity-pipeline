@@ -188,7 +188,7 @@ export function Chart({
   const ticks = roundTicks({
     low: xMin,
     high: xMax,
-    count: Math.max(1, Math.floor((right - left) / 54)),
+    count: Math.max(2, Math.floor((right - left) / 54)),
   })
   const levels = roundTicks({
     low: yMin,
