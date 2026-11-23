@@ -1,6 +1,10 @@
 import type { SimulationPcbDriverReceiverChannel, SourcePortId } from "../board"
 import type { Snapshot } from "../kernel"
-import { type SourceNodeGroups, sourceGroupId } from "./source-node-groups"
+import {
+  type SourceNodeGroups,
+  type SourceNodeId,
+  sourceGroupId,
+} from "./source-node-groups"
 
 /** Driver-first contacts of one differential channel, in declaration order. */
 export interface DifferentialContacts {
@@ -35,8 +39,8 @@ export function differentialContacts(
 
 /** Groups reached by the declared contacts on the two differential legs. */
 interface DifferentialGroups {
-  positive: ReadonlySet<SourcePortId>
-  negative: ReadonlySet<SourcePortId>
+  positive: ReadonlySet<SourceNodeId>
+  negative: ReadonlySet<SourceNodeId>
 }
 
 /** Find the differential leg groups before introducing passive bridges. */

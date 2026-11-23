@@ -14,15 +14,12 @@ export {
   modelRunDefinition,
 } from "./declarations"
 export {
-  differentialContacts,
-  differentialGroups,
-} from "./differential-contacts"
-export {
   electricalSources,
   hasBuiltInPassiveModel,
   namespaceSpice,
   voltageSourceTerminals,
 } from "./netlist"
+export { receiverGraphs, receiverPath } from "./receiver-paths"
 export { RouteBindingsSolver } from "./route-bindings"
 export { type RouteLadder, routeLadder } from "./route-ladder"
 export { RouteNetworkSolver } from "./route-network"
@@ -47,12 +44,8 @@ export type {
   ScopedRouteBindingsInput,
 } from "./routed-types"
 export {
-  cutSourceGroups,
   extractedNonrailSourceTraceIds,
   idealSourceNodes,
-  type SourceNodeGroups,
-  sourceGroupId,
-  sourceNodeGroups,
 } from "./source-node-groups"
 export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
 export type {
