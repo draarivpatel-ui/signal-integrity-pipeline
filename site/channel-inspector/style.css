@@ -1,0 +1,323 @@
+.channel-inspector {
+  --ci-line: #dae2eb;
+  --ci-subtle: #526076;
+  --ci-ink: #1a2b42;
+  --ci-surface: #fff;
+  --ci-accent: #126c66;
+  max-width: 1440px;
+  margin: 0 auto;
+  color: var(--ci-ink);
+}
+.inspector-header,
+.inspector-load,
+.inspector-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+.inspector-header {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.inspector-header h1 {
+  margin: 0;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.inspector-filename {
+  max-width: min(22rem, 100%);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ci-subtle);
+  font-size: 13px;
+}
+.inspector-load {
+  margin-bottom: 14px;
+}
+.inspector-drop {
+  cursor: pointer;
+  position: relative;
+  padding: 8px 12px;
+  border: 1px dashed #aab9c7;
+  border-radius: 7px;
+  font-size: 13px;
+  background: var(--ci-surface);
+}
+.inspector-drop strong {
+  color: var(--ci-accent);
+}
+.inspector-drop span {
+  color: var(--ci-subtle);
+}
+.inspector-drop:focus-within,
+.inspector-drop[data-dragging="true"] {
+  outline: 2px solid var(--ci-accent);
+  outline-offset: 1px;
+}
+.inspector-drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.inspector-sample,
+.inspector-simulation select {
+  background: var(--ci-surface);
+  border: 1px solid var(--ci-line);
+  border-radius: 7px;
+  color: var(--ci-ink);
+  font-size: 13px;
+}
+.inspector-sample:hover {
+  border-color: var(--ci-accent);
+  color: var(--ci-accent);
+}
+.inspector-simulation {
+  min-width: 0;
+  margin-left: auto;
+  font-size: 13px;
+}
+.inspector-simulation select {
+  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: min(60vw, 22rem);
+}
+.inspector-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
+  gap: 14px;
+  align-items: start;
+}
+.inspector-workspace {
+  border: 1px solid #34485e;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #101b2a;
+}
+.inspector-toolbar {
+  padding: 10px 12px;
+  justify-content: flex-start;
+  color: #dae6f3;
+  background: #172638;
+  border-bottom: 1px solid #2b4057;
+  font-size: 12px;
+}
+.inspector-toolbar input {
+  accent-color: #59e2cd;
+}
+.inspector-toolbar input[type="range"] {
+  width: clamp(55px, 9vw, 120px);
+}
+.inspector-segment {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border: 1px solid #3b5066;
+  border-radius: 6px;
+  padding: 2px;
+}
+.inspector-segment button {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  color: #c3d1e0;
+  background: transparent;
+  white-space: nowrap;
+}
+.inspector-segment button:hover,
+.inspector-segment button[aria-pressed="true"] {
+  color: #f5fcff;
+  background: #38536e;
+}
+.inspector-explode output {
+  min-width: 3ch;
+  color: #9bf0e2;
+  font-variant-numeric: tabular-nums;
+}
+.inspector-hide {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.inspector-stage {
+  position: relative;
+  height: clamp(360px, 55vh, 640px);
+  background-image: radial-gradient(
+      ellipse at center,
+      #24394a55 0%,
+      transparent 72%
+    ), radial-gradient(#3a5369 1px, transparent 1px);
+  background-size:
+    auto,
+    20px 20px;
+}
+.inspector-view,
+.inspector-canvas,
+.inspector-board-2d {
+  width: 100%;
+  height: 100%;
+}
+.inspector-canvas canvas {
+  display: block;
+  cursor: grab;
+}
+.inspector-canvas canvas:active {
+  cursor: grabbing;
+}
+.inspector-canvas p {
+  padding: 12px;
+  color: #ffb4a8;
+}
+.inspector-board-2d [data-copper-id] {
+  cursor: pointer;
+}
+.inspector-stage-note {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  color: #bacbe0;
+  font-size: 12px;
+  pointer-events: none;
+}
+.inspector-tooltip {
+  position: absolute;
+  pointer-events: none;
+  width: 228px;
+  max-width: 85%;
+  padding: 8px;
+  border: 1px solid #547087;
+  border-radius: 6px;
+  background: #122334;
+  color: #e8f5ff;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.inspector-tooltip span,
+.inspector-selection span {
+  display: block;
+}
+.inspector-feature-meta {
+  margin-block: 3px;
+  text-transform: capitalize;
+}
+.inspector-sidebar {
+  display: grid;
+  gap: 12px;
+}
+.inspector-card {
+  padding: 14px;
+  border: 1px solid var(--ci-line);
+  border-radius: 9px;
+  background: var(--ci-surface);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.inspector-card h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.inspector-card p {
+  margin: 6px 0 0;
+  color: var(--ci-subtle);
+}
+.inspector-card dl {
+  margin: 0;
+}
+.inspector-card dl div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding-block: 5px;
+}
+.inspector-card dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.inspector-counts {
+  text-transform: capitalize;
+}
+.inspector-counts i {
+  display: inline-block;
+  vertical-align: middle;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 2px;
+}
+.inspector-counts dd {
+  font-weight: 650;
+}
+.inspector-card .inspector-settings {
+  margin-top: 8px;
+  border-top: 1px solid var(--ci-line);
+  padding-top: 5px;
+  color: var(--ci-subtle);
+  font-size: 12px;
+}
+.inspector-ibis {
+  margin-top: 14px;
+}
+.inspector-ibis details + details {
+  border-top: 1px solid var(--ci-line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.inspector-ibis table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  text-align: left;
+}
+.inspector-ibis th,
+.inspector-ibis td {
+  padding: 5px 6px 5px 0;
+  border-bottom: 1px solid #ecf0f5;
+}
+.inspector-ibis .inspector-asset {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+.inspector-buffer h4 {
+  margin-bottom: 4px;
+}
+.inspector-curves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.inspector-curve {
+  width: min(16rem, 100%);
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid #ecf0f5;
+  border-radius: 6px;
+}
+.inspector-curve figcaption {
+  font-weight: 600;
+}
+.inspector-curve svg {
+  display: block;
+  width: 100%;
+  font-size: 9px;
+  fill: var(--ci-subtle);
+}
+.inspector-curve-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .inspector-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inspector-sidebar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .inspector-simulation {
+    margin-left: 0;
+  }
+}
