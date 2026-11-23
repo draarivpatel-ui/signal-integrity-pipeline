@@ -139,7 +139,8 @@ independent run. A differential endpoint drives opposite physical levels and
 measures P minus N. Quiet channels remain connected and are probed at the far
 receiver and at the near quiet driver. Single-ended probes always use their chip's
 local ground. Numeric offsets are seconds. Automatic duration ends when the
-last channel completes one full pattern at its own bit rate after its offset.
+last channel or switching aggressor completes one full pattern at its
+declared bit rate after its offset.
 Clock uses two unit intervals, a switching literal uses its bit count, and
 PRBS7 uses 127 unit intervals. Quiet channels use one unit interval from time
 zero. A default clock-only or short-literal capture shows the time trace. Set
