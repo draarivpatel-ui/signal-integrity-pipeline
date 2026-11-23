@@ -10,7 +10,6 @@
     "**/*.tsx",
     "../pages/**/*.tsx",
     "../cosmos.decorator.tsx",
-    "../vite.config.ts",
-    "../main.tsx"
+    "../vite.config.ts"
   ]
 }

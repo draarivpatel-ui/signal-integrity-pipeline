@@ -55,6 +55,10 @@
 }
 .wb-board-stage .inspector-canvas canvas {
   display: block;
+  cursor: grab;
+}
+.wb-board-stage .inspector-canvas canvas:active {
+  cursor: grabbing;
 }
 .wb-board-stage .inspector-board-2d {
   display: block;

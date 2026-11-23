@@ -102,6 +102,7 @@ IBIS_MODEL_DIR=models bun run dev
 flowchart LR
   fixture["Cosmos TSX / uploaded Circuit JSON"] --> debugger["GenericSolverDebugger · routed stages 1–6"]
   assets["Fixed local model paths / SI_DDR3_BOARD"] --> debugger
+  workbench["SI Workbench · routed stages 1–6"] --> transient
   debugger --> transient["RouteTransientSolver · stepAsync"]
   transient <-->|"POST /api/run-solver · HTTP RunSolver"| queue["Vite middleware · single slot"]
   queue <-->|"isolated temp dir · 45 min limit · OMP_NUM_THREADS=1"| native["Local ngspice on PATH"]
@@ -112,6 +113,17 @@ The backend accepts bounded JSON bodies (64 MiB), checks same-origin loopback
 requests, rejects other solvers and executable/cwd options, and serializes native
 runs and version probes. `GET http://127.0.0.1:5050/api/solvers` reports ngspice
 availability and version. A missing binary shows `ngspice not found on PATH`.
+
+### SI Workbench
+
+With **ngspice on PATH**, run `bun run dev` and select **si-workbench** in
+Cosmos. Choose **File → Open Sample** or open a local Circuit JSON design.
+Inspect routed copper in 2D or 3D, edit stackup, embedded IBIS models and
+stimulus, then press **F5** to run a local transient and inspect waveforms and
+eye diagrams in the Oscilloscope.
+
+External IBIS loading and board-wide design rule checks are future work. The
+pipeline rule for receivers that act as aggressors is pending.
 
 ## General workflow
 

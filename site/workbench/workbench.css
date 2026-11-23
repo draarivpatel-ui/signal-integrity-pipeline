@@ -4,15 +4,15 @@
 @import "./docks.css";
 @import "./board.css";
 @import "./ranges.css";
+@import "../channel-inspector/style.css";
 
-body {
-  margin: 0;
-}
 .wb-desktop,
 .wb-desktop * {
   box-sizing: border-box;
 }
 .wb-desktop {
+  position: fixed;
+  inset: 0;
   display: grid;
   grid-template-rows: var(--title-height) 20px var(--bar-height) minmax(0, 1fr) auto 22px;
   overflow: hidden;
@@ -20,8 +20,6 @@ body {
   box-shadow:
     inset 1px 1px var(--light),
     inset -1px -1px var(--edge);
-  width: 100%;
-  height: 100dvh;
   color: var(--ink);
   background: var(--face);
   font:

@@ -7,8 +7,9 @@
   "port": 5000,
   "portRetries": 0,
   "vite": {
-    "port": 5050
+    "port": 5050,
+    "indexPath": "site/cosmos/renderer.ts"
   },
   "ignore": ["**/.cache/**", "**/dist/**", "**/runs/**"],
-  "rendererUrl": "http://127.0.0.1:5050"
+  "rendererUrl": "http://127.0.0.1:5050/site/cosmos/renderer.html"
 }
