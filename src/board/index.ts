@@ -5,12 +5,16 @@
  * Imports: kernel.
  */
 
+/** @internal */
 export { admissionRouteView } from "./admission-view"
+/** @internal */
 export {
   scopedAdmissionDrawing,
   unscopedAdmissionDrawing,
 } from "./admission-visual"
+/** @internal */
 export { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
+/** @internal */
 export {
   type ConnectivityMap,
   crossesDifferentialLegs,
