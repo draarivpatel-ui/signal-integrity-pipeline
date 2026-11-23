@@ -24,6 +24,7 @@ import {
   projectNodes,
 } from "./project"
 import { StackupEditor } from "./stackup-editor"
+import { StimulusDialog } from "./stimulus-dialog"
 import { loadRecent, loadTheme, saveRecent, setTheme } from "./storage"
 import { Toolbar } from "./toolbar"
 import { ChildWindow, useWindows, windowTitles } from "./windows"
@@ -45,6 +46,7 @@ export function Workbench(): JSX.Element {
     modelId?: string
   }>()
   const [ibisFocus, setIbisFocus] = useState<IbisFocus>()
+  const [stimulusOpen, setStimulusOpen] = useState(false)
   const [about, setAbout] = useState(false)
   const [status, setStatus] = useState("Ready")
   const [error, setError] = useState<string>()
@@ -167,6 +169,8 @@ export function Workbench(): JSX.Element {
     reset: design.reset,
     board: input && (() => windows.show("board")),
     stackup: input && (() => windows.show("stackup")),
+    stimulus: simulation && (() => setStimulusOpen(true)),
+
     assign:
       input &&
       (() =>
@@ -416,6 +420,16 @@ export function Workbench(): JSX.Element {
             setAssignment(undefined)
             windows.show("ibis")
           }}
+        />
+      )}
+      {input && simulation && stimulusOpen && (
+        <StimulusDialog
+          circuit={input.circuit}
+          simulation={simulation}
+          retained={selection.retained}
+          radiusMm={input.distanceMm}
+          apply={design.edit}
+          close={() => setStimulusOpen(false)}
         />
       )}
       {about && (

@@ -15,6 +15,7 @@ import type {
 } from "../channel-inspector/input"
 
 import { type NetRole, netRoles } from "./model/net-roles"
+import { stimulusRadius } from "./model/stimulus"
 
 export interface CopperContext {
   feature: InspectorFeature
@@ -63,7 +64,7 @@ export function useBoardSelection({
       const copper = categorizeCopper({
         circuit: input.circuit,
         simulation,
-        distanceMm: input.distanceMm,
+        distanceMm: stimulusRadius({ simulation, defaultMm: input.distanceMm }),
       })
       return {
         features: inspectorFeatures({ ...copper, board: input.board }),

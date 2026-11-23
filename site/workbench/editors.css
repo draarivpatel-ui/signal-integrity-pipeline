@@ -157,3 +157,58 @@
 .wb-ibis input[type="number"] {
   width: 64px;
 }
+.wb-tabs {
+  display: flex;
+  padding: 4px 5px 0;
+  gap: 2px;
+  background: var(--face);
+  border-bottom: 1px solid var(--shadow);
+  user-select: none;
+}
+.wb-tabs button {
+  border-bottom-color: transparent;
+  padding: 3px 9px;
+}
+.wb-tabs button[aria-selected="true"] {
+  position: relative;
+  z-index: 1;
+  margin-bottom: -1px;
+  background: var(--panel);
+  font-weight: bold;
+  border-bottom-color: var(--panel);
+}
+:root[data-theme="luna"] .wb-tabs button[aria-selected="true"] {
+  border-top: 2px solid #e68b2c;
+}
+.wb-tab-panel {
+  min-height: 0;
+  flex: 1;
+  padding: 6px;
+  background: var(--panel);
+}
+.wb-stimulus {
+  width: min(640px, 85vw);
+}
+.wb-stimulus .wb-tab-panel {
+  min-height: 250px;
+}
+.wb-stimulus-timing {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+}
+.wb-stimulus-timing input {
+  max-width: 106px;
+}
+.wb-stimulus-list {
+  overflow: auto;
+  margin-top: 8px;
+  border: 1px solid var(--shadow);
+  background: var(--surface);
+}
+.wb-stimulus-list td input:not([type="checkbox"]) {
+  max-width: 61px;
+}
+.wb-aggressor-mode label {
+  justify-content: flex-start;
+}
