@@ -66,6 +66,7 @@ const MINIMUM_DRAWN_COUPLING = 0.01
 
 /** Physical node identity, coupled ladders, corrections and the single deck assembly. */
 export class RouteNetworkSolver extends BaseSolver {
+  override MAX_ITERATIONS = Infinity
   private steps?: Generator<void, Produced<RoutedDeck>>
   private output?: Produced<RoutedDeck>
   private ladder?: RouteLadder

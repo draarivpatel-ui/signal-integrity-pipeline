@@ -25,15 +25,11 @@ const DEFAULT_FIELD_PANELS = 12
 /** Reject requests below the routed field stage’s minimum panel count. */
 const MIN_FIELD_PANELS = 2
 
-/** Keep the pair screen and local matrix solves within modest memory. */
-const MAX_SCREEN_CONDUCTORS = 40
-
 const PARALLEL_COUPLING_WARNING = [
   "Parallel coupling retains connected pairs until both abs(Cij)/sqrt(Cii*Cjj) and abs(Lij)/sqrt(Lii*Ljj)",
   "are below 0.005 (0.5%). Pair screening is not an aggregate waveform error bound.",
   "Geometry admission follows the recorded copper scope;",
-  "fields beyond its cap and nonadjacent layers are unbounded omissions.",
-  `Local solves are capped at ${MAX_SCREEN_CONDUCTORS} conductors and fail explicitly.`,
+  "fields outside that scope and on nonadjacent layers are unbounded omissions.",
 ].join(" ")
 
 /** Routed geometry, extraction options, and the artifact location. */
@@ -70,11 +66,6 @@ function couplingPairs(
   const pairs: Snapshot<RouteSlice>[] = []
   for (const slice of slices) {
     const count = slice.wires.length
-    if (count > MAX_SCREEN_CONDUCTORS) {
-      throw new Error(
-        `Coupling screen has ${count} conductors; exceeds modest-memory limit of ${MAX_SCREEN_CONDUCTORS}`,
-      )
-    }
     for (let i = 0; i < count; i++) {
       for (let j = i + 1; j < count; j++) {
         pairs.push({ ...slice, wires: [slice.wires[i], slice.wires[j]] })
@@ -101,6 +92,7 @@ function sliceWeight({
 
 /** One pair screen or one unique multiconductor BEM solve per synchronous step. */
 export class RouteFieldsSolver extends BaseSolver {
+  override MAX_ITERATIONS = Infinity
   private readonly cache = new Map<
     SolvedRouteSection["key"],
     RouteCoefficients

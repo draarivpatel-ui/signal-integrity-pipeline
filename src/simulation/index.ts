@@ -46,7 +46,7 @@ export type {
 } from "./routed-types"
 export { type SignalRailIds, signalRailIds } from "./signal-rails"
 export { extractedNonrailSourceTraceIds } from "./source-node-groups"
-export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
+export { transmittedBits } from "./stimulus"
 export type {
   CircuitNodes,
   Declarations,

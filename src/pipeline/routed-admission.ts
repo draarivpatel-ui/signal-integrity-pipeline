@@ -1,16 +1,19 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
+  admissionRouteView,
+  circuitJsonDb,
   type RouteSectionsInput,
+  routeAdmissionMarks,
   routeBoardBox,
   routeBoardDrawing,
   routeFailure,
   routeLengths,
-  routeMarks,
-  routePortPoint,
   routeStrip,
   routeView,
   type SimulationPcbTransientChannelSimulationId,
+  scopedAdmissionDrawing,
+  unscopedAdmissionDrawing,
   withRouteDrawing,
 } from "../board"
 import type { IbisSources } from "../buffers"
@@ -146,6 +149,7 @@ function finalizeAdmission({
 
 /** Root admission performs exactly one channel simulation's lowering per step. */
 export class RoutedAdmissionSolver extends BaseSolver {
+  override MAX_ITERATIONS = Infinity
   private readonly input: RoutedAdmissionInput
   private admittedBoard?: AdmittedBoard
   private readonly channelSimulationPlans: RoutedChannelSimulationPlan[] = []
@@ -195,67 +199,66 @@ export class RoutedAdmissionSolver extends BaseSolver {
   > {
     return [this.input]
   }
-  /**
-   * Scoped copper in net colours with drivers as dots and receivers as rings, and each net's routed length
-   * unrolled in the pane; a rejection writes one red reason.
-   */
-  override visualize(): GraphicsObject {
-    const plan = this.channelSimulationPlans.at(-1)
+  /** Inspect the latest channel's copper and endpoints or the whole unscoped board. */
+  visualizeCopper(): GraphicsObject {
     const circuit = this.input.circuitJson
-    let drawing = routeBoardDrawing({
-      circuit,
-      scope: plan?.sections.copperScope,
+    const plan = this.channelSimulationPlans.at(-1)
+    if (plan === undefined)
+      return unscopedAdmissionDrawing({ circuit, error: this.error })
+    const { mappings } = plan.bindings
+    const db = circuitJsonDb(circuit)
+    const view = admissionRouteView({
+      db,
+      scope: plan.sections.copperScope,
+      endpointSourcePortIds: new Set(
+        mappings.flatMap(({ from, to }) => [from, to]),
+      ),
     })
-    if (!plan) {
-      if (this.failed)
-        drawing.texts!.push(
-          ...routeFailure({
-            box: routeBoardBox(circuit),
-            message: this.error ?? "Invalid signal scope",
-          }),
-        )
-      return drawing
+    return scopedAdmissionDrawing({
+      db,
+      view,
+      mappings,
+      error: this.error,
+    })
+  }
+  /** Add the stage camera and its routed-length pane to the shared copper drawing. */
+  override visualize(): GraphicsObject {
+    const circuit = this.input.circuitJson
+    const plan = this.channelSimulationPlans.at(-1)
+    const scope = plan?.sections.copperScope
+    const board = routeBoardDrawing({ circuit, scope })
+    if (plan === undefined || scope === undefined) {
+      if (this.error === null) return board
+      return {
+        ...board,
+        texts: routeFailure({
+          box: routeBoardBox(circuit),
+          message: this.error,
+        }),
+      }
     }
-    const view = routeView({ circuit, scope: plan.sections.copperScope })
-    drawing = withRouteDrawing({
-      drawing: drawing,
+    const view = routeView({ circuit, scope })
+    const drawing = withRouteDrawing({
+      drawing: board,
       overlay: routeStrip({
         pane: view.pane,
         rows: routeLengths({ circuit, view }),
       }),
     })
-    drawing.polygons!.push(
-      ...routeMarks({
-        marks: plan.bindings.mappings.flatMap((mapping) =>
-          (
-            [
-              [mapping.from, true],
-              [mapping.to, false],
-            ] as const
-          ).flatMap(([id, driver]) => {
-            const point = routePortPoint({ circuit, sourcePortId: id })
-            if (!point) return []
-            const net = view.ports.get(id)
-            return [
-              {
-                point,
-                color: net?.color ?? "#ffffff",
-                driver,
-                label: net?.label,
-              },
-            ]
-          }),
-        ),
-        unit: view.unit,
-      }),
-    )
-    if (this.failed)
-      drawing.texts!.push(
-        ...routeFailure({
-          box: view.pane,
-          message: this.error ?? "Invalid signal scope",
-        }),
-      )
-    return drawing
+    const marks = routeAdmissionMarks({
+      db: circuitJsonDb(circuit),
+      mappings: plan.bindings.mappings,
+      view,
+    })
+    const polygons = [...drawing.polygons, ...marks]
+    if (this.error === null) return { ...drawing, polygons }
+    return {
+      ...drawing,
+      polygons,
+      texts: [
+        ...drawing.texts,
+        ...routeFailure({ box: view.pane, message: this.error }),
+      ],
+    }
   }
 }
