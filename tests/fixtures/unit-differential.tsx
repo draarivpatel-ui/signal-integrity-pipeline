@@ -1,7 +1,7 @@
 // Topology/transient unit-test source only.
 import { simulation } from "@tscircuit/core"
 import type { ResistorProps } from "@tscircuit/props"
-import { Fragment, type JSX } from "react"
+import { Fragment, type JSX, type ReactNode } from "react"
 import { Reference, Transceiver } from "./signal-parts"
 
 /** Differential test rate in bits per second. */
@@ -19,6 +19,9 @@ export default function ({
   internalShort = false,
   allowUnroutedTraces,
   partialSeriesPair = false,
+  openPositive = false,
+  directNegative = false,
+  children,
 }: {
   reversed?: boolean
   routedTermination?: boolean
@@ -26,6 +29,9 @@ export default function ({
   seriesPositive?: boolean
   internalShort?: boolean
   allowUnroutedTraces?: boolean
+  openPositive?: boolean
+  directNegative?: boolean
+  children?: ReactNode
   partialSeriesPair?: boolean
 }): JSX.Element {
   let positive = "A"
@@ -65,13 +71,15 @@ export default function ({
         internallyConnectedPins={receiverInternalTies}
       />
       <Reference />
+      {children}
       {partialSeriesPair && (
         <>
           <PartialSeriesLeg pin="A" y={1.5} />
-          <PartialSeriesLeg pin="B" y={-1.5} />
+          {!directNegative && <PartialSeriesLeg pin="B" y={-1.5} />}
         </>
       )}
       {!partialSeriesPair &&
+        !openPositive &&
         (seriesPositive ? (
           <DualTerminatedPositiveLeg />
         ) : (
@@ -82,7 +90,7 @@ export default function ({
             pcbPath={[".TX > .A", ".RX > .A"]}
           />
         ))}
-      {!partialSeriesPair && (
+      {(!partialSeriesPair || directNegative) && (
         <trace
           from=".TX > .B"
           to=".RX > .B"

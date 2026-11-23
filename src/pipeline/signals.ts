@@ -31,7 +31,6 @@ import {
 } from "./signal-models"
 import {
   inspectSignalPins,
-  type SignalPins,
   scopeSignalPins,
   validateSignalPins,
 } from "./signal-pins"
@@ -47,7 +46,6 @@ export interface PreparedChannelSimulation {
   durationSeconds: number
   riseSeconds: number
   stepSeconds: number
-  routedTopology: SignalPins["routedTopology"]
   channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
   circuit: CircuitJsonSnapshot
@@ -247,12 +245,10 @@ interface ChannelSimulationOptions {
 function withPreparedChannelControls({
   settings,
   riseSeconds,
-  routedTopology,
   ...options
 }: ChannelSimulationControlOptions & {
   settings: NumericalSettings
   riseSeconds: number
-  routedTopology: SignalPins["routedTopology"]
 }): PreparedChannelSimulation {
   const { circuit, controls } = withChannelSimulationControls(options)
   const {
@@ -272,7 +268,6 @@ function withPreparedChannelControls({
     durationSeconds,
     riseSeconds,
     stepSeconds: options.stepSeconds,
-    routedTopology,
   }
 }
 
@@ -320,6 +315,5 @@ export function prepareChannelSimulation(
     aggressors,
     pins: pruned.pins,
     driven: signalPins.driven,
-    routedTopology: signalPins.routedTopology,
   })
 }
