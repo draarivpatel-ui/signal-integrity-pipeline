@@ -16,7 +16,7 @@ import {
   requiredContacts,
   validateRoutedContacts,
 } from "./routed-contacts"
-import { type CircuitNodesInput, circuitNodes } from "./routed-nodes"
+import { type CircuitNodesInput, resolveRoutedNodes } from "./routed-nodes"
 import { transmittedBits } from "./stimulus"
 import type {
   Declarations,
@@ -154,14 +154,14 @@ export function generalDeclarations({
   }))
   if (!models.length)
     fail("ibis_model", "At least one serialized native IBIS model required")
-  const nodes = circuitNodes({
+  const { nodes, cuts } = resolveRoutedNodes({
     circuit,
     mappings,
     routedTraceCuts,
     additionalSourceTraceIds,
     modeling,
   })
-  const endpoints = requiredContacts({ mappings, routedTraceCuts })
+  const endpoints = requiredContacts({ mappings, cuts })
   const passiveContacts = passiveModelContacts({ db, modeling })
   const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
   const sourceNets = new Set(

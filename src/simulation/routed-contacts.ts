@@ -1,4 +1,4 @@
-import type { CircuitJsonDb, SourcePortId } from "../board"
+import type { CircuitJsonDb, LaneMapping, SourcePortId } from "../board"
 import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import {
@@ -6,7 +6,7 @@ import {
   passiveSelectionComponents,
   placedSubcircuitPins,
 } from "./netlist"
-import type { CircuitNodesInput } from "./routed-nodes"
+import type { RoutedTraceCut } from "./routed-types"
 import type { PipelineIbisModel, SimulationModeling } from "./types"
 
 /** The source contact IDs and the paths or cuts that require each contact. */
@@ -15,22 +15,21 @@ type RequiredContacts = ReadonlyMap<SourcePortId, string>
 /** Keep the first path or cut associated with each required physical contact. */
 export function requiredContacts({
   mappings,
-  routedTraceCuts = [],
-}: Pick<CircuitNodesInput, "mappings" | "routedTraceCuts">): RequiredContacts {
+  cuts,
+}: {
+  mappings: readonly LaneMapping[]
+  cuts: readonly RoutedTraceCut[]
+}): RequiredContacts {
   const endpoints = new Map<SourcePortId, string>()
-  for (const {
-    fromSourcePortId,
-    toSourcePortId,
-    sourceTraceId,
-  } of routedTraceCuts) {
+  for (const { from, to, port } of mappings) {
+    if (!endpoints.has(from)) endpoints.set(from, port)
+    if (!endpoints.has(to)) endpoints.set(to, port)
+  }
+  for (const { fromSourcePortId, toSourcePortId, sourceTraceId } of cuts) {
     if (!endpoints.has(fromSourcePortId))
       endpoints.set(fromSourcePortId, sourceTraceId)
     if (!endpoints.has(toSourcePortId))
       endpoints.set(toSourcePortId, sourceTraceId)
-  }
-  for (const { from, to, port } of mappings) {
-    if (!endpoints.has(from)) endpoints.set(from, port)
-    if (!endpoints.has(to)) endpoints.set(to, port)
   }
   return endpoints
 }
