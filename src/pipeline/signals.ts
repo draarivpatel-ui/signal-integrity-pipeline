@@ -39,8 +39,8 @@ import {
 export { endpointPorts, probeEndpoints, signalBits } from "./signal-controls"
 export { routedLanes } from "./signal-lanes"
 
-/** Maximum and default lateral search distance for routed admission, in millimetres. */
-const MAX_COPPER_SCOPE_DISTANCE_MM = 32
+/** Default lateral search distance for routed admission, in millimetres. */
+const DEFAULT_COPPER_SCOPE_DISTANCE_MM = 32
 
 /** The lowered circuit and controls for a single transient channel simulation. */
 export interface PreparedChannelSimulation {
@@ -99,21 +99,15 @@ export function prepareChannelSimulationById({
   circuit,
   sources,
   simulationPcbTransientChannelSimulationId,
-  distanceMm = MAX_COPPER_SCOPE_DISTANCE_MM,
+  distanceMm = DEFAULT_COPPER_SCOPE_DISTANCE_MM,
 }: {
   circuit: CircuitJson
   sources: IbisSources
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
   distanceMm?: number
 }): PreparedChannelSimulation {
-  if (
-    !Number.isFinite(distanceMm) ||
-    distanceMm <= 0 ||
-    distanceMm > MAX_COPPER_SCOPE_DISTANCE_MM
-  ) {
-    throw new Error(
-      `Copper scope distance must be in (0,${MAX_COPPER_SCOPE_DISTANCE_MM}] mm`,
-    )
+  if (!Number.isFinite(distanceMm) || distanceMm <= 0) {
+    throw new Error("Copper scope distance must be finite and positive")
   }
   const channelSimulations = listChannelSimulations(circuit)
   const matches = channelSimulations.filter(

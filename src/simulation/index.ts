@@ -18,7 +18,7 @@ export {
   namespaceSpice,
   voltageSourceTerminals,
 } from "./netlist"
-export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
+export { transmittedBits } from "./stimulus"
 export type {
   CircuitNodes,
   Declarations,

@@ -20,9 +20,6 @@ const HTML_OPENING_TAG = "<html"
 /** ZIP archive headers begin with the ASCII characters P and K. */
 const ZIP_SIGNATURE = [0x50, 0x4b]
 
-/** Limit the size of a supplied IBIS asset to 64 MiB. */
-const MAX_IBIS_BYTES = 64 * 1024 * 1024
-
 /** Portable relative paths used by the explicit Node adapter as well as file maps. */
 export function relativeFile(path: string): string {
   const invalidPath =
@@ -52,7 +49,7 @@ function containsHtmlOpening(text: string): boolean {
 }
 
 /**
- * Admits the caller-supplied IBIS bytes for one model: checks the path, size, format and UTF-8 text,
+ * Admits the caller-supplied IBIS bytes for one model: checks the path, format and UTF-8 text,
  * then records the SHA-256 evidence. Nothing is ever downloaded from the declared URL.
  */
 export function loadModelSource({
@@ -75,8 +72,6 @@ export function loadModelSource({
   } else {
     bytes = source
   }
-  if (bytes.length > MAX_IBIS_BYTES)
-    fail("ibis_asset", "IBIS asset exceeds 64 MiB")
   if (ZIP_SIGNATURE.every((byte, index) => bytes[index] === byte)) {
     fail(
       "ibis_asset",

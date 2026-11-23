@@ -11,7 +11,7 @@ import {
   type SourcePortId,
 } from "../board"
 import type { InspectedPin } from "../buffers"
-import { MAX_STIMULUS_BITS, type RunControls } from "../simulation"
+import type { RunControls } from "../simulation"
 import type { Aggressors } from "./aggressors"
 import { circuitJsonDb } from "./circuit-json-db"
 import { defaultDurationSeconds, prbsPatterns } from "./timing"
@@ -175,9 +175,9 @@ export function signalBits({
     mask,
     Math.max(1, Math.ceil(intervals - roundingTolerance)),
   )
-  if (!Number.isFinite(count) || count > MAX_STIMULUS_BITS) {
+  if (!Number.isFinite(count)) {
     throw new Error(
-      `Signal "${signal.name}": ${pattern} patterns must contain at most ${MAX_STIMULUS_BITS} bits. Lower the bit rate or set duration to a shorter recording.`,
+      `Signal "${signal.name}": ${pattern} pattern length must be finite`,
     )
   }
   const { width, tap } = prbs
