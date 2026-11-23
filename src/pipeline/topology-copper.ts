@@ -1,4 +1,3 @@
-import type { Snapshot } from "../kernel"
 import {
   type Box,
   Point as PlanarPoint,
@@ -26,6 +25,7 @@ import type {
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
 import type { CircuitJsonSnapshot, SourceNetId, SourcePortId } from "../board"
 import { circuitJsonDb } from "../board"
+import type { Snapshot } from "../kernel"
 
 /** A quantized point or the key of a copper feature that acts as one junction. */
 export type CopperPointKey = string

@@ -23,9 +23,14 @@ RouteTransientSolver invokes ngspice through the injected solver port and publis
 ```mermaid
 flowchart LR
   source["Circuit JSON SI records"] --> admit["pipeline: channel admission and declared aggressor states<br/>buffers: package admission, unlisted-pin hierarchy and passivity"]
-  admit --> sections["board: copper scope, straight sections and reference planes"]
+  modelSources["IBIS sources"] --> admit
+  admit --> manifest["Admission manifest"]
+  admit --> cuts["pipeline: physical trace cuts"]
+  cuts --> sections["board: copper scope, straight sections and reference planes"]
+  cuts --> groups["simulation: ideal source groups"]
+  groups --> receiverPaths["pipeline: routed receiver paths"]
   sections --> fields["extraction: quasi-TEM cross-sections, pair screen and causal loss"]
-  admit --> bindings["buffers + simulation: vendor models, pin packages, ideal die rails, probes and sources"]
+  receiverPaths --> bindings["buffers + simulation: contact checks, vendor models, pin packages, ideal die rails, probes and sources"]
   fields --> network["simulation: coupled ladders, via and oblique corrections, one deck"]
   bindings --> network
   network --> transient["simulation: one native ngspice transient per channel simulation"]

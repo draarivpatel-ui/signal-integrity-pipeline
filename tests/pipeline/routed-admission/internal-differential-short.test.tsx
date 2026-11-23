@@ -2,9 +2,9 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
-import Differential from "../../fixtures/unit-differential"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
+import Differential from "../../fixtures/unit-differential"
 
 test("rejects a differential short through internally connected pins", async () => {
   const circuitJson = await renderSignals({

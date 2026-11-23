@@ -3,7 +3,12 @@ import type { TraceProps } from "@tscircuit/props"
 import type React from "react"
 import { Inverter, Reference } from "./signal-parts"
 
-type Route = "series" | "unrouted" | "receiver-only" | "driver-only"
+type Route =
+  | "series"
+  | "unrouted"
+  | "receiver-only"
+  | "driver-only"
+  | "parallel-passives"
 
 /** A logical driver-to-receiver connection with optional series copper. */
 export function AdmissionChannel({
@@ -42,7 +47,10 @@ export function AdmissionChannel({
       <Inverter name="RX" x={5} y={0} driver={false} />
       <Reference />
       {route === "unrouted" && <trace from={driver} to={receiver} />}
-      {route !== "unrouted" && (
+      {route === "parallel-passives" && (
+        <ParallelPassives driver={driver} receiver={receiver} />
+      )}
+      {route !== "unrouted" && route !== "parallel-passives" && (
         <>
           <resistor
             name="RS"
@@ -112,5 +120,44 @@ export function AdmissionChannel({
         />
       </simulation.pcbtransientchannelsimulation>
     </board>
+  )
+}
+
+/** One interior physical cut with two parallel passives on each side. */
+function ParallelPassives({
+  driver,
+  receiver,
+}: {
+  driver: string
+  receiver: string
+}): React.JSX.Element {
+  const left = ".R1 > .pin2"
+  const right = ".R2 > .pin1"
+  return (
+    <>
+      <resistor name="R1" resistance="33" footprint="0402" pcbX={-2} />
+      <resistor name="R2" resistance="33" footprint="0402" pcbX={2} />
+      <capacitor
+        name="C1"
+        capacitance="10pF"
+        footprint="0402"
+        pcbX={-2}
+        pcbY={1}
+      />
+      <capacitor
+        name="C2"
+        capacitance="10pF"
+        footprint="0402"
+        pcbX={2}
+        pcbY={1}
+      />
+      <trace from={driver} to=".R1 > .pin1" />
+      <trace from={driver} to=".C1 > .pin1" />
+      <trace from=".C1 > .pin2" to={left} />
+      <trace from={left} to={right} pcbPath={[left, right]} />
+      <trace from={right} to=".C2 > .pin1" />
+      <trace from=".R2 > .pin2" to={receiver} />
+      <trace from=".C2 > .pin2" to={receiver} />
+    </>
   )
 }
