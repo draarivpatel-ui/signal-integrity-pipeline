@@ -40,6 +40,7 @@ export interface BoardAppearance {
   highlight: string
   copper: Record<CopperCategory, string>
   opacity: number
+  farOpacity?: number
 }
 
 /** Shared positions for a board's geometry at one explosion setting. */
@@ -148,11 +149,15 @@ function addCopper({
     }
     if (geometries.length === 0) continue
     const style = copperStyles[category]
+    const opacity =
+      category === "far"
+        ? (appearance?.farOpacity ?? style.opacity)
+        : style.opacity
     const material = new THREE.MeshBasicMaterial({
       color: appearance?.copper[category] ?? style.color,
-      opacity: style.opacity,
-      transparent: style.opacity < 1,
-      depthWrite: style.opacity === 1,
+      opacity,
+      transparent: opacity < 1,
+      depthWrite: opacity === 1,
       side: THREE.DoubleSide,
       forceSinglePass: true,
     })

@@ -45,6 +45,7 @@ export function ScopeEye({
       }),
     [signal, bitNs, settings, skip, phase, threshold, maskHeight, maskWidth],
   )
+  const failed = eye.violations + eye.betweenSamples > 0
   const series: Series[] = eye.segments.map((segment, position) => ({
     id: `fold-${position}`,
     label: "Folded probe",
@@ -115,11 +116,7 @@ export function ScopeEye({
                 yMax: Math.max(extent.max, threshold + maskHeight / 2) + div,
               }}
               threshold={threshold}
-              mask={
-                showMask
-                  ? { points: eye.mask, failed: eye.violations > 0 }
-                  : undefined
-              }
+              mask={showMask ? { points: eye.mask, failed } : undefined}
             />
           ) : (
             <p className="wb-placeholder">
@@ -131,7 +128,7 @@ export function ScopeEye({
         <aside className="wb-probe-pane wb-scope-legend">
           <fieldset className="wb-fields">
             <legend>Eye mask</legend>
-            <label>
+            <label className="wb-check-label">
               <input
                 type="checkbox"
                 checked={showMask}
@@ -182,16 +179,24 @@ export function ScopeEye({
             <dd>
               {eye.widthFraction === undefined
                 ? "—"
-                : `${(eye.widthFraction * bitNs).toFixed(2)} ns`}
+                : `${(eye.widthFraction * bitNs).toFixed(2)} ns (${eye.widthFraction.toFixed(2)} UI)`}
             </dd>
             <dt>Crossing</dt>
-            <dd>{threshold.toFixed(3)} V</dd>
+            <dd>
+              {eye.crossingVoltage === undefined
+                ? "—"
+                : `${eye.crossingVoltage.toFixed(3)} V`}
+            </dd>
             <dt>Segments</dt>
             <dd>{series.length}</dd>
           </dl>
           {showMask && series.length > 0 && (
-            <strong className="wb-mask-state" data-failed={eye.violations > 0}>
-              {eye.violations > 0 ? `FAIL · ${eye.violations} hit` : "PASS"}
+            <strong className="wb-mask-state" data-failed={failed}>
+              {failed
+                ? `FAIL · ${eye.violations} sample ${eye.violations === 1 ? "hit" : "hits"}`
+                : "PASS"}
+              {eye.betweenSamples > 0 &&
+                ` · ${eye.betweenSamples} between samples`}
             </strong>
           )}
         </aside>

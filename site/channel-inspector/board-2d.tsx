@@ -1,5 +1,5 @@
 import type { LayerRef, Point } from "circuit-json"
-import type React from "react"
+import { type JSX, useRef, useState } from "react"
 import type { BoardInteraction } from "./board-3d"
 import {
   copperStyles,
@@ -25,7 +25,7 @@ function CopperShape({
 }: {
   shape: InspectorShape
   color: string
-}): React.JSX.Element {
+}): JSX.Element {
   if (shape.shape === "wire")
     return (
       <line
@@ -62,18 +62,28 @@ export function Board2d({
   onCursor,
   onContext,
   themed,
+  farOpacity,
+  substrateOpacity,
 }: BoardInteraction & {
   board: InspectorBoard
   features: readonly InspectorFeature[]
   layers: ReadonlySet<LayerRef>
   themed?: boolean
-}): React.JSX.Element {
+  farOpacity?: number
+  substrateOpacity?: number
+}): JSX.Element {
   const { center, width, height } = board
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState<Point>({ x: 0, y: 0 })
+  const drag = useRef<Point>(undefined)
+  const moved = useRef(false)
+  const viewWidth = (width + 2 * BOARD_MARGIN_MM) / zoom
+  const viewHeight = (height + 2 * BOARD_MARGIN_MM) / zoom
   const viewBox = [
-    center.x - width / 2 - BOARD_MARGIN_MM,
-    -center.y - height / 2 - BOARD_MARGIN_MM,
-    width + 2 * BOARD_MARGIN_MM,
-    height + 2 * BOARD_MARGIN_MM,
+    center.x + pan.x - viewWidth / 2,
+    -center.y + pan.y - viewHeight / 2,
+    viewWidth,
+    viewHeight,
   ].join(" ")
   const ordered = [...features].sort(
     (left, right) =>
@@ -85,22 +95,55 @@ export function Board2d({
       viewBox={viewBox}
       aria-label="Top view of PCB copper"
       onClick={() => onSelect(undefined)}
+      onClickCapture={(event) => {
+        if (moved.current) event.stopPropagation()
+        moved.current = false
+      }}
+      onWheel={(event) => {
+        if (themed)
+          setZoom((value) =>
+            Math.min(24, Math.max(1, value * Math.exp(-event.deltaY / 500))),
+          )
+      }}
+      onPointerDown={(event) => {
+        if (!themed || event.button !== 0) return
+        moved.current = false
+        drag.current = { x: event.clientX, y: event.clientY }
+      }}
+      onPointerUp={() => {
+        drag.current = undefined
+      }}
+      onPointerCancel={() => {
+        drag.current = undefined
+      }}
+      onPointerLeave={() => {
+        drag.current = undefined
+      }}
       onPointerMove={(event) => {
-        if (!onCursor) return
         const matrix = event.currentTarget.getScreenCTM()
         if (!matrix) return
         const point = new DOMPoint(
           event.clientX,
           event.clientY,
         ).matrixTransform(matrix.inverse())
-        onCursor({ x: point.x, y: -point.y })
+        onCursor?.({ x: point.x, y: -point.y })
+        if (!drag.current || event.buttons !== 1) return
+        const dx = event.clientX - drag.current.x
+        const dy = event.clientY - drag.current.y
+        if (!moved.current && Math.hypot(dx, dy) < 3) return
+        moved.current = true
+        drag.current = { x: event.clientX, y: event.clientY }
+        setPan((value) => ({
+          x: value.x - dx / matrix.a,
+          y: value.y - dy / matrix.d,
+        }))
       }}
     >
       <g transform="scale(1 -1)">
         <path
           d={ringPath([board.outline])}
           fill={themed ? "var(--glass)" : "#243648"}
-          fillOpacity={themed ? 0.19 : 1}
+          fillOpacity={substrateOpacity ?? (themed ? 0.19 : 1)}
           stroke={themed ? "var(--outline)" : "#67849d"}
           strokeWidth="0.04"
         />
@@ -120,6 +163,10 @@ export function Board2d({
           ))}
         {ordered.map((feature) => {
           const style = copperStyles[feature.category]
+          const opacity =
+            feature.category === "far"
+              ? (farOpacity ?? style.opacity)
+              : style.opacity
           const active = feature.id === (hovered ?? selected)?.id
           let color = themed ? `var(--${feature.category})` : style.color
           if (active) color = themed ? "var(--highlight)" : "#e9fcff"
@@ -136,7 +183,7 @@ export function Board2d({
                 event.preventDefault()
                 onContext({ feature, x: event.clientX, y: event.clientY })
               }}
-              opacity={active ? 1 : style.opacity}
+              opacity={active ? 1 : opacity}
               onPointerEnter={() => onHover(feature)}
               onPointerLeave={() => onHover(undefined)}
               onClick={(event) => {

@@ -14,6 +14,7 @@ import type {
 } from "../channel-inspector/geometry"
 import type { BoardAppearance } from "../channel-inspector/scene-geometry"
 import type { Theme } from "./chrome"
+import { fixed } from "./model/labels"
 
 const categories = {
   selected: "Victim",
@@ -23,7 +24,13 @@ const categories = {
 }
 
 /** Read the root CSS palette for the WebGL renderer. */
-function boardAppearance(opacity: number): BoardAppearance {
+function boardAppearance({
+  opacity,
+  farOpacity,
+}: {
+  opacity: number
+  farOpacity: number
+}): BoardAppearance {
   const css = getComputedStyle(document.documentElement)
   return {
     background: css.getPropertyValue("--scene").trim(),
@@ -38,6 +45,46 @@ function boardAppearance(opacity: number): BoardAppearance {
       far: css.getPropertyValue("--far").trim(),
     },
     opacity,
+    farOpacity,
+  }
+}
+
+/** Board controls shared by the viewer, context menu, and menu accelerators. */
+export interface BoardView {
+  mode: "3D" | "2D"
+  setMode: (mode: "3D" | "2D") => void
+  camera: CameraView
+  chooseCamera: (camera: CameraView) => void
+  fit: () => void
+  reset: number
+  hideFar: boolean
+  setHideFar: (hide: boolean) => void
+  transparent: boolean
+  setTransparent: (transparent: boolean) => void
+}
+
+/** Keep viewer preferences alive while an MDI window is closed or recreated. */
+export function useBoardView(): BoardView {
+  const [mode, setMode] = useState<BoardView["mode"]>("3D")
+  const [camera, setCamera] = useState<CameraView>("Iso")
+  const [reset, setReset] = useState(0)
+  const [hideFar, setHideFar] = useState(false)
+  const [transparent, setTransparent] = useState(true)
+  return {
+    mode,
+    setMode,
+    camera,
+    reset,
+    hideFar,
+    setHideFar,
+    transparent,
+    setTransparent,
+    chooseCamera: (view) => {
+      setMode("3D")
+      setCamera(view)
+      setReset((count) => count + 1)
+    },
+    fit: () => setReset((count) => count + 1),
   }
 }
 
@@ -47,27 +94,43 @@ export function BoardViewer({
   features,
   theme,
   interaction,
+  view,
+  radiusMm,
+  hoverLabel,
   error,
 }: {
   board: InspectorBoard
   features: InspectorFeature[]
   theme: Theme
   interaction: BoardInteraction
+  view: BoardView
+  radiusMm: number
+  hoverLabel?: string
   error?: string
 }): JSX.Element {
-  const [mode, setMode] = useState<"3D" | "2D">("3D")
-  const [camera, setCamera] = useState<CameraView>("Iso")
-  const [reset, setReset] = useState(0)
+  const {
+    mode,
+    setMode,
+    camera,
+    chooseCamera,
+    fit,
+    reset,
+    hideFar,
+    setHideFar,
+    transparent,
+  } = view
   const [exaggeration, setExaggeration] = useState(3)
   const [transparency, setTransparency] = useState(88)
-  const [hideFar, setHideFar] = useState(false)
+  const [pointer, setPointer] = useState<Point>()
   const [hiddenLayers, setHiddenLayers] = useState<LayerRef[]>([])
+  const farOpacity = theme === "classic" ? 0.24 : 0.15
+  const opacity = transparent ? (100 - transparency) / 100 : 1
   const [appearance, setAppearance] = useState<BoardAppearance>(() =>
-    boardAppearance(0.12),
+    boardAppearance({ opacity, farOpacity }),
   )
   useEffect(
-    () => setAppearance(boardAppearance((100 - transparency) / 100)),
-    [theme, transparency],
+    () => setAppearance(boardAppearance({ opacity, farOpacity })),
+    [theme, opacity, farOpacity],
   )
   const visibleLayers = useMemo(
     () =>
@@ -118,10 +181,7 @@ export function BoardViewer({
               <button
                 key={view}
                 aria-pressed={camera === view}
-                onClick={() => {
-                  setCamera(view)
-                  setReset((count) => count + 1)
-                }}
+                onClick={() => chooseCamera(view)}
               >
                 {view}
               </button>
@@ -145,6 +205,7 @@ export function BoardViewer({
                 type="range"
                 min="20"
                 max="100"
+                disabled={!transparent}
                 value={transparency}
                 onChange={(event) =>
                   setTransparency(event.target.valueAsNumber)
@@ -154,6 +215,7 @@ export function BoardViewer({
             </label>
           </>
         )}
+        <button onClick={fit}>Fit</button>
       </div>
       <div className="wb-tool-row wb-layer-strip">
         <strong>Layers</strong>
@@ -189,7 +251,20 @@ export function BoardViewer({
           {error}
         </div>
       )}
-      <div className="wb-board-stage">
+      <div
+        className="wb-board-stage"
+        onPointerMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          setPointer({
+            x: Math.min(
+              event.clientX - rect.left + 12,
+              Math.max(0, rect.width - 155),
+            ),
+            y: Math.min(event.clientY - rect.top + 14, rect.height - 25),
+          })
+        }}
+        onPointerLeave={() => setPointer(undefined)}
+      >
         <div hidden={mode !== "3D"} className="wb-board-3d">
           <Board3d
             board={visibleBoard}
@@ -200,19 +275,32 @@ export function BoardViewer({
             appearance={appearance}
             {...interaction}
           />
-          <small className="wb-board-hint">
-            Drag to orbit · Scroll to zoom · Right-click copper
-          </small>
         </div>
         {mode === "2D" && (
           <Board2d
+            key={reset}
             themed
+            farOpacity={farOpacity}
+            substrateOpacity={opacity}
             board={board}
             features={visible}
             layers={visibleLayers}
             {...interaction}
           />
         )}
+        {pointer && hoverLabel && (
+          <small
+            className="wb-board-tip"
+            role="tooltip"
+            style={{ left: pointer.x, top: pointer.y }}
+          >
+            {hoverLabel}
+          </small>
+        )}
+        <small className="wb-board-hint">
+          {mode === "3D" ? "Drag to orbit" : "Drag to pan"} · Scroll to zoom ·
+          Right-click copper
+        </small>
       </div>
       <div className="wb-tool-row wb-board-legend" aria-label="Copper legend">
         {copperCategories.map((category) => (
@@ -227,6 +315,7 @@ export function BoardViewer({
             </strong>
           </span>
         ))}
+        <span>Radius: {Number(radiusMm.toFixed(3))} mm</span>
       </div>
     </div>
   )
@@ -235,5 +324,5 @@ export function BoardViewer({
 /** Format board coordinates consistently in the desktop status bar. */
 export function boardCoordinates(point?: Point): string {
   if (!point) return "X — mm · Y — mm"
-  return `X ${point.x.toFixed(2)} · Y ${point.y.toFixed(2)} mm`
+  return `X ${fixed({ value: point.x, digits: 2 })} · Y ${fixed({ value: point.y, digits: 2 })} mm`
 }

@@ -2,7 +2,7 @@ import type { JSX } from "react"
 import type { BoardInteraction } from "../channel-inspector/board-3d"
 import type { InspectorFeature } from "../channel-inspector/geometry"
 import { boardCoordinates } from "./board-viewer"
-import { Icon } from "./icons"
+import { CaptionIcon, Icon } from "./icons"
 import { stageCount } from "./local-run"
 import { SolverIndicator } from "./simulation-log"
 import type { useSimulation } from "./simulation-state"
@@ -37,14 +37,14 @@ export function DesktopTitle({
           aria-label="Toggle docked panels"
           onClick={toggleDocks}
         >
-          _
+          <CaptionIcon name="minimize" />
         </button>
         <button
           title="Toggle full screen"
           aria-label="Toggle full screen"
           onClick={toggleFullscreen}
         >
-          □
+          <CaptionIcon name="maximize" />
         </button>
         <button
           title="Close board"
@@ -52,7 +52,7 @@ export function DesktopTitle({
           disabled={!close}
           onClick={close}
         >
-          ×
+          <CaptionIcon name="close" />
         </button>
       </div>
     </header>
@@ -65,12 +65,14 @@ export function DesktopStatus({
   status,
   cursor,
   picked,
+  pickedLabel,
   hovered,
 }: {
   runner: ReturnType<typeof useSimulation>
   status: string
   cursor?: Parameters<NonNullable<BoardInteraction["onCursor"]>>[0]
   picked?: InspectorFeature
+  pickedLabel?: string
   hovered?: InspectorFeature
 }): JSX.Element {
   const summary =
@@ -85,7 +87,7 @@ export function DesktopStatus({
       </span>
       <span className="wb-status-coords">{boardCoordinates(cursor)}</span>
       <span title={layer}>Layer {layer}</span>
-      <span title={picked?.id}>{picked?.id ?? "No selection"}</span>
+      <span title={pickedLabel}>{pickedLabel ?? "No selection"}</span>
       <SolverIndicator
         solver={runner.solver}
         version={runner.version}

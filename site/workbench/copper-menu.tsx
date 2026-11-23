@@ -1,6 +1,6 @@
 import { type JSX, useEffect } from "react"
 import type { CopperContext } from "./board-selection"
-import { CommandButton } from "./chrome"
+import { type Command, CommandButton } from "./chrome"
 import type { NetRole } from "./model/net-roles"
 
 const actions: { role: NetRole; label: string }[] = [
@@ -13,11 +13,15 @@ const actions: { role: NetRole; label: string }[] = [
 export function CopperMenu({
   context,
   editable,
+  current,
+  extra,
   edit,
   close,
 }: {
   context: CopperContext
   editable: boolean
+  current?: NetRole
+  extra: Command[]
   edit: (role: NetRole) => void
   close: () => void
 }): JSX.Element {
@@ -27,15 +31,23 @@ export function CopperMenu({
       className="wb-popover wb-context"
       style={{
         left: Math.max(0, Math.min(context.x, window.innerWidth - 194)),
-        top: Math.max(0, Math.min(context.y, window.innerHeight - 87)),
+        top: Math.max(0, Math.min(context.y, window.innerHeight - 190)),
       }}
     >
       {actions.map(({ role, label }) => (
         <CommandButton
           key={role}
-          command={{ label, action: editable ? () => edit(role) : undefined }}
+          command={{
+            label,
+            checked: current === role,
+            action: editable && current !== role ? () => edit(role) : undefined,
+          }}
           onInvoke={close}
         />
+      ))}
+      <div role="separator" className="wb-menu-separator" />
+      {extra.map((command) => (
+        <CommandButton key={command.label} command={command} onInvoke={close} />
       ))}
     </div>
   )

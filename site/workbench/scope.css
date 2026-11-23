@@ -65,3 +65,40 @@
   position: absolute;
   inset: 0;
 }
+
+.wb-scope {
+  container-type: inline-size;
+}
+.wb-scope .wb-tabs {
+  flex-wrap: wrap;
+  overflow: auto;
+}
+.wb-scope .wb-tabs button {
+  flex: none;
+}
+.wb-scope .wb-check-label {
+  justify-content: flex-start;
+  gap: 4px;
+}
+.wb-measurements th {
+  min-width: 54px;
+  overflow-wrap: normal;
+}
+.wb-measurements th:first-child {
+  min-width: 92px;
+}
+@container (max-width: 380px) {
+  .wb-scope-split {
+    flex-direction: column;
+    overflow: auto;
+  }
+  .wb-scope-plot {
+    min-height: 132px;
+  }
+  .wb-scope-legend {
+    width: auto;
+    max-height: 100px;
+    border-left: 0;
+    border-top: 1px solid var(--shadow);
+  }
+}

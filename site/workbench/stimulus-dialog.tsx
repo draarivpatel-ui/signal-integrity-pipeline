@@ -1,39 +1,86 @@
 import { type JSX, useId, useMemo, useState } from "react"
 import { type CircuitJson, circuitJsonDb, endpointPorts } from "../../src/board"
-import type { ChannelSimulation } from "../channel-inspector/input"
+import type {
+  ChannelSimulation,
+  InspectorInput,
+} from "../channel-inspector/input"
 import { Modal } from "./chrome"
-import { embeddedModels, modelPins } from "./model/ibis"
+import { type AdmittedAggressor, admittedAggressors } from "./local-run"
+import {
+  displayBuffer,
+  displayDirection,
+  embeddedModels,
+  modelPins,
+} from "./model/ibis"
+import { qualifiedPort } from "./model/labels"
 import {
   type ChannelEdit,
   editStimulus,
+  type StimulusEdit,
   stimulusRadius,
 } from "./model/stimulus"
 
-const stimulusTabs = [
-  "Victims & Timing",
-  "Aggressors",
-  "Per-Channel Overrides",
-] as const
+const stimulusTabs = ["Victims & Timing", "Aggressors"] as const
 type StimulusTab = (typeof stimulusTabs)[number]
 const nanosecondsPerMillisecond = 1e6
 const bitsPerMegabit = 1e6
 
+/** Admission either reports real driver states or explains why the design cannot run. */
+interface AggressorPreview {
+  drivers: AdmittedAggressor[]
+  error?: string
+}
+
+/** Admit the exact draft that OK would save. */
+function previewAggressors({
+  input,
+  id,
+  edit,
+}: {
+  input: InspectorInput
+  id: string
+  edit: StimulusEdit
+}): AggressorPreview {
+  try {
+    const circuit = editStimulus({ circuit: input.circuit, id, edit })
+    const simulation =
+      circuitJsonDb(circuit).simulation_pcb_transient_channel_simulation.get(
+        id,
+      )!
+    return {
+      drivers: admittedAggressors({ input: { ...input, circuit }, simulation }),
+    }
+  } catch (cause) {
+    return { drivers: [], error: (cause as Error).message }
+  }
+}
+
+/** Update only a selected channel's fields. */
+function withChannelEdit({
+  values,
+  id,
+  patch,
+}: {
+  values: Record<string, Partial<ChannelEdit>>
+  id: string
+  patch: Partial<ChannelEdit>
+}): Record<string, Partial<ChannelEdit>> {
+  return { ...values, [id]: { ...values[id], ...patch } }
+}
+
 /** Edit the active simulation and its declared channel-specific driver settings. */
 export function StimulusDialog({
-  circuit,
+  input,
   simulation,
-  radiusMm,
-  retained,
   apply,
   close,
 }: {
-  circuit: CircuitJson
+  input: InspectorInput
   simulation: ChannelSimulation
-  radiusMm: number
-  retained: ReadonlySet<string>
   apply: (circuit: CircuitJson) => void
   close: () => void
 }): JSX.Element {
+  const { circuit } = input
   const id = simulation.simulation_pcb_transient_channel_simulation_id
   const db = useMemo(() => circuitJsonDb(circuit), [circuit])
   const channels = db.simulation_pcb_driver_receiver_channel.list({
@@ -48,7 +95,7 @@ export function StimulusDialog({
       : simulation.duration_ms * nanosecondsPerMillisecond,
   )
   const [radius, setRadius] = useState(
-    stimulusRadius({ simulation, defaultMm: radiusMm }),
+    stimulusRadius({ simulation, defaultMm: input.distanceMm }),
   )
   const [disabled, setDisabled] = useState(
     simulation.aggressor_disabled === true,
@@ -57,60 +104,35 @@ export function StimulusDialog({
   const [edits, setEdits] = useState<Record<string, Partial<ChannelEdit>>>({})
   const [error, setError] = useState<string>()
   const list = useId()
-  const drivers = new Set(
-    channels.flatMap(({ driver }) => endpointPorts(driver)),
-  )
   const pins = useMemo(
     () => modelPins({ circuit, models: embeddedModels(circuit) }),
     [circuit],
   )
-  const aggressors = pins.filter(
-    (pin) =>
-      retained.has(pin.port) &&
-      !drivers.has(pin.port) &&
-      [
-        "output",
-        "i/o",
-        "3-state",
-        "open_drain",
-        "open_sink",
-        "open_source",
-      ].includes(pin.direction ?? ""),
+  const edit = useMemo<StimulusEdit>(
+    () => ({
+      name,
+      rateBps: rate * bitsPerMegabit,
+      durationMs:
+        duration === undefined
+          ? undefined
+          : duration / nanosecondsPerMillisecond,
+      radiusMm: radius,
+      aggressorPattern: pattern,
+      aggressorsDisabled: disabled,
+      channels: edits,
+    }),
+    [name, rate, duration, radius, pattern, disabled, edits],
   )
-  /** Update only the selected channel's overridden fields. */
-  const change = ({
-    id,
-    patch,
-  }: {
-    id: string
-    patch: Partial<ChannelEdit>
-  }): void => {
-    setEdits((values) => ({ ...values, [id]: { ...values[id], ...patch } }))
-  }
+  const preview = useMemo(() => {
+    if (tab === "Aggressors") return previewAggressors({ input, id, edit })
+  }, [tab, input, id, edit])
   return (
     <Modal
       title="Stimulus & Aggressors"
       close={close}
       apply={() => {
         try {
-          apply(
-            editStimulus({
-              circuit,
-              id,
-              edit: {
-                name,
-                rateBps: rate * bitsPerMegabit,
-                durationMs:
-                  duration === undefined
-                    ? undefined
-                    : duration / nanosecondsPerMillisecond,
-                radiusMm: radius,
-                aggressorPattern: pattern,
-                aggressorsDisabled: disabled,
-                channels: edits,
-              },
-            }),
-          )
+          apply(editStimulus({ circuit, id, edit }))
           setEdits({})
           setError(undefined)
           return true
@@ -199,7 +221,7 @@ export function StimulusDialog({
               </label>
             </fieldset>
           )}
-          {tab !== "Aggressors" && (
+          {tab === "Victims & Timing" && (
             <div className="wb-stimulus-list">
               <table className="wb-grid wb-editor-grid">
                 <thead>
@@ -228,17 +250,13 @@ export function StimulusDialog({
                         <td>{channel.name}</td>
                         <td>
                           {endpointPorts(channel.driver)
-                            .map(
-                              (port) => db.source_port.get(port)?.name ?? port,
-                            )
+                            .map((port) => qualifiedPort({ db, port }))
                             .join("/")}
                         </td>
                         <td>
                           {channel.receivers
                             .flatMap(endpointPorts)
-                            .map(
-                              (port) => db.source_port.get(port)?.name ?? port,
-                            )
+                            .map((port) => qualifiedPort({ db, port }))
                             .join("/")}
                         </td>
                         <td>
@@ -247,10 +265,13 @@ export function StimulusDialog({
                             list={list}
                             value={value.pattern}
                             onChange={(event) =>
-                              change({
-                                id: channelId,
-                                patch: { pattern: event.target.value },
-                              })
+                              setEdits((values) =>
+                                withChannelEdit({
+                                  values,
+                                  id: channelId,
+                                  patch: { pattern: event.target.value },
+                                }),
+                              )
                             }
                           />
                         </td>
@@ -262,13 +283,17 @@ export function StimulusDialog({
                             step="any"
                             value={value.bit_rate_bps / bitsPerMegabit || ""}
                             onChange={(event) =>
-                              change({
-                                id: channelId,
-                                patch: {
-                                  bit_rate_bps:
-                                    event.target.valueAsNumber * bitsPerMegabit,
-                                },
-                              })
+                              setEdits((values) =>
+                                withChannelEdit({
+                                  values,
+                                  id: channelId,
+                                  patch: {
+                                    bit_rate_bps:
+                                      event.target.valueAsNumber *
+                                      bitsPerMegabit,
+                                  },
+                                }),
+                              )
                             }
                           />
                         </td>
@@ -280,14 +305,17 @@ export function StimulusDialog({
                             step="any"
                             value={value.offset_ms * nanosecondsPerMillisecond}
                             onChange={(event) =>
-                              change({
-                                id: channelId,
-                                patch: {
-                                  offset_ms:
-                                    event.target.valueAsNumber /
-                                    nanosecondsPerMillisecond,
-                                },
-                              })
+                              setEdits((values) =>
+                                withChannelEdit({
+                                  values,
+                                  id: channelId,
+                                  patch: {
+                                    offset_ms:
+                                      event.target.valueAsNumber /
+                                      nanosecondsPerMillisecond,
+                                  },
+                                }),
+                              )
                             }
                           />
                         </td>
@@ -299,12 +327,16 @@ export function StimulusDialog({
                             step="1"
                             value={value.seed ?? ""}
                             onChange={(event) =>
-                              change({
-                                id: channelId,
-                                patch: {
-                                  seed: event.target.valueAsNumber || undefined,
-                                },
-                              })
+                              setEdits((values) =>
+                                withChannelEdit({
+                                  values,
+                                  id: channelId,
+                                  patch: {
+                                    seed:
+                                      event.target.valueAsNumber || undefined,
+                                  },
+                                }),
+                              )
                             }
                           />
                         </td>
@@ -314,12 +346,15 @@ export function StimulusDialog({
                             type="checkbox"
                             checked={value.driver_disabled === true}
                             onChange={(event) =>
-                              change({
-                                id: channelId,
-                                patch: {
-                                  driver_disabled: event.target.checked,
-                                },
-                              })
+                              setEdits((values) =>
+                                withChannelEdit({
+                                  values,
+                                  id: channelId,
+                                  patch: {
+                                    driver_disabled: event.target.checked,
+                                  },
+                                }),
+                              )
                             }
                           />
                         </td>
@@ -365,28 +400,32 @@ export function StimulusDialog({
                       <th>Detected driver</th>
                       <th>Model</th>
                       <th>Type</th>
+                      <th>State</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {aggressors.map((pin) => (
-                      <tr key={pin.id}>
-                        <td>
-                          {pin.model.component}.{pin.label}
-                        </td>
-                        <td>{pin.name}</td>
-                        <td>{pin.direction}</td>
-                      </tr>
-                    ))}
+                    {preview?.drivers.map(({ port, enabled }) => {
+                      const pin = pins.find((item) => item.port === port)
+                      return (
+                        <tr key={port}>
+                          <td>{qualifiedPort({ db, port })}</td>
+                          <td>{displayBuffer(pin?.name)}</td>
+                          <td>{displayDirection(pin?.direction)}</td>
+                          <td>{enabled ? "Driven" : "High impedance"}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
-              {disabled &&
-                aggressors.some((pin) => pin.direction === "output") && (
-                  <p className="wb-inline-error">
-                    An Output-only model has no disabled state. Choose a drive
-                    pattern or assign a model with a high-impedance state.
-                  </p>
-                )}
+              {preview?.error && (
+                <p role="alert" className="wb-inline-error">
+                  {preview.error}
+                </p>
+              )}
+              {preview && !preview.error && preview.drivers.length === 0 && (
+                <p>No aggressor drivers in the admitted copper scope.</p>
+              )}
             </>
           )}
         </div>

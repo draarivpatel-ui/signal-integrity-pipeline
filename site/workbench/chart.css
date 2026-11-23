@@ -60,7 +60,7 @@
   fill: currentColor;
 }
 .wb-chart-cursor text {
-  fill: var(--plot);
+  fill: var(--scope-plot, var(--plot));
 }
 .wb-eye-mask {
   stroke: var(--ok);

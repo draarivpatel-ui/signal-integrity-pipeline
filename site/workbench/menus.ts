@@ -1,3 +1,6 @@
+import { type CameraView, cameraViews } from "../channel-inspector/board-3d"
+import type { ChannelSimulation } from "../channel-inspector/input"
+import type { BoardView } from "./board-viewer"
 import type { Command, Menu, Theme } from "./chrome"
 import { themeIds, themes } from "./chrome"
 import type { IconName } from "./icons"
@@ -22,9 +25,14 @@ const commandInfo = {
   exclude: ["Exclude Selected Net", "Delete", null],
   clear: ["Clear Selection", "Escape", null],
   board: ["Board Viewer", null, "board"],
+  board3d: ["3D Board View", "1", null],
+  board2d: ["2D Top View", "2", null],
+  fit: ["Fit Board", "Home", null],
+  hideFar: ["Hide Far Copper", "H", null],
+  transparent: ["Transparent Substrate", "T", null],
   stackup: ["Stackup Editor", "Ctrl+K", "stackup"],
   assign: ["Assign Models…", "Ctrl+M", "models"],
-  ibis: ["Visual IBIS Editor", "Ctrl+I", "models"],
+  ibis: ["Visual IBIS Editor", "Ctrl+I", "ibisCurve"],
   stimulus: ["Stimulus / Aggressors…", "Ctrl+T", "stimulus"],
   run: ["Run", "F5", "run"],
   stop: ["Stop Simulation", "Shift+F5", "stop"],
@@ -35,6 +43,9 @@ const commandInfo = {
   solver: ["Check Local Solver Status", null, null],
   deck: ["View Compiled SPICE Deck…", null, null],
   reset: ["Reset Design to Loaded File", null, null],
+  radius: ["Copper Scope Radius…", null, null],
+  shortcuts: ["Keyboard Shortcuts…", "F1", null],
+  guide: ["SI Workflow Quick Guide…", null, null],
   about: ["About SI Workbench", null, null],
 } as const satisfies Record<
   string,
@@ -66,6 +77,15 @@ export function workbenchCommand({
 }
 
 interface MenuOptions {
+  boardView: BoardView
+  selectCamera?: (camera: CameraView) => void
+  simulations?: ChannelSimulation[]
+  simulationIndex: number
+  selectSimulation: (index: number) => void
+  clearRecent: () => void
+  activeFrame?: Frame
+  resetLayout: () => void
+  arrangeIcons: () => void
   actions: CommandActions
   recent: string[]
   theme: Theme
@@ -78,6 +98,24 @@ interface MenuOptions {
   showWindow: (id: WindowId) => void
   arrange: (mode: Arrange) => void
   comparing?: boolean
+}
+
+/** Bind the current command actions to their menu information. */
+function bindCommands(actions: CommandActions): (id: CommandId) => Command {
+  return (id) => workbenchCommand({ id, actions })
+}
+
+/** Flatten leaf shortcuts for the keyboard reference dialog. */
+export function menuShortcuts(menus: Menu[]): Command[] {
+  return menus.flatMap(({ items }) => commandShortcuts(items))
+}
+
+/** Read the visible accelerator labels even if a command is currently disabled. */
+function commandShortcuts(commands: Command[]): Command[] {
+  return commands.flatMap((command) => {
+    if (command.items) return commandShortcuts(command.items)
+    return command.shortcut ? [command] : []
+  })
 }
 
 /** Collect all desktop commands in the menu bar and keyboard dispatch. */
@@ -95,8 +133,7 @@ export function workbenchMenus(options: MenuOptions): Menu[] {
     showWindow,
     arrange,
   } = options
-  /** Bind command state to a menu row. */
-  const item = (id: CommandId): Command => workbenchCommand({ id, actions })
+  const item = bindCommands(actions)
   return [
     {
       label: "File",
@@ -106,18 +143,23 @@ export function workbenchMenus(options: MenuOptions): Menu[] {
         {
           label: "Open Recent",
           items: recent.length
-            ? recent.map((name) => ({
-                label: name,
-                action:
-                  name === "Parallel bus sample"
-                    ? actions.sample
-                    : actions.open,
-              }))
+            ? [
+                ...recent.map((name) => ({
+                  label: name,
+                  action:
+                    name === "Parallel bus sample"
+                      ? actions.sample
+                      : actions.open,
+                })),
+                { label: "Recent operations", separator: true },
+                { label: "Clear Recent", action: options.clearRecent },
+              ]
             : [{ label: "(No recent files)" }],
         },
         { label: "File operations", separator: true },
         item("save"),
         { label: "Export", items: [item("csv"), item("png")] },
+        { label: "Board lifecycle", separator: true },
         item("close"),
       ],
     },
@@ -136,7 +178,37 @@ export function workbenchMenus(options: MenuOptions): Menu[] {
     {
       label: "View",
       items: [
-        item("board"),
+        {
+          ...item("board3d"),
+          checked: options.boardView.mode === "3D",
+          radio: true,
+        },
+        {
+          ...item("board2d"),
+          checked: options.boardView.mode === "2D",
+          radio: true,
+        },
+        { label: "Board camera", separator: true },
+        {
+          label: "Camera",
+          items: [
+            ...cameraViews.map((camera, index) => ({
+              label: camera === "Iso" ? "Isometric" : camera,
+              shortcut: `Ctrl+${index + 1}`,
+              action:
+                options.selectCamera && (() => options.selectCamera?.(camera)),
+              checked:
+                options.boardView.mode === "3D" &&
+                options.boardView.camera === camera,
+              radio: true,
+            })),
+            { label: "Camera operations", separator: true },
+            item("fit"),
+          ],
+        },
+        { ...item("hideFar"), checked: options.boardView.hideFar },
+        { ...item("transparent"), checked: options.boardView.transparent },
+        { label: "Docking", separator: true },
         {
           label: "Project Explorer",
           shortcut: "Ctrl+Alt+P",
@@ -161,7 +233,26 @@ export function workbenchMenus(options: MenuOptions): Menu[] {
         },
       ],
     },
-    { label: "Setup", items: [item("stackup"), item("stimulus")] },
+    {
+      label: "Setup",
+      items: [
+        item("stackup"),
+        item("stimulus"),
+        item("radius"),
+        { label: "Simulation selection", separator: true },
+        {
+          label: "Active Simulation",
+          items: options.simulations?.map((simulation, index) => ({
+            label:
+              simulation.name ??
+              simulation.simulation_pcb_transient_channel_simulation_id,
+            checked: index === options.simulationIndex,
+            radio: true,
+            action: () => options.selectSimulation(index),
+          })) ?? [{ label: "(No simulations)" }],
+        },
+      ],
+    },
     {
       label: "Models",
       items: [
@@ -199,20 +290,38 @@ export function workbenchMenus(options: MenuOptions): Menu[] {
     {
       label: "Window",
       items: [
-        ...(["Cascade", "Tile", "Tile Vertically", "Maximize"] as const).map(
-          (mode) => ({
-            label: mode,
-            shortcut: mode === "Cascade" ? "Shift+F4" : undefined,
-            action: () => arrange(mode),
-          }),
-        ),
+        ...(
+          [
+            "Cascade",
+            "Tile Horizontally",
+            "Tile Vertically",
+            "Maximize",
+          ] as const
+        ).map((mode) => ({
+          label: mode,
+          shortcut: mode === "Cascade" ? "Shift+F4" : undefined,
+          action: () => arrange(mode),
+        })),
+        { label: "Arrange Icons", action: options.arrangeIcons },
+        { label: "Workspace", separator: true },
+        { label: "Reset Workspace Layout", action: options.resetLayout },
         { label: "Child windows", separator: true },
-        ...frames.map(({ id }) => ({
-          label: windowTitles[id],
+        ...frames.map(({ id }, index) => ({
+          label: `${index + 1} ${windowTitles[id]}`,
+          checked: options.activeFrame?.id === id,
+          radio: true,
           action: () => showWindow(id),
         })),
       ],
     },
-    { label: "Help", items: [item("about")] },
+    {
+      label: "Help",
+      items: [
+        item("shortcuts"),
+        item("guide"),
+        { label: "Product", separator: true },
+        item("about"),
+      ],
+    },
   ]
 }

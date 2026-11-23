@@ -1,10 +1,16 @@
-import { type JSX, useState } from "react"
+import { type JSX, useLayoutEffect, useRef, useState } from "react"
+import { Icon } from "./icons"
 import type { LogEntry } from "./local-run"
 import "./simulation.css"
 
 const filters = ["All", "Errors", "Warnings"] as const
 type Filter = (typeof filters)[number]
-const logIcons = { Info: "ℹ", OK: "✓", Warning: "▲", Error: "×" }
+const logIcons = {
+  Info: "info",
+  OK: "ok",
+  Warning: "warning",
+  Error: "error",
+} as const
 
 /** Report each real pipeline stage and show board locations when the diagnostic identifies them. */
 export function SimulationLog({
@@ -30,6 +36,11 @@ export function SimulationLog({
       (filter === "Errors" && level === "Error") ||
       (filter === "Warnings" && level === "Warning"),
   )
+  const scroll = useRef<HTMLDivElement>(null)
+  const newest = visible.at(-1)
+  useLayoutEffect(() => {
+    if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight
+  }, [newest, filter])
   return (
     <div className="wb-editor wb-log">
       <div className="wb-tool-row">
@@ -73,7 +84,7 @@ export function SimulationLog({
         </button>
         <output>{message}</output>
       </div>
-      <div className="wb-editor-scroll">
+      <div className="wb-editor-scroll" ref={scroll}>
         <table className="wb-grid wb-log-grid">
           <thead>
             <tr>
@@ -92,7 +103,9 @@ export function SimulationLog({
               return (
                 <tr key={index + key} data-level={entry.level}>
                   <td>{new Date(entry.time).toLocaleTimeString("en-GB")}</td>
-                  <td title={entry.level}>{logIcons[entry.level]}</td>
+                  <td title={entry.level}>
+                    <Icon name={logIcons[entry.level]} />
+                  </td>
                   <td>{entry.stage}</td>
                   <td>
                     {entry.message.length > 250 ? (

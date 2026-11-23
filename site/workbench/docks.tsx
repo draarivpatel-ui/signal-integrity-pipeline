@@ -1,5 +1,7 @@
 import { type JSX, type ReactNode, useRef, useState } from "react"
 import type { InspectorFeature } from "../channel-inspector/geometry"
+import { CaptionIcon } from "./icons"
+import type { NetRole } from "./model/net-roles"
 import type { ProjectNode, PropertyGroup } from "./project"
 
 /** A dock and its horizontal sizing handle. */
@@ -9,14 +11,21 @@ export function Dock({
   shown,
   close,
   children,
+  layoutKey,
 }: {
   side: "left" | "right"
   title: string
   shown: boolean
   close: () => void
   children: ReactNode
+  layoutKey: number
 }): JSX.Element | null {
-  const [width, setWidth] = useState(side === "left" ? 230 : 250)
+  const [size, setSize] = useState({
+    layoutKey,
+    width: side === "left" ? 230 : 250,
+  })
+  const width =
+    size.layoutKey === layoutKey ? size.width : side === "left" ? 230 : 250
   const drag = useRef<{ origin: number; width: number }>(undefined)
   if (!shown) return null
   return (
@@ -29,7 +38,7 @@ export function Dock({
             aria-label={`Close ${title}`}
             onClick={close}
           >
-            ×
+            <CaptionIcon name="close" />
           </button>
         </h2>
         {children}
@@ -48,15 +57,16 @@ export function Dock({
         onPointerMove={(event) => {
           if (event.buttons !== 1 || !drag.current) return
           const delta = event.clientX - drag.current.origin
-          setWidth(
-            Math.min(
+          setSize({
+            layoutKey,
+            width: Math.min(
               420,
               Math.max(
-                145,
+                side === "left" ? 160 : 190,
                 drag.current.width + delta * (side === "left" ? 1 : -1),
               ),
             ),
-          )
+          })
         }}
         onPointerUp={() => {
           drag.current = undefined
@@ -69,13 +79,59 @@ export function Dock({
   )
 }
 
+const propertyHelp: Record<string, string> = {
+  ID: "Unique identifier of this record in the design.",
+  Type: "The physical or logical record type for this object.",
+  Category: "How this copper is used by the selected simulation.",
+  Scope: "Why the copper is retained, classified as far, or excluded.",
+  Layers: "Copper layers occupied by this route or feature.",
+  "Width / diameter": "Trace widths and via diameters present in this feature.",
+  Width: "Overall board size in the X direction.",
+  Height: "Overall board size in the Y direction.",
+  Length: "Sum of the routed planar segments in this copper feature.",
+  Role: "Choose whether this net is a victim, an aggressor, or excluded.",
+  Driver: "Component and pin that launch the channel stimulus.",
+  Receivers: "Components and pins where the channel is observed.",
+  Pattern: "Bit pattern used to drive the selected channel or aggressors.",
+  "Bit rate":
+    "Number of bits sent per second, displayed in megabits per second.",
+  Duration: "Length of the transient capture in nanoseconds.",
+  "Scope radius":
+    "Maximum distance from victim copper to consider nearby conductors.",
+  Disabled: "Whether aggressor outputs are put into their disabled state.",
+  Component: "Reference designator of the owning component.",
+  Pin: "Physical pin number on the component.",
+  Port: "Logical name of the pin in the PCB design.",
+  Net: "Electrical network connected to this pin.",
+  "IBIS component": "Component declaration in the embedded IBIS document.",
+  "Assigned model": "IBIS buffer used by the solver for this physical pin.",
+  Corner: "Process corner used by the assigned buffer.",
+  Asset: "Original path of the embedded IBIS asset.",
+  Thickness: "Physical height of the board or layer in millimeters.",
+  Layer: "Physical stack layer or dielectric material name.",
+  "Copper layers": "Count of copper layers in the board stackup.",
+  Dk: "Relative permittivity of the dielectric.",
+  Df: "Dielectric loss tangent.",
+  Conductivity: "Electrical conductivity in siemens per meter.",
+  Experiment: "The name of the transient experiment used for this capture.",
+  Samples: "Number of native solver time points in this capture.",
+  Probes: "Number of voltage vectors sampled across the board.",
+  Qualification: "Qualification label reported by the simulation pipeline.",
+}
+
 /** Display stable property categories for a hovered or selected object. */
 export function Properties({
   node,
   feature,
+  editRole,
+  role,
+  editModel,
 }: {
   node?: ProjectNode
   feature?: InspectorFeature
+  editRole?: (role: NetRole) => void
+  role?: NetRole
+  editModel?: () => void
 }): JSX.Element | null {
   const [collapsed, setCollapsed] = useState<string[]>([])
   const [property, setProperty] = useState<string>()
@@ -118,6 +174,28 @@ export function Properties({
       },
     )
   }
+  if (feature && editRole)
+    geometry.push({
+      name: "Simulation role",
+      fields: [
+        [
+          "Role",
+          <select
+            key="role"
+            aria-label="Copper role"
+            value={role ?? ""}
+            onChange={(event) => editRole(event.target.value as NetRole)}
+          >
+            <option value="" disabled>
+              Automatic
+            </option>
+            <option value="selected">Victim</option>
+            <option value="near">Aggressor</option>
+            <option value="excluded">Exclude</option>
+          </select>,
+        ],
+      ],
+    })
   const groups = [...(node?.groups ?? []), ...geometry]
   return (
     <div className="wb-properties">
@@ -146,7 +224,10 @@ export function Properties({
                       )
                     }
                   >
-                    {collapsed.includes(name) ? "+" : "−"} · {name}
+                    <span className="wb-tree-expander" aria-hidden="true">
+                      {collapsed.includes(name) ? "+" : "−"}
+                    </span>
+                    {name}
                   </button>
                 </th>
               </tr>
@@ -158,7 +239,12 @@ export function Properties({
                     onClick={() => setProperty(label)}
                   >
                     <td>{label}</td>
-                    <td>{value}</td>
+                    <td>
+                      {value}
+                      {label === "Assigned model" && editModel && (
+                        <button onClick={editModel}>Edit…</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
             </tbody>
@@ -168,7 +254,8 @@ export function Properties({
       <div className="wb-property-help">
         <strong>{property ?? "Description"}</strong>
         <br />
-        {feature?.reason ??
+        {(property && propertyHelp[property]) ??
+          feature?.reason ??
           node?.description ??
           "Select another project item to inspect its properties."}
       </div>

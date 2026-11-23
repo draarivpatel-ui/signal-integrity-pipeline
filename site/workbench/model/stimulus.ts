@@ -139,3 +139,24 @@ export function editStimulus({
     })
   return updated
 }
+
+/** Update the copper scope of just the active simulation. */
+export function editScopeRadius({
+  circuit,
+  id,
+  radiusMm,
+}: {
+  circuit: CircuitJson
+  id: string
+  radiusMm: number
+}): CircuitJson {
+  const workbench_scope_distance_mm = validatedScopeDistanceMm(radiusMm)
+  return circuit.map((record) => {
+    if (
+      record.type !== "simulation_pcb_transient_channel_simulation" ||
+      record.simulation_pcb_transient_channel_simulation_id !== id
+    )
+      return record
+    return { ...record, workbench_scope_distance_mm }
+  })
+}

@@ -11,6 +11,7 @@ export const directions = ["Input", "Output", "I/O", "3-state"] as const
 function tokens(line: string): string[] {
   return line
     .split("|")[0]
+    .replaceAll("=", " ")
     .trim()
     .split(" ")
     .flatMap((part) => part.split("\t"))
@@ -24,6 +25,9 @@ function header(line: string): string | undefined {
     return line.slice(1, end).toLowerCase()
 }
 
+/** Bounds of a single IBIS model within its source lines. */
+type ModelSpan = [start: number, end: number]
+
 /** Locate the selected model's declaration and its owned field/table blocks. */
 function modelSpan({
   lines,
@@ -31,7 +35,7 @@ function modelSpan({
 }: {
   lines: string[]
   name: string
-}): [number, number] {
+}): ModelSpan {
   const start = lines.findIndex(
     (line) => header(line.trim()) === "model" && tokens(line).at(1) === name,
   )
@@ -56,6 +60,7 @@ interface ModelEdit {
   corner?: IbisCorner
   direction?: string
   scale?: number
+  driveRatio?: number
   capacitancePf?: number
 }
 
@@ -208,7 +213,7 @@ export function editIbisText({
         ...values.map((token) => {
           const current = ibisNumber(token)
           if (current === null) return token
-          return String(current * edit.scale!)
+          return String(current * (edit.driveRatio ?? edit.scale!))
         }),
       ].join(" ")
     }
@@ -256,4 +261,22 @@ export function bindIbisPin({
   throw new Error(
     `Pin ${pin} was not found in embedded component ${component}.`,
   )
+}
+
+/** Restore one buffer definition without altering other models or physical pin mappings. */
+export function restoreIbisText({
+  source,
+  baseline,
+  name,
+}: {
+  source: string
+  baseline: string
+  name: string
+}): string {
+  const lines = source.split("\n")
+  const original = baseline.split("\n")
+  const [start, end] = modelSpan({ lines, name })
+  const [from, to] = modelSpan({ lines: original, name })
+  lines.splice(start, end - start, ...original.slice(from, to))
+  return lines.join("\n")
 }

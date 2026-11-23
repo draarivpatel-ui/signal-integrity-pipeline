@@ -142,11 +142,14 @@
   inset: 0;
 }
 .wb-plot-legend {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
   gap: 2px 7px;
   padding: 4px;
   background: var(--plot);
+  max-height: 59px;
+  overflow: auto;
+  align-content: start;
 }
 .wb-plot-legend label {
   display: inline-flex;

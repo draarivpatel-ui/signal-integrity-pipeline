@@ -2,7 +2,13 @@ import type { IbisCorner } from "@tscircuit/ibis-to-spice"
 import { type JSX, useMemo, useState } from "react"
 import type { CircuitJson } from "../../src/board"
 import { Modal } from "./chrome"
-import { assignIbisModel, embeddedModels, modelPins } from "./model/ibis"
+import {
+  assignIbisModel,
+  displayBuffer,
+  displayDirection,
+  embeddedModels,
+  modelPins,
+} from "./model/ibis"
 import { corners, directions } from "./model/ibis-text"
 
 export interface IbisFocus {
@@ -155,9 +161,9 @@ export function AssignModels({
                   <td>{row.model.component}</td>
                   <td>{row.pin}</td>
                   <td>{row.label}</td>
-                  <td>{row.name ?? "—"}</td>
+                  <td>{displayBuffer(row.name)}</td>
                   <td>{row.corner}</td>
-                  <td>{row.direction ?? "—"}</td>
+                  <td>{displayDirection(row.direction)}</td>
                   <td>
                     {retained.has(row.port) ? "Retained" : "Outside scope"}
                   </td>

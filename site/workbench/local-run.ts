@@ -7,7 +7,11 @@ import {
 } from "../../src/board"
 import type { IbisSources } from "../../src/buffers"
 import { Diagnostic } from "../../src/kernel"
-import { RoutedPipelineSolver, routedStages } from "../../src/pipeline"
+import {
+  RoutedAdmissionSolver,
+  RoutedPipelineSolver,
+  routedStages,
+} from "../../src/pipeline"
 import type {
   ReceiverThreshold,
   RoutedCapture,
@@ -122,6 +126,51 @@ function localProblem({
   }
 }
 
+/** An aggressor and its drive state as lowered by routed admission. */
+export interface AdmittedAggressor {
+  port: SourcePortId
+  enabled: boolean
+}
+
+/** Read the same admitted aggressor states that the simulation will use. */
+export function admittedAggressors({
+  input,
+  simulation,
+}: {
+  input: InspectorInput
+  simulation: ChannelSimulation
+}): AdmittedAggressor[] {
+  const admission = new RoutedAdmissionSolver({
+    ...localProblem({ input, simulation }),
+    scopeDistanceMm: stimulusRadius({
+      simulation,
+      defaultMm: input.distanceMm,
+    }),
+    captureDrivers: true,
+  })
+  admission.solve()
+  if (admission.failed)
+    throw new Error(admission.error ?? "Routed admission failed.")
+  const [plan] = admission.getOutput().value
+  const db = circuitJsonDb(input.circuit)
+  const declaredDrivers = new Set(
+    db.simulation_pcb_driver_receiver_channel
+      .list({
+        simulation_pcb_transient_channel_simulation_id:
+          simulation.simulation_pcb_transient_channel_simulation_id,
+      })
+      .flatMap(({ driver }) => endpointPorts(driver)),
+  )
+  return plan.bindings.controls[
+    plan.simulationPcbTransientChannelSimulationId
+  ].states.flatMap((state) => {
+    if (!state.is_output || declaredDrivers.has(state.source_port_id)) return []
+    return [
+      { port: state.source_port_id, enabled: state.is_output_enabled === true },
+    ]
+  })
+}
+
 /** Map each raw probe to its channel timing and physical driver. */
 function capturedChannels({
   circuit,
@@ -140,10 +189,12 @@ function capturedChannels({
     channels.flatMap((channel) => {
       const [driver] = endpointPorts(channel.driver)
       const pin = pins.find(({ port }) => port === driver)
-      const nominalHigh =
-        pin?.name && pin.model.document?.modelNames.includes(pin.name)
-          ? (pin.model.document.getBuffer(pin.name).voltage?.[0] ?? undefined)
-          : undefined
+      let nominalHigh: number | undefined
+      if (pin?.name && pin.model.document?.modelNames.includes(pin.name)) {
+        const buffer = pin.model.document.getBuffer(pin.name)
+        nominalHigh =
+          buffer.voltage?.[0] ?? buffer.pullupReference?.[0] ?? undefined
+      }
       return [...channel.receivers, channel.driver].map(
         (_, index): [string, ProbeChannel] => [
           `${channel.name}_${index}`,
@@ -161,12 +212,18 @@ function capturedChannels({
   )
 }
 
+/** A completed-stage count and the stage currently being announced. */
+export interface StageProgress {
+  completed: number
+  stage: string
+}
+
 interface RunOptions {
   input: InspectorInput
   simulation: ChannelSimulation
   signal: AbortSignal
   log: (row: Omit<LogEntry, "time">) => void
-  progress: (completed: number, stage: string) => void
+  progress: (progress: StageProgress) => void
 }
 
 /** Step through all real routed stages, yielding to Chrome between batches. */
@@ -221,7 +278,7 @@ export async function runLocalSimulation({
     for (const [index, { solverName }] of routedStages.entries()) {
       stage = solverName
       const started = performance.now()
-      progress(index, stage)
+      progress({ completed: index, stage })
       log({ stage, level: "Info", message: "Started" })
       while (!solver.solved && solver.currentPipelineStageIndex <= index) {
         signal.throwIfAborted()
@@ -232,7 +289,7 @@ export async function runLocalSimulation({
         await solver.stepAsync()
         if (solver.failed) throw new Error(solver.error ?? `${stage} failed.`)
       }
-      progress(index + 1, stage)
+      progress({ completed: index + 1, stage })
       log({
         stage,
         level: "OK",

@@ -53,7 +53,7 @@ export function editStackup({
       record.type === "pcb_board" &&
       record.pcb_board_id === stackup.pcb_board_id
     )
-      return { ...record, thickness }
+      return { ...record, thickness: Number(thickness.toPrecision(15)) }
     return record
   })
   stackupFromCircuitJson(next)

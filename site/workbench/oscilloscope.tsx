@@ -1,6 +1,7 @@
 import { type JSX, useMemo, useState } from "react"
 import { Chart, type Datum, type Series, sampleAt, seriesColor } from "./chart"
 import type { SimulationRun } from "./local-run"
+import { fixed } from "./model/labels"
 import { measureWaveform, probePoints, voltageBounds } from "./model/waveforms"
 import { ScopeEye } from "./scope-eye"
 import "./scope.css"
@@ -13,7 +14,7 @@ type CursorId = (typeof cursorIds)[number]
 /** Format a measurement without fabricating absent values. */
 function metric(value?: number): string {
   if (value === undefined || !Number.isFinite(value)) return "—"
-  return value.toFixed(3)
+  return fixed({ value, digits: 3 })
 }
 
 /** Express each measured voltage probe as a named driver or receiver. */
@@ -233,7 +234,7 @@ function CaptureView({
   if (tab === "Measurements")
     return (
       <div className="wb-editor-scroll">
-        <table className="wb-grid wb-editor-grid">
+        <table className="wb-grid wb-editor-grid wb-measurements">
           <thead>
             <tr>
               {[
@@ -369,6 +370,9 @@ function CaptureView({
         </aside>
       </div>
       <div className="wb-chart-readout">
+        {visible[0] && (
+          <strong className="wb-cursor-reading">{visible[0].label}</strong>
+        )}
         {cursors
           .filter(({ label }) => !hiddenCursors.includes(label))
           .map(({ label, value }) => (
@@ -379,7 +383,8 @@ function CaptureView({
           ))}
         {hiddenCursors.length === 0 && (
           <span>
-            Δt: {metric(delta)} ns · ΔV: {metric(voltageDelta)} V
+            Δt: {metric(delta)} ns · ΔV: {metric(voltageDelta)} V · 1/|Δt|:{" "}
+            {delta === 0 ? "—" : metric(1000 / Math.abs(delta))} MHz
           </span>
         )}
       </div>

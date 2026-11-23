@@ -1,5 +1,9 @@
 @import "./themes.css";
+@import "./shell.css";
+@import "./menus.css";
+@import "./docks.css";
 @import "./board.css";
+@import "./ranges.css";
 
 body {
   margin: 0;
@@ -10,260 +14,58 @@ body {
 }
 .wb-desktop {
   display: grid;
-  grid-template-rows: 29px 25px 35px minmax(0, 1fr) auto 26px;
+  grid-template-rows: var(--title-height) 20px var(--bar-height) minmax(0, 1fr) auto 22px;
+  overflow: hidden;
+  padding: 2px;
+  box-shadow:
+    inset 1px 1px var(--light),
+    inset -1px -1px var(--edge);
   width: 100%;
   height: 100dvh;
   color: var(--ink);
   background: var(--face);
   font:
-    12px Tahoma,
+    11px / 1.3 Tahoma,
+    "MS Sans Serif",
     "Segoe UI",
+    Arial,
     sans-serif;
+  font-variant-numeric: tabular-nums;
 }
-.wb-desktop button,
+:where(.wb-desktop) button,
 .wb-desktop input,
 .wb-desktop select {
   font: inherit;
   color: inherit;
 }
-.wb-desktop button,
+:where(.wb-desktop) button,
 .wb-desktop input,
 .wb-desktop select {
   border: 1px solid var(--edge);
 }
-.wb-desktop button {
-  background: var(--face);
+:where(.wb-desktop) button {
+  background: var(--btn-bg);
   box-shadow:
     inset 1px 1px var(--light),
     inset -1px -1px var(--shadow);
   padding: 3px 8px;
-  border-radius: 0;
+  border-radius: var(--btn-radius);
 }
-.wb-desktop button:active {
+.wb-desktop input:not([type="checkbox"], [type="radio"], [type="range"]),
+.wb-desktop select {
+  background: var(--surface);
+  color: var(--ink);
+}
+:where(.wb-desktop) button:active {
   box-shadow: inset 1px 1px var(--shadow);
 }
-.wb-desktop button:disabled {
+:where(.wb-desktop) button:disabled {
   color: var(--muted);
   opacity: 0.65;
 }
-.wb-desktop :focus-visible {
+:where(.wb-desktop) :focus-visible {
   outline: 1px dotted currentColor;
   outline-offset: -3px;
-}
-.wb-title,
-.wb-child-title {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  min-width: 0;
-  padding: 0 6px;
-  background: linear-gradient(90deg, var(--title), var(--title-end));
-  color: var(--title-ink);
-  user-select: none;
-}
-.wb-title h1 {
-  font-size: 13px;
-  margin: 0;
-}
-.wb-title svg {
-  color: var(--title-ink);
-}
-.wb-menu-bar,
-.wb-toolbar {
-  display: flex;
-  align-items: center;
-  padding: 0 4px;
-  border-bottom: 1px solid var(--shadow);
-  box-shadow: inset 0 1px var(--light);
-}
-.wb-menu {
-  position: relative;
-}
-.wb-menu > button,
-.wb-toolbar button,
-.wb-popover button,
-.wb-tree button {
-  border-color: transparent;
-  box-shadow: none;
-}
-.wb-menu > button {
-  padding: 3px 7px;
-}
-.wb-menu > button:is(:hover, [aria-expanded="true"]),
-.wb-popover button:enabled:is(:hover, :focus),
-.wb-tree button:hover {
-  background: var(--select);
-  color: var(--select-ink);
-}
-.wb-popover {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 100;
-  min-width: 190px;
-  padding: 3px;
-  border: 1px solid var(--edge);
-  box-shadow:
-    inset 1px 1px var(--light),
-    2px 2px 0 #0004;
-  background: var(--face);
-}
-.wb-popover button {
-  display: grid;
-  grid-template-columns: 12px auto minmax(25px, 1fr);
-  align-items: center;
-  gap: 5px;
-  text-align: left;
-  width: 100%;
-  white-space: nowrap;
-  padding: 4px 6px;
-}
-.wb-popover kbd {
-  justify-self: end;
-  font: inherit;
-  opacity: 0.82;
-}
-.wb-toolbar {
-  gap: 2px;
-}
-.wb-toolbar button {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 28px;
-  padding: 0;
-}
-.wb-toolbar button:enabled:hover {
-  border-color: var(--shadow);
-  box-shadow: inset 1px 1px var(--light);
-}
-.wb-separator {
-  width: 2px;
-  height: 20px;
-  background: var(--shadow);
-  border-right: 1px solid var(--light);
-  margin: 0 4px;
-}
-.wb-docks {
-  display: grid;
-  grid-template-columns: 202px minmax(0, 1fr) 218px;
-  min-height: 0;
-  gap: 3px;
-  padding: 3px;
-}
-.wb-dock,
-.wb-workspace {
-  min-width: 0;
-  min-height: 0;
-  border: 1px solid var(--edge);
-  box-shadow:
-    inset 1px 1px var(--shadow),
-    inset -1px -1px var(--light);
-}
-.wb-dock {
-  overflow: auto;
-  background: var(--surface);
-}
-.wb-dock h2 {
-  margin: 0;
-  padding: 5px 7px;
-  font-size: 12px;
-  background: var(--face);
-  border-bottom: 1px solid var(--shadow);
-  box-shadow: inset 1px 1px var(--light);
-}
-.wb-tree {
-  padding: 5px;
-}
-.wb-tree button {
-  background: transparent;
-  text-align: left;
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  padding: 1px 3px;
-}
-.wb-muted {
-  color: var(--muted);
-}
-.wb-workspace {
-  position: relative;
-  overflow: hidden;
-  background: var(--workspace);
-}
-.wb-empty {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  color: var(--title-ink);
-}
-.wb-empty button {
-  color: var(--ink);
-}
-.wb-empty svg {
-  scale: 1.5;
-}
-.wb-child {
-  position: absolute;
-  min-width: 0;
-  display: grid;
-  grid-template-rows: 23px minmax(0, 1fr);
-  padding: 2px;
-  border: 1px solid var(--edge);
-  box-shadow:
-    inset 1px 1px var(--light),
-    inset -1px -1px var(--shadow),
-    2px 3px 5px #0004;
-  background: var(--face);
-}
-.wb-child[hidden] {
-  display: none;
-}
-.wb-child[data-active="true"] {
-  z-index: 1;
-}
-.wb-child[data-active="false"] > .wb-child-title {
-  background: var(--inactive);
-}
-.wb-child-title {
-  justify-content: space-between;
-  touch-action: none;
-  font-weight: bold;
-}
-.wb-child-title button {
-  width: 17px;
-  height: 16px;
-  padding: 0;
-  color: var(--ink);
-  line-height: 12px;
-  font-weight: bold;
-  margin-left: 2px;
-}
-.wb-child-body {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid var(--shadow);
-  background: var(--panel);
-}
-.wb-grip {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  z-index: 4;
-  width: 13px;
-  height: 13px;
-  cursor: nwse-resize;
-  touch-action: none;
-  background: repeating-linear-gradient(
-    135deg,
-    transparent 0 2px,
-    var(--shadow) 2px 3px,
-    var(--light) 3px 4px
-  );
-  clip-path: polygon(100% 0, 0 100%, 100% 100%);
 }
 .wb-placeholder,
 .wb-error {
@@ -271,6 +73,9 @@ body {
 }
 .wb-error {
   grid-row: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   color: var(--error);
   background: var(--surface);
 }
@@ -282,7 +87,7 @@ body {
 .wb-grid th,
 .wb-grid td {
   text-align: left;
-  padding: 4px 6px;
+  padding: 2px 5px;
   border: 1px solid var(--line);
   overflow-wrap: anywhere;
 }
@@ -294,404 +99,34 @@ body {
   background: var(--select);
   color: var(--select-ink);
 }
-.wb-status {
-  grid-row: 6;
-  display: grid;
-  grid-template-columns: minmax(100px, 1fr) 128px 84px minmax(75px, 170px) 118px 107px 14px;
-  align-items: stretch;
-  gap: 3px;
-  padding: 3px;
-  min-width: 0;
-}
-.wb-status > :not(.wb-status-grip) {
-  min-width: 0;
-  width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  border: 1px solid var(--shadow);
-  border-right-color: var(--light);
-  border-bottom-color: var(--light);
-  padding: 1px 5px;
-}
-.wb-status-grip {
-  align-self: end;
+
+.wb-desktop input[type="checkbox"],
+.wb-desktop input[type="radio"] {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  margin: 0 2px 0 0;
+  width: 13px;
   height: 13px;
-  background: repeating-linear-gradient(
-    135deg,
-    transparent 0 2px,
-    var(--shadow) 2px 3px,
-    var(--light) 3px 4px
-  );
-  clip-path: polygon(100% 0, 0 100%, 100% 100%);
-}
-.wb-status-coords {
-  font-family: "Lucida Console", monospace;
-  font-size: 10px;
-}
-.wb-title-buttons {
-  margin-left: auto;
-  display: flex;
-  background: transparent;
-  padding: 0;
-}
-.wb-modal {
-  padding: 2px;
-  min-width: 310px;
-  max-width: min(740px, 95vw);
-  border: 1px solid var(--edge);
-  box-shadow:
-    inset 1px 1px var(--light),
-    3px 5px 16px #0005;
-  background: var(--face);
-  color: var(--ink);
-}
-.wb-modal::backdrop {
-  background: #09131f60;
-}
-.wb-modal .wb-child-title {
-  height: 24px;
-}
-.wb-dialog-body {
-  padding: 12px;
-  overflow: auto;
-  max-height: 70dvh;
-}
-.wb-dialog-body h2 {
-  font-size: 15px;
-  margin-top: 0;
-}
-.wb-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  padding: 6px 9px 8px;
-}
-.wb-dialog-actions button {
-  min-width: 66px;
-}
-@media (max-width: 840px) {
-  .wb-docks {
-    grid-template-columns: 155px minmax(0, 1fr) 160px;
-  }
-  .wb-menu-bar {
-    overflow: visible;
-  }
-}
-@media (max-width: 600px) {
-  .wb-docks {
-    grid-template-columns: 110px minmax(0, 1fr);
-  }
-  [data-dock="properties"] {
-    display: none;
-  }
-  .wb-status {
-    grid-template-columns: minmax(95px, 1fr) 95px 92px 54px 12px;
-  }
-  .wb-status > :nth-child(3),
-  .wb-status > :nth-child(4) {
-    display: none;
-  }
-  .wb-menu > button {
-    padding-inline: 3px;
-  }
-}
-
-.wb-desktop {
-  overflow: hidden;
-  padding: 2px;
-  box-shadow:
-    inset 1px 1px var(--light),
-    inset -1px -1px var(--edge);
-  grid-template-rows: var(--title-height) 20px var(--bar-height) minmax(0, 1fr) auto 22px;
-  font:
-    11px / 1.3 Tahoma,
-    "MS Sans Serif",
-    "Segoe UI",
-    Arial,
-    sans-serif;
-  font-variant-numeric: tabular-nums;
-}
-.wb-title,
-.wb-child-title {
-  background: var(--title-gradient);
-}
-.wb-title h1 {
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.wb-child {
-  grid-template-rows: var(--frame-height) minmax(0, 1fr);
-  border-color: var(--frame-border);
-}
-.wb-caption,
-.wb-minimized-strip {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.wb-minimized-strip {
-  position: absolute;
-  z-index: 500;
-  bottom: 2px;
-  left: 2px;
-  max-width: calc(100% - 4px);
-  flex-wrap: wrap;
-}
-.wb-minimized-strip > div {
-  width: 160px;
-  height: 22px;
-  border: 1px solid var(--edge);
-}
-.wb-toolbar button {
-  width: 22px;
-  height: 22px;
-}
-.wb-toolbar button:active svg,
-.wb-toolbar button[aria-pressed="true"] svg {
-  transform: translate(1px, 1px);
-}
-.wb-rebar {
-  height: 18px;
-  width: 5px;
-  border: 1px solid var(--shadow);
-  border-top-color: var(--light);
-  border-left-color: var(--light);
-  margin-inline: 1px 4px;
-}
-.wb-theme-switch {
-  margin-left: auto;
-  white-space: nowrap;
-}
-.wb-menu-bar,
-.wb-toolbar,
-.wb-tree,
-.wb-dock h2,
-.wb-status,
-.wb-grid th {
-  user-select: none;
-}
-.wb-menu-separator {
-  height: 2px;
-  margin: 3px 2px;
-  border-top: 1px solid var(--shadow);
-  border-bottom: 1px solid var(--light);
-}
-.wb-submenu {
-  position: relative;
-}
-.wb-submenu .wb-popover {
-  left: 100%;
-  top: -3px;
-}
-.wb-menu-bar {
-  z-index: 700;
-}
-.wb-context {
-  z-index: 710;
-}
-.wb-desktop button {
-  background: var(--btn-bg);
-  border-radius: var(--btn-radius);
-}
-.wb-menu button,
-.wb-toolbar button,
-.wb-tree button,
-.wb-popover button {
-  background: transparent;
-  border-radius: 0;
-}
-.wb-desktop input:not([type="checkbox"], [type="radio"], [type="range"]),
-.wb-desktop select {
+  vertical-align: middle;
   background: var(--surface);
-}
-.wb-dock h2 {
-  padding: 2px 5px;
-  font-size: 11px;
-}
-.wb-grid th,
-.wb-grid td {
-  padding: 2px 5px;
-}
-.wb-modal::backdrop {
-  background: #0002;
-}
-.wb-dialog-actions {
-  border-top: 1px solid var(--shadow);
-  box-shadow: inset 0 1px var(--light);
-}
-.wb-dialog-actions button {
-  min-width: 75px;
-}
-.wb-dialog-actions button:first-child {
-  outline: 1px solid var(--edge);
-}
-:root[data-theme="luna"] .wb-child {
-  border-width: 3px;
-  padding: 0;
-  border-radius: 5px 5px 0 0;
-}
-:root[data-theme="luna"] .wb-child-title button {
-  color: white;
-  border-color: #adcaff;
-  background: linear-gradient(#6ca9ff, #1b63d9);
-  box-shadow: none;
-}
-:root[data-theme="luna"] .wb-child-title button:last-child {
-  background: linear-gradient(#f38d6b, #c43e25);
-}
-:root[data-theme="luna"] .wb-desktop button:enabled:hover {
-  box-shadow: inset 0 0 0 1px #f6b64a;
-}
-.wb-board-hint {
-  color: var(--tip-color);
-  background: var(--tip-bg);
-  border: 1px solid var(--edge);
-}
-
-.wb-docks {
-  display: flex;
-  gap: 0;
-}
-.wb-workspace {
-  flex: 1;
-}
-.wb-dock-wrap {
-  display: flex;
-  min-height: 0;
-  max-width: 25%;
-  flex: none;
-}
-.wb-dock-wrap[data-side="right"] {
-  flex-direction: row-reverse;
-}
-.wb-dock {
-  flex: 1;
-}
-.wb-dock h2 {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.wb-dock h2 button {
-  width: 15px;
-  height: 14px;
-  padding: 0;
-  line-height: 11px;
-}
-.wb-splitter {
-  width: 4px;
-  flex: none;
-  cursor: col-resize;
-  touch-action: none;
-  box-shadow:
-    inset 1px 0 var(--light),
-    inset -1px 0 var(--shadow);
-}
-.wb-tree,
-.wb-tree ul {
-  list-style: none;
-  margin: 0;
-  padding: 4px 2px;
-}
-.wb-tree ul {
-  padding: 0 0 0 12px;
-}
-.wb-tree-row {
-  height: 19px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-.wb-tree button.wb-tree-expander {
-  padding: 0;
-  border: 1px solid var(--shadow);
-  width: 10px;
-  height: 10px;
-  line-height: 7px;
-  display: block;
-  flex: none;
   color: var(--ink);
-  background: var(--surface);
+  box-shadow:
+    inset 1px 1px var(--shadow),
+    1px 1px var(--light);
 }
-.wb-tree-indent {
-  width: 10px;
-  flex: none;
+.wb-desktop input[type="radio"] {
+  border-radius: 50%;
 }
-.wb-tree-node {
-  display: flex;
-  min-width: 0;
-  max-width: calc(100% - 13px);
+.wb-desktop input[type="checkbox"]:checked {
+  background: var(--surface)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 11 11'%3E%3Cpath d='m2 5 2 2 5-5' fill='none' stroke='%230565ba' stroke-width='2'/%3E%3C/svg%3E")
+    center no-repeat;
 }
-.wb-tree-node span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.wb-desktop input[type="radio"]:checked {
+  background: radial-gradient(var(--ink) 0 2px, var(--surface) 3px);
 }
-.wb-tree-node svg {
-  flex: none;
-}
-.wb-tree [aria-selected="true"] > .wb-tree-row > .wb-tree-node {
-  color: var(--select-ink);
-  background: var(--select);
-}
-.wb-swatch {
-  width: 10px;
-  height: 8px;
-  margin-inline: 3px;
-  border: 1px solid var(--shadow);
-  flex: none;
-}
-.wb-properties {
-  height: calc(100% - 20px);
-  display: flex;
-  flex-direction: column;
-}
-.wb-property-caption {
-  padding: 3px 5px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
-}
-.wb-property-scroll {
-  flex: 1;
-  overflow: auto;
-}
-.wb-property-scroll td:first-child {
-  width: 46%;
-}
-.wb-property-group button {
-  padding: 0;
-  width: 100%;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  font-weight: bold;
-}
-.wb-property-help {
-  min-height: 44px;
-  border-top: 1px solid var(--shadow);
-  padding: 4px 5px;
-  background: var(--panel);
-}
-@media (max-width: 600px) {
-  .wb-dock-wrap[data-side="right"] {
-    display: none;
-  }
-}
-.wb-about {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  min-width: 320px;
-}
-.wb-about > svg {
-  width: 42px;
-  height: 42px;
-  flex: none;
+.wb-desktop input:is([type="checkbox"], [type="radio"]):disabled {
+  opacity: 0.5;
 }

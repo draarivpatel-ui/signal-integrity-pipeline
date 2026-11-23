@@ -1,5 +1,6 @@
 import { type JSX, useState } from "react"
 import { Icon, Modal } from "./chrome"
+import { downloadBlob } from "./exports"
 
 /** Show the installed solver and workbench components. */
 export function AboutDialog({
@@ -34,7 +35,12 @@ export function DeckDialog({
 }): JSX.Element {
   const [message, setMessage] = useState("")
   return (
-    <Modal title="Compiled SPICE Deck" close={close}>
+    <Modal
+      title="Compiled SPICE Deck"
+      close={close}
+      closeLabel="Close"
+      icon="log"
+    >
       <textarea
         className="wb-deck"
         aria-label="Compiled SPICE deck"
@@ -52,6 +58,16 @@ export function DeckDialog({
           }
         >
           Copy to Clipboard
+        </button>
+        <button
+          onClick={() =>
+            downloadBlob({
+              filename: "workbench.cir",
+              blob: new Blob([deck], { type: "text/plain" }),
+            })
+          }
+        >
+          Download .cir
         </button>
         <output>{message}</output>
       </div>

@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from "react"
+import {
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 import type {
   ChannelSimulation,
   InspectorInput,
@@ -12,39 +19,27 @@ import {
 
 type SolverState = "checking" | "ready" | "offline" | "running"
 
-/** Own the local solver lifecycle and retain the captures for this board session. */
-export function useSimulation(): {
-  entries: LogEntry[]
-  runs: SimulationRun[]
-  stage: string
-  completed: number
-  solver: SolverState
-  summary: string
-  version?: string
-  check: (record?: boolean) => Promise<void>
-  start: (input: {
-    input: InspectorInput
-    simulation: ChannelSimulation
-    onCapture: () => void
-  }) => Promise<void>
-  stop?: () => void
-  reset: () => void
-  clearLog: () => void
-} {
-  const [entries, setEntries] = useState<LogEntry[]>([])
-  const [runs, setRuns] = useState<SimulationRun[]>([])
-  const [stage, setStage] = useState("")
-  const [completed, setCompleted] = useState(0)
-  const [solver, setSolver] = useState<SolverState>("checking")
-  const [summary, setSummary] = useState("")
-  const [version, setVersion] = useState<string>()
-  const active = useRef<AbortController>(undefined)
+type WriteLog = (entry: Omit<LogEntry, "time">) => void
 
-  /** Append an immutable log event with its local display timestamp. */
-  const log = (entry: Omit<LogEntry, "time">): void =>
+/** Append a log row with its local timestamp. */
+function logWriter(setEntries: Dispatch<SetStateAction<LogEntry[]>>): WriteLog {
+  return (entry) =>
     setEntries((rows) => [...rows, { ...entry, time: Date.now() }])
-  /** Refresh backend status for the status strip or detailed log. */
-  const check = async (record?: boolean): Promise<void> => {
+}
+
+/** Create a status refresh that leaves active runs in control of the solver status. */
+function solverChecker({
+  active,
+  setSolver,
+  setVersion,
+  log,
+}: {
+  active: RefObject<AbortController | undefined>
+  setSolver: Dispatch<SetStateAction<SolverState>>
+  setVersion: Dispatch<SetStateAction<string | undefined>>
+  log: WriteLog
+}): (record?: boolean) => Promise<void> {
+  return async (record) => {
     try {
       const status = await localSolverStatus()
       if (active.current) return
@@ -69,6 +64,41 @@ export function useSimulation(): {
         })
     }
   }
+}
+
+/** Current solver lifecycle, log, captures, and local run commands. */
+export interface SimulationState {
+  entries: LogEntry[]
+  runs: SimulationRun[]
+  stage: string
+  completed: number
+  solver: SolverState
+  summary: string
+  version?: string
+  check: (record?: boolean) => Promise<void>
+  start: (input: {
+    input: InspectorInput
+    simulation: ChannelSimulation
+    onCapture: () => void
+  }) => Promise<void>
+  stop?: () => void
+  reset: () => void
+  clearLog: () => void
+}
+
+/** Own the local solver lifecycle and retain the captures for this board session. */
+export function useSimulation(): SimulationState {
+  const [entries, setEntries] = useState<LogEntry[]>([])
+  const [runs, setRuns] = useState<SimulationRun[]>([])
+  const [stage, setStage] = useState("")
+  const [completed, setCompleted] = useState(0)
+  const [solver, setSolver] = useState<SolverState>("checking")
+  const [summary, setSummary] = useState("")
+  const [version, setVersion] = useState<string>()
+  const active = useRef<AbortController>(undefined)
+
+  const log = logWriter(setEntries)
+  const check = solverChecker({ active, setSolver, setVersion, log })
   useEffect(() => {
     void check()
   }, [])
@@ -95,9 +125,9 @@ export function useSimulation(): {
           simulation,
           signal: controller.signal,
           log,
-          progress: (count, name) => {
-            setCompleted(count)
-            setStage(name)
+          progress: ({ completed, stage }) => {
+            setCompleted(completed)
+            setStage(stage)
           },
         })
         setRuns((previous) => [

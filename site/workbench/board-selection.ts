@@ -23,7 +23,8 @@ export interface CopperContext {
   y: number
 }
 
-interface BoardSelection {
+/** Current physical selection and linked board interaction handlers. */
+export interface BoardSelection {
   features: InspectorFeature[]
   retained: ReadonlySet<string>
   error?: string

@@ -6,40 +6,37 @@ import {
   useRef,
   useState,
 } from "react"
-import { loadInput } from "../channel-inspector/input"
 import type { IbisFocus } from "./assign-models"
 import { useBoardSelection } from "./board-selection"
-import { BoardViewer } from "./board-viewer"
+import { BoardViewer, useBoardView } from "./board-viewer"
 import { Icon, MenuBar } from "./chrome"
 import { CopperMenu, useCopperContextDismiss } from "./copper-menu"
 import { useDesignHistory } from "./design-history"
 import { DesktopStatus, DesktopTitle } from "./desktop-frame"
 import { Dock, Properties } from "./docks"
-import { exportDesign, exportWaveforms, exportWindow } from "./exports"
+import { exportWindow } from "./exports"
 import { IbisViewer } from "./ibis-viewer"
-import { type CommandActions, workbenchMenus } from "./menus"
-import { editNetRole, type NetRole } from "./model/net-roles"
+import { CaptionIcon } from "./icons"
+import { workbenchMenus } from "./menus"
+import { netRoles } from "./model/net-roles"
+import { stimulusRadius } from "./model/stimulus"
 import { Oscilloscope, type ScopeTab } from "./oscilloscope"
-import {
-  findProjectNode,
-  type ProjectNode,
-  ProjectTree,
-  projectNodes,
-} from "./project"
+import { findProjectNode, type ProjectNode, ProjectTree } from "./project"
+import { projectNodes } from "./project-nodes"
 import { captureNodes, diagnosticNode } from "./run-project"
 import { SimulationLog } from "./simulation-log"
 import { useSimulation } from "./simulation-state"
 import { StackupEditor } from "./stackup-editor"
-import { loadRecent, loadTheme, saveRecent, setTheme } from "./storage"
+import { clearRecent, loadTheme, setTheme } from "./storage"
 import { Toolbar } from "./toolbar"
 import { ChildWindow, MinimizedWindows, useWindows } from "./windows"
+import { useBoardSession, workbenchActions } from "./workbench-actions"
 import { type ActiveDialog, WorkbenchDialogs } from "./workbench-dialogs"
 import "./workbench.css"
 
 /** Desktop entry point for offline Circuit JSON inspection and simulation. */
 export function Workbench(): JSX.Element {
   const [theme, selectTheme] = useState(loadTheme)
-  const [recent, setRecent] = useState(loadRecent)
   const design = useDesignHistory()
   const runner = useSimulation()
   const [selectedRun, setSelectedRun] = useState<number>()
@@ -53,11 +50,11 @@ export function Workbench(): JSX.Element {
   const [showProperties, setShowProperties] = useState(true)
   const simulation = input?.simulations[simulationIndex]
   const [ibisFocus, setIbisFocus] = useState<IbisFocus>()
-  const [status, setStatus] = useState("Ready")
   const [error, setError] = useState<string>()
-  const [busy, setBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const windows = useWindows()
+  const boardView = useBoardView()
+  const [layoutKey, setLayoutKey] = useState(0)
   useLayoutEffect(() => setTheme(theme), [theme])
   const selection = useBoardSelection({
     input,
@@ -85,196 +82,141 @@ export function Workbench(): JSX.Element {
     copper: treeId ? undefined : selection.selected?.id,
   })
   const boardFocus = selection.selected ?? selection.hovered
-  /** Synchronize a tree click with the selected physical board object. */
-  const pickNode = (node: ProjectNode): void => {
-    if (node.simulation !== undefined && node.simulation !== simulationIndex)
-      setSimulationIndex(node.simulation)
-    setTreeId(node.id)
-    selection.select(node.copper?.id)
-  }
-  /** Open the selected project editor or result. */
-  const openNode = (node: ProjectNode): void => {
-    if (node.window === "scope") {
-      setSelectedRun(node.run)
-      setScopeTab("Waveforms")
-      windows.show("scope")
-      return
-    }
-    if (node.window === "board" || node.window === "stackup")
-      windows.show(node.window)
-    else if (node.modelId)
-      setDialog({ kind: "assign", port: node.port, modelId: node.modelId })
-  }
   useCopperContextDismiss(selection)
-
-  /** Apply a role to source copper through a new channel design. */
-  const changeRole = (role: NetRole): void => {
-    const trace = selection.selected?.record
-    if (
-      !input ||
-      !simulation ||
-      trace?.type !== "pcb_trace" ||
-      selection.selected?.category === "rail"
-    )
-      return
-    try {
-      const circuit = editNetRole({
-        circuit: input.circuit,
-        simulation,
-        trace,
-        role,
-      })
-      design.edit(circuit)
-      setError(undefined)
-    } catch (cause) {
-      setError((cause as Error).message)
-    }
-  }
-  /** Open a board in the active workspace. */
-  const load = async (file?: File): Promise<void> => {
-    if (busy || runner.solver === "running") return
-    setBusy(true)
-    setError(undefined)
-    setStatus("Reading Circuit JSON…")
-    try {
-      const next = await loadInput(file)
-      selection.reset()
-      runner.reset()
+  const session = useBoardSession({
+    design,
+    runner,
+    selection,
+    simulation,
+    windows,
+    setError,
+    onOpen: (next) => {
       setSelectedRun(undefined)
       setCompare(false)
       setSimulationIndex(0)
-      setTreeId("board")
-      design.open(next)
-      setRecent((previous) => saveRecent({ name: next.name, recent: previous }))
-      windows.show("board")
-      setStatus("Ready")
-    } catch (cause) {
-      setError((cause as Error).message)
-      setStatus("Open failed")
-    } finally {
-      setBusy(false)
-    }
-  }
-  /** Open the stage log and execute the active transient. */
-  const run = (): void => {
-    if (!input || !simulation || busy || runner.solver === "running") return
-    windows.show("log")
-    void runner.start({
-      input,
-      simulation,
-      onCapture: () => {
-        setSelectedRun(undefined)
+      setTreeId(next ? "board" : undefined)
+      setIbisFocus(undefined)
+      setDialog(undefined)
+    },
+  })
+  const { busy, status, recent, load, closeBoard, changeRole, apply } = session
+  const openSample = useCallback(() => {
+    void load()
+  }, [load])
+  const pickNode = useCallback(
+    (node: ProjectNode) => {
+      if (node.simulation !== undefined && node.simulation !== simulationIndex)
+        setSimulationIndex(node.simulation)
+      setTreeId(node.id)
+      selection.select(node.copper?.id)
+    },
+    [simulationIndex, selection.select],
+  )
+  const openNode = useCallback(
+    (node: ProjectNode) => {
+      if (node.window === "scope") {
+        setSelectedRun(node.run)
         setScopeTab("Waveforms")
         windows.show("scope")
-      },
-    })
-  }
+        return
+      }
+      if (node.window) windows.show(node.window)
+      else if (node.modelId)
+        setDialog({ kind: "assign", port: node.port, modelId: node.modelId })
+    },
+    [windows],
+  )
+  const selectSimulation = useCallback(
+    (index: number) => {
+      selection.select(undefined)
+      setTreeId(undefined)
+      setSimulationIndex(index)
+    },
+    [selection.select],
+  )
   const lastRun = runner.runs.at(-1)
   const activeRun = runner.runs.find(({ id }) => id === selectedRun) ?? lastRun
   const canCompare =
-    activeRun &&
+    activeRun !== undefined &&
     runner.runs.some(
       (item) =>
         item.id < activeRun.id && item.simulationId === activeRun.simulationId,
     )
-  /** Close this local design and its run history. */
-  const closeBoard = (): void => {
-    design.open()
-    selection.reset()
-    runner.reset()
-    windows.reset()
-    setTreeId(undefined)
-    setSelectedRun(undefined)
-    setCompare(false)
-    setError(undefined)
-    setStatus("Ready")
-    setDialog(undefined)
-  }
   const activeFrame = windows.frames.find(
     ({ z, minimized }) => z === activeZ && !minimized,
   )
-  /** Prompt for a local file. */
-  const openFile = (): void => fileInput.current?.click()
-  /** Render the bundled TSX board. */
-  const openSample = (): void => {
-    void load()
-  }
-  const actions: CommandActions = {
-    open: runner.solver !== "running" ? openFile : undefined,
-    save: input && (() => exportDesign(input)),
-    csv: activeRun && (() => exportWaveforms(activeRun)),
-    png:
-      activeFrame &&
-      (() =>
-        void exportWindow(activeFrame.id).catch((cause: Error) =>
-          setError(cause.message),
-        )),
-    close:
-      input && runner.solver !== "running"
-        ? () => {
-            if (design.dirty) setDialog({ kind: "discard" })
-            else closeBoard()
-          }
-        : undefined,
-    sample: runner.solver !== "running" ? openSample : undefined,
-    undo: design.undo,
-    redo: design.redo,
-    reset: design.reset,
-    board: input && (() => windows.show("board")),
-    stackup: input && (() => windows.show("stackup")),
-    run: simulation && !busy && runner.solver !== "running" ? run : undefined,
-    stop: runner.stop,
-    scope: () => {
-      setScopeTab("Waveforms")
-      windows.show("scope")
-    },
-    eye: () => {
-      setScopeTab("Eye Diagram")
-      windows.show("scope")
-    },
-    compare: canCompare
-      ? () => {
-          setCompare(!compare)
-          windows.show("scope")
-        }
-      : undefined,
-    log: () => windows.show("log"),
-    solver: () => {
-      windows.show("log")
-      void runner.check(true)
-    },
-    deck: lastRun && (() => setDialog({ kind: "deck" })),
-    stimulus: simulation && (() => setDialog({ kind: "stimulus" })),
-
-    assign:
-      input &&
-      (() =>
-        setDialog({
-          kind: "assign",
-          port: chosenNode?.port,
-          modelId: chosenNode?.modelId,
-        })),
-    ibis: input && (() => windows.show("ibis")),
-    victim:
-      selection.selected?.record.type === "pcb_trace"
-        ? () => changeRole("selected")
-        : undefined,
-    aggressor:
-      selection.selected?.record.type === "pcb_trace"
-        ? () => changeRole("near")
-        : undefined,
-    exclude:
-      selection.selected?.record.type === "pcb_trace"
-        ? () => changeRole("excluded")
-        : undefined,
+  const canEditRole =
+    selection.selected?.record.type === "pcb_trace" &&
+    selection.selected.category !== "rail"
+  const actions = workbenchActions({
+    session,
+    design,
+    runner,
+    windows,
+    simulation,
+    boardView,
+    activeFrame,
+    chosenNode,
+    lastRun,
+    activeRun,
+    canCompare,
+    canEditRole,
+    openFile: () => fileInput.current?.click(),
+    openSample,
+    setError,
+    setDialog,
+    setScopeTab,
+    toggleCompare: () => setCompare((value) => !value),
     clear: () => {
       selection.select(undefined)
       setTreeId(undefined)
     },
-    about: () => setDialog({ kind: "about" }),
-  }
+    onCapture: () => {
+      setSelectedRun(undefined)
+      setScopeTab("Waveforms")
+      windows.show("scope")
+      setError(undefined)
+    },
+  })
+  const hoverNode =
+    selection.hovered && findProjectNode({ root, copper: selection.hovered.id })
+  const selectedNode =
+    selection.selected &&
+    findProjectNode({ root, copper: selection.selected.id })
+  const knownRole =
+    selection.selected &&
+    (netRoles(simulation)[selection.selected.id] ??
+      (selection.selected.category === "selected" ||
+      selection.selected.category === "near"
+        ? selection.selected.category
+        : undefined))
+  const ibisNode = chosenNode?.modelId
+    ? chosenNode
+    : findProjectNode({ root, id: chosenNode?.port })
   const menus = workbenchMenus({
     actions,
+    boardView,
+    selectCamera:
+      input &&
+      ((camera) => {
+        boardView.chooseCamera(camera)
+        windows.show("board")
+      }),
+    simulations: input?.simulations,
+    simulationIndex,
+    selectSimulation,
+    activeFrame,
+    resetLayout: () => {
+      setLayoutKey((key) => key + 1)
+      setShowTree(true)
+      setShowProperties(true)
+      windows.resetLayout()
+    },
+    arrangeIcons: windows.arrangeIcons,
+    clearRecent: () => {
+      clearRecent()
+      session.setRecent([])
+    },
     comparing: compare && canCompare,
     recent,
     theme,
@@ -319,11 +261,7 @@ export function Workbench(): JSX.Element {
         actions={actions}
         simulations={input?.simulations}
         index={simulationIndex}
-        selectSimulation={(index) => {
-          selection.select(undefined)
-          setTreeId(undefined)
-          setSimulationIndex(index)
-        }}
+        selectSimulation={selectSimulation}
         theme={theme}
         selectTheme={selectTheme}
       />
@@ -340,6 +278,7 @@ export function Workbench(): JSX.Element {
       />
       <div className="wb-docks">
         <Dock
+          layoutKey={layoutKey}
           side="left"
           title="Project Explorer"
           shown={showTree}
@@ -386,6 +325,12 @@ export function Workbench(): JSX.Element {
                   features={selection.features}
                   theme={theme}
                   interaction={selection.interaction}
+                  view={boardView}
+                  radiusMm={stimulusRadius({
+                    simulation,
+                    defaultMm: input.distanceMm,
+                  })}
+                  hoverLabel={hoverNode?.label ?? selection.hovered?.id}
                   error={selection.error}
                 />
               )}
@@ -393,7 +338,7 @@ export function Workbench(): JSX.Element {
                 <StackupEditor
                   circuit={input.circuit}
                   feature={selection.selected}
-                  apply={design.edit}
+                  apply={apply}
                   close={() => windows.close("stackup")}
                 />
               )}
@@ -401,8 +346,9 @@ export function Workbench(): JSX.Element {
                 <IbisViewer
                   key={`${ibisFocus?.modelId ?? ""}:${ibisFocus?.buffer ?? ""}`}
                   circuit={input.circuit}
+                  original={design.original!.circuit}
                   initial={ibisFocus}
-                  apply={design.edit}
+                  apply={apply}
                 />
               )}
               {frame.id === "log" && (
@@ -444,6 +390,7 @@ export function Workbench(): JSX.Element {
           />
         </div>
         <Dock
+          layoutKey={layoutKey}
           side="right"
           title="Properties Inspector"
           shown={showProperties}
@@ -453,12 +400,23 @@ export function Workbench(): JSX.Element {
             key={chosenNode?.id ?? boardFocus?.id}
             node={chosenNode ?? (boardFocus ? undefined : root)}
             feature={boardFocus}
+            editRole={canEditRole ? changeRole : undefined}
+            role={knownRole}
+            editModel={
+              chosenNode?.modelId ? () => openNode(chosenNode) : undefined
+            }
           />
         </Dock>
       </div>
       {error && (
         <div className="wb-error" role="alert">
-          {error}
+          <span>{error}</span>
+          <button
+            aria-label="Dismiss error"
+            onClick={() => setError(undefined)}
+          >
+            <CaptionIcon name="close" />
+          </button>
         </div>
       )}
       <DesktopStatus
@@ -466,15 +424,39 @@ export function Workbench(): JSX.Element {
         status={status}
         cursor={selection.cursor}
         picked={selection.selected}
+        pickedLabel={selectedNode?.label ?? selection.selected?.id}
         hovered={selection.hovered}
       />
       {selection.context && (
         <CopperMenu
           context={selection.context}
-          editable={
-            selection.selected?.record.type === "pcb_trace" &&
-            selection.selected.category !== "rail"
-          }
+          editable={canEditRole}
+          current={knownRole}
+          extra={[
+            {
+              label: "Assign IBIS Model…",
+              action: ibisNode?.modelId ? () => openNode(ibisNode) : undefined,
+            },
+            {
+              label: "View IBIS Curves",
+              action:
+                ibisNode?.modelId && ibisNode.buffer
+                  ? () => {
+                      setIbisFocus({
+                        modelId: ibisNode.modelId!,
+                        buffer: ibisNode.buffer,
+                      })
+                      windows.show("ibis")
+                    }
+                  : undefined,
+            },
+            { label: "Fit Board", action: actions.fit },
+            {
+              label: "Toggle 2D/3D",
+              action:
+                boardView.mode === "3D" ? actions.board2d : actions.board3d,
+            },
+          ]}
           edit={changeRole}
           close={selection.closeContext}
         />
@@ -484,11 +466,12 @@ export function Workbench(): JSX.Element {
         input={input}
         simulation={simulation}
         retained={selection.retained}
-        apply={design.edit}
+        apply={apply}
         close={() => setDialog(undefined)}
         closeBoard={closeBoard}
         lastRun={lastRun}
         version={runner.version}
+        menus={menus}
         showCurves={(focus) => {
           setIbisFocus(focus)
           setDialog(undefined)

@@ -7,6 +7,8 @@ import {
   useState,
 } from "react"
 
+import { CaptionIcon, Icon, type IconName } from "./icons"
+
 export { Icon, type IconName } from "./icons"
 
 export const themes = {
@@ -23,6 +25,7 @@ export interface Command {
   shortcut?: string
   title?: string
   checked?: boolean
+  radio?: boolean
   separator?: boolean
   items?: Command[]
 }
@@ -50,53 +53,81 @@ function matches({
   )
 }
 
+/** Recursively include nested accelerators in the same dispatch as top-level commands. */
+function menuCommands(items: Command[]): Command[] {
+  return items.flatMap((item) => [item, ...menuCommands(item.items ?? [])])
+}
+
+/** Activate a menu by mnemonic or dispatch its enabled keyboard command. */
+function dispatchMenuKey({
+  event,
+  menus,
+  open,
+  bar,
+  setOpen,
+}: {
+  event: KeyboardEvent
+  menus: Menu[]
+  open?: string
+  bar: HTMLElement | null
+  setOpen: (value?: string) => void
+}): void {
+  if (document.querySelector("dialog[open]")) return
+  if (event.key === "Escape" && open) {
+    setOpen(undefined)
+    return
+  }
+  if (
+    (event.target as HTMLElement).closest(
+      "input:not([type=checkbox], [type=radio], [type=button]), textarea, select, [contenteditable=true]",
+    )
+  )
+    return
+  const menu = menus.find(
+    ({ label, mnemonic = 0 }) =>
+      event.altKey && event.key.toLowerCase() === label[mnemonic].toLowerCase(),
+  )
+  if (menu) {
+    event.preventDefault()
+    setOpen(menu.label)
+    requestAnimationFrame(() =>
+      bar?.querySelector<HTMLButtonElement>("[role=menuitem]:enabled")?.focus(),
+    )
+    return
+  }
+  const command = menus
+    .flatMap(({ items }) => menuCommands(items))
+    .find(
+      ({ shortcut, action }) =>
+        action && shortcut && matches({ shortcut, event }),
+    )
+  if (!command?.action) return
+  event.preventDefault()
+  command.action()
+  setOpen(undefined)
+}
+
 /** A mouse and keyboard operable desktop menu bar. */
 export function MenuBar({ menus }: { menus: Menu[] }): JSX.Element {
   const [open, setOpen] = useState<string>()
   const bar = useRef<HTMLElement>(null)
   useEffect(() => {
-    /** Dismiss a dropdown when focus moves to the workspace by pointer. */
-    const onPointer = (event: globalThis.PointerEvent): void => {
-      if (!bar.current?.contains(event.target as Node)) setOpen(undefined)
-    }
-    /** Activate a menu by its mnemonic or run a named command. */
-    const onKey = (event: KeyboardEvent): void => {
-      if (document.querySelector("dialog[open]")) return
-      if (event.key === "Escape" && open) {
-        setOpen(undefined)
-        return
-      }
-      if ((event.target as HTMLElement).closest("input, textarea, select"))
-        return
-      const menu = menus.find(
-        ({ label, mnemonic = 0 }) =>
-          event.altKey &&
-          event.key.toLowerCase() === label[mnemonic].toLowerCase(),
-      )
-      if (menu) {
-        event.preventDefault()
-        setOpen(menu.label)
-        requestAnimationFrame(() =>
-          bar.current
-            ?.querySelector<HTMLButtonElement>("[role=menuitem]:enabled")
-            ?.focus(),
-        )
-        return
-      }
-      const command = menus
-        .flatMap(({ items }) => items)
-        .find(({ shortcut }) => shortcut && matches({ shortcut, event }))
-      if (!command?.action) return
-      event.preventDefault()
-      command.action()
-      setOpen(undefined)
-    }
-    document.addEventListener("pointerdown", onPointer)
-    document.addEventListener("keydown", onKey)
-    return () => {
-      document.removeEventListener("pointerdown", onPointer)
-      document.removeEventListener("keydown", onKey)
-    }
+    const listeners = new AbortController()
+    const { signal } = listeners
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!bar.current?.contains(event.target as Node)) setOpen(undefined)
+      },
+      { signal },
+    )
+    document.addEventListener(
+      "keydown",
+      (event) =>
+        dispatchMenuKey({ event, menus, open, bar: bar.current, setOpen }),
+      { signal },
+    )
+    return () => listeners.abort()
   }, [menus, open])
   return (
     <nav className="wb-menu-bar" ref={bar} aria-label="Main menu">
@@ -224,7 +255,7 @@ export function CommandButton({
       }}
     >
       <span className="wb-command-check" aria-hidden="true">
-        {command.checked && "✓"}
+        {command.checked && (command.radio ? "●" : "✓")}
       </span>
       <span>{command.label}</span>
       <kbd aria-hidden="true">{command.shortcut}</kbd>
@@ -238,12 +269,16 @@ export function Modal({
   close,
   apply,
   confirm,
+  icon = "app",
+  closeLabel = "OK",
   children,
 }: {
   title: string
   close: () => void
   apply?: () => boolean
   confirm?: () => void
+  icon?: IconName
+  closeLabel?: string
   children: ReactNode
 }): JSX.Element {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -262,10 +297,15 @@ export function Modal({
       }}
     >
       <div className="wb-child-title">
-        <strong id={titleId}>{title}</strong>
-        <button aria-label="Close dialog" onClick={close}>
-          ×
-        </button>
+        <span className="wb-caption">
+          <Icon name={icon} />
+          <strong id={titleId}>{title}</strong>
+        </span>
+        <div className="wb-title-buttons">
+          <button aria-label="Close dialog" onClick={close}>
+            <CaptionIcon name="close" />
+          </button>
+        </div>
       </div>
       <div className="wb-dialog-body">{children}</div>
       <div className="wb-dialog-actions">
@@ -275,7 +315,7 @@ export function Modal({
             if (!apply || apply()) close()
           }}
         >
-          OK
+          {closeLabel}
         </button>
         {(apply || confirm) && <button onClick={close}>Cancel</button>}
         {apply && <button onClick={apply}>Apply</button>}

@@ -75,7 +75,9 @@
   left: 5px;
   bottom: 4px;
   pointer-events: none;
-  background: var(--scene);
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--edge);
 }
 .wb-board-legend {
   min-height: 27px;
@@ -101,4 +103,17 @@
   position: fixed;
   right: auto;
   bottom: auto;
+}
+
+.wb-board-tip {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  padding: 2px 5px;
+  color: var(--tip-color);
+  background: var(--tip-bg);
+  border: 1px solid var(--edge);
+}
+.wb-board-stage .inspector-board-2d {
+  touch-action: none;
 }

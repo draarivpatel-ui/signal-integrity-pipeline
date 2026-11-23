@@ -1,5 +1,11 @@
 import type { LayerRef } from "circuit-json"
-import { type JSX, useMemo, useState } from "react"
+import {
+  type Dispatch,
+  type JSX,
+  type SetStateAction,
+  useMemo,
+  useState,
+} from "react"
 import { type CircuitJson, circuitJsonDb } from "../../src/board"
 import type { InspectorFeature } from "../channel-inspector/geometry"
 import {
@@ -14,6 +20,105 @@ interface LayerFields {
   thickness?: number
   relative_permittivity?: number
   loss_tangent?: number
+}
+
+type LayerPatches = Record<number, LayerFields>
+
+interface LayerEdit {
+  index: number
+  key: keyof LayerFields
+  value: number
+}
+
+/** Update a physical layer field in the unapplied draft. */
+function patchWriter(
+  setPatches: Dispatch<SetStateAction<LayerPatches>>,
+): (edit: LayerEdit) => void {
+  return ({ index, key, value }) =>
+    setPatches((items) => ({
+      ...items,
+      [index]: {
+        ...items[index],
+        [key]: Number.isFinite(value) ? value : undefined,
+      },
+    }))
+}
+
+const slabColors = {
+  copper: "var(--near)",
+  dielectric: "var(--glass)",
+  soldermask: "var(--rail)",
+}
+
+/** Draw the physical order with readable copper slabs and signal/reference annotations. */
+function StackupSection({
+  layers,
+  selected,
+  signal,
+  reference,
+  total,
+}: {
+  layers: StackLayer[]
+  selected: number
+  signal: LayerRef
+  reference?: LayerRef
+  total: number
+}): JSX.Element {
+  const heights = layers.map((layer) => {
+    const proportional =
+      total > 0 ? (112 * Math.max(0, layer.thickness ?? 0)) / total : 0
+    if (layer.layer_type === "copper") return Math.max(13, proportional)
+    return proportional
+  })
+  const height = heights.reduce((sum, slab) => sum + slab, 0)
+  let position = 4
+  return (
+    <svg
+      role="img"
+      aria-label="Stackup cross-section"
+      viewBox={`0 0 174 ${height + 8}`}
+    >
+      {layers.map((layer, index) => {
+        const y = position
+        const slab = heights[index]
+        position += slab
+        let color = slabColors[layer.layer_type]
+        let label: string | undefined
+        if (layer.layer_type === "copper") {
+          label = layer.layer
+          if (layer.layer === signal) {
+            label += " · signal"
+            color = "var(--selected)"
+          }
+          if (layer.layer === reference) {
+            label += " · reference"
+            color = "var(--rail)"
+          }
+        }
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: The physical order identifies a layer.
+          <g key={index}>
+            <rect
+              x="5"
+              y={y}
+              width="52"
+              height={slab}
+              fill={color}
+              stroke={
+                selected === index ? "var(--highlight)" : "var(--outline)"
+              }
+              strokeWidth={selected === index ? 1.4 : 0.6}
+            />
+            {label && (
+              <text x="63" y={y + slab / 2 + 3} fontSize="10" fill="var(--ink)">
+                {label}
+              </text>
+            )}
+          </g>
+        )
+      })}
+    </svg>
+  )
 }
 
 /** An editable tabular stackup with an ideal-plane impedance probe. */
@@ -78,25 +183,8 @@ export function StackupEditor({
     }
   }, [circuit, layers, signal, reference, width])
   const total = layers.reduce((sum, layer) => sum + (layer.thickness ?? 0), 0)
-  let z = 0
-  /** Update a single field in the local, unapplied draft. */
-  const update = ({
-    index,
-    key,
-    value,
-  }: {
-    index: number
-    key: keyof LayerFields
-    value: number
-  }): void => {
-    setPatches((items) => ({
-      ...items,
-      [index]: {
-        ...items[index],
-        [key]: Number.isFinite(value) ? value : undefined,
-      },
-    }))
-  }
+  const dirty = Object.keys(patches).length > 0
+  const update = patchWriter(setPatches)
   return (
     <div className="wb-editor">
       <div className="wb-editor-split">
@@ -216,37 +304,13 @@ export function StackupEditor({
           </table>
         </div>
         <aside className="wb-probe-pane">
-          <svg
-            role="img"
-            aria-label="Stackup cross-section"
-            viewBox="0 0 160 65"
-          >
-            {layers.map((layer, index) => {
-              const h = (57 * (layer.thickness ?? 0)) / total
-              const y = z + 4
-              z += h
-              const colors = {
-                copper: "var(--near)",
-                dielectric: "var(--glass)",
-                soldermask: "var(--rail)",
-              }
-              return (
-                <rect
-                  // biome-ignore lint/suspicious/noArrayIndexKey: Physical layer order is its identity.
-                  key={`layer-slab-${index}`}
-                  x="5"
-                  y={y}
-                  width="150"
-                  height={h}
-                  fill={colors[layer.layer_type]}
-                  stroke={
-                    selected === index ? "var(--selected)" : "var(--outline)"
-                  }
-                  strokeWidth="0.8"
-                />
-              )
-            })}
-          </svg>
+          <StackupSection
+            layers={layers}
+            selected={selected}
+            signal={signal}
+            reference={reference}
+            total={total}
+          />
           <fieldset className="wb-fields">
             <legend>Impedance probe</legend>
             <label>
@@ -327,9 +391,12 @@ export function StackupEditor({
         </p>
       )}
       <div className="wb-editor-actions">
-        <span>Stack thickness {total.toFixed(3)} mm</span>
+        <span>
+          Stack thickness {total.toFixed(3)} mm
+          {dirty && " · Modified — click Apply to update board"}
+        </span>
         <button
-          disabled={!Object.keys(patches).length}
+          disabled={!dirty}
           onClick={() => {
             try {
               apply(editStackup({ circuit, layers }))

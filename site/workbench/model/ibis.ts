@@ -1,4 +1,5 @@
 import {
+  type IbisBuffer,
   type IbisCorner,
   type IbisDocument,
   parseIbis,
@@ -12,7 +13,7 @@ import {
 } from "../../../src/board"
 import type { Snapshot } from "../../../src/kernel"
 import { pinModel, readInlineIbis } from "../../channel-inspector/ibis-panel"
-import { bindIbisPin, editIbisText } from "./ibis-text"
+import { bindIbisPin, editIbisText, restoreIbisText } from "./ibis-text"
 
 export interface EmbeddedModel {
   record: Snapshot<SimulationIbisModel>
@@ -191,12 +192,14 @@ export function tuneIbisModel({
   model,
   name,
   scale,
+  driveRatio,
   capacitancePf,
 }: {
   circuit: CircuitJson
   model: EmbeddedModel
   name: string
-  scale: number
+  scale?: number
+  driveRatio?: number
   capacitancePf?: number
 }): CircuitJson {
   if (!model.source)
@@ -206,7 +209,98 @@ export function tuneIbisModel({
     model,
     source: editIbisText({
       source: model.source,
-      edit: { name, scale, capacitancePf },
+      edit: { name, scale, driveRatio, capacitancePf },
     }),
   })
+}
+
+/** Restore a loaded buffer, or its corresponding unedited pin-specific variant. */
+export function resetIbisModel({
+  circuit,
+  model,
+  baseline,
+  name,
+}: {
+  circuit: CircuitJson
+  model: EmbeddedModel
+  baseline: string
+  name: string
+}): CircuitJson {
+  if (!model.source) throw new Error("This model is not embedded.")
+  return replaceModel({
+    circuit,
+    model,
+    source: restoreIbisText({ source: model.source, baseline, name }),
+  })
+}
+
+/** Find the loaded version of a buffer, recreating a variant with its binding's corner and direction. */
+export function ibisBaseline({
+  model,
+  loaded,
+  name,
+}: {
+  model: EmbeddedModel
+  loaded?: EmbeddedModel
+  name: string
+}): string | undefined {
+  if (!loaded?.source || !loaded.document || !model.document) return
+  if (loaded.document.modelNames.includes(name)) return loaded.source
+  const base = name.split("__wb_")[0]
+  if (!loaded.document.modelNames.includes(base)) return
+  return editIbisText({
+    source: loaded.source,
+    edit: {
+      name: base,
+      newName: name,
+      corner: pinCorner(name),
+      direction: model.document.getBuffer(name).type,
+    },
+  })
+}
+
+/** Measure the applied drive scale from the stored model relative to the loaded tables. */
+export function ibisDriveScale({
+  buffer,
+  baseline,
+}: {
+  buffer: IbisBuffer
+  baseline: IbisBuffer
+}): number {
+  for (const type of ["pullup", "pulldown"] as const) {
+    const row =
+      baseline[type]?.findIndex(
+        (sample) => sample[1] != null && sample[1] !== 0,
+      ) ?? -1
+    if (row < 0) continue
+    const reference = baseline[type]![row][1]!
+    const actual = buffer[type]?.[row]?.[1]
+    if (actual != null) return Number((actual / reference).toPrecision(8))
+  }
+  return 1
+}
+
+/** Hide the generated binding name while preserving its selected process corner. */
+export function displayBuffer(name?: string): string {
+  if (!name) return "—"
+  const base = name.split("__wb_")[0]
+  const corner = pinCorner(name)
+  if (corner === "minimum") return `${base} (min)`
+  if (corner === "maximum") return `${base} (max)`
+  return base
+}
+
+/** Render conventional IBIS model-type capitalization. */
+export function displayDirection(direction?: string): string {
+  if (!direction) return "—"
+  if (direction === "i/o") return "I/O"
+  return direction[0].toUpperCase() + direction.slice(1)
+}
+
+/** Show the original embedded asset path without the record-local solver suffix. */
+export function displayAsset(record: Snapshot<SimulationIbisModel>): string {
+  const path = record.ibis_model_asset.project_relative_path
+  const suffix = `-workbench-${record.simulation_ibis_model_id}.ibs`
+  if (path.endsWith(suffix)) return path.slice(0, -suffix.length)
+  return path
 }

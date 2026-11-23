@@ -1,10 +1,30 @@
-import type { IbisBuffer, IbisCorner } from "@tscircuit/ibis-to-spice"
+import {
+  type IbisBuffer,
+  type IbisCorner,
+  parseIbis,
+} from "@tscircuit/ibis-to-spice"
 import { type JSX, useMemo, useState } from "react"
 import type { CircuitJson } from "../../src/board"
 import type { IbisFocus } from "./assign-models"
 import { Chart, type Datum, type Series, sampleAt, seriesColor } from "./chart"
-import { embeddedModels, tuneIbisModel } from "./model/ibis"
+import {
+  displayAsset,
+  displayBuffer,
+  displayDirection,
+  embeddedModels,
+  ibisBaseline,
+  ibisDriveScale,
+  resetIbisModel,
+  tuneIbisModel,
+} from "./model/ibis"
 import { corners } from "./model/ibis-text"
+import { fixed } from "./model/labels"
+
+/** Current and voltage curve series for the selected IBIS corners. */
+interface IbisSeries {
+  currents: Series[]
+  voltages: Series[]
+}
 
 /** Convert the parsed buffer's current and fixture tables to display units. */
 function ibisSeries({
@@ -13,7 +33,7 @@ function ibisSeries({
 }: {
   buffer: IbisBuffer
   corner: IbisCorner | "all"
-}): { currents: Series[]; voltages: Series[] } {
+}): IbisSeries {
   const tables = [
     { label: "Pullup", table: buffer.pullup },
     { label: "Pulldown", table: buffer.pulldown },
@@ -43,7 +63,7 @@ function ibisSeries({
       })
     }
     for (const [color, wave] of buffer.waveforms.entries()) {
-      const label = `${wave.kind === "rising" ? "Rising" : "Falling"} · ${wave.resistance} Ω #${color + 1}`
+      const label = `${wave.kind === "rising" ? "Rising" : "Falling"} · ${wave.resistance} Ω @ ${wave.fixtureVoltage[index] ?? "—"} V`
       const points = wave.data.flatMap((row): Datum[] => {
         const volts = row[index + 1]
         if (volts == null) return []
@@ -51,7 +71,7 @@ function ibisSeries({
       })
       if (!points.length) continue
       voltages.push({
-        id: `${label}-${value}`,
+        id: `${wave.kind}-${color}-${value}`,
         label: corner === "all" ? `${label} · ${value}` : label,
         points,
         color,
@@ -66,11 +86,13 @@ function ibisSeries({
 function IbisPlot({
   series,
   title,
+  xTitle,
   xUnit,
   yUnit,
 }: {
   series: Series[]
   title: string
+  xTitle: string
   xUnit: string
   yUnit: string
 }): JSX.Element {
@@ -84,7 +106,7 @@ function IbisPlot({
         <Chart
           series={visible}
           title={title}
-          xUnit={xUnit}
+          xUnit={xTitle}
           yUnit={yUnit}
           onHover={setX}
         />
@@ -115,7 +137,7 @@ function IbisPlot({
       <output className="wb-chart-readout">
         {x === undefined
           ? "Drag to zoom · Double-click to fit"
-          : `X ${x.toPrecision(4)} ${xUnit}`}
+          : `X: ${fixed({ value: x, digits: 2 })} ${xUnit}`}
       </output>
     </section>
   )
@@ -124,18 +146,21 @@ function IbisPlot({
 /** Inspect and modify embedded IBIS buffers with process-corner waveform views. */
 export function IbisViewer({
   circuit,
+  original,
   initial,
   apply,
 }: {
   circuit: CircuitJson
+  original: CircuitJson
   initial?: IbisFocus
   apply: (circuit: CircuitJson) => void
 }): JSX.Element {
   const models = useMemo(() => embeddedModels(circuit), [circuit])
+  const loadedModels = useMemo(() => embeddedModels(original), [original])
   const [modelId, setModel] = useState(initial?.modelId)
   const [bufferName, setBuffer] = useState(initial?.buffer)
   const [corner, setCorner] = useState<IbisCorner | "all">("typical")
-  const [scale, setScale] = useState(1)
+  const [scale, setScale] = useState<number>()
   const [cap, setCap] = useState<number>()
   const [reset, setReset] = useState(0)
   const [error, setError] = useState<string>()
@@ -145,6 +170,23 @@ export function IbisViewer({
   const names = model?.document?.modelNames ?? []
   const name = names.find((value) => value === bufferName) ?? names[0]
   const buffer = name && model?.document?.getBuffer(name)
+  const baseline = useMemo(() => {
+    if (!model || !name) return
+    const loaded = loadedModels.find(
+      ({ record }) =>
+        record.simulation_ibis_model_id ===
+        model.record.simulation_ibis_model_id,
+    )
+    return ibisBaseline({ model, loaded, name })
+  }, [model, name, loadedModels])
+  const appliedScale = useMemo(() => {
+    if (baseline && buffer && name)
+      return ibisDriveScale({
+        buffer,
+        baseline: parseIbis(baseline).getBuffer(name),
+      })
+    return 1
+  }, [baseline, buffer, name])
   const curves = useMemo(
     () => buffer && ibisSeries({ buffer, corner }),
     [buffer, corner],
@@ -158,6 +200,7 @@ export function IbisViewer({
             value={model?.record.simulation_ibis_model_id ?? ""}
             onChange={(event) => {
               setModel(event.target.value)
+              setScale(undefined)
               setBuffer(undefined)
               setCap(undefined)
               setError(undefined)
@@ -180,12 +223,14 @@ export function IbisViewer({
             onChange={(event) => {
               setBuffer(event.target.value)
               setCap(undefined)
-              setScale(1)
+              setScale(undefined)
               setError(undefined)
             }}
           >
             {names.map((item) => (
-              <option key={item}>{item}</option>
+              <option key={item} value={item}>
+                {displayBuffer(item)}
+              </option>
             ))}
           </select>
         </label>
@@ -212,7 +257,7 @@ export function IbisViewer({
             min="0.5"
             max="2"
             step="0.05"
-            value={scale}
+            value={scale ?? appliedScale}
             onChange={(event) => setScale(event.target.valueAsNumber || 0)}
           />
           ×
@@ -234,7 +279,11 @@ export function IbisViewer({
           />
         </label>
         <button
-          disabled={!name || (scale === 1 && cap === undefined)}
+          disabled={
+            !name ||
+            ((scale === undefined || scale === appliedScale) &&
+              cap === undefined)
+          }
           onClick={() => {
             if (!name || !model) return
             try {
@@ -244,11 +293,13 @@ export function IbisViewer({
                   model,
                   name,
                   scale,
+                  driveRatio:
+                    scale === undefined ? undefined : scale / appliedScale,
                   capacitancePf: cap,
                 }),
               )
               setCap(undefined)
-              setScale(1)
+              setScale(undefined)
               setError(undefined)
             } catch (cause) {
               setError((cause as Error).message)
@@ -260,11 +311,27 @@ export function IbisViewer({
         <button
           onClick={() => {
             setCap(undefined)
-            setScale(1)
+            setScale(undefined)
             setError(undefined)
           }}
         >
-          Reset Edits
+          Clear Pending Edits
+        </button>
+        <button
+          disabled={!baseline || !buffer}
+          onClick={() => {
+            if (!baseline || !model || !name) return
+            try {
+              apply(resetIbisModel({ circuit, model, baseline, name }))
+              setCap(undefined)
+              setScale(undefined)
+              setError(undefined)
+            } catch (cause) {
+              setError((cause as Error).message)
+            }
+          }}
+        >
+          Reset Model
         </button>
       </div>
       {(error || model?.error) && (
@@ -277,13 +344,15 @@ export function IbisViewer({
           <IbisPlot
             series={curves.currents}
             title="V–I Curves"
-            xUnit="Voltage (V)"
+            xTitle="IBIS Table Voltage (V)"
+            xUnit="V"
             yUnit="mA"
           />
           <IbisPlot
             series={curves.voltages}
             title="V–t Waveforms"
-            xUnit="Time (ns)"
+            xTitle="Time (ns)"
+            xUnit="ns"
             yUnit="V"
           />
         </div>
@@ -295,8 +364,12 @@ export function IbisViewer({
       )}
       {buffer && (
         <div className="wb-tool-row wb-chart-readout">
-          Type: {buffer.type} · V_ref: {buffer.voltage?.[0] ?? "—"} V · Asset:{" "}
-          {model?.record.ibis_model_asset.project_relative_path}
+          Type: {displayDirection(buffer.type)} · Voltage range:{" "}
+          {buffer.voltage?.[0] ?? "—"} V · C_comp:{" "}
+          {buffer.capacitance[0] == null
+            ? "—"
+            : Number((buffer.capacitance[0] * 1e12).toPrecision(6))}{" "}
+          pF · Asset: {model && displayAsset(model.record)}
         </div>
       )}
     </div>

@@ -8,8 +8,9 @@ interface History {
   index: number
 }
 
-/** Retain immutable design revisions independently from view controls. */
-export function useDesignHistory(): {
+/** The loaded version, current revision, and immutable history actions. */
+export interface DesignHistory {
+  original?: InspectorInput
   input?: InspectorInput
   dirty: boolean
   open: (input?: InspectorInput) => void
@@ -17,11 +18,15 @@ export function useDesignHistory(): {
   undo?: () => void
   redo?: () => void
   reset?: () => void
-} {
+}
+
+/** Retain immutable design revisions independently from view controls. */
+export function useDesignHistory(): DesignHistory {
   const [history, setHistory] = useState<History>({ versions: [], index: 0 })
   const input = history.versions[history.index]
   return {
     input,
+    original: history.versions[0],
     dirty: history.index > 0,
     open: (next) => setHistory({ versions: next ? [next] : [], index: 0 }),
     edit: (circuit) => {

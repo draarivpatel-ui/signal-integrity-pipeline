@@ -8,11 +8,14 @@
   top: 0;
 }
 .wb-log-grid :is(td, th):nth-child(1),
+.wb-log-grid :is(td, th):nth-child(2),
 .wb-log-grid :is(td, th):nth-child(3) {
   white-space: nowrap;
 }
 .wb-log-grid :is(td, th):nth-child(4) {
   width: 100%;
+  min-width: 160px;
+  overflow-wrap: break-word;
 }
 .wb-log-grid td:nth-child(5) {
   min-width: 91px;
@@ -20,15 +23,8 @@
 .wb-log-grid td:nth-child(5) button {
   white-space: nowrap;
 }
-.wb-log-grid tr[data-level="Error"] td:nth-child(2) {
-  color: var(--error);
-  font-weight: bold;
-}
-.wb-log-grid tr[data-level="Warning"] td:nth-child(2) {
-  color: var(--warn);
-}
-.wb-log-grid tr[data-level="OK"] td:nth-child(2) {
-  color: var(--ok);
+.wb-log-grid td:nth-child(2) svg {
+  display: block;
 }
 .wb-status > span {
   display: flex;

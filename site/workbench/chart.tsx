@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { roundTicks } from "../../src/simulation/waveform-visual"
 import "./chart.css"
 
 export type Datum = [x: number, y: number]
@@ -32,8 +33,38 @@ const dimensions = {
   top: 25,
   bottom: 318,
 }
-const ticks = Array.from({ length: 11 }, (_, index) => index)
-const levels = Array.from({ length: 9 }, (_, index) => index)
+/** One axis projected between its data and screen endpoints. */
+interface Axis {
+  low: number
+  high: number
+  from: number
+  to: number
+}
+
+/** Project a sample position onto one axis of the graticule. */
+function projectAxis(axis: Axis): (value: number) => number {
+  return (value) =>
+    axis.from +
+    ((axis.to - axis.from) * (value - axis.low)) / (axis.high - axis.low)
+}
+
+/** Resolve pointer input in SVG space even when the MDI window is resized. */
+function cursorAt({
+  event,
+  axis,
+}: {
+  event: PointerEvent<SVGSVGElement>
+  axis: Axis
+}): number {
+  const matrix = event.currentTarget.getScreenCTM()
+  const pointer = new DOMPoint(event.clientX, event.clientY)
+  const { x } = matrix ? pointer.matrixTransform(matrix.inverse()) : pointer
+  return (
+    axis.low +
+    (axis.high - axis.low) *
+      Math.max(0, Math.min(1, (x - axis.from) / (axis.to - axis.from)))
+  )
+}
 
 /** Find plot bounds in one pass without expanding long captures onto the call stack. */
 function seriesBounds(series: Series[]): ChartBounds | undefined {
@@ -132,8 +163,8 @@ export function Chart({
     const observer = new ResizeObserver(([{ contentRect }]) => {
       if (contentRect.width > 0 && contentRect.height > 0)
         setViewport({
-          width: Math.max(240, contentRect.width),
-          height: Math.max(170, contentRect.height),
+          width: Math.max(118, contentRect.width),
+          height: Math.max(120, contentRect.height),
         })
     })
     observer.observe(element.current)
@@ -151,22 +182,19 @@ export function Chart({
   const bottom = height - (dimensions.height - dimensions.bottom)
   const [xMin, xMax] = zoom ?? [domain.xMin, domain.xMax]
   const { yMin, yMax } = domain
-  /** Project one data coordinate onto the graticule. */
-  const xAt = (x: number): number =>
-    left + ((right - left) * (x - xMin)) / (xMax - xMin)
-  /** Project one voltage or current onto the graticule. */
-  const yAt = (y: number): number =>
-    bottom - ((bottom - top) * (y - yMin)) / (yMax - yMin)
-  /** Handle pointer input in SVG space even when the MDI window is resized. */
-  const cursorX = (event: PointerEvent<SVGSVGElement>): number => {
-    const matrix = event.currentTarget.getScreenCTM()
-    const pointer = new DOMPoint(event.clientX, event.clientY)
-    const { x } = matrix ? pointer.matrixTransform(matrix.inverse()) : pointer
-    return (
-      xMin +
-      (xMax - xMin) * Math.max(0, Math.min(1, (x - left) / (right - left)))
-    )
-  }
+  const xAxis = { low: xMin, high: xMax, from: left, to: right }
+  const xAt = projectAxis(xAxis)
+  const yAt = projectAxis({ low: yMin, high: yMax, from: bottom, to: top })
+  const ticks = roundTicks({
+    low: xMin,
+    high: xMax,
+    count: Math.max(1, Math.floor((right - left) / 54)),
+  })
+  const levels = roundTicks({
+    low: yMin,
+    high: yMax,
+    count: Math.max(1, Math.floor((bottom - top) / 24)),
+  })
   return (
     <svg
       className="wb-chart"
@@ -185,13 +213,13 @@ export function Chart({
         const grabbed = (event.target as SVGElement)
           .closest("[data-cursor]")
           ?.getAttribute("data-cursor")
-        const x = cursorX(event)
+        const x = cursorAt({ event, axis: xAxis })
         event.currentTarget.setPointerCapture(event.pointerId)
         if (grabbed === "A" || grabbed === "B") setActiveCursor(grabbed)
         else setDrag({ start: x, end: x })
       }}
       onPointerMove={(event) => {
-        const x = cursorX(event)
+        const x = cursorAt({ event, axis: xAxis })
         setMarker(x)
         onHover?.(x)
         if (activeCursor)
@@ -217,29 +245,25 @@ export function Chart({
           <rect x={left} y={top} width={right - left} height={bottom - top} />
         </clipPath>
       </defs>
-      {ticks.map((i) => {
-        const x = left + ((right - left) * i) / 10
+      {ticks.map(({ value, text }) => {
+        const x = xAt(value)
         return (
-          <g key={i}>
+          <g key={text}>
             <line className="wb-plot-grid" x1={x} x2={x} y1={top} y2={bottom} />
-            {i % 2 === 0 && (
-              <text textAnchor="middle" x={x} y={bottom + 17}>
-                {Number((xMin + ((xMax - xMin) * i) / 10).toPrecision(4))}
-              </text>
-            )}
+            <text textAnchor="middle" x={x} y={bottom + 17}>
+              {text}
+            </text>
           </g>
         )
       })}
-      {levels.map((i) => {
-        const y = bottom - ((bottom - top) * i) / 8
+      {levels.map(({ value, text }) => {
+        const y = yAt(value)
         return (
-          <g key={i}>
+          <g key={text}>
             <line className="wb-plot-grid" x1={left} x2={right} y1={y} y2={y} />
-            {i % 2 === 0 && (
-              <text textAnchor="end" x={left - 5} y={y + 3}>
-                {Number((yMin + ((yMax - yMin) * i) / 8).toPrecision(3))}
-              </text>
-            )}
+            <text textAnchor="end" x={left - 5} y={y + 3}>
+              {text}
+            </text>
           </g>
         )
       })}

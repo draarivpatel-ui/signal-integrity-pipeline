@@ -44,7 +44,7 @@ export function loadRecent(): string[] {
   return []
 }
 
-/** Record the last five distinct design names. */
+/** Record the last six distinct design names. */
 export function saveRecent({
   name,
   recent,
@@ -52,7 +52,12 @@ export function saveRecent({
   name: string
   recent: string[]
 }): string[] {
-  const next = [name, ...recent.filter((item) => item !== name)].slice(0, 5)
+  const next = [name, ...recent.filter((item) => item !== name)].slice(0, 6)
   store({ key: recentKey, value: JSON.stringify(next) })
   return next
+}
+
+/** Clear filenames stored on this browser. */
+export function clearRecent(): void {
+  store({ key: recentKey, value: "[]" })
 }
