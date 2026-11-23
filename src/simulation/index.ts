@@ -26,7 +26,7 @@ export type {
   RoutedTraceCut,
 } from "./routed-types"
 export { type SignalRailIds, signalRailIds } from "./signal-rails"
-export { MAX_STIMULUS_BITS, transmittedBits } from "./stimulus"
+export { transmittedBits } from "./stimulus"
 export type {
   CircuitNodes,
   Declarations,

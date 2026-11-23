@@ -38,8 +38,8 @@ import {
 export { probeEndpoints, signalBits } from "./signal-controls"
 export { routedLanes } from "./signal-lanes"
 
-/** Maximum and default lateral search distance for routed admission, in millimetres. */
-const MAX_COPPER_SCOPE_DISTANCE_MM = 32
+/** Default lateral search distance for routed admission, in millimetres. */
+const DEFAULT_COPPER_SCOPE_DISTANCE_MM = 32
 
 /** The lowered circuit and controls for a single transient channel simulation. */
 export interface PreparedChannelSimulation {
@@ -97,16 +97,10 @@ export function listChannelSimulations(
 
 /** Normalize a caller's copper search radius at the preparation boundary. */
 export function validatedScopeDistanceMm(
-  distanceMm: number = MAX_COPPER_SCOPE_DISTANCE_MM,
+  distanceMm: number = DEFAULT_COPPER_SCOPE_DISTANCE_MM,
 ): number {
-  if (
-    !Number.isFinite(distanceMm) ||
-    distanceMm <= 0 ||
-    distanceMm > MAX_COPPER_SCOPE_DISTANCE_MM
-  ) {
-    throw new Error(
-      `Copper scope distance must be in (0,${MAX_COPPER_SCOPE_DISTANCE_MM}] mm`,
-    )
+  if (!Number.isFinite(distanceMm) || distanceMm <= 0) {
+    throw new Error("Copper scope distance must be finite and positive")
   }
   return distanceMm
 }
