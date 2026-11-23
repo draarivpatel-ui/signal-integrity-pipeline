@@ -36,7 +36,7 @@ import {
   validateSignalPins,
 } from "./signal-pins"
 
-export { endpointPorts, probeEndpoints, signalBits } from "./signal-controls"
+export { probeEndpoints, signalBits } from "./signal-controls"
 export { routedLanes } from "./signal-lanes"
 
 /** Maximum and default lateral search distance for routed admission, in millimetres. */

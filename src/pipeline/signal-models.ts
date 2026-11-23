@@ -4,6 +4,7 @@ import {
   type CircuitJsonSnapshot,
   type CopperScope,
   circuitJsonDb,
+  endpointPorts,
   getSourcePortConnectivityMapFromCircuitJson,
   type SignalEndpoint,
   type SimulationIbisModel,
@@ -15,10 +16,9 @@ import {
   stackupFromCircuitJson,
 } from "../board"
 import type { InspectedPin } from "../buffers"
-import type { Snapshot } from "../kernel"
+import { type Snapshot, snapshot } from "../kernel"
 import { hasBuiltInPassiveModel, voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
-import { endpointPorts } from "./signal-controls"
 import type { ScopedSignalPins, SignalPins } from "./signal-pins"
 import { withChannelSimulationSupplies } from "./supplies"
 
@@ -194,12 +194,12 @@ export function withUsedIbisModels({
   const db = circuitJsonDb(circuit)
   const models = new Map<
     CircuitJsonSnapshot[number],
-    SimulationIbisModel | undefined
+    InspectedPin["model"] | undefined
   >()
   for (const model of db.simulation_ibis_model.list()) {
     const used = [...pins.values()].filter((pin) => pin.model === model)
     if (used.length === 0) models.set(model, undefined)
-    else models.set(model, prunedIbisModel({ model, usedPins: used }))
+    else models.set(model, snapshot(prunedIbisModel({ model, usedPins: used })))
   }
   return {
     circuit: circuit.flatMap((record): CircuitJsonSnapshot => {
