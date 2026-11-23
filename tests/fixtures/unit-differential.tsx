@@ -24,7 +24,7 @@ export default function ({
   children,
 }: {
   reversed?: boolean
-  routedTermination?: boolean
+  routedTermination?: boolean | "positive"
   short?: "TX" | "RX" | "RTERM" | "series" | "interior"
   seriesPositive?: boolean
   internalShort?: boolean
@@ -132,12 +132,17 @@ export default function ({
             width={0.2}
             pcbPath={[".RX > .A", ".RTERM > .pin1"]}
           />
-          <trace
-            from=".RX > .B"
-            to=".RTERM > .pin2"
-            width={0.2}
-            pcbPath={[".RX > .B", ".RTERM > .pin2"]}
-          />
+          {routedTermination === true && (
+            <trace
+              from=".RX > .B"
+              to=".RTERM > .pin2"
+              width={0.2}
+              pcbPath={[".RX > .B", ".RTERM > .pin2"]}
+            />
+          )}
+          {routedTermination === "positive" && (
+            <trace from=".RX > .B" to=".RTERM > .pin2" />
+          )}
         </>
       )}
       {short === "interior" && <trace from=".RA1 > .pin2" to=".RB1 > .pin2" />}
