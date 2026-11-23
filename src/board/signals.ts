@@ -21,10 +21,14 @@ function isConstantBitPattern(pattern: string): boolean {
   return true
 }
 
+/** Pattern and timing shared by selected channels and aggressors. */
+export type DriverPattern = Pick<
+  SimulationPcbDriverReceiverChannel,
+  "name" | "pattern" | "bit_rate_bps" | "offset_ms" | "seed" | "driver_disabled"
+>
+
 /** Returns whether a channel has a disabled driver or a constant literal bit pattern. */
-export function isQuiet(
-  channel: Snapshot<SimulationPcbDriverReceiverChannel>,
-): boolean {
+export function isQuiet(channel: Snapshot<DriverPattern>): boolean {
   return (
     channel.driver_disabled === true || isConstantBitPattern(channel.pattern)
   )

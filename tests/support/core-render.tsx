@@ -1,10 +1,10 @@
 import { Circuit } from "@tscircuit/core"
-import type React from "react"
+import type { ReactElement } from "react"
 import type { CircuitJson } from "../../src/board"
 
 /** Render TSX through core and preserve partial records when it rejects the board. */
 export async function renderCoreSignals(
-  tree: React.ReactElement,
+  tree: ReactElement,
 ): Promise<CircuitJson> {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
   try {
@@ -15,6 +15,8 @@ export async function renderCoreSignals(
     if (errors.length) throw new Error(JSON.stringify(errors))
     return records
   } catch (error) {
-    throw Object.assign(error as Error, { circuitJson: circuit.db.toArray() })
+    throw Object.assign(new Error((error as Error).message, { cause: error }), {
+      circuitJson: circuit.db.toArray(),
+    })
   }
 }
