@@ -72,6 +72,7 @@ export interface RouteSourceNet {
 }
 
 /** Group traces by their source connectivity in first PCB trace order. */
+/** @internal */
 export function routeSourceNets({
   db,
   traces,
@@ -116,6 +117,7 @@ export function routeSourceNets({
 }
 
 /** The board's physical extent, including unscoped copper on boards without a boundary. */
+/** @internal */
 export function routeBoardBox(db: CircuitJsonDb): Viewbox {
   const board = db.pcb_board.getWhere({})
   if (board?.outline) {
@@ -147,6 +149,7 @@ export function routeBoardBox(db: CircuitJsonDb): Viewbox {
 }
 
 /** Assign one colour per source net across the selected traces and their connected ports. */
+/** @internal */
 export function routeCopperStyles({
   db,
   traces,
@@ -176,6 +179,7 @@ export function routeCopperStyles({
 }
 
 /** Fit the standalone drawing to the scoped trace points and the placed driver and receiver ports. */
+/** @internal */
 export function admissionRouteView({
   db,
   scope,
