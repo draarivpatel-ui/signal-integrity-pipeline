@@ -1,8 +1,14 @@
 import {
+  type CircuitJsonDb,
+  type CircuitJsonSnapshot,
   crossesDifferentialLegs,
+  getSourcePortConnectivityMapFromCircuitJson,
   type PassiveBridge,
+  passiveBridges,
   type SimulationPcbDriverReceiverChannel,
   type SourcePortId,
+  type SourceTraceId,
+  selectPort,
 } from "../board"
 import type { Snapshot } from "../kernel"
 import {
@@ -18,11 +24,16 @@ import {
   differentialGroups,
 } from "./differential-contacts"
 import type { RoutedTraceCut } from "./routed-types"
+import { signalRailIds } from "./signal-rails"
 import {
+  type IdealSourceNodes,
+  idealSourceNodes,
   nodeGroups,
   type SourceNodeGroups,
   type SourceNodeId,
+  sourceGroupId,
 } from "./source-node-groups"
+import type { SimulationModeling } from "./types"
 
 /** Physical contacts belonging to an extracted trace or a series passive. */
 type ReceiverEdge =
@@ -36,11 +47,10 @@ type ReceiverEdge =
 type ReceiverConnection = Connection<SourceNodeId, ReceiverEdge>
 
 /** The routed and permissive receiver graphs and the ideal groups they project. */
-interface ReceiverGraphs {
-  groups: SourceNodeGroups
+export interface ReceiverGraphs extends IdealSourceNodes {
   physical: ConnectionGraph<SourceNodeId, ReceiverEdge>
   ideal: ConnectionGraph<SourceNodeId, ReceiverEdge>
-  inferredTerminations: ReadonlySet<ReceiverConnection>
+  seriesBridges: readonly PassiveBridge[]
 }
 
 /** Retain the physical contacts when projecting an edge onto ideal groups. */
@@ -53,82 +63,109 @@ function idealReceiverConnection({
 }): ReceiverConnection {
   const { fromSourcePortId, toSourcePortId } = evidence
   return {
-    fromNodeId: groups.get(fromSourcePortId) ?? fromSourcePortId,
-    toNodeId: groups.get(toSourcePortId) ?? toSourcePortId,
+    fromNodeId: sourceGroupId({ groups, sourcePortId: fromSourcePortId }),
+    toNodeId: sourceGroupId({ groups, sourcePortId: toSourcePortId }),
     evidence,
   }
 }
 
-/** Index routed cuts and traversable series components for both routing modes. */
-export function receiverGraphs({
-  cuts,
+/** Find series passives independently of the joins a mixed routed and ideal path might make. */
+function receiverSeriesBridges({
   bridges,
-  groups,
+  channels,
+  wireGroups,
+}: {
+  bridges: readonly PassiveBridge[]
+  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  wireGroups: readonly SourceNodeGroups[]
+}): PassiveBridge[] {
+  const contacts = differentialContacts(channels)
+  const projections = wireGroups.map((groups) => ({
+    groups,
+    differential: differentialGroups({ contacts, groups }),
+  }))
+  return bridges.filter(
+    ([fromSourcePortId, toSourcePortId]) =>
+      !projections.some(({ groups, differential }) => {
+        const fromGroupId = sourceGroupId({
+          groups,
+          sourcePortId: fromSourcePortId,
+        })
+        const toGroupId = sourceGroupId({
+          groups,
+          sourcePortId: toSourcePortId,
+        })
+        return (
+          fromGroupId !== toGroupId &&
+          crossesDifferentialLegs({
+            from: fromGroupId,
+            to: toGroupId,
+            differential,
+          })
+        )
+      }),
+  )
+}
+
+/** Resolve ideal groups and index the same series connections for admission and binding. */
+export function receiverGraphs({
+  db,
+  circuit,
+  groundSourcePortId,
+  modeling,
+  cuts,
+  additionalSourceTraceIds,
   channels,
 }: {
+  db: CircuitJsonDb
+  circuit: CircuitJsonSnapshot
+  groundSourcePortId: SourcePortId
+  modeling: Snapshot<SimulationModeling>
   cuts: readonly RoutedTraceCut[]
-  bridges: readonly PassiveBridge[]
-  groups: SourceNodeGroups
+  additionalSourceTraceIds?: readonly SourceTraceId[]
   channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
 }): ReceiverGraphs {
+  const idealNodes = idealSourceNodes({ db, cuts, additionalSourceTraceIds })
   const physicalCuts = cutConnections({
     cuts,
     node: (sourcePortId) => sourcePortId,
   })
-  const physicalCutGroups = nodeGroups(
+  const physicalGroups = nodeGroups(
     physicalCuts.map(({ fromNodeId, toNodeId }) => [fromNodeId, toNodeId]),
   )
-  const idealCutGroups = nodeGroups([...groups, ...physicalCutGroups])
-  const contacts = differentialContacts(channels)
-  const physicalLegs = differentialGroups({
-    contacts,
-    groups: physicalCutGroups,
-  })
-  const idealLegs = differentialGroups({ contacts, groups: idealCutGroups })
-  const physical: ReceiverConnection[] = [...physicalCuts]
-  const ideal: ReceiverConnection[] = cuts.map((evidence) =>
-    idealReceiverConnection({ evidence, groups }),
+  const referenceIds = (modeling.supplies ?? []).flatMap(
+    ({ positive, negative }) =>
+      [positive, negative].map(
+        (selector) => selectPort({ circuit, selector }).source_port_id,
+      ),
   )
-  const inferredTerminations = new Set<ReceiverConnection>()
-  for (const [fromSourcePortId, toSourcePortId] of bridges) {
-    const fromPhysicalGroupId =
-      physicalCutGroups.get(fromSourcePortId) ?? fromSourcePortId
-    const toPhysicalGroupId =
-      physicalCutGroups.get(toSourcePortId) ?? toSourcePortId
-    if (
-      crossesDifferentialLegs({
-        from: fromPhysicalGroupId,
-        to: toPhysicalGroupId,
-        differential: physicalLegs,
-      })
-    )
-      continue
-    const evidence = { fromSourcePortId, toSourcePortId }
-    physical.push({
+  const rails = signalRailIds({
+    db,
+    connectivity: getSourcePortConnectivityMapFromCircuitJson(circuit),
+    referenceIds: [groundSourcePortId, ...referenceIds],
+  })
+  const seriesBridges = receiverSeriesBridges({
+    bridges: passiveBridges({ circuit, excluded: rails }),
+    channels,
+    wireGroups: [physicalGroups, idealNodes.groups],
+  })
+  const physical = [
+    ...physicalCuts,
+    ...seriesBridges.map(([fromSourcePortId, toSourcePortId]) => ({
       fromNodeId: fromSourcePortId,
       toNodeId: toSourcePortId,
-      evidence,
-    })
-    // A short can make a real series component appear to join the legs.
-    const connection = idealReceiverConnection({ evidence, groups })
-    const fromIdealGroupId =
-      idealCutGroups.get(fromSourcePortId) ?? fromSourcePortId
-    const toIdealGroupId = idealCutGroups.get(toSourcePortId) ?? toSourcePortId
-    if (
-      crossesDifferentialLegs({
-        from: fromIdealGroupId,
-        to: toIdealGroupId,
-        differential: idealLegs,
-      })
-    )
-      inferredTerminations.add(connection)
-    ideal.push(connection)
-  }
+      evidence: { fromSourcePortId, toSourcePortId },
+    })),
+  ]
   return {
-    groups,
+    ...idealNodes,
+    seriesBridges,
     physical: connectionGraph(physical),
-    ideal: connectionGraph(ideal),
-    inferredTerminations,
+    ideal: connectionGraph(
+      physical.map(({ evidence }) =>
+        idealReceiverConnection({ evidence, groups: idealNodes.groups }),
+      ),
+    ),
   }
 }
 
@@ -156,9 +193,14 @@ export function receiverPath({
   if (!allowUnroutedTraces) return
   return connectionPath({
     graph: graphs.ideal,
-    discouraged: graphs.inferredTerminations,
-    fromNodeId: graphs.groups.get(fromSourcePortId) ?? fromSourcePortId,
-    toNodeId: graphs.groups.get(toSourcePortId) ?? toSourcePortId,
+    fromNodeId: sourceGroupId({
+      groups: graphs.groups,
+      sourcePortId: fromSourcePortId,
+    }),
+    toNodeId: sourceGroupId({
+      groups: graphs.groups,
+      sourcePortId: toSourcePortId,
+    }),
   })?.map(({ evidence }) => evidence)
 }
 
@@ -172,9 +214,8 @@ export function receiverBypassCuts({
 }): RoutedTraceCut[] {
   const cycle = receiverCycle({
     graph: graphs.ideal,
-    rootNodeId: graphs.groups.get(sourcePortId) ?? sourcePortId,
+    rootNodeId: sourceGroupId({ groups: graphs.groups, sourcePortId }),
     isCut: (edge) => "sourceTraceId" in edge,
-    discouraged: graphs.inferredTerminations,
   })
   return (cycle ?? []).flatMap(({ evidence }) => {
     if ("sourceTraceId" in evidence) return [evidence]
