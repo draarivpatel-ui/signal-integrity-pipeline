@@ -5,7 +5,17 @@
  * Imports: kernel.
  */
 
+/** @internal */
+export { admissionRouteView } from "./admission-view"
+/** @internal */
+export {
+  routeAdmissionMarks,
+  scopedAdmissionDrawing,
+  unscopedAdmissionDrawing,
+} from "./admission-visual"
+/** @internal */
 export { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
+/** @internal */
 export {
   type ConnectivityMap,
   crossesDifferentialLegs,
@@ -57,7 +67,6 @@ export {
 export {
   type RouteFrame,
   type RouteNet,
-  type RouteStripRow,
   type RouteView,
   routeBoardBox,
   routeBoardDrawing,
@@ -68,22 +77,25 @@ export {
   routeFailure,
   routeFrame,
   routeHue,
-  routeLengths,
   routeMarks,
   routeNets,
   routeOutline,
   routePane,
   routePinDirection,
   routePortPoint,
-  routeStrip,
   routeStroke,
   routeText,
   routeTones,
-  routeUnrolled,
   routeVia,
   routeView,
   withRouteDrawing,
 } from "./route-visual"
+export {
+  type RouteStripRow,
+  routeLengths,
+  routeStrip,
+  routeUnrolled,
+} from "./route-visual-strip"
 export type {
   CircuitJson,
   CircuitJsonSnapshot,

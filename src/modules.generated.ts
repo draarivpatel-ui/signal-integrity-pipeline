@@ -19,7 +19,7 @@ export type DiagnosticCode =
   | 'ibis_pin_missing'
   | 'ibis_reference_ambiguous' | 'ibis_reference_short' | 'ibis_reference_voltage_missing' | 'ibis_state'
   | 'matrix_format' | 'matrix_zero'
-  | 'mesh_convergence' | 'native_declaration' | 'native_geometry' | 'native_output' | 'native_solver' | 'native_timeout'
+  | 'mesh_convergence' | 'native_declaration' | 'native_geometry' | 'native_output' | 'native_solver'
   | 'passive_capability' | 'passive_reference' | 'passivity' | 'pin_mapping' | 'probe_reference' | 'reciprocity'
   | 'route_type' | 'simulation_capability' | 'simulation_duration' | 'simulation_experiment' | 'simulation_id'
   | 'simulation_probe'

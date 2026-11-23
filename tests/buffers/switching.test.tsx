@@ -481,7 +481,6 @@ test.skipIf(!process.env.SI_TEST_SWITCHING_NGSPICE)(
     const converted = convert({ next: input })
     const long = run({ input, bits: "10", interval: "5ns", duration: "10ns" })
     const solve = createNativeSolver({
-      timeoutMs: 10000,
       tools: { ngspice: process.env.NGSPICE_BIN ?? "ngspice" },
     })
     const traces: SpiceSamples[] = []
