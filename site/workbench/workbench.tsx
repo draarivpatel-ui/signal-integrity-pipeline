@@ -326,6 +326,7 @@ export function Workbench({
               {input && frame.id === "board" && (
                 <BoardViewer
                   board={input.board}
+                  circuit={input.circuit}
                   features={selection.features}
                   theme={theme}
                   interaction={selection.interaction}

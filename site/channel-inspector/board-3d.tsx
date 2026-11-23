@@ -238,7 +238,7 @@ function attachPicking({
   }
 }
 
-/** Mount the orthographic viewer and share copper hover and selection with the SVG view. */
+/** Mount the orthographic viewer and share copper hover and selection with the 2D view. */
 export function Board3d({
   board,
   features,

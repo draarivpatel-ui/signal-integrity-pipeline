@@ -1,4 +1,4 @@
-import type { LayerRef, Point } from "circuit-json"
+import type { CircuitJson, LayerRef, Point } from "circuit-json"
 import { type JSX, useEffect, useMemo, useState } from "react"
 import { Board2d } from "../channel-inspector/board-2d"
 import {
@@ -15,6 +15,8 @@ import type {
 import type { BoardAppearance } from "../channel-inspector/scene-geometry"
 import type { Theme } from "./chrome"
 import { fixed } from "./model/labels"
+
+const allCopper = new Set<string>()
 
 const categories = {
   selected: "Victim",
@@ -91,6 +93,7 @@ export function useBoardView(): BoardView {
 /** View the same selected, neighboring and reference copper in 2D and 3D. */
 export function BoardViewer({
   board,
+  circuit,
   features,
   theme,
   interaction,
@@ -100,6 +103,7 @@ export function BoardViewer({
   error,
 }: {
   board: InspectorBoard
+  circuit: CircuitJson
   features: InspectorFeature[]
   theme: Theme
   interaction: BoardInteraction
@@ -123,6 +127,7 @@ export function BoardViewer({
   const [transparency, setTransparency] = useState(88)
   const [pointer, setPointer] = useState<Point>()
   const [hiddenLayers, setHiddenLayers] = useState<LayerRef[]>([])
+  const [preferredLayer, setPreferredLayer] = useState<LayerRef>("top")
   const farOpacity = theme === "classic" ? 0.24 : 0.15
   const opacity = transparent ? (100 - transparency) / 100 : 1
   const [appearance, setAppearance] = useState<BoardAppearance>(() =>
@@ -133,15 +138,22 @@ export function BoardViewer({
     [theme, opacity, farOpacity],
   )
   const visibleLayers = useMemo(
-    () =>
-      new Set(board.layers.filter((layer) => !hiddenLayers.includes(layer))),
+    () => board.layers.filter((layer) => !hiddenLayers.includes(layer)),
     [board, hiddenLayers],
   )
+  let activeLayer = visibleLayers[0]
+  if (visibleLayers.includes(preferredLayer)) activeLayer = preferredLayer
+  const hiddenCopper = useMemo(() => {
+    if (!hideFar) return allCopper
+    return new Set(
+      features.filter(({ category }) => category === "far").map(({ id }) => id),
+    )
+  }, [features, hideFar])
   const visibleBoard = useMemo(
     () => ({
       ...board,
       components: board.components.filter(({ layer }) =>
-        visibleLayers.has(layer),
+        visibleLayers.includes(layer),
       ),
     }),
     [board, visibleLayers],
@@ -154,7 +166,7 @@ export function BoardViewer({
           ...feature,
           shapes: feature.shapes.flatMap((shape) => {
             const layers = shape.layers.filter((layer) =>
-              visibleLayers.has(layer),
+              visibleLayers.includes(layer),
             )
             if (!layers.length) return []
             return [{ ...shape, layers }]
@@ -218,12 +230,29 @@ export function BoardViewer({
         <button onClick={fit}>Fit</button>
       </div>
       <div className="wb-tool-row wb-layer-strip">
+        {mode === "2D" && (
+          <label>
+            Active layer
+            <select
+              value={activeLayer ?? ""}
+              disabled={!activeLayer}
+              onChange={(event) =>
+                setPreferredLayer(event.target.value as LayerRef)
+              }
+            >
+              {!activeLayer && <option value="">None</option>}
+              {visibleLayers.map((layer) => (
+                <option key={layer}>{layer}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <strong>Layers</strong>
         {board.layers.map((layer) => (
           <label key={layer}>
             <input
               type="checkbox"
-              checked={visibleLayers.has(layer)}
+              checked={visibleLayers.includes(layer)}
               onChange={(event) => {
                 const checked = event.target.checked
                 setHiddenLayers((items) =>
@@ -278,13 +307,13 @@ export function BoardViewer({
         </div>
         {mode === "2D" && (
           <Board2d
-            key={reset}
-            themed
-            farOpacity={farOpacity}
-            substrateOpacity={opacity}
             board={board}
+            circuit={circuit}
+            hidden={hiddenCopper}
             features={visible}
             layers={visibleLayers}
+            activeLayer={activeLayer}
+            reset={reset}
             {...interaction}
           />
         )}
@@ -305,7 +334,9 @@ export function BoardViewer({
       <div className="wb-tool-row wb-board-legend" aria-label="Copper legend">
         {copperCategories.map((category) => (
           <span className="wb-legend-item" key={category}>
-            <i style={{ background: `var(--${category})` }} />
+            {mode === "3D" && (
+              <i style={{ background: `var(--${category})` }} />
+            )}
             {categories[category]}{" "}
             <strong>
               {

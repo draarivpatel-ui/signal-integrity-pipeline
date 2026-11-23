@@ -53,6 +53,20 @@
   height: 100%;
   width: 100%;
 }
+.wb-board-2d,
+.wb-board-2d canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.wb-board-2d canvas {
+  touch-action: none;
+  cursor: crosshair;
+}
+.wb-board-2d canvas:active {
+  cursor: grabbing;
+}
 .wb-board-stage .inspector-canvas canvas {
   display: block;
   cursor: grab;
@@ -60,14 +74,19 @@
 .wb-board-stage .inspector-canvas canvas:active {
   cursor: grabbing;
 }
-.wb-board-stage .inspector-board-2d {
-  display: block;
-  width: 100%;
-  height: 100%;
-  padding: 3%;
+.wb-board-surface {
+  opacity: 0.9;
 }
-.wb-board-stage svg [data-copper-id] {
-  cursor: crosshair;
+.wb-board-renderer {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  max-width: calc(100% - 10px);
+  padding: 2px 5px;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  pointer-events: none;
 }
 .wb-board-stage .inspector-canvas p,
 .wb-board-hint {
@@ -117,7 +136,4 @@
   color: var(--tip-color);
   background: var(--tip-bg);
   border: 1px solid var(--edge);
-}
-.wb-board-stage .inspector-board-2d {
-  touch-action: none;
 }
