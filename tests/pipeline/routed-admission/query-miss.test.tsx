@@ -7,7 +7,7 @@ import { listChannelSimulations } from "../../../src/pipeline/signals"
 import { AdmissionChannel } from "../../fixtures/admission-channel"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("an absent source port query returns undefined", async () => {
+test("an absent source port query returns null", async () => {
   const circuit = await renderSignals({
     tree: <AdmissionChannel route="series" />,
   })
@@ -16,11 +16,11 @@ test("an absent source port query returns undefined", async () => {
     // @ts-expect-error Borrowed simulation declarations are readonly.
     channelSimulation.name = "changed"
   }, TypeError)
-  const db = circuitJsonDb(circuit)
-  const port: Snapshot<SourcePort> | undefined = db.source_port.get("missing")
-  const portByName: Snapshot<SourcePort> | undefined = db.source_port.getWhere({
+  const db = circuitJsonDb(snapshot(circuit))
+  const port: Snapshot<SourcePort> | null = db.source_port.get("missing")
+  const portByName: Snapshot<SourcePort> | null = db.source_port.getWhere({
     name: "missing",
   })
-  assert.equal(port, undefined)
-  assert.equal(portByName, undefined)
+  assert.equal(port, null)
+  assert.equal(portByName, null)
 })
