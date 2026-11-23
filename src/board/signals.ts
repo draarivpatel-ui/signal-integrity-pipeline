@@ -4,7 +4,7 @@ import type {
   SimulationPcbTransientChannelSimulation,
 } from "circuit-json"
 import type { Snapshot } from "../kernel"
-import type { SourcePortId } from "./ids"
+import type { SignalEndpointPortIds, SourcePortId } from "./ids"
 
 export type {
   SignalEndpoint,
@@ -35,11 +35,19 @@ export function isQuiet(channel: Snapshot<DriverPattern>): boolean {
 }
 
 /** The ordered physical port IDs of a signal endpoint. */
-type SignalEndpointPortIds = SourcePortId[]
+type VisualSignalEndpointPortIds = SourcePortId[]
 
 /** The physical ports of a signal endpoint, excluding optional IBIS model names. */
 export function signalEndpointPortIds(
   endpoint: SignalEndpoint,
+): VisualSignalEndpointPortIds {
+  if ("source_port_id" in endpoint) return [endpoint.source_port_id]
+  return [endpoint.p_source_port_id, endpoint.n_source_port_id]
+}
+
+/** Ordered physical ports. The sign of a differential signal is P minus N. */
+export function endpointPorts(
+  endpoint: Snapshot<SignalEndpoint>,
 ): SignalEndpointPortIds {
   if ("source_port_id" in endpoint) return [endpoint.source_port_id]
   return [endpoint.p_source_port_id, endpoint.n_source_port_id]

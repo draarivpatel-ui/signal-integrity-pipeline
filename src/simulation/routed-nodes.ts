@@ -1,24 +1,39 @@
 import {
   type CircuitJsonSnapshot,
   circuitJsonDb,
+  endpointPorts,
   type LaneMapping,
   passiveBridges,
+  type SimulationPcbDriverReceiverChannel,
   type SourcePortId,
   type SourceTraceId,
   selectPort,
 } from "../board"
 import type { Snapshot } from "../kernel"
+import { connectionGraph } from "./connection-paths"
+import {
+  cutConnections,
+  shortedCutPath,
+  validateCutBridge,
+} from "./cut-connections"
 import { fail } from "./diagnostics"
 import { differentialContacts } from "./differential-contacts"
+import {
+  receiverBypassCuts,
+  receiverGraphs,
+  receiverPath,
+} from "./receiver-paths"
 import type { RoutedTraceCut } from "./routed-types"
 import {
   idealSourceNodes,
+  type NodeGroups,
+  nodeGroups,
   type SourceNodeGroups,
+  type SourceNodeId,
   shortedCut,
   sourceGroupId,
-  sourceNodeGroups,
 } from "./source-node-groups"
-import type { CircuitNodes, SimulationModeling } from "./types"
+import type { CircuitNodes, SimulationModeling, SpiceNodeName } from "./types"
 
 /** Board, physical cuts, and source selectors for SPICE node resolution. */
 export interface CircuitNodesInput {
@@ -38,17 +53,9 @@ function physicalCuts({
   mappings: readonly LaneMapping[]
 }): RoutedTraceCut[] {
   const cuts = new Map<SourceTraceId, RoutedTraceCut>()
-  for (const { from, to, sourceTraceId, sourceTraceIds } of mappings) {
-    if (!sourceTraceIds) {
-      if (!cuts.has(sourceTraceId))
-        cuts.set(sourceTraceId, {
-          sourceTraceId,
-          fromSourcePortId: from,
-          toSourcePortId: to,
-        })
-      continue
-    }
-    for (const pathSourceTraceId of sourceTraceIds) {
+  for (const { sourceTraceId, sourceTraceIds } of mappings) {
+    for (const pathSourceTraceId of sourceTraceIds ?? [sourceTraceId]) {
+      if (cuts.has(pathSourceTraceId)) continue
       const ports =
         db.source_trace.get(pathSourceTraceId)?.connected_source_port_ids
       if (ports?.length !== 2)
@@ -75,10 +82,12 @@ function differentialLegPorts({
   sourcePortIds,
   mappings,
   cutsByTraceId,
+  graphs,
 }: {
   sourcePortIds: SourcePortId[]
   mappings: readonly LaneMapping[]
   cutsByTraceId: CutsByTraceId
+  graphs: ReturnType<typeof receiverGraphs>
 }): SourcePortId[] {
   const [driverSourcePortId, ...receiverSourcePortIds] = sourcePortIds
   return [
@@ -93,25 +102,24 @@ function differentialLegPorts({
           return [cut.fromSourcePortId, cut.toSourcePortId]
         })
       }),
+      ...receiverSourcePortIds.flatMap((toSourcePortId) => {
+        const path = receiverPath({
+          graphs,
+          fromSourcePortId: driverSourcePortId,
+          toSourcePortId,
+          allowUnroutedTraces: true,
+        })
+        return (path ?? []).flatMap(({ fromSourcePortId, toSourcePortId }) => [
+          fromSourcePortId,
+          toSourcePortId,
+        ])
+      }),
     ]),
   ]
 }
 
-/** Group SPICE nodes that are connected directly through routed copper. */
-function routedNodeGroups({
-  cuts,
-  node,
-}: {
-  cuts: readonly RoutedTraceCut[]
-  node: CircuitNodes["node"]
-}): SourceNodeGroups {
-  return sourceNodeGroups(
-    cuts.map(({ fromSourcePortId, toSourcePortId }) => [
-      node(fromSourcePortId),
-      node(toSourcePortId),
-    ]),
-  )
-}
+/** SPICE nodes grouped by connectivity through physical cuts. */
+type SpiceNodeGroups = NodeGroups<SpiceNodeName>
 
 /** Validate the physical contacts and routed interiors of both differential legs. */
 function validateDifferentialLegs({
@@ -120,12 +128,14 @@ function validateDifferentialLegs({
   mappings,
   node,
   legGroups,
+  graphs,
 }: {
   db: ReturnType<typeof circuitJsonDb>
   cuts: readonly RoutedTraceCut[]
   mappings: readonly LaneMapping[]
   node: CircuitNodes["node"]
-  legGroups: SourceNodeGroups
+  legGroups: SpiceNodeGroups
+  graphs: ReturnType<typeof receiverGraphs>
 }): void {
   const cutsByTraceId = new Map(cuts.map((cut) => [cut.sourceTraceId, cut]))
   const contacts = differentialContacts(
@@ -140,11 +150,13 @@ function validateDifferentialLegs({
       sourcePortIds: positiveSourcePortIds,
       mappings,
       cutsByTraceId,
+      graphs,
     })
     const negativePorts = differentialLegPorts({
       sourcePortIds: negativeSourcePortIds,
       mappings,
       cutsByTraceId,
+      graphs,
     })
     const groundedSourcePortId = [...positivePorts, ...negativePorts].find(
       (sourcePortId) => node(sourcePortId) === "0",
@@ -154,18 +166,15 @@ function validateDifferentialLegs({
         "channel_short",
         `${name}: contact ${groundedSourcePortId} is shorted to ground`,
       )
-    const positiveGroups = new Map<string, SourcePortId>()
-    const positiveNodes = new Map<string, SourcePortId>()
+    const positiveGroups = new Map<SpiceNodeName, SourcePortId>()
+    const positiveNodes = new Map<SpiceNodeName, SourcePortId>()
     for (const sourcePortId of positivePorts) {
-      const sourceNodeId = node(sourcePortId)
-      const sourceGroup = sourceGroupId({
-        groups: legGroups,
-        sourcePortId: sourceNodeId,
-      })
-      if (!positiveNodes.has(sourceNodeId))
-        positiveNodes.set(sourceNodeId, sourcePortId)
-      if (!positiveGroups.has(sourceGroup))
-        positiveGroups.set(sourceGroup, sourcePortId)
+      const spiceNode = node(sourcePortId)
+      const spiceGroup = legGroups.get(spiceNode) ?? spiceNode
+      if (!positiveNodes.has(spiceNode))
+        positiveNodes.set(spiceNode, sourcePortId)
+      if (!positiveGroups.has(spiceGroup))
+        positiveGroups.set(spiceGroup, sourcePortId)
     }
     // Prefer an exact ideal contact so a driver short does not name a remote receiver.
     for (const negativeSourcePortId of negativePorts) {
@@ -177,11 +186,9 @@ function validateDifferentialLegs({
         )
     }
     for (const negativeSourcePortId of negativePorts) {
-      const negativeGroupId = sourceGroupId({
-        groups: legGroups,
-        sourcePortId: node(negativeSourcePortId),
-      })
-      const positiveSourcePortId = positiveGroups.get(negativeGroupId)
+      const spiceNode = node(negativeSourcePortId)
+      const spiceGroup = legGroups.get(spiceNode) ?? spiceNode
+      const positiveSourcePortId = positiveGroups.get(spiceGroup)
       if (positiveSourcePortId !== undefined)
         fail(
           "channel_short",
@@ -200,7 +207,7 @@ function createCircuitNodeLookup({
   splitNets: ReturnType<typeof idealSourceNodes>["splitNets"]
 }): CircuitNodes["node"] {
   /** Resolve one physical source port or named net. */
-  return function node(sourceId: SourcePortId): string {
+  return function node(sourceId: SourceNodeId): SpiceNodeName {
     if (splitNets.has(sourceId))
       fail(
         "channel_net",
@@ -239,38 +246,55 @@ function validateReceiverPaths({
 
 /** Reject a closed chain of physical cuts, including cuts beyond declared receivers. */
 function validateCutChains({
-  cuts,
-  node,
+  connections,
   groups,
 }: {
-  cuts: readonly RoutedTraceCut[]
-  node: CircuitNodes["node"]
-  groups: SourceNodeGroups
+  connections: ReturnType<typeof cutConnections<SpiceNodeName>>
+  groups: SpiceNodeGroups
 }): void {
-  const nodesByGroup = new Map<string, number>()
+  const nodesByGroup = new Map<SpiceNodeName, number>()
+  const cutsByGroup = new Map<SpiceNodeName, number>()
   for (const group of groups.values())
     nodesByGroup.set(group, (nodesByGroup.get(group) ?? 0) + 1)
-  const cutsByGroup = new Map<string, RoutedTraceCut[]>()
-  for (const cut of cuts) {
-    const group = sourceGroupId({
-      groups,
-      sourcePortId: node(cut.fromSourcePortId),
-    })
-    const groupCuts = cutsByGroup.get(group) ?? []
-    groupCuts.push(cut)
-    cutsByGroup.set(group, groupCuts)
+  for (const { fromNodeId } of connections) {
+    const group = groups.get(fromNodeId) ?? fromNodeId
+    cutsByGroup.set(group, (cutsByGroup.get(group) ?? 0) + 1)
   }
-  for (const [group, groupCuts] of cutsByGroup) {
-    if (groupCuts.length < (nodesByGroup.get(group) ?? 0)) continue
-    fail(
-      "channel_short",
-      `Ideal connections close a path across routed cuts: ${groupCuts
-        .map(
-          ({ sourceTraceId, fromSourcePortId, toSourcePortId }) =>
-            `${sourceTraceId} (${fromSourcePortId} to ${toSourcePortId})`,
+  const graph = connectionGraph(connections)
+  for (const connection of connections) {
+    const group = groups.get(connection.fromNodeId) ?? connection.fromNodeId
+    if ((cutsByGroup.get(group) ?? 0) >= (nodesByGroup.get(group) ?? 0))
+      validateCutBridge({ graph, connection })
+  }
+}
+
+/** Check a collapsed receiver when no ordered extracted path survived admission. */
+function validateReceiverBypasses({
+  channels,
+  graphs,
+  groups,
+}: {
+  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  graphs: ReturnType<typeof receiverGraphs>
+  groups: SourceNodeGroups
+}): void {
+  for (const { driver, receivers } of channels) {
+    const drivers = endpointPorts(driver)
+    for (const receiver of receivers) {
+      for (const [leg, toSourcePortId] of endpointPorts(receiver).entries()) {
+        const fromSourcePortId = drivers[leg]
+        if (
+          sourceGroupId({ groups, sourcePortId: fromSourcePortId }) !==
+          sourceGroupId({ groups, sourcePortId: toSourcePortId })
         )
-        .join(", ")}`,
-    )
+          continue
+        const cuts = receiverBypassCuts({
+          graphs,
+          sourcePortId: fromSourcePortId,
+        })
+        if (cuts.length) shortedCutPath(cuts)
+      }
+    }
   }
 }
 
@@ -299,14 +323,16 @@ export function circuitNodes({
     ...db.source_net.list().map((net) => net.source_net_id),
     ...groups.keys(),
   ])
-  const mapping = Object.fromEntries(
-    [...sourceNodeIds].flatMap((id) => {
-      if (splitNets.has(id)) return []
-      const group = groups.get(id) ?? id
-      const name = names.get(group) ?? `n${names.size}`
-      names.set(group, name)
-      return [[id, name]]
-    }),
+  const mapping = Object.freeze(
+    Object.fromEntries(
+      [...sourceNodeIds].flatMap((id) => {
+        if (splitNets.has(id)) return []
+        const group = groups.get(id) ?? id
+        const name = names.get(group) ?? `n${names.size}`
+        names.set(group, name)
+        return [[id, name]]
+      }),
+    ),
   )
   const node = createCircuitNodeLookup({ mapping, splitNets })
   const routedNodes = new Set<string>()
@@ -324,11 +350,18 @@ export function circuitNodes({
     routedNodes.add(from)
     routedNodes.add(to)
   }
-  const legGroups = routedNodeGroups({ cuts, node })
-  validateDifferentialLegs({ db, cuts, mappings, node, legGroups })
+  const connections = cutConnections({ cuts, node })
+  const legGroups = nodeGroups(
+    connections.map(({ fromNodeId, toNodeId }) => [fromNodeId, toNodeId]),
+  )
+  const bridges = passiveBridges({ circuit, excluded: new Set() })
+  const channels = db.simulation_pcb_driver_receiver_channel.list()
+  const graphs = receiverGraphs({ cuts, bridges, groups, channels })
+  validateDifferentialLegs({ db, cuts, mappings, node, legGroups, graphs })
   validateReceiverPaths({ mappings, node })
-  validateCutChains({ cuts, node, groups: legGroups })
-  for (const [from, to] of passiveBridges({ circuit, excluded: new Set() })) {
+  validateCutChains({ connections, groups: legGroups })
+  validateReceiverBypasses({ channels, graphs, groups })
+  for (const [from, to] of bridges) {
     const terminal = node(from)
     if (routedNodes.has(terminal) && terminal === node(to))
       fail(
