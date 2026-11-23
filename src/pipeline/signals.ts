@@ -294,7 +294,7 @@ export function prepareChannelSimulation(
   validateSignalPins(scoped)
   const aggressors = planAggressors({
     ...scoped,
-    endpointIds: signalPins.endpointIds,
+    driven: signalPins.driven,
   })
   const patterns: DriverPattern[] = [...selection.driverReceiverChannels]
   const edgeTimesSeconds = [...signalPins.edgeTimesSeconds]

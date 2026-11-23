@@ -8,6 +8,7 @@ import {
   type SourcePortId,
 } from "../board"
 import { type InspectedPin, pinCapabilities } from "../buffers"
+import type { SignalPins } from "./signal-pins"
 import { prbsPatterns } from "./timing"
 
 // The pinned Circuit JSON schema predates these fields: https://github.com/tscircuit/circuit-json/pull/1042
@@ -16,7 +17,7 @@ const aggressorDeclaration = z.object({
   aggressor_disabled: z.boolean().optional(),
 })
 
-/** An enabled pattern or a disabled output for each drive-capable pin outside the selected endpoints. */
+/** An enabled pattern or a disabled output for each output-capable pin without a channel driver role. */
 export type Aggressors = Map<SourcePortId, DriverPattern | null>
 
 /** Identify the pin in diagnostics by the circuit's component and port names. */
@@ -37,16 +38,16 @@ export function planAggressors({
   circuit,
   channelSimulation,
   pins,
-  endpointIds,
+  driven,
 }: {
   circuit: CircuitJsonSnapshot
   channelSimulation: SimulationPcbTransientChannelSimulation
   pins: Map<SourcePortId, InspectedPin>
-  endpointIds: ReadonlySet<SourcePortId>
+  driven: SignalPins["driven"]
 }): Aggressors {
   const aggressors: Aggressors = new Map()
   const aggressorPins = [...pins.values()]
-    .filter((pin) => !endpointIds.has(pin.port) && pinCapabilities(pin).drive)
+    .filter((pin) => !driven.has(pin.port) && pinCapabilities(pin).drive)
     .sort((a, b) => a.port.localeCompare(b.port, "en"))
   if (aggressorPins.length === 0) return aggressors
 

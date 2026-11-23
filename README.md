@@ -52,8 +52,9 @@ simulations and eye diagrams directly under the board, including when it
 contains cached subcircuits. Core checks endpoint connectivity and routing,
 supplies preset via plating, and plans omitted pseudo-random binary sequence (PRBS) seeds by channel name.
 The pipeline reads the IBIS assets and validates the selected model capabilities.
-If the copper scope retains any output-capable pins outside the selected
-channel endpoints, those pins are aggressors. Declare their state on the simulation. Use `aggressorPattern="0"`
+Aggressors are output-capable pins retained by the copper scope that do not
+drive a declared channel in the simulation. This includes bidirectional
+receivers. Declare their state on the simulation. Use `aggressorPattern="0"`
 or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
 `"prbs7"` to switch at the simulation bit rate from time zero.
 `aggressorDisabled` takes precedence and requires every aggressor
