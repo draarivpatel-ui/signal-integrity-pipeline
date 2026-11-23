@@ -281,12 +281,11 @@ it adds no Node imports to the fixture graph.
 ```mermaid
 stateDiagram-v2
   [*] --> validate: POST /api/run-solver
-  validate --> rejected: invalid JSON / size / solver / paths / flags / origin
+  validate --> rejected: invalid JSON / solver / paths / flags / origin
   validate --> queued: accepted request
-  queued --> rejected: queue full
   queued --> running: single slot available
   running --> completed: result and output files
-  running --> failed: native error or 45 min timeout
+  running --> failed: native error
   completed --> [*]: release slot and clean temp directory
   failed --> [*]: release slot and clean temp directory
   rejected --> [*]

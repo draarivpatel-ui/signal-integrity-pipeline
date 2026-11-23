@@ -104,11 +104,11 @@ flowchart LR
   assets["Fixed local model paths / SI_DDR3_BOARD"] --> debugger
   debugger --> transient["RouteTransientSolver · stepAsync"]
   transient <-->|"POST /api/run-solver · HTTP RunSolver"| queue["Vite middleware · single slot"]
-  queue <-->|"isolated temp dir · 45 min limit · OMP_NUM_THREADS=1"| native["Local ngspice on PATH"]
+  queue <-->|"isolated temp dir · OMP_NUM_THREADS=1"| native["Local ngspice on PATH"]
   transient --> capture["Actual waveform samples"]
 ```
 
-The backend accepts bounded JSON bodies (64 MiB), checks same-origin loopback
+The backend validates JSON bodies, checks same-origin loopback
 requests, rejects other solvers and executable/cwd options, and serializes native
 runs and version probes. `GET http://127.0.0.1:5050/api/solvers` reports ngspice
 availability and version. A missing binary shows `ngspice not found on PATH`.
