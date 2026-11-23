@@ -192,7 +192,7 @@ function CommandEntry({
       >
         <span />
         <span>{command.label}</span>
-        <kbd>▸</kbd>
+        <kbd aria-hidden="true">▸</kbd>
       </button>
       {expanded && (
         <div className="wb-popover" role="menu">
@@ -223,9 +223,11 @@ export function CommandButton({
         onInvoke()
       }}
     >
-      <span className="wb-command-check">{command.checked && "✓"}</span>
+      <span className="wb-command-check" aria-hidden="true">
+        {command.checked && "✓"}
+      </span>
       <span>{command.label}</span>
-      <kbd>{command.shortcut}</kbd>
+      <kbd aria-hidden="true">{command.shortcut}</kbd>
     </button>
   )
 }

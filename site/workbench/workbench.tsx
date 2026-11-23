@@ -3,10 +3,11 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react"
-import { type InspectorInput, loadInput } from "../channel-inspector/input"
+import { loadInput } from "../channel-inspector/input"
 import { useBoardSelection } from "./board-selection"
 import { BoardViewer, boardCoordinates } from "./board-viewer"
 import {
@@ -18,8 +19,15 @@ import {
   themeIds,
   themes,
 } from "./chrome"
-import { updateDesign } from "./model/design"
+import { useDesignHistory } from "./design-history"
+import { Dock, Properties } from "./docks"
 import { editNetRole, type NetRole } from "./model/net-roles"
+import {
+  findProjectNode,
+  type ProjectNode,
+  ProjectTree,
+  projectNodes,
+} from "./project"
 import { loadRecent, loadTheme, saveRecent, setTheme } from "./storage"
 import { ChildWindow, useWindows, windowTitles } from "./windows"
 import "./workbench.css"
@@ -28,25 +36,52 @@ import "./workbench.css"
 export function Workbench(): JSX.Element {
   const [theme, selectTheme] = useState(loadTheme)
   const [recent, setRecent] = useState(loadRecent)
-  const [input, setInput] = useState<InspectorInput>()
+  const design = useDesignHistory()
+  const { input } = design
+  const [simulationIndex, setSimulationIndex] = useState(0)
+  const [treeId, setTreeId] = useState<string>()
+  const [showTree, setShowTree] = useState(true)
+  const [showProperties, setShowProperties] = useState(true)
+  const simulation = input?.simulations[simulationIndex]
   const [about, setAbout] = useState(false)
   const [status, setStatus] = useState("Ready")
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState(false)
-  const properties = useRef<HTMLElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const windows = useWindows()
   useLayoutEffect(() => setTheme(theme), [theme])
   const selection = useBoardSelection({
     input,
-    simulation: input?.simulations[0],
-    onPick: useCallback(() => {}, []),
+    simulation,
+    onPick: useCallback(() => setTreeId(undefined), []),
   })
   const activeZ = Math.max(
     0,
     ...windows.frames.filter((frame) => !frame.minimized).map(({ z }) => z),
   )
+  const root = useMemo(
+    () =>
+      input &&
+      projectNodes({ input, active: simulation, features: selection.features }),
+    [input, simulation, selection.features],
+  )
+  const chosenNode = findProjectNode({
+    root,
+    id: treeId,
+    copper: treeId ? undefined : selection.selected?.id,
+  })
   const boardFocus = selection.selected ?? selection.hovered
+  /** Synchronize a tree click with the selected physical board object. */
+  const pickNode = (node: ProjectNode): void => {
+    if (node.simulation !== undefined && node.simulation !== simulationIndex)
+      setSimulationIndex(node.simulation)
+    setTreeId(node.id)
+    selection.select(node.copper?.id)
+  }
+  /** Focus the window associated with a project branch. */
+  const openNode = (node: ProjectNode): void => {
+    if (node.window === "board") windows.show(node.window)
+  }
   useEffect(() => {
     if (!selection.context) return
     const end = new AbortController()
@@ -73,6 +108,7 @@ export function Workbench(): JSX.Element {
     const trace = selection.selected?.record
     if (
       !input ||
+      !simulation ||
       trace?.type !== "pcb_trace" ||
       selection.selected?.category === "rail"
     )
@@ -80,11 +116,11 @@ export function Workbench(): JSX.Element {
     try {
       const circuit = editNetRole({
         circuit: input.circuit,
-        simulation: input.simulations[0],
+        simulation,
         trace,
         role,
       })
-      setInput(updateDesign({ input, circuit }))
+      design.edit(circuit)
       setError(undefined)
     } catch (cause) {
       setError((cause as Error).message)
@@ -99,7 +135,9 @@ export function Workbench(): JSX.Element {
     try {
       const next = await loadInput(file)
       selection.reset()
-      setInput(next)
+      setSimulationIndex(0)
+      setTreeId("board")
+      design.open(next)
       setRecent((previous) => saveRecent({ name: next.name, recent: previous }))
       windows.show("board")
       setStatus("Ready")
@@ -138,10 +176,8 @@ export function Workbench(): JSX.Element {
     {
       label: "Edit",
       items: [
-        {
-          label: "Property Grid",
-          action: () => properties.current?.focus(),
-        },
+        { label: "Undo Design Edit", shortcut: "Ctrl+Z", action: design.undo },
+        { label: "Redo Design Edit", shortcut: "Ctrl+Y", action: design.redo },
       ],
     },
     {
@@ -150,6 +186,18 @@ export function Workbench(): JSX.Element {
         {
           label: "Board Viewer",
           action: input && (() => windows.show("board")),
+        },
+        {
+          label: "Project Explorer",
+          shortcut: "Ctrl+Alt+P",
+          checked: showTree,
+          action: () => setShowTree(!showTree),
+        },
+        {
+          label: "Properties Inspector",
+          shortcut: "Ctrl+Alt+R",
+          checked: showProperties,
+          action: () => setShowProperties(!showProperties),
         },
         { label: "theme separator", separator: true },
         {
@@ -217,9 +265,9 @@ export function Workbench(): JSX.Element {
         <h1>
           tscircuit SI Workbench - [
           {input
-            ? `${input.name} | ${input.simulations[0].name ?? "Simulation"}`
+            ? `${input.name} | ${simulation?.name ?? "Simulation"}`
             : "No Board Loaded"}
-          ]
+          ]{design.dirty && "*"}
         </h1>
       </header>
       <MenuBar menus={menus} />
@@ -248,6 +296,30 @@ export function Workbench(): JSX.Element {
         >
           <Icon name="board" />
         </button>
+        {input && (
+          <label>
+            Sim:{" "}
+            <select
+              aria-label="Active simulation"
+              value={simulationIndex}
+              onChange={(event) => {
+                selection.select(undefined)
+                setTreeId(undefined)
+                setSimulationIndex(Number(event.target.value))
+              }}
+            >
+              {input.simulations.map((item, index) => (
+                <option
+                  key={item.simulation_pcb_transient_channel_simulation_id}
+                  value={index}
+                >
+                  {item.name ??
+                    item.simulation_pcb_transient_channel_simulation_id}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="wb-theme-switch">
           Theme:{" "}
           <select
@@ -278,18 +350,28 @@ export function Workbench(): JSX.Element {
         }}
       />
       <div className="wb-docks">
-        <aside className="wb-dock">
-          <h2>Project Explorer</h2>
-          <div className="wb-tree" role="tree" aria-label="Project Explorer">
-            {input && (
-              <button role="treeitem" onClick={() => windows.show("board")}>
-                <Icon name="board" />
-                {input.name}
-              </button>
-            )}
-            {!input && <span className="wb-muted">No design open</span>}
-          </div>
-        </aside>
+        <Dock
+          side="left"
+          title="Project Explorer"
+          shown={showTree}
+          close={() => setShowTree(false)}
+        >
+          <ProjectTree
+            root={root}
+            selected={chosenNode?.id}
+            pick={pickNode}
+            open={openNode}
+            context={({ node, event }) => {
+              if (!node.copper) return
+              event.preventDefault()
+              selection.interaction.onContext?.({
+                feature: node.copper,
+                x: event.clientX,
+                y: event.clientY,
+              })
+            }}
+          />
+        </Dock>
         <div className="wb-workspace" aria-label="Window workspace">
           {!input && (
             <div className="wb-empty">
@@ -346,62 +428,18 @@ export function Workbench(): JSX.Element {
               ))}
           </div>
         </div>
-        <aside
-          className="wb-dock"
-          data-dock="properties"
-          ref={properties}
-          tabIndex={-1}
+        <Dock
+          side="right"
+          title="Properties Inspector"
+          shown={showProperties}
+          close={() => setShowProperties(false)}
         >
-          <h2>Property Grid</h2>
-          {input && (
-            <table className="wb-grid">
-              <thead>
-                <tr>
-                  <th>Property</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {boardFocus && (
-                  <>
-                    <tr>
-                      <td>Copper</td>
-                      <td>{boardFocus.id}</td>
-                    </tr>
-                    <tr>
-                      <td>Category</td>
-                      <td>{boardFocus.category}</td>
-                    </tr>
-                    <tr>
-                      <td>Layer</td>
-                      <td>{boardFocus.layers.join(", ")}</td>
-                    </tr>
-                    <tr>
-                      <td>Scope</td>
-                      <td>{boardFocus.reason}</td>
-                    </tr>
-                  </>
-                )}
-                <tr>
-                  <td>Design</td>
-                  <td>{input.name}</td>
-                </tr>
-                <tr>
-                  <td>Width</td>
-                  <td>{input.board.width} mm</td>
-                </tr>
-                <tr>
-                  <td>Height</td>
-                  <td>{input.board.height} mm</td>
-                </tr>
-                <tr>
-                  <td>Copper layers</td>
-                  <td>{input.board.layers.length}</td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-        </aside>
+          <Properties
+            key={chosenNode?.id ?? boardFocus?.id}
+            node={chosenNode ?? (boardFocus ? undefined : root)}
+            feature={boardFocus}
+          />
+        </Dock>
       </div>
       {error && (
         <div className="wb-error" role="alert">
