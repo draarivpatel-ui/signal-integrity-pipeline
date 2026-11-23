@@ -6,10 +6,11 @@ import {
   useRef,
   useState,
 } from "react"
+import type { InspectorSample } from "../channel-inspector/input"
 import type { IbisFocus } from "./assign-models"
 import { useBoardSelection } from "./board-selection"
 import { BoardViewer, useBoardView } from "./board-viewer"
-import { Icon, MenuBar } from "./chrome"
+import { MenuBar } from "./chrome"
 import { CopperMenu, useCopperContextDismiss } from "./copper-menu"
 import { useDesignHistory } from "./design-history"
 import { DesktopStatus, DesktopTitle } from "./desktop-frame"
@@ -27,6 +28,7 @@ import { captureNodes, diagnosticNode } from "./run-project"
 import { SimulationLog } from "./simulation-log"
 import { useSimulation } from "./simulation-state"
 import { StackupEditor } from "./stackup-editor"
+import { StartPage } from "./start-page"
 import { clearRecent, loadTheme, setTheme } from "./storage"
 import { Toolbar } from "./toolbar"
 import { ChildWindow, MinimizedWindows, useWindows } from "./windows"
@@ -35,7 +37,11 @@ import { type ActiveDialog, WorkbenchDialogs } from "./workbench-dialogs"
 import "./workbench.css"
 
 /** Desktop entry point for offline Circuit JSON inspection and simulation. */
-export function Workbench(): JSX.Element {
+export function Workbench({
+  initialSample,
+}: {
+  initialSample?: InspectorSample
+}): JSX.Element {
   const [theme, selectTheme] = useState(loadTheme)
   const design = useDesignHistory()
   const runner = useSimulation()
@@ -89,7 +95,9 @@ export function Workbench(): JSX.Element {
     selection,
     simulation,
     windows,
+    initialSample,
     setError,
+    setDialog,
     onOpen: (next) => {
       setSelectedRun(undefined)
       setCompare(false)
@@ -99,10 +107,7 @@ export function Workbench(): JSX.Element {
       setDialog(undefined)
     },
   })
-  const { busy, status, recent, load, closeBoard, changeRole, apply } = session
-  const openSample = useCallback(() => {
-    void load()
-  }, [load])
+  const { status, recent, load, closeBoard, changeRole, apply } = session
   const pickNode = useCallback(
     (node: ProjectNode) => {
       if (node.simulation !== undefined && node.simulation !== simulationIndex)
@@ -162,7 +167,6 @@ export function Workbench(): JSX.Element {
     canCompare,
     canEditRole,
     openFile: () => fileInput.current?.click(),
-    openSample,
     setError,
     setDialog,
     setScopeTab,
@@ -301,15 +305,6 @@ export function Workbench(): JSX.Element {
           />
         </Dock>
         <div className="wb-workspace" aria-label="Window workspace">
-          {!input && (
-            <div className="wb-empty">
-              <Icon name="app" />
-              <p>Open or drop a Circuit JSON design.</p>
-              <button onClick={openSample} disabled={busy}>
-                Open Sample
-              </button>
-            </div>
-          )}
           {windows.frames.map((frame) => (
             <ChildWindow
               key={frame.id}
@@ -319,6 +314,15 @@ export function Workbench(): JSX.Element {
               close={() => windows.close(frame.id)}
               change={windows.change}
             >
+              {frame.id === "start" && (
+                <StartPage
+                  recent={recent}
+                  openFile={actions.open}
+                  openRecent={actions.openRecent}
+                  openSample={actions.open && ((sample) => void load(sample))}
+                  runner={runner}
+                />
+              )}
               {input && frame.id === "board" && (
                 <BoardViewer
                   board={input.board}

@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import { CaptionIcon, Icon } from "./icons"
 
 export const windowTitles = {
+  start: "Start Page",
   board: "Board Viewer",
   stackup: "Stackup Editor",
   ibis: "Visual IBIS Editor",
@@ -11,6 +12,15 @@ export const windowTitles = {
   scope: "Oscilloscope",
 } as const
 export type WindowId = keyof typeof windowTitles
+
+const windowIcons = {
+  start: "app",
+  board: "board",
+  stackup: "stackup",
+  ibis: "ibisCurve",
+  log: "log",
+  scope: "scope",
+} as const
 
 /** Position and activation state of one child window. */
 export interface Frame {
@@ -44,13 +54,15 @@ function newFrame({ id, count }: { id: WindowId; count: number }): Frame {
       maximized: false,
     }
   const offset = 2 + count * 3
+  let height = 94 - offset
+  if (id === "start") height = 58
   return {
     id,
     z: 0,
     x: offset,
     y: offset,
     width: 95 - offset,
-    height: 94 - offset,
+    height,
     minimized: false,
     maximized: false,
   }
@@ -70,7 +82,9 @@ export interface Windows {
 
 /** Keep activation order and percentage bounds independent of the tool contents. */
 export function useWindows(): Windows {
-  const [frames, setFrames] = useState<Frame[]>([])
+  const [frames, setFrames] = useState<Frame[]>(() => [
+    { ...newFrame({ id: "start", count: 0 }), z: 1 },
+  ])
   return {
     frames,
     reset: () => setFrames([]),
@@ -275,7 +289,7 @@ export function ChildWindow({
         }}
       >
         <span className="wb-caption">
-          <Icon name={frame.id === "ibis" ? "ibisCurve" : frame.id} />
+          <Icon name={windowIcons[frame.id]} />
           <span>{windowTitles[frame.id]}</span>
         </span>
         <div className="wb-title-buttons">
@@ -343,7 +357,7 @@ export function MinimizedWindows({
         .map(({ id }) => (
           <div key={id} className="wb-child-title">
             <span className="wb-caption">
-              <Icon name={id === "ibis" ? "ibisCurve" : id} />
+              <Icon name={windowIcons[id]} />
               <span>{windowTitles[id]}</span>
             </span>
             <div className="wb-title-buttons">

@@ -102,6 +102,8 @@ IBIS_MODEL_DIR=models bun run dev
 flowchart LR
   fixture["Cosmos TSX / uploaded Circuit JSON"] --> debugger["GenericSolverDebugger · routed stages 1–6"]
   assets["Fixed local model paths / SI_DDR3_BOARD"] --> debugger
+  start["SI Workbench · Home / Default / DDR"] --> workbench
+  boardFile["SI_DDR3_BOARD · local Circuit JSON"] -->|"GET /api/local-boards/ddr3"| start
   workbench["SI Workbench · routed stages 1–6"] --> transient
   debugger --> transient["RouteTransientSolver · stepAsync"]
   transient <-->|"POST /api/run-solver · HTTP RunSolver"| queue["Vite middleware · single slot"]
@@ -116,11 +118,27 @@ availability and version. A missing binary shows `ngspice not found on PATH`.
 
 ### SI Workbench
 
-With **ngspice on PATH**, run `bun run dev` and select **SIWorkbench** (first in the sidebar) in
-Cosmos. Choose **File → Open Sample** or open a local Circuit JSON design.
-Inspect routed copper in 2D or 3D, edit stackup, embedded IBIS models and
-stimulus, then press **F5** to run a local transient and inspect waveforms and
-eye diagrams in the Oscilloscope.
+Run `bun run dev` to open **Home** in the **SIWorkbench** group at the top of
+the Cosmos sidebar.
+
+- **Home** has a Start Page with **Open Circuit JSON…**, recent files, both
+  samples, and the local ngspice status.
+- **Default** opens the built-in parallel bus sample.
+- **DDR** opens a local DDR3 Circuit JSON file with declared transient channel
+  simulations and embedded IBIS models for local runs.
+
+Set the board path when starting Cosmos to use the DDR page or Home's DDR3
+sample card.
+
+```sh
+SI_DDR3_BOARD=/path/to/board.circuit.json bun run dev
+```
+
+The Vite dev server streams the configured file over loopback. The file and
+its IBIS models stay local. With **ngspice on PATH**, press **F5** to run a local
+transient and inspect waveforms and eye diagrams in the Oscilloscope. The
+Workbench also supports 2D and 3D copper inspection and edits to stackup,
+embedded IBIS models, and stimulus.
 
 External IBIS loading and board-wide design rule checks are future work. The
 pipeline rule for receivers that act as aggressors is pending.

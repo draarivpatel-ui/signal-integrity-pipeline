@@ -16,19 +16,75 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.wb-empty {
-  position: absolute;
-  inset: 0;
+.wb-start-page {
+  max-width: 540px;
+  margin-inline: auto;
   display: grid;
-  place-content: center;
-  justify-items: center;
-  color: var(--title-ink);
+  gap: 20px;
+  padding: clamp(12px, 4%, 28px);
 }
-.wb-empty button {
-  color: var(--ink);
+.wb-start-page h2 {
+  margin: 0 0 7px;
+  font-size: 13px;
 }
-.wb-empty svg {
-  scale: 1.5;
+.wb-start-page p {
+  margin: 0;
+  color: var(--muted);
+}
+.wb-start-open,
+.wb-start-solver {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.wb-start-open {
+  justify-self: start;
+}
+.wb-start-samples {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px;
+}
+.wb-start-samples button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 9px;
+  padding: 10px;
+  text-align: left;
+}
+.wb-start-samples svg {
+  grid-row: span 2;
+  width: 24px;
+  height: 24px;
+}
+.wb-start-samples span {
+  color: var(--muted);
+}
+.wb-start-page ul {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wb-start-page li {
+  min-width: 0;
+  max-width: 100%;
+}
+.wb-start-page li button {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-start-solver {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.wb-local-board-message code {
+  overflow-wrap: anywhere;
 }
 .wb-child {
   position: absolute;

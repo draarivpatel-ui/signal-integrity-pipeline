@@ -1,9 +1,18 @@
-import { type Dispatch, type SetStateAction, useState } from "react"
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 import type { CircuitJson } from "../../src/board"
 import {
   type ChannelSimulation,
+  DdrBoardUnavailable,
   type InspectorInput,
+  type InspectorSample,
   loadInput,
+  sampleNames,
 } from "../channel-inspector/input"
 import type { BoardSelection } from "./board-selection"
 import type { BoardView } from "./board-viewer"
@@ -25,7 +34,7 @@ interface BoardSession {
   status: string
   recent: string[]
   setRecent: Dispatch<SetStateAction<string[]>>
-  load: (file?: File) => Promise<void>
+  load: (source: File | InspectorSample) => Promise<void>
   closeBoard: () => void
   changeRole: (role: NetRole) => void
   apply: (circuit: CircuitJson) => void
@@ -38,7 +47,9 @@ export function useBoardSession({
   selection,
   simulation,
   windows,
+  initialSample,
   setError,
+  setDialog,
   onOpen,
 }: {
   design: DesignHistory
@@ -46,24 +57,32 @@ export function useBoardSession({
   selection: BoardSelection
   simulation?: ChannelSimulation
   windows: Windows
+  initialSample?: InspectorSample
   setError: (message?: string) => void
+  setDialog: (dialog?: ActiveDialog) => void
   onOpen: (input?: InspectorInput) => void
 }): BoardSession {
   const [recent, setRecent] = useState(loadRecent)
   const [status, setStatus] = useState("Ready")
   const [busy, setBusy] = useState(false)
-  return {
+  const loading = useRef<AbortController>(undefined)
+  const session: BoardSession = {
     recent,
     setRecent,
     status,
     busy,
-    load: async (file) => {
-      if (busy || runner.solver === "running") return
+    load: async (source) => {
+      if (loading.current || runner.solver === "running") return
+      const controller = new AbortController()
+      const { signal } = controller
+      loading.current = controller
       setBusy(true)
       setError(undefined)
+      setDialog(undefined)
       setStatus("Reading Circuit JSON…")
       try {
-        const next = await loadInput(file)
+        const next = await loadInput({ source, signal, onStatus: setStatus })
+        if (signal.aborted) return
         selection.reset()
         runner.reset()
         windows.reset()
@@ -75,10 +94,16 @@ export function useBoardSession({
         onOpen(next)
         setStatus("Ready")
       } catch (cause) {
-        setError((cause as Error).message)
+        if (signal.aborted) return
+        if (cause instanceof DdrBoardUnavailable)
+          setDialog({ kind: "ddr-unavailable", message: cause.message })
+        else setError((cause as Error).message)
         setStatus("Open failed")
       } finally {
-        setBusy(false)
+        if (loading.current === controller) {
+          loading.current = undefined
+          setBusy(false)
+        }
       }
     },
     closeBoard: () => {
@@ -86,6 +111,7 @@ export function useBoardSession({
       selection.reset()
       runner.reset()
       windows.reset()
+      windows.show("start")
       onOpen()
       setError(undefined)
       setStatus("Ready")
@@ -114,6 +140,14 @@ export function useBoardSession({
       }
     },
   }
+  useEffect(() => {
+    if (initialSample) void session.load(initialSample)
+    return () => {
+      loading.current?.abort()
+      loading.current = undefined
+    }
+  }, [initialSample])
+  return session
 }
 
 /** Bind menu and toolbar commands to the active session. */
@@ -131,7 +165,6 @@ export function workbenchActions({
   canCompare,
   canEditRole,
   openFile,
-  openSample,
   setError,
   setDialog,
   setScopeTab,
@@ -152,7 +185,6 @@ export function workbenchActions({
   canCompare: boolean
   canEditRole: boolean
   openFile: () => void
-  openSample: () => void
   setError: (message?: string) => void
   setDialog: (dialog?: ActiveDialog) => void
   setScopeTab: (tab: ScopeTab) => void
@@ -164,7 +196,14 @@ export function workbenchActions({
   const available = !session.busy && runner.solver !== "running"
   return {
     open: available ? openFile : undefined,
-    sample: available ? openSample : undefined,
+    sample: available ? () => void session.load("default") : undefined,
+    openRecent: available
+      ? (name) => {
+          if (name === sampleNames.default) return void session.load("default")
+          if (name === sampleNames.ddr) return void session.load("ddr")
+          openFile()
+        }
+      : undefined,
     save: input && (() => exportDesign(input)),
     csv: activeRun && (() => exportWaveforms(activeRun)),
     png:

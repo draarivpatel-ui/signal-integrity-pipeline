@@ -14,6 +14,7 @@ import { StimulusDialog } from "./stimulus-dialog"
 
 export type ActiveDialog =
   | { kind: "assign"; port?: string; modelId?: string }
+  | { kind: "ddr-unavailable"; message: string }
   | {
       kind:
         | "stimulus"
@@ -108,6 +109,16 @@ export function WorkbenchDialogs({
   version?: string
   menus: Menu[]
 }): JSX.Element | null {
+  if (dialog?.kind === "ddr-unavailable")
+    return (
+      <Modal title="DDR3 board unavailable" close={close} icon="warning">
+        <div className="wb-local-board-message">
+          <p>{dialog.message}</p>
+          <p>Start Cosmos with the path to your DDR3 Circuit JSON.</p>
+          <code>SI_DDR3_BOARD=/path/to/board.circuit.json bun run dev</code>
+        </div>
+      </Modal>
+    )
   if (dialog?.kind === "assign" && input)
     return (
       <AssignModels

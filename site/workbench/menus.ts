@@ -52,7 +52,9 @@ const commandInfo = {
   readonly [string, string | null, IconName | null]
 >
 export type CommandId = keyof typeof commandInfo
-export type CommandActions = Partial<Record<CommandId, () => void>>
+export type CommandActions = Partial<Record<CommandId, () => void>> & {
+  openRecent?: (name: string) => void
+}
 export const toolbarGroups = [
   ["open", "sample", "save"],
   ["board", "stackup", "assign", "ibis", "stimulus"],
@@ -134,6 +136,7 @@ export function workbenchMenus(options: MenuOptions): Menu[] {
     arrange,
   } = options
   const item = bindCommands(actions)
+  const { openRecent } = actions
   return [
     {
       label: "File",
@@ -146,10 +149,7 @@ export function workbenchMenus(options: MenuOptions): Menu[] {
             ? [
                 ...recent.map((name) => ({
                   label: name,
-                  action:
-                    name === "Parallel bus sample"
-                      ? actions.sample
-                      : actions.open,
+                  action: openRecent && (() => openRecent(name)),
                 })),
                 { label: "Recent operations", separator: true },
                 { label: "Clear Recent", action: options.clearRecent },

@@ -2,9 +2,9 @@ import react from "@vitejs/plugin-react"
 import { defineConfig, type UserConfig } from "vite"
 import { createSolverMiddleware } from "./src/adapters/solver-middleware"
 
-/** `bun run dev` opens Cosmos on the SI Workbench fixture. */
+/** `bun run dev` opens Cosmos on the SI Workbench Start Page. */
 const WORKBENCH_FIXTURE_URL = `http://127.0.0.1:5000/?fixtureId=${encodeURIComponent(
-  JSON.stringify({ path: "pages/SIWorkbench.page.tsx" }),
+  JSON.stringify({ path: "pages/SIWorkbench.page.tsx", name: "Home" }),
 )}`
 
 export default defineConfig({
@@ -33,7 +33,9 @@ export default defineConfig({
         },
       }),
       configureServer: (server) => {
-        server.middlewares.use(createSolverMiddleware())
+        server.middlewares.use(
+          createSolverMiddleware({ localBoardFile: process.env.SI_DDR3_BOARD }),
+        )
       },
       configurePreviewServer: (server) => {
         server.middlewares.use(createSolverMiddleware())

@@ -75,10 +75,10 @@ export function DesktopStatus({
   pickedLabel?: string
   hovered?: InspectorFeature
 }): JSX.Element {
-  const summary =
-    runner.solver === "running"
-      ? `Stage ${Math.min(stageCount, runner.completed + 1)}/${stageCount} · ${runner.stage}`
-      : runner.summary || status
+  let summary = status
+  if (runner.solver === "running")
+    summary = `Stage ${Math.min(stageCount, runner.completed + 1)}/${stageCount} · ${runner.stage}`
+  else if (status === "Ready" && runner.summary) summary = runner.summary
   const layer = (hovered ?? picked)?.layers.join(", ") || "—"
   return (
     <footer className="wb-status">

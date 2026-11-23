@@ -7,6 +7,7 @@ import { delimiter, join } from "node:path"
 import { promisify } from "node:util"
 import { z } from "zod"
 import type { RunSolver, SolverRequest } from "../solver"
+import { streamLocalBoard } from "./local-board"
 import { createNativeSolver } from "./native-solver"
 import { relativeFile } from "./paths"
 
@@ -51,6 +52,7 @@ export interface SolverMiddlewareOptions {
   maxRequestBytes?: number
   modelDirectory?: string
   boardFile?: string
+  localBoardFile?: string
 }
 /** The middleware signature required by the Vite request chain. */
 type Middleware = (
@@ -63,8 +65,9 @@ type SolverQueue = <T>(run: () => Promise<T>) => Promise<T>
 
 type SolverMiddlewareContext = Omit<
   Required<SolverMiddlewareOptions>,
-  "detectSolvers"
+  "detectSolvers" | "localBoardFile"
 > & {
+  localBoardFile?: string
   queue: SolverQueue
   solvers: () => Promise<LocalSolvers>
 }
@@ -414,6 +417,7 @@ async function runSolverRequest({
 }
 
 const MISSING_HOST = ""
+const DDR3_BOARD_ROUTE = "/api/local-boards/ddr3"
 
 /** Require the IPv4 loopback literal followed by a nonempty decimal port. */
 function isLoopbackHost(host: string = MISSING_HOST): boolean {
@@ -425,7 +429,7 @@ function isLoopbackHost(host: string = MISSING_HOST): boolean {
   return true
 }
 
-/** Dispatch the three local API routes after the same-origin check. */
+/** Dispatch local API requests after the same-origin check. */
 async function routeHttpRequest({
   request,
   response,
@@ -439,6 +443,8 @@ async function routeHttpRequest({
 }): Promise<void> {
   if (
     !isLoopbackHost(request.headers.host) ||
+    (path === DDR3_BOARD_ROUTE &&
+      request.socket.remoteAddress !== "127.0.0.1") ||
     (request.headers.origin &&
       request.headers.origin !== `http://${request.headers.host}`)
   )
@@ -454,6 +460,16 @@ async function routeHttpRequest({
       body: await context.solvers(),
     })
   }
+  if (path === DDR3_BOARD_ROUTE && request.method === "GET") {
+    if (await streamLocalBoard({ response, path: context.localBoardFile }))
+      return
+    return writeErrorResponse({
+      response,
+      status: 404,
+      message:
+        "SI_DDR3_BOARD is unset or its Circuit JSON file is unavailable.",
+    })
+  }
   if (path.startsWith("/api/local-assets/") && request.method === "GET")
     return writeLocalAssetResponse({
       response,
@@ -463,7 +479,12 @@ async function routeHttpRequest({
   if (path === "/api/run-solver" && request.method === "POST")
     return runSolverRequest({ request, response, context })
   let status = 404
-  if (path === "/api/solvers" || path === "/api/run-solver") status = 405
+  if (
+    path === "/api/solvers" ||
+    path === "/api/run-solver" ||
+    path === DDR3_BOARD_ROUTE
+  )
+    status = 405
   writeErrorResponse({
     response,
     status,
@@ -516,6 +537,7 @@ export function createSolverMiddleware({
   maxRequestBytes = MAX_REQUEST_BYTES,
   modelDirectory = process.env.IBIS_MODEL_DIR ?? "models",
   boardFile = process.env.SI_DDR3_BOARD ?? join(modelDirectory, boardAsset),
+  localBoardFile,
 }: SolverMiddlewareOptions = {}): Middleware {
   const queue = createSolverQueue()
   const context = {
@@ -523,6 +545,7 @@ export function createSolverMiddleware({
     maxRequestBytes,
     modelDirectory,
     boardFile,
+    localBoardFile,
     queue,
     solvers: createSolverLookup({ queue, detectSolvers }),
   }
