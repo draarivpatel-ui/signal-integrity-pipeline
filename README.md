@@ -116,7 +116,7 @@ availability and version. A missing binary shows `ngspice not found on PATH`.
 
 ### SI Workbench
 
-With **ngspice on PATH**, run `bun run dev` and select **si-workbench** in
+With **ngspice on PATH**, run `bun run dev` and select **SIWorkbench** (first in the sidebar) in
 Cosmos. Choose **File → Open Sample** or open a local Circuit JSON design.
 Inspect routed copper in 2D or 3D, edit stackup, embedded IBIS models and
 stimulus, then press **F5** to run a local transient and inspect waveforms and
