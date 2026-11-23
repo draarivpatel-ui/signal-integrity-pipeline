@@ -40,6 +40,7 @@ export type {
 } from "./schema"
 export { recordSchema, validateCircuitRecords } from "./schema"
 export {
+  type DriverPattern,
   isQuiet,
   type SignalEndpoint,
   type SimulationPcbDriverReceiverChannel,

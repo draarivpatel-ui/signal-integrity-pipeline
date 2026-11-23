@@ -105,6 +105,7 @@ export default function ({
       )}
       <simulation.pcbtransientchannelsimulation
         name="RS485"
+        aggressorDisabled
         bitRate={BIT_RATE_BPS}
         duration={CAPTURE_BITS / BIT_RATE_BPS}
       >
