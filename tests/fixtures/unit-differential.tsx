@@ -17,12 +17,16 @@ export default function ({
   short,
   seriesPositive = false,
   internalShort = false,
+  allowUnroutedTraces,
+  partialSeriesPair = false,
 }: {
   reversed?: boolean
   routedTermination?: boolean
-  short?: "TX" | "RX" | "RTERM" | "series"
+  short?: "TX" | "RX" | "RTERM" | "series" | "interior"
   seriesPositive?: boolean
   internalShort?: boolean
+  allowUnroutedTraces?: boolean
+  partialSeriesPair?: boolean
 }): JSX.Element {
   let positive = "A"
   let negative = "B"
@@ -61,22 +65,31 @@ export default function ({
         internallyConnectedPins={receiverInternalTies}
       />
       <Reference />
-      {seriesPositive ? (
-        <DualTerminatedPositiveLeg />
-      ) : (
+      {partialSeriesPair && (
+        <>
+          <PartialSeriesLeg pin="A" y={1.5} />
+          <PartialSeriesLeg pin="B" y={-1.5} />
+        </>
+      )}
+      {!partialSeriesPair &&
+        (seriesPositive ? (
+          <DualTerminatedPositiveLeg />
+        ) : (
+          <trace
+            from=".TX > .A"
+            to=".RX > .A"
+            width={0.2}
+            pcbPath={[".TX > .A", ".RX > .A"]}
+          />
+        ))}
+      {!partialSeriesPair && (
         <trace
-          from=".TX > .A"
-          to=".RX > .A"
+          from=".TX > .B"
+          to=".RX > .B"
           width={0.2}
-          pcbPath={[".TX > .A", ".RX > .A"]}
+          pcbPath={[".TX > .B", ".RX > .B"]}
         />
       )}
-      <trace
-        from=".TX > .B"
-        to=".RX > .B"
-        width={0.2}
-        pcbPath={[".TX > .B", ".RX > .B"]}
-      />
       <resistor
         name="RTERM"
         resistance="120"
@@ -119,6 +132,7 @@ export default function ({
           />
         </>
       )}
+      {short === "interior" && <trace from=".RA1 > .pin2" to=".RB1 > .pin2" />}
       {short === "series" && <trace from=".RS1 > .pin2" to=".TX > .B" />}
       {short === "TX" && <trace from=".TX > .A" to=".TX > .B" />}
       {short === "RX" && <trace from=".RX > .A" to=".RX > .B" />}
@@ -126,6 +140,7 @@ export default function ({
       <simulation.pcbtransientchannelsimulation
         name="RS485"
         aggressorDisabled
+        allowUnroutedTraces={allowUnroutedTraces}
         bitRate={BIT_RATE_BPS}
         duration={CAPTURE_BITS / BIT_RATE_BPS}
       >
@@ -175,6 +190,49 @@ function DualTerminatedPositiveLeg(): JSX.Element {
           />
         </Fragment>
       ))}
+    </>
+  )
+}
+
+/** Keep the junction between two series passives ideal while routing both ends. */
+function PartialSeriesLeg({
+  pin,
+  y,
+}: {
+  pin: "A" | "B"
+  y: number
+}): JSX.Element {
+  const driver = `.TX > .${pin}`
+  const receiver = `.RX > .${pin}`
+  const left = `R${pin}1`
+  const right = `R${pin}2`
+  return (
+    <>
+      <resistor
+        name={left}
+        resistance="33"
+        footprint="0402"
+        pcbX={-2}
+        pcbY={y}
+      />
+      <resistor
+        name={right}
+        resistance="33"
+        footprint="0402"
+        pcbX={2}
+        pcbY={y}
+      />
+      <trace
+        from={driver}
+        to={`.${left} > .pin1`}
+        pcbPath={[driver, `.${left} > .pin1`]}
+      />
+      <trace from={`.${left} > .pin2`} to={`.${right} > .pin1`} />
+      <trace
+        from={`.${right} > .pin2`}
+        to={receiver}
+        pcbPath={[`.${right} > .pin2`, receiver]}
+      />
     </>
   )
 }
