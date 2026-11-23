@@ -10,7 +10,7 @@ import type { InspectorSample } from "../channel-inspector/input"
 import type { IbisFocus } from "./assign-models"
 import { useBoardSelection } from "./board-selection"
 import { BoardViewer, useBoardView } from "./board-viewer"
-import { MenuBar } from "./chrome"
+import { MenuBar, type Theme } from "./chrome"
 import { CopperMenu, useCopperContextDismiss } from "./copper-menu"
 import { useDesignHistory } from "./design-history"
 import { DesktopStatus, DesktopTitle } from "./desktop-frame"
@@ -29,7 +29,7 @@ import { SimulationLog } from "./simulation-log"
 import { useSimulation } from "./simulation-state"
 import { StackupEditor } from "./stackup-editor"
 import { StartPage } from "./start-page"
-import { clearRecent, loadTheme, setTheme } from "./storage"
+import { applyTheme, clearRecent, loadTheme, saveTheme } from "./storage"
 import { Toolbar } from "./toolbar"
 import { ChildWindow, MinimizedWindows, useWindows } from "./windows"
 import { useBoardSession, workbenchActions } from "./workbench-actions"
@@ -42,7 +42,11 @@ export function Workbench({
 }: {
   initialSample?: InspectorSample
 }): JSX.Element {
-  const [theme, selectTheme] = useState(loadTheme)
+  const [theme, setTheme] = useState(loadTheme)
+  const selectTheme = useCallback((chosen: Theme) => {
+    saveTheme(chosen)
+    setTheme(chosen)
+  }, [])
   const design = useDesignHistory()
   const runner = useSimulation()
   const [selectedRun, setSelectedRun] = useState<number>()
@@ -61,7 +65,7 @@ export function Workbench({
   const windows = useWindows()
   const boardView = useBoardView()
   const [layoutKey, setLayoutKey] = useState(0)
-  useLayoutEffect(() => setTheme(theme), [theme])
+  useLayoutEffect(() => applyTheme(theme), [theme])
   const selection = useBoardSelection({
     input,
     simulation,
