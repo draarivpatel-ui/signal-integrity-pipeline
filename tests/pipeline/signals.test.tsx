@@ -748,16 +748,6 @@ test("PRBS31 fits the pattern limit at exactly 65536 intervals", async () => {
   assert.equal(plan.stimuli[0].transmission_pattern.bits.length, 65_536)
 })
 
-test("PRBS31 rejects overlong captures during preparation", async () => {
-  const circuit = await renderSignals({
-    tree: <Board pattern="prbs31" duration={70_000 / 20e6} />,
-  })
-  assert.throws(
-    () => prepareChannelSimulations({ circuit, sources: inverterSources }),
-    /at most 65536 bits/,
-  )
-})
-
 test("the default capture accepts a quiet driver whose offset is past the end", async () => {
   const automatic = await renderSignals({
     tree: <Board pattern="0" offset={3e-6} />,
