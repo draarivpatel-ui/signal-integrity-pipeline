@@ -4,6 +4,7 @@ import {
   type CopperScope,
   channelCopperScope,
   circuitJsonDb,
+  endpointPorts,
   getSourcePortConnectivityMapFromCircuitJson,
   type SignalEndpointPortIds,
   type SimulationPcbDriverReceiverChannel,
@@ -21,7 +22,6 @@ import {
 } from "../buffers"
 import type { Snapshot } from "../kernel"
 import { safeId } from "../kernel"
-import { endpointPorts } from "./signal-controls"
 import { signalTopology, validateSignalGraph } from "./topology"
 
 /** Named source ports and nets electrically connected to channel simulation reference or power rails. */
