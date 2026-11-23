@@ -27,7 +27,11 @@ aggressor, measured at its declared bit rate after its offset.
 
 ```mermaid
 flowchart LR
-  input["RoutedAdmissionSolver<br/>Declared aggressor states"] --> result["RouteSectionsSolver"]
+  board["Circuit JSON and channel declarations"] --> admit["RoutedAdmissionSolver"]
+  ibis["IBIS sources"] --> admit
+  admit --> sections["RouteSectionsSolver"]
+  admit --> binding["IBIS binding inputs"]
+  admit --> manifest["Admission manifest"]
 ```
 
 ```mermaid

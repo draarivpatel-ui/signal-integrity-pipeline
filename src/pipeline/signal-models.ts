@@ -1,8 +1,7 @@
-import type { Snapshot } from "../kernel"
 import type { PcbTrace } from "circuit-json"
 import {
-  type CircuitJsonSnapshot,
   type CircuitJsonDb,
+  type CircuitJsonSnapshot,
   type CopperScope,
   circuitJsonDb,
   getSourcePortConnectivityMapFromCircuitJson,
@@ -16,17 +15,12 @@ import {
   stackupFromCircuitJson,
 } from "../board"
 import type { InspectedPin } from "../buffers"
-import { voltageSourceTerminals } from "../simulation"
+import type { Snapshot } from "../kernel"
+import { hasBuiltInPassiveModel, voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import { endpointPorts } from "./signal-controls"
 import type { ScopedSignalPins, SignalPins } from "./signal-pins"
 import { withChannelSimulationSupplies } from "./supplies"
-
-/** Source component variants with a functional model type and component ID. */
-type SourceComponent = Extract<
-  CircuitJsonSnapshot[number],
-  { type: "source_component" }
->
 
 /** Ports and nets with a node supplied by routed copper, a buffer, or a voltage source. */
 type LoadNodeIds = Set<SourcePortId | SourceNetId>
@@ -99,7 +93,7 @@ export function channelSimulationCircuit({
   driverReceiverChannels,
 }: {
   db: CircuitJsonDb
-  channelSimulation: SimulationPcbTransientChannelSimulation
+  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
   driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
 }): CircuitJsonSnapshot {
   const models = ibisModelOverrides({ db, driverReceiverChannels })
@@ -117,13 +111,6 @@ export function channelSimulationCircuit({
     .map((record) => models.get(record) ?? record)
   circuit.push(channelSimulation, ...driverReceiverChannels)
   return circuit
-}
-
-/** A routed signal component can use a built-in passive model. */
-function hasBuiltInPassiveModel(component: Snapshot<SourceComponent>): boolean {
-  return ["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
-    component.ftype,
-  )
 }
 
 /** Require a supported model for every component on the signal nets. */

@@ -1,6 +1,5 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import React from "react"
 import type { SimulationPcbDriverReceiverChannel } from "../../src/board"
 import { endpointPorts, signalBits } from "../../src/pipeline/signal-controls"
 import { renderSignals } from "../fixtures/signal-render"

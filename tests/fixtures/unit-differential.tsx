@@ -20,7 +20,7 @@ export default function ({
 }: {
   reversed?: boolean
   routedTermination?: boolean
-  short?: "TX" | "RX" | "RTERM"
+  short?: "TX" | "RX" | "RTERM" | "series"
   seriesPositive?: boolean
   internalShort?: boolean
 }): JSX.Element {
@@ -119,6 +119,7 @@ export default function ({
           />
         </>
       )}
+      {short === "series" && <trace from=".RS1 > .pin2" to=".TX > .B" />}
       {short === "TX" && <trace from=".TX > .A" to=".TX > .B" />}
       {short === "RX" && <trace from=".RX > .A" to=".RX > .B" />}
       {short === "RTERM" && <trace from=".RTERM > .pin1" to=".RTERM > .pin2" />}

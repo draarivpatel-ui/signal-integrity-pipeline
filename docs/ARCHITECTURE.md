@@ -11,7 +11,14 @@ RouteSectionsSolver divides scoped copper into straight slices and resolves phys
 
 ```mermaid
 flowchart LR
-  input["RoutedAdmissionSolver<br/>Declared aggressor states"] --> result["RouteSectionsSolver"]
+  board["Circuit JSON and channel declarations"] --> prepare["Prepare channel and aggressor states"]
+  ibis["IBIS sources"] --> prepare
+  prepare --> cuts["Find physical trace cuts"]
+  cuts --> groups["Group ideal source contacts"]
+  groups --> paths["Map driver-to-receiver paths"]
+  cuts --> sections["RouteSectionsSolver"]
+  paths --> bindings["Binding inputs for contact and short checks"]
+  paths --> manifest["Admission manifest"]
 ```
 
 ```mermaid
