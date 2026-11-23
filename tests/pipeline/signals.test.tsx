@@ -89,6 +89,8 @@ function Board({
   const neighbourPath: NonNullable<TraceProps["pcbPath"]> = [neighbourDriverRef]
   if (branch) neighbourPath.push({ x: 5, y: 1 })
   neighbourPath.push(neighbourReceiverRef)
+  let aggressorPattern: string | undefined
+  if (branch || unlisted) aggressorPattern = "0"
   let receivers: string | string[] = receiverRef
   if (branch) receivers = [receiverRef, neighbourReceiverRef]
   return (
@@ -178,6 +180,7 @@ function Board({
         bitRate="20Mbps"
         duration={duration}
         allowUnroutedTraces={allowUnroutedTraces}
+        aggressorPattern={aggressorPattern}
       >
         <simulation.pcbdriverreceiverchannel
           offset={offset}
@@ -474,7 +477,11 @@ test("preparation keeps controls and probes independent across channel simulatio
       {},
       <>
         {board.props.children}
-        <simulation.pcbtransientchannelsimulation name="ALT" bitRate="50Mbps">
+        <simulation.pcbtransientchannelsimulation
+          name="ALT"
+          bitRate="50Mbps"
+          aggressorPattern="0"
+        >
           <simulation.pcbdriverreceiverchannel
             name="A"
             driverRef=".TX0 > .Y"
@@ -539,7 +546,7 @@ test("preparation keeps controls and probes independent across channel simulatio
   )
 })
 
-test("unlisted outputs drive low and the listed driver receives a legal seed", async () => {
+test("the aggressor drives the declared low and the listed driver receives a legal seed", async () => {
   const circuit = await renderSignals({ tree: <Board unlisted /> })
   const prepared = prepareChannelSimulations({
     circuit,

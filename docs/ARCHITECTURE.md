@@ -22,7 +22,7 @@ RouteTransientSolver invokes ngspice through the injected solver port and publis
 
 ```mermaid
 flowchart LR
-  source["Circuit JSON SI records"] --> admit["pipeline: independent channel simulation admission<br/>buffers: package admission, unlisted-pin hierarchy and passivity"]
+  source["Circuit JSON SI records"] --> admit["pipeline: channel admission and declared aggressor states<br/>buffers: package admission, unlisted-pin hierarchy and passivity"]
   admit --> sections["board: copper scope, straight sections and reference planes"]
   sections --> fields["extraction: quasi-TEM cross-sections, pair screen and causal loss"]
   admit --> bindings["buffers + simulation: vendor models, pin packages, ideal die rails, probes and sources"]
@@ -152,7 +152,7 @@ stateDiagram-v2
   RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
   RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
-  RoutedAdmissionSolver --> failed
+  RoutedAdmissionSolver --> failed: invalid admission, including undeclared aggressors
   RouteSectionsSolver --> failed
   RouteFieldsSolver --> failed
   RouteBindingsSolver --> failed
