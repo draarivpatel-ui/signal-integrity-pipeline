@@ -13,6 +13,7 @@ import {
 import {
   type CutConnection,
   cutConnections,
+  physicalCutGraph,
   validateCutBridge,
 } from "./cut-connections"
 import { fail } from "./diagnostics"
@@ -87,6 +88,7 @@ function splitNamedNets({
         sourceGroupId({ groups: explicitGroups, sourcePortId }),
     }),
   )
+  const physicalGraph = physicalCutGraph(cuts)
   const netGroups = nodeGroups(
     ideal
       .filter((trace) => !trace.connected_source_port_ids.length)
@@ -106,7 +108,7 @@ function splitNamedNets({
   }
   const splitNets = new Set<SourceNetId>()
   for (const [net, contacts] of portsByNet) {
-    const namedCuts = connectingCuts({ cutGraph, contacts })
+    const namedCuts = connectingCuts({ cutGraph, contacts, physicalGraph })
     if (!namedCuts.length) continue
     const ids = new Set([
       net,
@@ -125,7 +127,9 @@ function splitNamedNets({
 function connectingCuts({
   cutGraph,
   contacts,
+  physicalGraph,
 }: {
+  physicalGraph: ReturnType<typeof physicalCutGraph>
   cutGraph: ConnectionGraph<SourceNodeId, RoutedTraceCut>
   contacts: ReadonlySet<SourceNodeId>
 }): CutConnection<SourceNodeId>[] {
@@ -141,7 +145,7 @@ function connectingCuts({
     }
   }
   for (const connection of cuts)
-    validateCutBridge({ graph: cutGraph, connection })
+    validateCutBridge({ graph: cutGraph, connection, physicalGraph })
   return [...cuts]
 }
 
@@ -201,7 +205,7 @@ function validateSplitNet({
 }
 
 /** The ideal partition and the named nets which now span multiple nodes. */
-interface IdealSourceNodes {
+export interface IdealSourceNodes {
   groups: SourceNodeGroups
   splitNets: ReadonlySet<SourceNetId>
 }
