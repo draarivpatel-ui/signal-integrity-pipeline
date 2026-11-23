@@ -12,8 +12,8 @@ import { type CircuitJson, routeTones } from "../src/board"
 import { boardPictureSvg } from "../src/board/board-picture"
 import { sha256 } from "../src/kernel"
 import {
-  RoutedPipelineSolver,
   type RoutedAdmissionInput,
+  RoutedPipelineSolver,
   routedStages,
 } from "../src/pipeline"
 
@@ -47,7 +47,6 @@ const PROGRESS_INTERVAL_MS = 15_000
 const RENDER_WIDTH = 1600
 const RENDER_HEIGHT = 1100
 /** Time limit for the optional two-trace native capture. */
-const TWO_TRACE_TIMEOUT_MS = 10_000
 /** Include nearby copper in the two-trace stage views. */
 const TWO_TRACE_SCOPE_DISTANCE_MM = 1
 
@@ -93,7 +92,7 @@ async function stages({
   const execute =
     name === "two-trace" && process.argv.includes("--native-two-trace")
   const context = {
-    runSolver: createNativeSolver({ timeoutMs: TWO_TRACE_TIMEOUT_MS }),
+    runSolver: createNativeSolver(),
     progress: console.log,
   }
   const root = new RoutedPipelineSolver({ input, context })
