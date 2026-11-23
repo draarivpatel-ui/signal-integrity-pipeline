@@ -47,35 +47,31 @@ missing or invalid matrix definitions still fail.
 Die POWER/GND references always connect directly to perfect rails;
 vendor package R/L/C remains between every mapped pin and its die node.
 
-The TSX examples use the pinned `@tscircuit/core` release. Place transient
+The TSX examples use the pinned `@tscircuit/core` preview. Place transient
 simulations and eye diagrams directly under the board, including when it
 contains cached subcircuits. Core checks endpoint connectivity and routing,
 supplies preset via plating, and plans omitted pseudo-random binary sequence (PRBS) seeds by channel name.
 The pipeline reads the IBIS assets and validates the selected model capabilities.
-
-ngspice must already be installed; `createNativeSolver({ tools: { ngspice } })`
-accepts an executable path. No package install or solver download happens during
-a solve. Native processes are serialized and run with `OMP_NUM_THREADS=1`.
-Vendor IBIS files and board JSON remain local and ignored by git.
-
 Aggressors are output-capable pins retained by the copper scope that do not
 drive a declared channel in the simulation. This includes bidirectional
 receivers. Declare their state on the simulation. Use `aggressorPattern="0"`
 or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
 `"prbs7"` to switch at the simulation bit rate from time zero.
 `aggressorDisabled` takes precedence and requires every aggressor
-model to support high impedance. The selected channels keep their own
-`pattern` and `driverDisabled` settings. The pinned core preview emits the
-aggressor fields.
+model to support high impedance. The selected channels (victims) keep their
+own `pattern` and `driverDisabled` settings. TSX authors need a core build that
+emits the aggressor fields.
 
-Automatic duration covers a full pattern for every switching channel or
-aggressor, measured at its declared bit rate after its offset.
+ngspice must already be installed; `createNativeSolver({ tools: { ngspice } })`
+accepts an executable path. No package install or solver download happens during
+a solve. Native processes are serialized and run with `OMP_NUM_THREADS=1`.
+Vendor IBIS files and board JSON remain local and ignored by git.
 
 ## General workflow
 
 ```mermaid
 flowchart TD
-  board[/"Your board<br/>(Circuit JSON with transient channel simulations)"/] --> s1["1. Admit each channel simulation: drivers, receivers, pin states, patterns and the copper scope<br/><small>pipeline</small>"]
+  board[/"Your board<br/>(Circuit JSON with transient channel simulations)"/] --> s1["1. Admit each channel simulation: drivers, receivers, the copper scope and declared aggressor states<br/><small>pipeline</small>"]
   chips[/"Chip models<br/>(IBIS files; coupled package admission)"/] --> s1
   s1 --> s2["2. Cut the scoped copper into straight sections over their reference planes<br/><small>board</small>"]
   s2 --> s3["3. Solve each unique cross-section's coupled R, L, G and C<br/><small>extraction</small>"]
@@ -123,7 +119,7 @@ stateDiagram-v2
   RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
   RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
-  RoutedAdmissionSolver --> failed
+  RoutedAdmissionSolver --> failed: invalid admission, including undeclared aggressors
   RouteSectionsSolver --> failed
   RouteFieldsSolver --> failed
   RouteBindingsSolver --> failed
