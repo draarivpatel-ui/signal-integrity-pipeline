@@ -93,15 +93,15 @@ flowchart LR
   skin --> result
   inductance --> result
   result --> routed[Routed pipeline: arc-cell energies and causal ladders]
-  routed --> pilot[Bounded native pilot and failure evidence]
+  routed --> pilot[Native simulation and failure evidence]
 ```
 
 ## Routed coupling
 
-`board` admits candidate nets within 32 mm unless the problem narrows the scope.
+`board` admits candidate nets within the requested scope radius, which defaults to 32 mm.
 `extraction/route-coupling.ts` solves parallel pairs before assembling final
 cross-sections; either normalized mutual C or L at least 0.5% retains the pair.
-The cap, 40-conductor guard and omissions are recorded.
+The selected scope and omitted pairs are recorded.
 
 ```mermaid
 flowchart LR
@@ -177,11 +177,9 @@ its bulk `extractRoutes` loop and caller-owned field cache are deleted. Segmenta
 and ladder generators retain one canonical algorithm, also drained by existing
 numerical primitive callers. Network stepping creates one route run's cells;
 its final step assembles the coupled global matrices, oblique/via terms and deck.
-One BEM solve is atomic. The 40-conductor limit remains enforced. Route-arc
-energies store only nonzero entries integrated from common slices, capped at
-500,000 entries across R/L/skin/C/dielectric matrices. A non-dominant shunt
-requiring dense modal realization separately caps its allocation at 500,000
-entries. Neither guard depends on a raw 1,024-cell limit.
+One BEM solve is atomic. Route-arc energies store the nonzero entries integrated
+from common slices across the R/L/skin/C/dielectric matrices. A non-dominant
+shunt can require a dense modal realization.
 
 Coupled series resistance uses a normalized reciprocal multiport. For
 `S = diag(sqrt(Rii))`, its auxiliary node voltages are `x = S I`, its

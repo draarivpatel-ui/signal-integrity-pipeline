@@ -26,7 +26,7 @@ import { createNativeSolver, loadIbisSources } from '@tscircuit/signal-integrity
 
 const solver = new RoutedPipelineSolver({
   input: { circuitJson, ibisSources: await loadIbisSources({ circuitJson, baseDir: '.' }) },
-  context: { runSolver: createNativeSolver({ timeoutMs: 600_000 }), progress: console.log },
+  context: { runSolver: createNativeSolver(), progress: console.log },
 })
 await solver.solveAsync()
 const { channelSimulations, files } = solver.getOutput()
