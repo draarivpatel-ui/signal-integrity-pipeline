@@ -2,6 +2,7 @@ import {
   type CircuitJsonDb,
   type CircuitJsonSnapshot,
   crossesDifferentialLegs,
+  endpointPorts,
   getSourcePortConnectivityMapFromCircuitJson,
   type PassiveBridge,
   passiveBridges,
@@ -16,9 +17,8 @@ import {
   type ConnectionGraph,
   connectionGraph,
   connectionPath,
-  receiverCycle,
 } from "./connection-paths"
-import { cutConnections } from "./cut-connections"
+import { type ChannelSegment, cutConnections } from "./cut-connections"
 import {
   differentialContacts,
   differentialGroups,
@@ -35,22 +35,14 @@ import {
 } from "./source-node-groups"
 import type { SimulationModeling } from "./types"
 
-/** Physical contacts belonging to an extracted trace or a series passive. */
-type ReceiverEdge =
-  | RoutedTraceCut
-  | {
-      fromSourcePortId: SourcePortId
-      toSourcePortId: SourcePortId
-    }
-
 /** One traversal step with its physical contacts. */
-type ReceiverConnection = Connection<SourceNodeId, ReceiverEdge>
+type ReceiverConnection = Connection<SourceNodeId, ChannelSegment>
 
 /** The routed and permissive receiver graphs and the ideal groups they project. */
 export interface ReceiverGraphs extends IdealSourceNodes {
-  physical: ConnectionGraph<SourceNodeId, ReceiverEdge>
-  ideal: ConnectionGraph<SourceNodeId, ReceiverEdge>
-  seriesBridges: readonly PassiveBridge[]
+  physical: ConnectionGraph<SourceNodeId, ChannelSegment>
+  ideal: ConnectionGraph<SourceNodeId, ChannelSegment>
+  channelConnections: readonly ReceiverConnection[]
 }
 
 /** Retain the physical contacts when projecting an edge onto ideal groups. */
@@ -58,7 +50,7 @@ function idealReceiverConnection({
   evidence,
   groups,
 }: {
-  evidence: ReceiverEdge
+  evidence: ChannelSegment
   groups: SourceNodeGroups
 }): ReceiverConnection {
   const { fromSourcePortId, toSourcePortId } = evidence
@@ -69,41 +61,149 @@ function idealReceiverConnection({
   }
 }
 
-/** Find series passives independently of the joins a mixed routed and ideal path might make. */
+/** A raw wire or passive edge used to distinguish a shorted series path from a termination. */
+type WireOrPassive = Connection<SourceNodeId, PassiveBridge | null>
+
+/** Find series bridge evidence without traversing the opposite leg's wire backbone. */
+function seriesOnLeg({
+  sourcePortIds,
+  oppositeSourcePortIds,
+  wireGraph,
+  connections,
+}: {
+  sourcePortIds: readonly SourcePortId[]
+  oppositeSourcePortIds: readonly SourcePortId[]
+  wireGraph: ConnectionGraph<SourceNodeId, PassiveBridge | null>
+  connections: readonly WireOrPassive[]
+}): ReadonlySet<PassiveBridge> {
+  const [oppositeDriver, ...oppositeReceivers] = oppositeSourcePortIds
+  const oppositeWires = new Set(
+    oppositeReceivers.flatMap(
+      (toNodeId) =>
+        connectionPath({
+          graph: wireGraph,
+          fromNodeId: oppositeDriver,
+          toNodeId,
+        }) ?? [],
+    ),
+  )
+  const oppositePorts = new Set<SourceNodeId>(oppositeSourcePortIds)
+  const graph = connectionGraph(
+    connections.filter(
+      (connection) =>
+        !oppositePorts.has(connection.fromNodeId) &&
+        !oppositePorts.has(connection.toNodeId) &&
+        !oppositeWires.has(connection),
+    ),
+  )
+  const [fromNodeId, ...receivers] = sourcePortIds
+  return new Set(
+    receivers.flatMap((toNodeId) =>
+      (connectionPath({ graph, fromNodeId, toNodeId }) ?? []).flatMap(
+        ({ evidence }) => {
+          if (evidence) return [evidence]
+          return []
+        },
+      ),
+    ),
+  )
+}
+
+/** Exclude terminations across combined wire groups and retain genuine shorted series paths. */
 function receiverSeriesBridges({
   bridges,
   channels,
-  wireGroups,
+  wires,
 }: {
   bridges: readonly PassiveBridge[]
   channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
-  wireGroups: readonly SourceNodeGroups[]
+  wires: SourceNodeId[][]
 }): PassiveBridge[] {
   const contacts = differentialContacts(channels)
-  const projections = wireGroups.map((groups) => ({
-    groups,
-    differential: differentialGroups({ contacts, groups }),
-  }))
-  return bridges.filter(
-    ([fromSourcePortId, toSourcePortId]) =>
-      !projections.some(({ groups, differential }) => {
-        const fromGroupId = sourceGroupId({
-          groups,
-          sourcePortId: fromSourcePortId,
-        })
-        const toGroupId = sourceGroupId({
-          groups,
-          sourcePortId: toSourcePortId,
-        })
-        return (
-          fromGroupId !== toGroupId &&
-          crossesDifferentialLegs({
-            from: fromGroupId,
-            to: toGroupId,
-            differential,
-          })
-        )
+  if (!contacts.length) return [...bridges]
+  const groups = nodeGroups(wires)
+  const differential = differentialGroups({ contacts, groups })
+  const wireConnections = wires.flatMap(([fromNodeId, ...toNodeIds]) =>
+    toNodeIds.map(
+      (toNodeId): WireOrPassive => ({ fromNodeId, toNodeId, evidence: null }),
+    ),
+  )
+  const wireGraph = connectionGraph(wireConnections)
+  const connections = [
+    ...wireConnections,
+    ...bridges.map(
+      (bridge): WireOrPassive => ({
+        fromNodeId: bridge[0],
+        toNodeId: bridge[1],
+        evidence: bridge,
       }),
+    ),
+  ]
+  const terminations = new Set<PassiveBridge>()
+  for (const [
+    index,
+    { positiveSourcePortIds, negativeSourcePortIds },
+  ] of contacts.entries()) {
+    const crossing = bridges.filter(([fromSourcePortId, toSourcePortId]) => {
+      const from = sourceGroupId({ groups, sourcePortId: fromSourcePortId })
+      const to = sourceGroupId({ groups, sourcePortId: toSourcePortId })
+      return (
+        from !== to &&
+        crossesDifferentialLegs({
+          from,
+          to,
+          differential: [differential[index]],
+        })
+      )
+    })
+    if (!crossing.length) continue
+    const positiveSeries = seriesOnLeg({
+      sourcePortIds: positiveSourcePortIds,
+      oppositeSourcePortIds: negativeSourcePortIds,
+      wireGraph,
+      connections,
+    })
+    const negativeSeries = seriesOnLeg({
+      sourcePortIds: negativeSourcePortIds,
+      oppositeSourcePortIds: positiveSourcePortIds,
+      wireGraph,
+      connections,
+    })
+    for (const bridge of crossing)
+      if (!positiveSeries.has(bridge) && !negativeSeries.has(bridge))
+        terminations.add(bridge)
+  }
+  return bridges.filter((bridge) => !terminations.has(bridge))
+}
+
+/** Include passive segments only in components with a routed cut or a declared signal contact. */
+function channelConnections({
+  idealConnections,
+  channels,
+  groups,
+}: {
+  idealConnections: readonly ReceiverConnection[]
+  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  groups: SourceNodeGroups
+}): ReceiverConnection[] {
+  const networks = nodeGroups(
+    idealConnections.map(({ fromNodeId, toNodeId }) => [fromNodeId, toNodeId]),
+  )
+  const signalGroups = channels.flatMap(({ driver, receivers }) =>
+    [driver, ...receivers]
+      .flatMap(endpointPorts)
+      .map((sourcePortId) => sourceGroupId({ groups, sourcePortId })),
+  )
+  const channelNetworks = new Set(
+    [
+      ...signalGroups,
+      ...idealConnections
+        .filter(({ evidence }) => evidence.sourceTraceId !== undefined)
+        .map(({ fromNodeId }) => fromNodeId),
+    ].map((sourceNodeId) => networks.get(sourceNodeId)),
+  )
+  return idealConnections.filter(({ fromNodeId }) =>
+    channelNetworks.has(networks.get(fromNodeId)),
   )
 }
 
@@ -130,9 +230,6 @@ export function receiverGraphs({
     cuts,
     node: (sourcePortId) => sourcePortId,
   })
-  const physicalGroups = nodeGroups(
-    physicalCuts.map(({ fromNodeId, toNodeId }) => [fromNodeId, toNodeId]),
-  )
   const referenceIds = (modeling.supplies ?? []).flatMap(
     ({ positive, negative }) =>
       [positive, negative].map(
@@ -147,7 +244,10 @@ export function receiverGraphs({
   const seriesBridges = receiverSeriesBridges({
     bridges: passiveBridges({ circuit, excluded: rails }),
     channels,
-    wireGroups: [physicalGroups, idealNodes.groups],
+    wires: [
+      ...idealNodes.wireConnections,
+      ...physicalCuts.map(({ fromNodeId, toNodeId }) => [fromNodeId, toNodeId]),
+    ],
   })
   const physical = [
     ...physicalCuts,
@@ -157,20 +257,23 @@ export function receiverGraphs({
       evidence: { fromSourcePortId, toSourcePortId },
     })),
   ]
+  const idealConnections = physical.map(({ evidence }) =>
+    idealReceiverConnection({ evidence, groups: idealNodes.groups }),
+  )
   return {
     ...idealNodes,
-    seriesBridges,
     physical: connectionGraph(physical),
-    ideal: connectionGraph(
-      physical.map(({ evidence }) =>
-        idealReceiverConnection({ evidence, groups: idealNodes.groups }),
-      ),
-    ),
+    ideal: connectionGraph(idealConnections),
+    channelConnections: channelConnections({
+      idealConnections,
+      channels,
+      groups: idealNodes.groups,
+    }),
   }
 }
 
 /** Ordered path contacts, independent from the routed traces a deck will extract. */
-type ReceiverPath = ReceiverEdge[]
+type ReceiverPath = ChannelSegment[]
 
 /** Prefer a physical path; allow ideal connections to complete a partial route. */
 export function receiverPath({
@@ -202,23 +305,4 @@ export function receiverPath({
       sourcePortId: toSourcePortId,
     }),
   })?.map(({ evidence }) => evidence)
-}
-
-/** Find the routed part of a closed path through the collapsed receiver group. */
-export function receiverBypassCuts({
-  graphs,
-  sourcePortId,
-}: {
-  graphs: ReceiverGraphs
-  sourcePortId: SourcePortId
-}): RoutedTraceCut[] {
-  const cycle = receiverCycle({
-    graph: graphs.ideal,
-    rootNodeId: sourceGroupId({ groups: graphs.groups, sourcePortId }),
-    isCut: (edge) => "sourceTraceId" in edge,
-  })
-  return (cycle ?? []).flatMap(({ evidence }) => {
-    if ("sourceTraceId" in evidence) return [evidence]
-    return []
-  })
 }
