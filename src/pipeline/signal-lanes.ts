@@ -7,10 +7,9 @@ import type {
   SourceNetId,
   SourcePortId,
 } from "../board"
-import { circuitJsonDb } from "../board"
+import { circuitJsonDb, endpointPorts } from "../board"
 import { Diagnostic, type Snapshot } from "../kernel"
 import type { NumericalSettings, RoutedLane } from "./modeling"
-import { endpointPorts } from "./signal-controls"
 import type { SignalPins } from "./signal-pins"
 
 /** Supported lanes and rejection messages from auditing the scoped copper. */
