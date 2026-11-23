@@ -5,6 +5,11 @@
  * Imports: kernel.
  */
 
+export { admissionRouteView } from "./admission-view"
+export {
+  scopedAdmissionDrawing,
+  unscopedAdmissionDrawing,
+} from "./admission-visual"
 export { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
 export {
   type ConnectivityMap,

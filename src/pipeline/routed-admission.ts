@@ -1,7 +1,11 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
-import type {
-  RouteSectionsInput,
-  SimulationPcbTransientChannelSimulationId,
+import type { GraphicsObject } from "graphics-debug"
+import {
+  admissionRouteView,
+  type RouteSectionsInput,
+  type SimulationPcbTransientChannelSimulationId,
+  scopedAdmissionDrawing,
+  unscopedAdmissionDrawing,
 } from "../board"
 import type { IbisSources } from "../buffers"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
@@ -187,5 +191,26 @@ export class RoutedAdmissionSolver extends BaseSolver {
     typeof RoutedAdmissionSolver
   > {
     return [this.input]
+  }
+  /** Inspect the latest channel's copper and endpoints or the whole unscoped board. */
+  override visualize(): GraphicsObject {
+    const circuit = this.input.circuitJson
+    const plan = this.channelSimulationPlans.at(-1)
+    if (plan === undefined)
+      return unscopedAdmissionDrawing({ circuit, error: this.error })
+    const { mappings } = plan.bindings
+    const view = admissionRouteView({
+      circuit,
+      scope: plan.sections.copperScope,
+      endpointSourcePortIds: new Set(
+        mappings.flatMap(({ from, to }) => [from, to]),
+      ),
+    })
+    return scopedAdmissionDrawing({
+      circuit,
+      view,
+      mappings,
+      error: this.error,
+    })
   }
 }
