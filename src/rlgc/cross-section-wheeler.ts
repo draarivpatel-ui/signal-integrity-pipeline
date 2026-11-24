@@ -1,8 +1,8 @@
 import { defaultCopperConductivitySm } from "../board"
 import { hypotenuse, type Matrix, symmetrize } from "../kernel"
+import { calculateConductorFaceCounts } from "./cross-section-edges"
 import { calculateRegionField } from "./cross-section-field"
 import { calculateMatrixInverse } from "./cross-section-matrix"
-import { calculateConductorFaceCounts } from "./cross-section-mesh"
 import {
   type FieldRegion,
   type RegionMeshInput,

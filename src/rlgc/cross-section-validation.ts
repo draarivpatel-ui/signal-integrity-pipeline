@@ -1,5 +1,5 @@
 import { defaultCopperConductivitySm } from "../board"
-import { DIELECTRIC_BOUNDARY_TOLERANCE_MM } from "./cross-section-mesh"
+import { DIELECTRIC_BOUNDARY_TOLERANCE_MM } from "./cross-section-regions"
 import type {
   CrossSection,
   CrossSectionDielectricLayer,

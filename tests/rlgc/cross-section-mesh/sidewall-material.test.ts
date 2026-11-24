@@ -1,9 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import {
-  buildRegionPanels,
-  partitionCrossSection,
-} from "../../../src/rlgc/cross-section-mesh"
+import { buildRegionPanels } from "../../../src/rlgc/cross-section-mesh"
+import { partitionCrossSection } from "../../../src/rlgc/cross-section-regions"
 
 test("splits both conductor sidewalls at a dielectric boundary", () => {
   const [{ region }] = partitionCrossSection({
