@@ -18,7 +18,14 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
   })
   solver.solve()
   const drawing = solver.visualize()
-  assert.match(drawing.title || "", /TOPOLOGY CHECK FAILED/)
+  assert.equal(drawing.title, "SERIES — can't simulate")
+  assert.ok(
+    drawing.texts?.some((text) =>
+      text.text.includes(
+        "DATA is shorted: TX pin Y connects directly to RX pin A",
+      ),
+    ),
+  )
   assert.ok(
     drawing.lines?.some(
       (line) => line.layer === "failure" && line.label === "Ideal bypass",
