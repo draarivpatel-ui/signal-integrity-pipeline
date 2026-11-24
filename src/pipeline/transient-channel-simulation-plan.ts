@@ -24,7 +24,8 @@ import {
 } from "./plan/input"
 import { buildPlanVisualScene, type FailedPlanAttempt } from "./plan/visual"
 import { resolveReceiverTracePaths } from "./resolve-receiver-paths"
-import { compareNames, prepareChannelSimulation } from "./signals"
+import { compareNames } from "./signal-names"
+import { prepareChannelSimulation } from "./signals"
 
 /** Planning starts with the base route mesh resolution. */
 const BASE_REFINEMENT = 1

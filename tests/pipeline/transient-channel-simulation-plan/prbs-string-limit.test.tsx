@@ -7,8 +7,7 @@ import { Inverter, Reference } from "../../fixtures/signal-parts"
 import { renderSignals } from "../../fixtures/signal-render"
 import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
-/** Exercise the size check with a finite capture of 600 million bit intervals. */
-async function assertPatternLimit(): Promise<void> {
+test("rejects a PRBS string that exceeds the runtime representation", async () => {
   const circuitJson = await renderSignals({
     tree: (
       <board
@@ -50,25 +49,4 @@ async function assertPatternLimit(): Promise<void> {
     ibisSources: { [inverterModelPath]: routedVisualIbis },
   })
   assert.throws(() => solver.solve(), /prbs31 pattern exceeds .* bits/)
-}
-
-if (process.argv.includes("--verify-pattern")) await assertPatternLimit()
-else
-  test.failing(
-    "rejects a PRBS string that exceeds the runtime representation",
-    async () => {
-      // Bound the run on the unfixed solver so it cannot build the full string.
-      const subprocess = Bun.spawn(
-        [process.execPath, "run", import.meta.path, "--verify-pattern"],
-        {
-          timeout: 700,
-          stderr: "pipe",
-        },
-      )
-      const [stderr, exitCode] = await Promise.all([
-        new Response(subprocess.stderr).text(),
-        subprocess.exited,
-      ])
-      assert.equal(exitCode, 0, stderr)
-    },
-  )
+})

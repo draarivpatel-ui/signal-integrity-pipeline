@@ -7,8 +7,8 @@ import type { TraceProps } from "@tscircuit/props"
 import React from "react"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import { endpointPorts } from "../../src/board"
+import { compareNames } from "../../src/pipeline/signal-names"
 import {
-  compareNames,
   listChannelSimulations,
   type PreparedChannelSimulation,
   prepareChannelSimulationById,

@@ -35,6 +35,7 @@ export interface FailedPlanAttempt {
 /** A declared driver/receiver pair, keeping differential polarity. */
 export interface PlanPath {
   channelName: string
+  channelId: SimulationPcbDriverReceiverChannel["simulation_pcb_driver_receiver_channel_id"]
   signalName: string
   fromSourcePortId: SourcePortId
   toSourcePortId: SourcePortId
@@ -44,21 +45,29 @@ export interface PlanPath {
 function listDeclaredPaths(
   channels: readonly SimulationPcbDriverReceiverChannel[],
 ): PlanPath[] {
-  return channels.flatMap(({ name, driver, receivers }) => {
-    const drivers = endpointPorts(driver)
-    return receivers.flatMap((receiver) =>
-      endpointPorts(receiver).map((toSourcePortId, leg) => {
-        let signal = name
-        if (drivers.length > 1) signal += ["+", "−"][leg]
-        return {
-          channelName: name,
-          signalName: signal,
-          fromSourcePortId: drivers[leg],
-          toSourcePortId,
-        }
-      }),
-    )
-  })
+  return channels.flatMap(
+    ({
+      name,
+      driver,
+      receivers,
+      simulation_pcb_driver_receiver_channel_id,
+    }) => {
+      const drivers = endpointPorts(driver)
+      return receivers.flatMap((receiver) =>
+        endpointPorts(receiver).map((toSourcePortId, leg) => {
+          let signal = name
+          if (drivers.length > 1) signal += ["+", "−"][leg]
+          return {
+            channelName: name,
+            channelId: simulation_pcb_driver_receiver_channel_id,
+            signalName: signal,
+            fromSourcePortId: drivers[leg],
+            toSourcePortId,
+          }
+        }),
+      )
+    },
+  )
 }
 
 /** Presentation data for the electrical partitions before rendering the board. */

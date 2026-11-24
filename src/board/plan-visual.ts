@@ -10,7 +10,7 @@ import {
   ring,
   viaShapes,
 } from "./plan-marks"
-import { buildBoardShapes } from "./plan-shapes"
+import { buildBoardShapes, drawPlanPolygon } from "./plan-shapes"
 import {
   boxPoints,
   buildPlanFrame,
@@ -269,7 +269,10 @@ export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
     title: scene.title,
     coordinateSystem: "cartesian",
     lines: [...boardLines, ...labels.leaders, ...header.lines],
-    polygons: [...boardPolygons, ...labels.backgrounds],
+    polygons: [
+      ...boardPolygons.flatMap(drawPlanPolygon),
+      ...labels.backgrounds,
+    ],
     texts: [...labels.texts, ...header.texts],
     rects: header.rects,
   }

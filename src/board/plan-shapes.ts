@@ -14,7 +14,7 @@ import type { PcbPlatedHole, PcbSmtPad } from "circuit-json"
 import type { Point, Polygon, Viewbox } from "graphics-debug"
 import type { SourcePortId } from "./ids"
 import { boxPoints, type PlanPort, type PlanPorts } from "./plan-view"
-import { planPourFills } from "./plan-visual-types"
+import { type PlanPolygon, planPourFills } from "./plan-visual-types"
 
 /** Board pad records of either technology. */
 type PlanPad = PcbSmtPad | PcbPlatedHole
@@ -68,7 +68,7 @@ export function buildBoardShapes({
   active: ReadonlySet<SourcePortId>
   ports: ReadonlyMap<SourcePortId, PlanPort>
   unitMm: number
-}): Polygon[] {
+}): PlanPolygon[] {
   const outline = db.pcb_board.getWhere({})?.outline
   let boardPoints = boxPoints(board)
   if (outline?.length) boardPoints = [...outline]
@@ -97,8 +97,8 @@ function buildPourShapes({
 }: {
   db: CircuitJsonUtilObjects
   unitMm: number
-}): Polygon[] {
-  const shapes: Polygon[] = []
+}): PlanPolygon[] {
+  const shapes: PlanPolygon[] = []
   for (const pour of db.pcb_copper_pour.list()) {
     const net = db.source_net.get(pour.source_net_id || "")
     let label = `Copper (${pour.layer})`
@@ -106,15 +106,19 @@ function buildPourShapes({
     let fill: string = planPourFills.gray
     if (net?.is_power === true && net.is_ground !== true)
       fill = planPourFills.pink
-    for (const points of facePolygons(getPourPolygon(pour)))
+    for (const island of getPourPolygon(pour).splitToIslands()) {
+      const [outer, ...holes] = island.faces as Iterable<Face>
+      if (!outer) continue
       shapes.push({
-        points,
+        points: facePoints(outer),
+        holes: holes.map(facePoints),
         fill,
         stroke: "#cbd5e1",
         strokeWidth: unitMm * 0.26,
         layer: "pours",
         label,
       })
+    }
   }
   return shapes
 }
@@ -206,4 +210,18 @@ function buildPadShapes({
     }
   }
   return shapes
+}
+
+/** Flatten hole rings into a nonzero SVG fill. Retraced bridges have no fill area. */
+export function drawPlanPolygon(polygon: PlanPolygon): Polygon[] {
+  const { holes, ...outline } = polygon
+  if (!holes?.length) return [outline]
+  const anchor = outline.points[0]
+  const points = [...outline.points, anchor]
+  for (const hole of holes) points.push(...hole, hole[0], anchor)
+  return [
+    { ...outline, points, stroke: "none" },
+    { ...outline, fill: "none" },
+    ...holes.map((ring) => ({ ...outline, points: ring, fill: "none" })),
+  ]
 }

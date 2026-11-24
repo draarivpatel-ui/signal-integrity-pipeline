@@ -233,6 +233,8 @@ export function describePlanFailure({
     )
     return `${names[0]} has no board pad to drive ${driver?.signalName || "the signal"}.`
   }
+  if (issue?.code === "channel_fanout" && !topology)
+    return issue.message.slice(issue.code.length + 2)
   if (issue?.code === "channel_fanout" && fault.traces.size) {
     const parts = new Set(
       pins.map((sourcePortId) => partOrPin({ sourcePortId, db })),

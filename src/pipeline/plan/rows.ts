@@ -256,11 +256,11 @@ function partialRows({
   return paths.flatMap((path) => {
     const { fromSourcePortId, toSourcePortId } = path
     if (
-      fault.overlays.some(
-        (link) =>
-          link.kind === "missing" &&
-          link.fromSourcePortId === fromSourcePortId &&
-          link.toSourcePortId === toSourcePortId,
+      fault.incompletePaths.some(
+        (incomplete) =>
+          incomplete.channelId === path.channelId &&
+          incomplete.fromSourcePortId === fromSourcePortId &&
+          incomplete.toSourcePortId === toSourcePortId,
       )
     )
       return [
@@ -382,9 +382,10 @@ function buildCompactRows({
 }): PlanHeaderRow[] {
   const groups = new Map<string, ResolvedPlanPath[]>()
   for (const path of topology.paths) {
-    const group = groups.get(path.signalName) || []
-    group.push(path)
-    groups.set(path.signalName, group)
+    const key = JSON.stringify([path.channelId, path.fromSourcePortId])
+    const group = groups.get(key)
+    if (group) group.push(path)
+    else groups.set(key, [path])
   }
   if (groups.size > limit || !groups.size) {
     const signals = new Set(
@@ -404,7 +405,8 @@ function buildCompactRows({
   const indices = new Map(
     topology.traces.map(({ sourceTraceId, index }) => [sourceTraceId, index]),
   )
-  return [...groups].map(([name, paths], index) => {
+  return [...groups.values()].map((paths, index) => {
+    const [firstPath] = paths
     const traces = new Set(
       paths.flatMap(({ pathSegments }) =>
         pathSegments.flatMap((segment) => {
@@ -416,14 +418,14 @@ function buildCompactRows({
     const first = indices.get([...traces][0])
     let color: string = planColors.ideal
     if (first !== undefined) color = getTraceColor(first)
-    const driver = getPinName({ sourcePortId: paths[0].fromSourcePortId, db })
+    const driver = getPinName({ sourcePortId: firstPath.fromSourcePortId, db })
     const receivers = paths
       .map(({ toSourcePortId }) =>
         getPinName({ sourcePortId: toSourcePortId, db }),
       )
       .join(", ")
     const detail = `${formatCount({ count: traces.size, noun: "trace" })}, ${formatTotalLengthMm({ traces, measures })}`
-    let text = `${name}: ${driver} → ${receivers} (${detail})`
+    let text = `${firstPath.signalName}: ${driver} → ${receivers} (${detail})`
     if (index === groups.size - 1) text += suffix
     return {
       text,

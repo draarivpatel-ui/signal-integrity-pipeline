@@ -1,5 +1,5 @@
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
-import type { Line, Polygon } from "graphics-debug"
+import type { Line, Point, Polygon } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId, SourceTraceId } from "./ids"
@@ -86,6 +86,7 @@ export interface PlanLine extends Line {
 
 /** Endpoint symbol carried through polygon clipping for the legend. */
 export interface PlanPolygon extends Polygon {
+  holes?: Point[][]
   endpointKind?: PlanVisualEndpoint["kind"]
 }
 

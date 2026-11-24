@@ -3,15 +3,17 @@ import {
   Box,
   Point as CopperPoint,
   Polygon as CopperPolygon,
+  type Face,
   Segment,
 } from "@flatten-js/core"
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PcbTrace } from "circuit-json"
-import type { Line, Point, Polygon, Viewbox } from "graphics-debug"
+import type { Line, Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId } from "./ids"
 import { padOutline } from "./plan-shapes"
+import type { PlanPolygon } from "./plan-visual-types"
 
 /** Bounds of points, or undefined when there are none. */
 export function getPointBounds(points: readonly Point[]): Viewbox | undefined {
@@ -299,7 +301,7 @@ export function clipPlanLines<Mark extends Line>({
 }
 
 /** Clip board geometry to the window before converting it to graphics primitives. */
-export function clipPlanPolygons<Mark extends Polygon>({
+export function clipPlanPolygons<Mark extends PlanPolygon>({
   polygons,
   crop,
 }: {
@@ -310,10 +312,19 @@ export function clipPlanPolygons<Mark extends Polygon>({
   const window = new CopperPolygon(crop)
   return polygons.flatMap((polygon) => {
     const shape = new CopperPolygon(polygon.points.map(({ x, y }) => [x, y]))
+    for (const hole of polygon.holes || [])
+      shape.addFace(hole.map(({ x, y }) => new CopperPoint(x, y)))
     if (crop.not_intersect(shape.box)) return []
     if (crop.contains(shape.box)) return [polygon]
     return BooleanOperations.intersect(shape, window)
       .splitToIslands()
-      .map((island) => ({ ...polygon, points: island.vertices }))
+      .map((island) => {
+        const [outer, ...holes] = island.faces as Iterable<Face>
+        return {
+          ...polygon,
+          points: outer.vertices,
+          holes: holes.map((hole) => hole.vertices),
+        }
+      })
   })
 }
