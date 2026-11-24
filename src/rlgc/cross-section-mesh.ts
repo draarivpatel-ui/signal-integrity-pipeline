@@ -30,15 +30,15 @@ const DIELECTRIC_INTERFACE = -1
 
 /** Plan region edges before allocating any panels. */
 function* planRegionEdges(mesh: RegionMeshInput): Iterable<BoundaryEdge> {
-  const { region, count, extent, isVacuum } = mesh
-  const conductorSpans = region.conductors.map((c) =>
+  const { region, panelsPerEdge, interfaceExtent, isVacuum } = mesh
+  const conductorSpansMm = region.conductors.map((c) =>
     Math.max(c.widthMm, c.zMm + c.thicknessMm),
   )
   const dielectricTopsMm = region.dielectricLayers.map(
     (layer) => layer.zMm + layer.thicknessMm,
   )
-  const scale = Math.max(...conductorSpans, ...dielectricTopsMm)
-  const conductorSizes = region.conductors.flatMap((c) => [
+  const scaleMm = Math.max(...conductorSpansMm, ...dielectricTopsMm)
+  const conductorSizesMm = region.conductors.flatMap((c) => [
     c.widthMm,
     c.thicknessMm,
   ])
@@ -46,21 +46,21 @@ function* planRegionEdges(mesh: RegionMeshInput): Iterable<BoundaryEdge> {
     (layer) => layer.thicknessMm,
   )
   const materialProbeMm =
-    Math.min(...conductorSizes, ...dielectricThicknessesMm) *
+    Math.min(...conductorSizesMm, ...dielectricThicknessesMm) *
     MATERIAL_PROBE_FRACTION
   const coordinateToleranceMm = materialProbeMm / COORDINATE_TOLERANCE_DIVISOR
   let dielectricLayers = region.dielectricLayers
   if (isVacuum) dielectricLayers = []
   const verticalSteps = Math.max(
     MIN_VERTICAL_PANELS,
-    Math.ceil(count / VERTICAL_PANEL_DIVISOR),
+    Math.ceil(panelsPerEdge / VERTICAL_PANEL_DIVISOR),
   )
   const facePanelCounts =
     mesh.facePanelCounts ?? calculateConductorFaceCounts(mesh)
   for (const [conductorIndex, conductor] of region.conductors.entries()) {
     yield* planConductorEdges({
       verticalSteps,
-      facePanelCounts: facePanelCounts[conductorIndex],
+      facePanelCount: facePanelCounts[conductorIndex],
       conductor,
       conductorIndex,
       dielectricLayers,
@@ -70,23 +70,23 @@ function* planRegionEdges(mesh: RegionMeshInput): Iterable<BoundaryEdge> {
   }
   if (!dielectricLayers.length) return
 
-  const projections = region.conductors.flatMap((c) => [
+  const conductorProjectionsMm = region.conductors.flatMap((c) => [
     c.xMm - c.widthMm / 2,
     c.xMm + c.widthMm / 2,
   ])
   // Between two grounded planes the first transverse mode decays by e per spacing / pi.
-  let padding = extent * scale
+  let paddingMm = interfaceExtent * scaleMm
   if (region.planeSpacingMm)
-    padding = extent * (region.planeSpacingMm / Math.PI)
-  if (!Number.isFinite(padding))
-    fail(
-      "mesh_panel_limit",
-      "Nonfinite interface extent exceeds the mesh panel limit",
-    )
-  const first = Math.min(...projections) - padding
-  const last = Math.max(...projections) + padding
-  const xs = mergeCoordinates({
-    coordinatesMm: [first, ...projections, last],
+    paddingMm = interfaceExtent * (region.planeSpacingMm / Math.PI)
+  if (!Number.isFinite(paddingMm))
+    fail({
+      code: "mesh_panel_limit",
+      text: "Nonfinite interface extent exceeds the mesh panel limit",
+    })
+  const startXMm = Math.min(...conductorProjectionsMm) - paddingMm
+  const endXMm = Math.max(...conductorProjectionsMm) + paddingMm
+  const edgeCoordinatesMm = mergeCoordinates({
+    coordinatesMm: [startXMm, ...conductorProjectionsMm, endXMm],
     coordinateToleranceMm,
   })
   const dielectricBoundaryHeightsMm = dielectricLayers.flatMap((layer) => [
@@ -96,16 +96,16 @@ function* planRegionEdges(mesh: RegionMeshInput): Iterable<BoundaryEdge> {
   const boundaries = mergeCoordinates({
     coordinatesMm: dielectricBoundaryHeightsMm,
     coordinateToleranceMm,
-  }).filter((z) => {
+  }).filter((zMm) => {
     return (
-      z > coordinateToleranceMm &&
+      zMm > coordinateToleranceMm &&
       (!region.planeSpacingMm ||
-        z < region.planeSpacingMm - coordinateToleranceMm)
+        zMm < region.planeSpacingMm - coordinateToleranceMm)
     )
   })
-  for (const z of boundaries) {
-    const below = getMaterial({ dielectricLayers, z: z - materialProbeMm })
-    const above = getMaterial({ dielectricLayers, z: z + materialProbeMm })
+  for (const zMm of boundaries) {
+    const below = getMaterial({ dielectricLayers, zMm: zMm - materialProbeMm })
+    const above = getMaterial({ dielectricLayers, zMm: zMm + materialProbeMm })
     if (
       below.relativePermittivity === above.relativePermittivity &&
       below.lossTangent === above.lossTangent
@@ -122,31 +122,31 @@ function* planRegionEdges(mesh: RegionMeshInput): Iterable<BoundaryEdge> {
         above.relativePermittivity *
         (below.lossTangent - above.lossTangent)) /
       permittivitySum ** 2
-    for (let k = 1; k < xs.length; k++) {
-      const middle = (xs[k - 1] + xs[k]) / 2
+    for (let k = 1; k < edgeCoordinatesMm.length; k++) {
+      const middleXMm = (edgeCoordinatesMm[k - 1] + edgeCoordinatesMm[k]) / 2
       const isCovered = region.conductors.some((c) => {
-        const withinWidth =
-          middle > c.xMm - c.widthMm / 2 && middle < c.xMm + c.widthMm / 2
+        const isWithinWidth =
+          middleXMm > c.xMm - c.widthMm / 2 && middleXMm < c.xMm + c.widthMm / 2
         return (
-          withinWidth &&
-          z >= c.zMm - materialProbeMm &&
-          z <= c.zMm + c.thicknessMm + materialProbeMm
+          isWithinWidth &&
+          zMm >= c.zMm - materialProbeMm &&
+          zMm <= c.zMm + c.thicknessMm + materialProbeMm
         )
       })
       if (isCovered) continue
-      let steps = count
+      let steps = panelsPerEdge
       if (region.planeSpacingMm) {
         steps = calculateHorizontalPanelCount({
-          count,
-          lengthMm: xs[k] - xs[k - 1],
-          clearanceMm: Math.min(z, region.planeSpacingMm - z),
+          panelsPerEdge,
+          lengthMm: edgeCoordinatesMm[k] - edgeCoordinatesMm[k - 1],
+          clearanceMm: Math.min(zMm, region.planeSpacingMm - zMm),
         })
       }
       yield {
-        x1: xs[k - 1],
-        z1: z,
-        x2: xs[k],
-        z2: z,
+        startXMm: edgeCoordinatesMm[k - 1],
+        startZMm: zMm,
+        endXMm: edgeCoordinatesMm[k],
+        endZMm: zMm,
         conductorIndex: DIELECTRIC_INTERFACE,
         relativePermittivity: 1,
         lossTangent: 0,
@@ -165,10 +165,10 @@ export function buildRegionPanels(mesh: RegionMeshInput): BoundaryPanel[] {
   for (const edge of planRegionEdges(mesh)) {
     panelCount += edge.steps
     if (!Number.isSafeInteger(panelCount) || panelCount > MAX_REGION_PANELS) {
-      fail(
-        "mesh_panel_limit",
-        `Cross-section region exceeds the panel limit of ${MAX_REGION_PANELS} (at least ${panelCount} requested). Reduce the resolution or interface extent.`,
-      )
+      fail({
+        code: "mesh_panel_limit",
+        text: `Cross-section region exceeds the panel limit of ${MAX_REGION_PANELS} (at least ${panelCount} requested). Reduce the resolution or interface extent.`,
+      })
     }
     edges.push(edge)
   }

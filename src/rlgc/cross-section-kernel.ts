@@ -20,7 +20,7 @@ const PARALLEL_TOLERANCE = 1e-14
 
 /** Length ratio and separation limits for the analytic parallel-panel integral. */
 const MAX_PARALLEL_LENGTH_RATIO = 30
-/** Separation in units of the longer panel length. */
+/** Separation in units of the longerPanelMm panel length. */
 const MAX_PARALLEL_SEPARATION = 3
 
 /** The coplanar limit of the across-panel field is zero. */
@@ -36,14 +36,26 @@ const NEAR_PANEL_LENGTHS = 2
 const SELF_LOG_INTEGRAL = 1.5
 
 /** Antiderivative of log distance, including points on a source panel. */
-function logDistanceIntegral({ x, y }: { x: number; y: number }): number {
+function evaluateLogDistanceIntegral({
+  x,
+  y,
+}: {
+  x: number
+  y: number
+}): number {
   let correction = 0
   if (y) correction = Math.abs(y) * atan(x / Math.abs(y))
   return x * log(hypotenuse(x, y) || 1) - x + correction
 }
 
 /** Second antiderivative of log distance, for exact Galerkin integration of parallel panels. */
-function logDistanceDoubleIntegral({ x, y }: { x: number; y: number }): number {
+function evaluateLogDistanceDoubleIntegral({
+  x,
+  y,
+}: {
+  x: number
+  y: number
+}): number {
   const r = hypotenuse(x, y)
   let logarithm = 0
   let correction = 0
@@ -53,7 +65,13 @@ function logDistanceDoubleIntegral({ x, y }: { x: number; y: number }): number {
 }
 
 /** Normal derivative of the second primitive; the coplanar principal value is zero. */
-function normalFieldDoubleIntegral({ x, y }: { x: number; y: number }): number {
+function evaluateNormalFieldDoubleIntegral({
+  x,
+  y,
+}: {
+  x: number
+  y: number
+}): number {
   if (!y) return 0
   return (
     Math.sign(y) *
@@ -62,7 +80,7 @@ function normalFieldDoubleIntegral({ x, y }: { x: number; y: number }): number {
 }
 
 /** Exact potential or upward field primitive at one endpoint pair. */
-function parallelPanelIntegral({
+function evaluateParallelPanelIntegral({
   x,
   v,
   tangentX,
@@ -77,10 +95,10 @@ function parallelPanelIntegral({
 }): number {
   if (isNormalField)
     return (
-      tangentZ * logDistanceIntegral({ x, y: v }) +
-      tangentX * normalFieldDoubleIntegral({ x, y: v })
+      tangentZ * evaluateLogDistanceIntegral({ x, y: v }) +
+      tangentX * evaluateNormalFieldDoubleIntegral({ x, y: v })
     )
-  return -logDistanceDoubleIntegral({ x, y: v })
+  return -evaluateLogDistanceDoubleIntegral({ x, y: v })
 }
 
 /** Target and source panels for the kernel interaction. */
@@ -100,30 +118,32 @@ function evaluateFreeKernel({
   isNormalField: boolean
 }): number {
   let tangentZ = sourcePanel.tangentZ
-  let sourceZ = sourcePanel.centerZMm
+  let sourceZMm = sourcePanel.centerZMm
   if (isMirrored) {
     tangentZ = -tangentZ
-    sourceZ = -sourceZ
+    sourceZMm = -sourceZMm
   }
   const dx = targetPanel.centerXMm - sourcePanel.centerXMm
-  const dz = targetPanel.centerZMm - sourceZ
+  const dz = targetPanel.centerZMm - sourceZMm
   const isParallel =
     Math.abs(
       targetPanel.tangentX * tangentZ -
         targetPanel.tangentZ * sourcePanel.tangentX,
     ) < PARALLEL_TOLERANCE
-  const longer = Math.max(targetPanel.lengthMm, sourcePanel.lengthMm)
+  const longerPanelMm = Math.max(targetPanel.lengthMm, sourcePanel.lengthMm)
   const hasComparableLength =
-    longer <
+    longerPanelMm <
     MAX_PARALLEL_LENGTH_RATIO *
       Math.min(targetPanel.lengthMm, sourcePanel.lengthMm)
   if (
     isParallel &&
     hasComparableLength &&
-    hypotenuse(dx, dz) < MAX_PARALLEL_SEPARATION * longer
+    hypotenuse(dx, dz) < MAX_PARALLEL_SEPARATION * longerPanelMm
   ) {
+    // Project the center separation onto the source panel tangent and normal.
     const u = dx * sourcePanel.tangentX + dz * tangentZ
     const v = -dx * tangentZ + dz * sourcePanel.tangentX
+    // The half-sum and half-difference of panel lengths locate the four endpoint pairs.
     const h = (targetPanel.lengthMm + sourcePanel.lengthMm) / 2
     const d = (targetPanel.lengthMm - sourcePanel.lengthMm) / 2
     const projection = {
@@ -133,16 +153,16 @@ function evaluateFreeKernel({
       isNormalField,
     }
     const high =
-      parallelPanelIntegral({ x: u + h, ...projection }) -
-      parallelPanelIntegral({ x: u + d, ...projection })
-    const low = parallelPanelIntegral({ x: u - d, ...projection })
-    const end = parallelPanelIntegral({ x: u - h, ...projection })
+      evaluateParallelPanelIntegral({ x: u + h, ...projection }) -
+      evaluateParallelPanelIntegral({ x: u + d, ...projection })
+    const low = evaluateParallelPanelIntegral({ x: u - d, ...projection })
+    const end = evaluateParallelPanelIntegral({ x: u - h, ...projection })
     return (
       (high - low + end) /
       (2 * Math.PI * targetPanel.lengthMm * sourcePanel.lengthMm)
     )
   }
-  // For unequal potential panels, average over the shorter panel and integrate the longer one.
+  // For unequal potential panels, average over the shorter panel and integrate the longer panel.
   if (
     !isNormalField &&
     !isMirrored &&
@@ -155,33 +175,38 @@ function evaluateFreeKernel({
     })
   let result = 0
   for (const [t, weight] of quadrature) {
-    const dx =
+    const quadratureDxMm =
       targetPanel.centerXMm +
       (t * targetPanel.tangentX * targetPanel.lengthMm) / 2 -
       sourcePanel.centerXMm
-    const dz =
+    const quadratureDzMm =
       targetPanel.centerZMm +
       (t * targetPanel.tangentZ * targetPanel.lengthMm) / 2 -
-      sourceZ
-    const u = dx * sourcePanel.tangentX + dz * tangentZ
-    const v = -dx * tangentZ + dz * sourcePanel.tangentX
-    const h = sourcePanel.lengthMm / 2
+      sourceZMm
+    const u = quadratureDxMm * sourcePanel.tangentX + quadratureDzMm * tangentZ
+    const v = -quadratureDxMm * tangentZ + quadratureDzMm * sourcePanel.tangentX
+    const halfSourceLengthMm = sourcePanel.lengthMm / 2
     if (!isNormalField) {
       const potential =
         -(
-          logDistanceIntegral({ x: u + h, y: v }) -
-          logDistanceIntegral({ x: u - h, y: v })
+          evaluateLogDistanceIntegral({ x: u + halfSourceLengthMm, y: v }) -
+          evaluateLogDistanceIntegral({ x: u - halfSourceLengthMm, y: v })
         ) /
         (2 * Math.PI * sourcePanel.lengthMm)
       result += (potential * weight) / 2
       continue
     }
     const along =
-      log(hypotenuse(u + h, v) / hypotenuse(u - h, v)) / sourcePanel.lengthMm
+      log(
+        hypotenuse(u + halfSourceLengthMm, v) /
+          hypotenuse(u - halfSourceLengthMm, v),
+      ) / sourcePanel.lengthMm
     let across = 0
     const separation = Math.abs(v)
     if (!(separation < COPLANAR_TOLERANCE)) {
-      const angle = atan((u + h) / separation) - atan((u - h) / separation)
+      const angle =
+        atan((u + halfSourceLengthMm) / separation) -
+        atan((u - halfSourceLengthMm) / separation)
       across = (Math.sign(v) * angle) / sourcePanel.lengthMm
     }
     const field =
@@ -256,6 +281,7 @@ export function evaluatePanelKernel({
         sourcePanel.centerZMm +
         (tb * sourcePanel.tangentZ * sourcePanel.lengthMm) / 2
       const dz = za - zb
+      // Scale the horizontal separation and direct and reflected vertical separations by pi / plane spacing.
       const u = (Math.PI * dx) / planeSpacingMm
       const v = (Math.PI * dz) / planeSpacingMm
       const s = (Math.PI * (za + zb)) / planeSpacingMm

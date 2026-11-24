@@ -19,7 +19,11 @@ export function drawCrossSection({
   title: string
 }): GraphicsObject {
   const [{ region }] = partitionCrossSection(crossSection)
-  const panels = buildRegionPanels({ region, count: 12, extent: 24 })
+  const panels = buildRegionPanels({
+    region,
+    panelsPerEdge: 12,
+    interfaceExtent: 24,
+  })
   const topMm = Math.max(
     region.planeSpacingMm,
     ...region.dielectricLayers.map((layer) => layer.zMm + layer.thicknessMm),

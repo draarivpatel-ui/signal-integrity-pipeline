@@ -9,6 +9,11 @@ const MIN_PIVOT_MAGNITUDE = 1e-20
 /** Allow matrix roundoff relative to the largest coefficient when checking passivity. */
 const PASSIVITY_RELATIVE_TOLERANCE = 1e-9
 
+/** Zero-filled square matrix in conductor order. */
+export function createZeroMatrix(size: number): Matrix {
+  return Array.from({ length: size }, () => Array(size).fill(0))
+}
+
 /** Partial-pivoted LU factors and row swaps for reuse across excitations. */
 interface BoundaryFactors {
   matrix: Float64Array[]
@@ -32,7 +37,10 @@ export function factorBoundaryMatrix(
       !Number.isFinite(pivotCoefficient) ||
       Math.abs(pivotCoefficient) < MIN_PIVOT_MAGNITUDE
     ) {
-      fail("matrix_zero", "Singular cross-section boundary matrix")
+      fail({
+        code: "matrix_zero",
+        text: "Singular cross-section boundary matrix",
+      })
     }
     swaps[k] = pivot
     const row = matrix[k]
@@ -106,10 +114,10 @@ export function calculateReciprocityResidual(matrix: Matrix): number {
 /** Reject nonphysical matrices before frequency interpolation; permit exact lossless null spaces. */
 export function assertMatrixPassive({
   matrix,
-  strict = DEFAULT_STRICT_PASSIVITY,
+  isStrict = DEFAULT_STRICT_PASSIVITY,
 }: {
   matrix: Matrix
-  strict?: boolean
+  isStrict?: boolean
 }): void {
   const size = matrix.length
   let largest = -Infinity
@@ -119,10 +127,13 @@ export function assertMatrixPassive({
     }
   }
   if (!Number.isFinite(largest))
-    fail("matrix_format", "Nonfinite cross-section coefficient")
+    fail({ code: "matrix_format", text: "Nonfinite cross-section coefficient" })
   if (calculateReciprocityResidual(matrix) > PASSIVITY_RELATIVE_TOLERANCE)
-    fail("reciprocity", "Cross-section passivity requires a symmetric matrix")
-  if (largest === 0 && !strict) return
+    fail({
+      code: "reciprocity",
+      text: "Cross-section passivity requires a symmetric matrix",
+    })
+  if (largest === 0 && !isStrict) return
   // Normalize before adding the diagonal shift so the tolerance remains representable.
   // For loss matrices this tests A + tolerance * I, allowing eigenvalues within roundoff of zero.
   const scale = largest || 1
@@ -131,14 +142,14 @@ export function assertMatrixPassive({
   for (let i = 0; i < size; i++) {
     for (let j = 0; j <= i; j++) {
       let coefficient = matrix[i][j] / scale
-      if (i === j && !strict) coefficient += tolerance
+      if (i === j && !isStrict) coefficient += tolerance
       for (let k = 0; k < j; k++) coefficient -= factor[i][k] * factor[j][k]
       if (i === j) {
-        if (coefficient < 0 || (strict && coefficient <= tolerance)) {
-          fail(
-            "passivity",
-            "Cross-section matrix has nonpositive field energy; refine the mesh",
-          )
+        if (coefficient < 0 || (isStrict && coefficient <= tolerance)) {
+          fail({
+            code: "passivity",
+            text: "Cross-section matrix has nonpositive field energy; refine the mesh",
+          })
         }
         factor[i][j] = Math.sqrt(Math.max(0, coefficient))
         continue
@@ -148,7 +159,10 @@ export function assertMatrixPassive({
         continue
       }
       if (Math.abs(coefficient) > tolerance)
-        fail("passivity", "Cross-section loss matrix has an invalid null space")
+        fail({
+          code: "passivity",
+          text: "Cross-section loss matrix has an invalid null space",
+        })
     }
   }
 }
