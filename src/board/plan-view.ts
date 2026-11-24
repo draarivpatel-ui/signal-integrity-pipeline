@@ -18,6 +18,7 @@ import type { Line, Point, Polygon, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId } from "./ids"
+import { planPourFills } from "./plan-visual-types"
 
 /** Bounds of points, or undefined when there are none. */
 export function routeBounds(points: readonly Point[]): Viewbox | undefined {
@@ -382,17 +383,18 @@ export function planBoardShapes({
   ]
   for (const pour of db.pcb_copper_pour.list()) {
     const net = db.source_net.get(pour.source_net_id || "")
-    const label = `${net?.name || pour.pcb_copper_pour_id} (${pour.layer})`
-    let fill = "rgba(100,116,139,0.08)"
+    const name = net?.name || ""
+    const label = `${name} copper (${pour.layer})`.trimStart()
+    let fill: string = planPourFills.gray
     if (net?.is_power === true && net.is_ground !== true)
-      fill = "rgba(219,39,119,0.06)"
+      fill = planPourFills.pink
     for (const points of facePolygons(getPourPolygon(pour)))
       shapes.push({
         points,
         fill,
         stroke: "#cbd5e1",
         strokeWidth: unit * 0.26,
-        layer: "board",
+        layer: "pours",
         label,
       })
   }

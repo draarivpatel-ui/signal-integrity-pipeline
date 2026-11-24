@@ -50,9 +50,16 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
       (shape) => shape.layer === "failure" && shape.label?.includes("TX.Y"),
     ),
   )
+  assert.ok(drawing.texts)
+  const legend = drawing.texts.map(({ text }) => text).join(" ")
+  assert.ok(legend.includes("red dashed arc = shortcut"))
+  assert.ok(legend.includes("red dashes on trace = short or loop"))
+  assert.ok(!legend.includes("purple dashes"))
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "short-bypass-visual",
+    caption:
+      "Two traces connect TX to RX through resistor RS. The plan stops because the board design also has a direct shortcut past RS and both traces.",
   })
 })
