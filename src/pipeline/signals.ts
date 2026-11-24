@@ -16,7 +16,7 @@ import {
 import { type SafeId, safeId } from "../kernel"
 import type { RunControls } from "../simulation"
 import { planAggressors } from "./aggressors"
-import { prepareChannelTraces } from "./channel-traces"
+import { prepareTraceContacts } from "./channel-traces"
 import type { NumericalSettings } from "./modeling"
 import {
   type ChannelSimulationControlOptions,
@@ -37,7 +37,6 @@ import {
   validateSignalPins,
 } from "./signal-pins"
 
-export { auditChannelTraces } from "./channel-traces"
 export { probeEndpoints, signalBits } from "./signal-controls"
 
 /** Default lateral search distance for channel simulation planning, in millimetres. */
@@ -101,7 +100,7 @@ export function listChannelSimulations(
 export const INVALID_NEARBY_GAP_MESSAGE =
   "Copper search gap must be finite and positive (mm)."
 
-/** Normalize a caller's copper search radius at the preparation boundary. */
+/** Normalize a caller's nearby copper gap at the preparation boundary. */
 export function validateNearbyGapMm(
   nearbyGapMm: number = DEFAULT_NEARBY_GAP_MM,
 ): number {
@@ -290,13 +289,13 @@ export function prepareChannelSimulation(
   })
   const timing = signalTiming({ patterns, durationSeconds, edgeTimesSeconds })
   validateComponentModels({ ...scoped, topology: signalPins.topology })
-  const channelTraces = prepareChannelTraces(scoped)
+  const traceContacts = prepareTraceContacts(scoped)
   const pruned = withUsedIbisModels(scoped)
   const supplied = prepareSignalSettings({
     pruned,
     signalPins,
     scopedPins,
-    channelTraces,
+    traceContacts,
   })
   return withPreparedChannelControls({
     ...selection,

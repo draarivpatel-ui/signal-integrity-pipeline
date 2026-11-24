@@ -56,7 +56,7 @@ test("draws the receiver path and extra trace on a daisy chain", async () => {
       text.text.includes("Extra trace: MID pin A → RX pin A (top, 5 mm)"),
     ),
   )
-  assert.equal(drawing.title, "DAISY: ready to simulate")
+  assert.equal(drawing.title, "DAISY: plan ready")
   assert.equal(header?.length, 6)
   assert.deepEqual(
     drawing.texts

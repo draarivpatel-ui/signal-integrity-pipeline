@@ -40,4 +40,5 @@ test("a trace contact outside a receiver path needs a passive selected for the d
       }),
     { domain: "simulation", code: "channel_model", message: /LOAD/ },
   )
+  assert.equal(solver.visualize().title, "DAISY: plan ready")
 })

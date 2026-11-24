@@ -1,33 +1,21 @@
 import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import {
   type CircuitJson,
-  cloneCircuitJson,
   endpointPorts,
   indexPlanPorts,
-  type PlanOverlay,
-  type PlanTrace,
   type PlanVisualScene,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
-  type SourceNetId,
   type SourcePortId,
   type SourceTraceId,
-  selectPort,
 } from "../../board"
 import { Diagnostic } from "../../kernel"
-import {
-  buildReceiverGraphs,
-  type CircuitNodes,
-  findReceiverPath,
-  numberCircuitNodes,
-  type ReceiverGraphs,
-  validateRoutedNodes,
-} from "../../simulation"
 import type { TransientChannelSimulationPlan } from "../transient-channel-simulation-plan"
 import { buildEndpoints } from "./endpoints"
 import { resolvePlanFault } from "./fault"
 import { buildPathRows } from "./rows"
 import { buildSceneDiagnostic, summarizePlan } from "./summary"
+import { type PlanTopology, resolvePlanTopology } from "./visual-topology"
 
 /** The declaration and original diagnostic captured before the solver reports a failure. */
 export interface FailedPlanAttempt {
@@ -39,7 +27,7 @@ export interface FailedPlanAttempt {
 export interface PlanPath {
   channelName: string
   simulationPcbDriverReceiverChannelId: SimulationPcbDriverReceiverChannel["simulation_pcb_driver_receiver_channel_id"]
-  signalName: string
+  legLabel: string
   fromSourcePortId: SourcePortId
   toSourcePortId: SourcePortId
 }
@@ -58,13 +46,13 @@ function listDeclaredPaths(
       const drivers = endpointPorts(driver)
       return receivers.flatMap((receiver) =>
         endpointPorts(receiver).map((toSourcePortId, leg) => {
-          let signal = name
-          if (drivers.length > 1) signal += ["+", "−"][leg]
+          let legLabel = name
+          if (drivers.length > 1) legLabel += ["+", "−"][leg]
           return {
             channelName: name,
             simulationPcbDriverReceiverChannelId:
               simulation_pcb_driver_receiver_channel_id,
-            signalName: signal,
+            legLabel,
             fromSourcePortId: drivers[leg],
             toSourcePortId,
           }
@@ -74,290 +62,95 @@ function listDeclaredPaths(
   )
 }
 
-/** Presentation data for the electrical partitions before rendering the board. */
-export interface PlanTopology {
-  traces: PlanTrace[]
-  paths: ResolvedPlanPath[]
-  overlays: PlanOverlay[]
-  spiceNodeNamesBySourceContactId: CircuitNodes["mapping"]
-  issue?: Diagnostic
+/** Identity of the simulation shown, suppressing the default generated name. */
+interface PlanAttemptSelection {
+  simulationPcbTransientChannelSimulationId?: TransientChannelSimulationPlan["simulationPcbTransientChannelSimulationId"]
+  simulationName?: string
 }
 
-/** One ordered trace, series part, or ideal connection between route contacts. */
-export type PlanPathSegment = Pick<
-  PlanPath,
-  "fromSourcePortId" | "toSourcePortId"
-> &
-  (
-    | { kind: "trace"; sourceTraceId: SourceTraceId }
-    | { kind: "series" | "ideal" }
-  )
-
-/** Ordered segments traversed by one driver-to-receiver connection. */
-export interface ResolvedPlanPath extends PlanPath {
-  pathSegments: PlanPathSegment[]
-}
-
-/** Orient each edge and fill jumps between contacts on the same ideal node. */
-function resolvePath({
-  path,
-  graphs,
-  spiceNodeNamesBySourceContactId,
+/** A failed attempt takes precedence over any previously completed plan. */
+function selectPlanAttempt({
+  plan,
+  failed,
 }: {
-  path: PlanPath
-  graphs: ReceiverGraphs
-  spiceNodeNamesBySourceContactId: CircuitNodes["mapping"]
-}): ResolvedPlanPath {
-  const edges = findReceiverPath({
-    graphs,
-    fromSourcePortId: path.fromSourcePortId,
-    toSourcePortId: path.toSourcePortId,
-    allowUnroutedTraces: true,
-  })
-  const pathSegments: PlanPathSegment[] = []
-  let current = path.fromSourcePortId
-  for (const {
-    fromSourcePortId: firstSourcePortId,
-    toSourcePortId: secondSourcePortId,
-    sourceTraceId,
-  } of edges || []) {
-    let fromSourcePortId = firstSourcePortId
-    let toSourcePortId = secondSourcePortId
-    if (
-      current === toSourcePortId ||
-      (current !== fromSourcePortId &&
-        spiceNodeNamesBySourceContactId[current] !==
-          spiceNodeNamesBySourceContactId[fromSourcePortId] &&
-        spiceNodeNamesBySourceContactId[current] ===
-          spiceNodeNamesBySourceContactId[toSourcePortId])
-    ) {
-      fromSourcePortId = secondSourcePortId
-      toSourcePortId = firstSourcePortId
-    }
-    if (current !== fromSourcePortId)
-      pathSegments.push({
-        kind: "ideal",
-        fromSourcePortId: current,
-        toSourcePortId: fromSourcePortId,
-      })
-    if (sourceTraceId === undefined)
-      pathSegments.push({ kind: "series", fromSourcePortId, toSourcePortId })
-    else
-      pathSegments.push({
-        kind: "trace",
-        sourceTraceId,
-        fromSourcePortId,
-        toSourcePortId,
-      })
-    current = toSourcePortId
+  plan?: TransientChannelSimulationPlan
+  failed?: FailedPlanAttempt
+}): PlanAttemptSelection {
+  let simulationPcbTransientChannelSimulationId =
+    plan?.simulationPcbTransientChannelSimulationId
+  let name = plan?.name
+  if (failed) {
+    simulationPcbTransientChannelSimulationId =
+      failed.channelSimulation?.simulation_pcb_transient_channel_simulation_id
+    name = failed.channelSimulation?.name
   }
-  if (edges && current !== path.toSourcePortId)
-    pathSegments.push({
-      kind: "ideal",
-      fromSourcePortId: current,
-      toSourcePortId: path.toSourcePortId,
-    })
-  return { ...path, pathSegments }
+  let simulationName = name
+  if (name === simulationPcbTransientChannelSimulationId)
+    simulationName = undefined
+  return { simulationPcbTransientChannelSimulationId, simulationName }
 }
 
-/** Draw only relevant series passives and ideal wires, keeping distinct explicit joins. */
-function buildTopologyOverlays({
+/** Routed traces touching a declared endpoint and all ports with routed copper. */
+interface RoutedEvidence {
+  existingSourceTraceIds: Set<SourceTraceId>
+  partiallyRoutedSourcePortIds: Set<SourcePortId>
+}
+
+/** Index already routed copper even when the simulation plan fails. */
+function indexRoutedEvidence({
   db,
-  graphs,
-  activeSourcePortIds,
-  placedSourcePortIds,
-  spiceNodeNamesBySourceContactId,
+  paths,
 }: {
   db: CircuitJsonUtilObjects
-  graphs: ReceiverGraphs
-  activeSourcePortIds: ReadonlySet<SourcePortId>
-  placedSourcePortIds: ReadonlySet<SourcePortId>
-  spiceNodeNamesBySourceContactId: CircuitNodes["mapping"]
-}): PlanOverlay[] {
-  const overlays: PlanOverlay[] = []
-  for (const { evidence } of graphs.channelConnections) {
-    if (evidence.sourceTraceId !== undefined) continue
-    const { fromSourcePortId, toSourcePortId } = evidence
-    overlays.push({
-      fromSourcePortId,
-      toSourcePortId,
-      kind: "series",
-      label: "Series passive",
-    })
-  }
-  const overlaySourcePortIds = new Set([
-    ...activeSourcePortIds,
-    ...overlays.flatMap(({ fromSourcePortId, toSourcePortId }) => [
+  paths: readonly PlanPath[]
+}): RoutedEvidence {
+  const routedSourceTraceIds = new Set(
+    db.pcb_trace.list().map(({ source_trace_id }) => source_trace_id),
+  )
+  const pathSourcePortIds = new Set(
+    paths.flatMap(({ fromSourcePortId, toSourcePortId }) => [
       fromSourcePortId,
       toSourcePortId,
     ]),
-  ])
-  const activeSpiceNodeNames = new Set(
-    [...overlaySourcePortIds].map(
-      (sourcePortId) => spiceNodeNamesBySourceContactId[sourcePortId],
-    ),
   )
-  const sourcePortIdsBySourceNetId = new Map<SourceNetId, Set<SourcePortId>>()
-  const seen = new Set<string>()
-  for (const connection of graphs.wireConnections) {
-    const pins = connection.filter(
-      (sourcePortId) =>
-        placedSourcePortIds.has(sourcePortId) &&
-        activeSpiceNodeNames.has(
-          spiceNodeNamesBySourceContactId[sourcePortId],
-        ) &&
-        spiceNodeNamesBySourceContactId[sourcePortId] !== "0",
+  const existingSourceTraceIds = new Set<SourceTraceId>()
+  const partiallyRoutedSourcePortIds = new Set<SourcePortId>()
+  for (const trace of db.source_trace.list()) {
+    const {
+      source_trace_id: sourceTraceId,
+      connected_source_port_ids: sourcePortIds,
+    } = trace
+    if (!routedSourceTraceIds.has(sourceTraceId)) continue
+    for (const sourcePortId of sourcePortIds)
+      partiallyRoutedSourcePortIds.add(sourcePortId)
+    if (
+      sourcePortIds.some((sourcePortId) => pathSourcePortIds.has(sourcePortId))
     )
-    const [fromSourcePortId, ...targets] = pins
-    for (const toSourcePortId of targets) {
-      const key = [fromSourcePortId, toSourcePortId].sort().join(" ")
-      if (seen.has(key)) continue
-      seen.add(key)
-      overlays.push({
-        fromSourcePortId,
-        toSourcePortId,
-        kind: "ideal",
-        label: "Ideal connection",
-      })
-    }
-    for (const sourceContactId of connection) {
-      const sourceNet = db.source_net.get(sourceContactId)
-      if (!sourceNet) continue
-      const sourceNetId = sourceNet.source_net_id
-      const sourcePortIds =
-        sourcePortIdsBySourceNetId.get(sourceNetId) || new Set()
-      for (const sourcePortId of pins) sourcePortIds.add(sourcePortId)
-      sourcePortIdsBySourceNetId.set(sourceNetId, sourcePortIds)
-    }
+      existingSourceTraceIds.add(sourceTraceId)
   }
-  for (const [
-    fromSourcePortId,
-    ...targets
-  ] of sourcePortIdsBySourceNetId.values()) {
-    for (const toSourcePortId of targets) {
-      const key = [fromSourcePortId, toSourcePortId].sort().join(" ")
-      if (seen.has(key)) continue
-      seen.add(key)
-      overlays.push({
-        fromSourcePortId,
-        toSourcePortId,
-        kind: "ideal",
-        label: "Ideal net connection",
-      })
-    }
-  }
-  return overlays
+  return { existingSourceTraceIds, partiallyRoutedSourcePortIds }
 }
 
-/** Reuse binding's node numbering and validation without changing the resulting plans. */
-function resolvePlanTopology({
-  plan,
-  paths,
-  placedSourcePortIds,
+/** Describe the plan stage without claiming that binding or simulation has run. */
+function getPlanTitle({
+  simulationName,
+  hasDiagnostic,
+  hasPlan,
+  solved,
 }: {
-  plan: TransientChannelSimulationPlan
-  paths: readonly PlanPath[]
-  placedSourcePortIds: ReadonlySet<SourcePortId>
-}): PlanTopology {
-  const {
-    circuitJson: plannedCircuitJson,
-    receiverPaths,
-    traceContacts,
-    modeling,
-  } = plan.bindings
-  const circuitJson = cloneCircuitJson(plannedCircuitJson)
-  const db = cju(circuitJson)
-  const channels = db.simulation_pcb_driver_receiver_channel.list()
-  const groundSourcePortId = selectPort({
-    circuit: circuitJson,
-    selector: modeling.channelReference,
-  }).source_port_id
-  const graphs = buildReceiverGraphs({
-    db,
-    circuit: circuitJson,
-    traceContacts,
-    channels,
-    groundSourcePortId,
-    modeling,
-  })
-  const { mapping: spiceNodeNamesBySourceContactId, node } = numberCircuitNodes(
-    {
-      db,
-      graphs,
-      groundSourcePortId,
-    },
-  )
-  const resolved = paths.map((path) =>
-    resolvePath({ path, graphs, spiceNodeNamesBySourceContactId }),
-  )
-  const oriented = new Map<SourceTraceId, SourcePortId>()
-  for (const { pathSegments } of resolved)
-    for (const segment of pathSegments)
-      if (segment.kind === "trace" && !oriented.has(segment.sourceTraceId))
-        oriented.set(segment.sourceTraceId, segment.fromSourcePortId)
-  const traceContactsBySourceTraceId = new Map(
-    traceContacts.map((contacts) => [contacts.sourceTraceId, contacts]),
-  )
-  const orderedSourceTraceIds = new Set([
-    ...oriented.keys(),
-    ...traceContactsBySourceTraceId.keys(),
-  ])
-  const visualTraces = [...orderedSourceTraceIds].flatMap(
-    (sourceTraceId, index): PlanTrace[] => {
-      const contacts = traceContactsBySourceTraceId.get(sourceTraceId)
-      if (!contacts) return []
-      const pathFromSourcePortId = oriented.get(sourceTraceId)
-      const isOnReceiverPath = pathFromSourcePortId !== undefined
-      if (pathFromSourcePortId === contacts.toSourcePortId)
-        return [
-          {
-            ...contacts,
-            fromSourcePortId: contacts.toSourcePortId,
-            toSourcePortId: contacts.fromSourcePortId,
-            index,
-            isOnReceiverPath,
-          },
-        ]
-      return [{ ...contacts, index, isOnReceiverPath }]
-    },
-  )
-  const activeSourcePortIds = new Set(
-    [...paths, ...visualTraces].flatMap(
-      ({ fromSourcePortId, toSourcePortId }) => [
-        fromSourcePortId,
-        toSourcePortId,
-      ],
-    ),
-  )
-  const topology: PlanTopology = {
-    traces: visualTraces,
-    spiceNodeNamesBySourceContactId,
-    paths: resolved,
-    overlays: buildTopologyOverlays({
-      db,
-      graphs,
-      activeSourcePortIds,
-      placedSourcePortIds,
-      spiceNodeNamesBySourceContactId,
-    }),
-  }
-  try {
-    validateRoutedNodes({
-      traceContacts,
-      receiverPaths,
-      graphs,
-      channels,
-      node,
-      hasImplicitTraceContacts: false,
-    })
-  } catch (error) {
-    if (!(error instanceof Diagnostic)) throw error
-    return { ...topology, issue: error }
-  }
-  return topology
+  simulationName?: string
+  hasDiagnostic: boolean
+  hasPlan: boolean
+  solved: boolean
+}): string {
+  if (hasDiagnostic) return `${simulationName || "Plan"}: can't simulate`
+  if (hasPlan && simulationName) return `${simulationName}: plan ready`
+  if (hasPlan) return "Plan: ready"
+  if (solved) return "Plan: no signals to simulate"
+  return "Plan: waiting to run"
 }
 
-/** Select the latest attempted simulation before looking up its own channel declarations. */
+/** Build the drawing data for the latest planning attempt. */
 export function buildPlanVisualScene({
   circuitJson,
   plan,
@@ -372,17 +165,8 @@ export function buildPlanVisualScene({
   solved: boolean
 }): PlanVisualScene {
   const db = cju([...circuitJson])
-  let simulationPcbTransientChannelSimulationId =
-    plan?.simulationPcbTransientChannelSimulationId
-  let name = plan?.name
-  if (failed) {
-    simulationPcbTransientChannelSimulationId =
-      failed.channelSimulation?.simulation_pcb_transient_channel_simulation_id
-    name = failed.channelSimulation?.name
-  }
-  let simulationName = name
-  if (name === simulationPcbTransientChannelSimulationId)
-    simulationName = undefined
+  const { simulationPcbTransientChannelSimulationId, simulationName } =
+    selectPlanAttempt({ plan, failed })
   const channels = db.simulation_pcb_driver_receiver_channel
     .list()
     .filter(
@@ -404,17 +188,8 @@ export function buildPlanVisualScene({
     })
   let issue = topology?.issue
   if (failed?.error instanceof Diagnostic) issue = failed.error
-  const routedSourceTraceIds = new Set(
-    db.pcb_trace.list().map(({ source_trace_id }) => source_trace_id),
-  )
-  const routedTraces = db.source_trace
-    .list()
-    .filter(({ source_trace_id }) => routedSourceTraceIds.has(source_trace_id))
-  const partiallyRoutedSourcePortIds = new Set(
-    routedTraces.flatMap(
-      ({ connected_source_port_ids }) => connected_source_port_ids,
-    ),
-  )
+  const { partiallyRoutedSourcePortIds, existingSourceTraceIds } =
+    indexRoutedEvidence({ db, paths })
   const fault = resolvePlanFault({
     db,
     issue,
@@ -431,19 +206,6 @@ export function buildPlanVisualScene({
     fault,
     db,
   })
-  const pathSourcePortIds = new Set(
-    paths.flatMap(({ fromSourcePortId, toSourcePortId }) => [
-      fromSourcePortId,
-      toSourcePortId,
-    ]),
-  )
-  const existingSourceTraceIds = new Set(
-    routedTraces
-      .filter(({ connected_source_port_ids }) =>
-        connected_source_port_ids.some((port) => pathSourcePortIds.has(port)),
-      )
-      .map(({ source_trace_id }) => source_trace_id),
-  )
   const endpoints = buildEndpoints({ paths, topology, labels })
   const copperScope = topology && plan?.sections.copperScope
   let summary: PlanVisualScene["summary"]
@@ -453,10 +215,6 @@ export function buildPlanVisualScene({
       db,
       nearbyGapMm: copperScope?.nearbyGapMm,
     })
-  let title = "Plan: waiting to run"
-  if (diagnostic) title = `${simulationName || "Plan"}: can't simulate`
-  else if (plan) title = `${simulationName || "Plan"}: ready to simulate`
-  else if (solved) title = "Plan: no signals to simulate"
   let traceFaultKind: PlanVisualScene["traceFaultKind"]
   if (issue?.code === "channel_fanout") {
     traceFaultKind = "loop"
@@ -465,7 +223,12 @@ export function buildPlanVisualScene({
   return {
     db,
     ports,
-    title,
+    title: getPlanTitle({
+      simulationName,
+      hasDiagnostic: diagnostic !== undefined,
+      hasPlan: plan !== undefined,
+      solved,
+    }),
     diagnostic,
     copperScope,
     summary,

@@ -13,7 +13,7 @@ import {
 import type { PcbPlatedHole, PcbSmtPad } from "circuit-json"
 import type { Point, Polygon, Viewbox } from "graphics-debug"
 import type { SourcePortId } from "./ids"
-import { boxPoints, type PlanPort, type PlanPorts } from "./plan-view"
+import { getBoxPoints, type PlanPort, type PlanPorts } from "./plan-view"
 import { type PlanPolygon, planPourFills } from "./plan-visual-types"
 
 /** Board pad records of either technology. */
@@ -32,11 +32,19 @@ export function getPadOutline({
   return getPlatedHolePolygon(pad, component?.rotation)
 }
 
+/** Sample even short arcs at multiple vertices. */
+const MIN_ARC_SAMPLES = 4
+/** Draw curved boundaries with this many vertices per radian. */
+const ARC_SAMPLES_PER_RADIAN = 6
+
 /** Sample arcs from geometry so circular and rounded shapes keep their outlines. */
 function sampleFacePoints(face: Face): Point[] {
   return face.edges.flatMap(({ shape }) => {
     if (shape instanceof Segment) return [shape.start]
-    const steps = Math.max(4, Math.ceil(shape.sweep * 6))
+    const steps = Math.max(
+      MIN_ARC_SAMPLES,
+      Math.ceil(shape.sweep * ARC_SAMPLES_PER_RADIAN),
+    )
     return Array.from({ length: steps }, (_, i) =>
       shape.pointAtLength((shape.length * i) / steps),
     ).filter((point) => point !== null)
@@ -70,7 +78,7 @@ export function buildBoardShapes({
   unitMm: number
 }): PlanPolygon[] {
   const outline = db.pcb_board.getWhere({})?.outline
-  let boardPoints = boxPoints(board)
+  let boardPoints = getBoxPoints(board)
   if (outline?.length) boardPoints = [...outline]
   const shapes: Polygon[] = [
     {

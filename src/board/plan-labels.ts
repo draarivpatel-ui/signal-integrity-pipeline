@@ -8,14 +8,16 @@ import type { Line, Point, Polygon, Text } from "graphics-debug"
 import type { SourcePortId } from "./ids"
 import { estimateTextWidthEms, getPlanTextSizeMm } from "./plan-header"
 import {
-  boxPoints,
+  getBoxPoints,
   getPinName,
+  getPlanPolygonOutline,
   getPointBounds,
   type PlanFrame,
   type PlanPort,
 } from "./plan-view"
 import {
   getTraceColor,
+  type PlanPolygon,
   type PlanVisualScene,
   planColors,
   planPourFills,
@@ -65,12 +67,12 @@ function buildPinColors(scene: PlanVisualScene): Map<SourcePortId, string> {
 function getMarkBox(polygon: Polygon): Box | undefined {
   const bounds = getPointBounds(polygon.points)
   if (bounds === undefined) return
-  const stroke = (polygon.strokeWidth || 0) / 2
+  const halfStrokeMm = (polygon.strokeWidth || 0) / 2
   return new Box(
-    bounds.minX - stroke,
-    bounds.minY - stroke,
-    bounds.maxX + stroke,
-    bounds.maxY + stroke,
+    bounds.minX - halfStrokeMm,
+    bounds.minY - halfStrokeMm,
+    bounds.maxX + halfStrokeMm,
+    bounds.maxY + halfStrokeMm,
   )
 }
 
@@ -94,12 +96,12 @@ function placeLabel({
   label,
   fontSizeMm,
   window,
-  isBoxClear,
+  clearance,
 }: {
   label: PlanLabel
   fontSizeMm: number
   window: Box
-  isBoxClear: (box: Box) => boolean
+  clearance: LabelClearance
 }): Box | undefined {
   const { anchor, text } = label
   const widthMm = (estimateTextWidthEms(text) + 0.45) * fontSizeMm
@@ -117,7 +119,7 @@ function placeLabel({
         if (
           window.contains(box) &&
           label.outline.contains(new BoardPolygon(box)) &&
-          isBoxClear(box)
+          isLabelBoxClear({ box, clearance })
         )
           return box
       }
@@ -139,14 +141,16 @@ function placeLabel({
         const y = edge + side * ((step + 0.5) * heightMm + marginMm)
         for (const dx of [0, -step * fontSizeMm, step * fontSizeMm]) {
           const box = getLabelBox({ x: x + dx, y, widthMm, heightMm })
-          if (window.contains(box) && isBoxClear(box)) return box
+          if (window.contains(box) && isLabelBoxClear({ box, clearance }))
+            return box
         }
       }
       if (label.kind === "part") {
-        const gap = widthMm / 2 + marginMm + step * fontSizeMm
-        for (const x of [anchor.xmax + gap, anchor.xmin - gap]) {
+        const gapMm = widthMm / 2 + marginMm + step * fontSizeMm
+        for (const x of [anchor.xmax + gapMm, anchor.xmin - gapMm]) {
           const box = getLabelBox({ x, y: center.y, widthMm, heightMm })
-          if (window.contains(box) && isBoxClear(box)) return box
+          if (window.contains(box) && isLabelBoxClear({ box, clearance }))
+            return box
         }
       }
     }
@@ -155,7 +159,7 @@ function placeLabel({
   const x = window.xmax + widthMm / 2 + fontSizeMm
   for (let y = center.y; ; y -= heightMm + marginMm) {
     const box = getLabelBox({ x, y, widthMm, heightMm })
-    if (isBoxClear(box)) return box
+    if (isLabelBoxClear({ box, clearance })) return box
   }
 }
 
@@ -212,7 +216,7 @@ function collectPlanLabels({
   window: Box
   marks: readonly BoardMark[]
   bodies: readonly Box[]
-  polygons: readonly Polygon[]
+  polygons: readonly PlanPolygon[]
 }): PlanLabel[] {
   const pins = [...buildPinColors(scene)].flatMap(
     ([sourcePortId, color]): PlanLabel[] => {
@@ -263,7 +267,7 @@ function collectPlanLabels({
   })
   const pours = polygons.flatMap((polygon): PlanLabel[] => {
     if (polygon.layer !== "pours" || !polygon.label) return []
-    const outline = new BoardPolygon(polygon.points.map(({ x, y }) => [x, y]))
+    const outline = getPlanPolygonOutline(polygon)
     let glyph = "□"
     if (polygon.fill === planPourFills.pink) glyph = "■"
     return [
@@ -293,7 +297,7 @@ function indexLabelObstacles({
   polygons,
   lines,
 }: {
-  polygons: readonly Polygon[]
+  polygons: readonly PlanPolygon[]
   lines: readonly Line[]
 }): LabelObstacles {
   const marks = polygons.flatMap((polygon) => {
@@ -324,6 +328,35 @@ function indexLabelObstacles({
   return { marks, bodies, obstacles, strokes }
 }
 
+/** Marks and strokes that a label may not cover. */
+type LabelClearance = Pick<LabelObstacles, "obstacles" | "strokes">
+
+/** Check the label box against marks and the full width of nearby strokes. */
+function isLabelBoxClear({
+  box,
+  clearance,
+}: {
+  box: Box
+  clearance: LabelClearance
+}): boolean {
+  const { obstacles, strokes } = clearance
+  if (obstacles.some((obstacle) => !box.not_intersect(obstacle))) return false
+  return strokes.every(({ segment, clearanceMm }) => {
+    const padded = new Box(
+      box.xmin - clearanceMm,
+      box.ymin - clearanceMm,
+      box.xmax + clearanceMm,
+      box.ymax + clearanceMm,
+    )
+    return (
+      padded.not_intersect(segment.box) ||
+      (!padded.contains(segment.start) &&
+        !padded.contains(segment.end) &&
+        segment.intersect(padded).length === 0)
+    )
+  })
+}
+
 /** Lay out readable pin and component names without crossing visible marks. */
 export function placePlanLabels({
   scene,
@@ -337,7 +370,7 @@ export function placePlanLabels({
   frame: PlanFrame
   ports: ReadonlyMap<SourcePortId, PlanPort>
   radiusMm: number
-  polygons: readonly Polygon[]
+  polygons: readonly PlanPolygon[]
   lines: readonly Line[]
 }): PlanLabels {
   const { box } = frame
@@ -373,22 +406,7 @@ export function placePlanLabels({
       label,
       fontSizeMm: labelFontSizeMm,
       window,
-      isBoxClear: (box) =>
-        blocked.every((obstacle) => box.not_intersect(obstacle)) &&
-        strokes.every(({ segment, clearanceMm }) => {
-          const padded = new Box(
-            box.xmin - clearanceMm,
-            box.ymin - clearanceMm,
-            box.xmax + clearanceMm,
-            box.ymax + clearanceMm,
-          )
-          return (
-            padded.not_intersect(segment.box) ||
-            (!padded.contains(segment.start) &&
-              !padded.contains(segment.end) &&
-              segment.intersect(padded).length === 0)
-          )
-        }),
+      clearance: { obstacles: blocked, strokes },
     })
     if (placement === undefined) {
       if (label.kind === "pour") pourLegendEntries.set(label.text, label.legend)
@@ -412,7 +430,7 @@ export function placePlanLabels({
     obstacles.push(placement)
     if (label.kind === "pin") {
       backgrounds.push({
-        points: boxPoints({
+        points: getBoxPoints({
           minX: placement.xmin,
           minY: placement.ymin,
           maxX: placement.xmax,
