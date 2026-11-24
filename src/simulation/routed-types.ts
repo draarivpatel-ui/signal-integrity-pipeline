@@ -62,8 +62,7 @@ export type RouteBuffer = Pick<
   | "sourceEvidence"
 >
 /** Immutable circuit nodes, compiled buffers and inputs for the route network. */
-export type RoutedBindings = Snapshot<{
-  circuitJson: CircuitJson
+export type RoutedBindings = { readonly circuitJson: CircuitJson } & Snapshot<{
   scope: CopperScope
   mappings: readonly LaneMapping[]
   plan: SimulationPlan
