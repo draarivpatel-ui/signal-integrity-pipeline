@@ -17,13 +17,13 @@ import {
   validateChannelBridge,
 } from "./trace-connections"
 
-/** Source IDs which may resolve to a SPICE getVertexId. */
+/** Source IDs which may resolve to a SPICE node name. */
 export type SourceContactId = SourcePortId | SourceNetId
 
 /** Each source port or net's representative under ideal connectivity. */
 export type IdealGroups = ReadonlyMap<SourceContactId, SourceContactId>
 
-/** Each given getVertexId's representative under the specified connections. */
+/** Each vertex's representative under the specified connections. */
 export type ConnectedGroups<VertexId> = ReadonlyMap<VertexId, VertexId>
 
 /** Use the shared disjoint sets to give every group a representative. */
@@ -232,6 +232,9 @@ function validateSplitNet({
     fail(
       "channel_fanout",
       `${contacts.sourceTraceId}: shared channel net has additional ports; bind loads to an explicit endpoint`,
+      {
+        hint: "A shared channel net has additional ports. Bind loads to an explicit endpoint.",
+      },
     )
 }
 

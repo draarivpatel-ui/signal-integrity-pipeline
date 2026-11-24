@@ -16,12 +16,12 @@ import {
   measureTraces,
   type TraceMeasure,
 } from "./measure"
+import type { PlanPath } from "./visual"
 import type {
-  PlanPath,
   PlanPathSegment,
   PlanTopology,
   ResolvedPlanPath,
-} from "./visual"
+} from "./visual-topology"
 
 /** Group the words for a count by number. */
 export function formatCount({
@@ -75,26 +75,26 @@ export function getSegmentKey(segment: PlanPathSegment): string {
 
 /** A path segment with its on-board endpoints. */
 function buildPathRow({
-  signalName,
+  legLabel,
   fromSourcePortId,
   toSourcePortId,
   detail,
   color,
   db,
-}: Pick<PlanPath, "signalName" | "fromSourcePortId" | "toSourcePortId"> & {
+}: Pick<PlanPath, "legLabel" | "fromSourcePortId" | "toSourcePortId"> & {
   detail: string
   color: string
   db: CircuitJsonUtilObjects
 }): PlanHeaderRow {
   return {
-    text: `${signalName}: ${getPinName({ sourcePortId: fromSourcePortId, db })} → ${getPinName({ sourcePortId: toSourcePortId, db })} (${detail})`,
+    text: `${legLabel}: ${getPinName({ sourcePortId: fromSourcePortId, db })} → ${getPinName({ sourcePortId: toSourcePortId, db })} (${detail})`,
     color,
   }
 }
 
-/** Orient extra traces away from their connection to a mapped path. */
+/** Orient extra traces away from their connection to a receiver path. */
 export function orderExtraTraces(topology: PlanTopology): readonly PlanTrace[] {
-  const contacts = new Set(
+  const connectedSpiceNodeNames = new Set(
     topology.paths
       .flatMap(({ fromSourcePortId, toSourcePortId, pathSegments }) => [
         fromSourcePortId,
@@ -117,18 +117,22 @@ export function orderExtraTraces(topology: PlanTopology): readonly PlanTrace[] {
   while (extras.length) {
     const attached = extras.findIndex(
       ({ fromSourcePortId, toSourcePortId }) =>
-        contacts.has(
+        connectedSpiceNodeNames.has(
           topology.spiceNodeNamesBySourceContactId[fromSourcePortId],
         ) ||
-        contacts.has(topology.spiceNodeNamesBySourceContactId[toSourcePortId]),
+        connectedSpiceNodeNames.has(
+          topology.spiceNodeNamesBySourceContactId[toSourcePortId],
+        ),
     )
     const [trace] = extras.splice(Math.max(0, attached), 1)
     const { fromSourcePortId, toSourcePortId } = trace
     if (
-      !contacts.has(
+      !connectedSpiceNodeNames.has(
         topology.spiceNodeNamesBySourceContactId[fromSourcePortId],
       ) &&
-      contacts.has(topology.spiceNodeNamesBySourceContactId[toSourcePortId])
+      connectedSpiceNodeNames.has(
+        topology.spiceNodeNamesBySourceContactId[toSourcePortId],
+      )
     )
       ordered.push({
         ...trace,
@@ -138,7 +142,7 @@ export function orderExtraTraces(topology: PlanTopology): readonly PlanTrace[] {
     else ordered.push(trace)
     for (const sourcePortId of [fromSourcePortId, toSourcePortId]) {
       const node = topology.spiceNodeNamesBySourceContactId[sourcePortId]
-      if (node && node !== "0") contacts.add(node)
+      if (node && node !== "0") connectedSpiceNodeNames.add(node)
     }
   }
   return ordered
@@ -226,9 +230,9 @@ function buildDetailedRows({
   )
   const seen = new Set<string>()
   const rows: PlanHeaderRow[] = []
-  for (const { signalName, pathSegments } of topology.paths) {
+  for (const { legLabel, pathSegments } of topology.paths) {
     for (const segment of pathSegments) {
-      const key = `${signalName}: ${getSegmentKey(segment)} ${segment.fromSourcePortId}`
+      const key = `${legLabel}: ${getSegmentKey(segment)} ${segment.fromSourcePortId}`
       if (seen.has(key)) continue
       seen.add(key)
       if (segment.kind === "trace") {
@@ -237,7 +241,7 @@ function buildDetailedRows({
           rows.push(
             buildPathRow({
               ...segment,
-              signalName,
+              legLabel,
               detail: describeTrace(measures.get(segment.sourceTraceId)),
               color: getTraceColor(trace.index),
               db,
@@ -248,7 +252,7 @@ function buildDetailedRows({
         rows.push(
           buildPathRow({
             ...segment,
-            signalName,
+            legLabel,
             detail,
             color: planColors.series,
             db,
@@ -258,7 +262,7 @@ function buildDetailedRows({
         rows.push(
           buildPathRow({
             ...segment,
-            signalName,
+            legLabel,
             detail: "ideal connection",
             color: planColors.ideal,
             db,
@@ -271,7 +275,7 @@ function buildDetailedRows({
     rows.push(
       buildPathRow({
         ...trace,
-        signalName: "Extra trace",
+        legLabel: "Extra trace",
         detail: describeTrace(measures.get(trace.sourceTraceId)),
         color: getTraceColor(trace.index),
         db,
@@ -342,7 +346,7 @@ function buildCompactRows({
       )
       .join(", ")
     const detail = `${formatCount({ count: sourceTraceIds.size, noun: "trace" })}, ${formatTotalLengthMm({ sourceTraceIds, measures })}`
-    let text = `${firstPath.signalName}: ${driver} → ${receivers} (${detail})`
+    let text = `${firstPath.legLabel}: ${driver} → ${receivers} (${detail})`
     if (index === groups.size - 1) text += suffix
     return {
       text,
@@ -381,14 +385,14 @@ export function buildPathRows({
         return buildPathRow({
           fromSourcePortId: overlay.toSourcePortId,
           toSourcePortId: overlay.fromSourcePortId,
-          signalName: "Bypass",
+          legLabel: "Bypass",
           detail: "ideal connection",
           color: planColors.failure,
           db,
         })
       return buildPathRow({
         ...overlay,
-        signalName: "Bypass",
+        legLabel: "Bypass",
         detail: "ideal connection",
         color: planColors.failure,
         db,
