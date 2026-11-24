@@ -6,13 +6,13 @@ import {
   type CircuitJson,
   type CopperScope,
   channelCopperScope,
-  findContactWire,
-  findRouteReferences,
+  type ExtractedCopper,
+  extractCopperGeometry,
+  findPadContactWire,
+  findWireReferences,
   getSourcePortConnectivityMapFromCircuitJson,
-  type SectionGeometry,
   type SourceNetId,
   type SourcePortId,
-  sectionRoutes,
   sourceNetMembers,
 } from "../../src/board"
 import {
@@ -38,7 +38,7 @@ function endpointName(name: string): string {
 
 /** The source IDs and geometry shared by the routed board variants. */
 interface RouteFixture {
-  geometry: SectionGeometry
+  geometry: ExtractedCopper
   scope: CopperScope
   ground: ReturnType<typeof sourceNetMembers>
   groundId: SourceNetId
@@ -76,7 +76,7 @@ async function routeFixture(): Promise<RouteFixture> {
     }),
     distanceMm: 1,
   })
-  const geometry = sectionRoutes({ circuit, copperScope: scope })
+  const geometry = extractCopperGeometry({ circuit, copperScope: scope })
   return {
     geometry,
     scope,
@@ -107,7 +107,7 @@ function solveFields({
   geometry,
   panels,
 }: {
-  geometry: SectionGeometry
+  geometry: ExtractedCopper
   panels?: number
 }): ExtractedRoutes {
   const solver = new RouteFieldsSolver({
@@ -152,7 +152,7 @@ describe("routed 2D board", () => {
     const { geometry } = fixture
     const inner4 = { ...geometry.wires[0], layer: "inner4" as const }
     assert.deepEqual(
-      findRouteReferences({ geometry, wire: inner4, positionMm: -2 }).map(
+      findWireReferences({ geometry, wire: inner4, positionMm: -2 }).map(
         (plane) => plane.layer,
       ),
       ["inner5", "inner3"],
@@ -252,7 +252,7 @@ test("solves overlapping copper as equipotential patches", async () => {
     railSourceIds: new Set(),
     distanceMm: 1,
   })
-  const merged = sectionRoutes({
+  const merged = extractCopperGeometry({
     circuit: mergedCircuit,
     copperScope: mergedScope,
   })
@@ -267,7 +267,7 @@ test("solves overlapping copper as equipotential patches", async () => {
 describe("oblique route", () => {
   let circuit: CircuitJson
   let scope: CopperScope
-  let geometry: SectionGeometry
+  let geometry: ExtractedCopper
   let groundId: SourceNetId
 
   beforeAll(async () => {
@@ -286,7 +286,7 @@ describe("oblique route", () => {
       railSourceIds: new Set(),
       distanceMm: 1,
     })
-    geometry = sectionRoutes({ circuit, copperScope: scope })
+    geometry = extractCopperGeometry({ circuit, copperScope: scope })
   })
 
   test("records shielding at the local plane", () => {
@@ -337,7 +337,7 @@ describe("oblique route", () => {
 describe("via-in-pad route", () => {
   let viaCircuit: CircuitJson
   let viaScope: CopperScope
-  let viaGeometry: SectionGeometry
+  let viaGeometry: ExtractedCopper
 
   beforeAll(async () => {
     const { ground } = await routeFixture()
@@ -369,7 +369,10 @@ describe("via-in-pad route", () => {
       railSourceIds: new Set(),
       distanceMm: 1,
     })
-    viaGeometry = sectionRoutes({ circuit: viaCircuit, copperScope: viaScope })
+    viaGeometry = extractCopperGeometry({
+      circuit: viaCircuit,
+      copperScope: viaScope,
+    })
   })
 
   test("keeps every planar wire on the routing layer", () => {
@@ -378,7 +381,7 @@ describe("via-in-pad route", () => {
 
   test("keeps contacts at zero-length top wires", () => {
     assert.ok(
-      findContactWire({
+      findPadContactWire({
         geometry: viaGeometry,
         layer: "top",
         point: [-3, 0],

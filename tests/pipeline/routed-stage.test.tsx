@@ -1,9 +1,9 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import {
-  type RouteSectionsOutput,
-  type RouteSectionsInput,
-  RouteSectionsSolver,
+  type CopperGeometry,
+  type CopperGeometryExtractionInput,
+  CopperGeometryExtractionSolver,
 } from "../../src/board"
 import { RoutedStageSolver } from "../../src/pipeline"
 import { type RoutedCapture, RouteTransientSolver } from "../../src/simulation"
@@ -12,12 +12,12 @@ import { routedVisualFixture } from "../fixtures/routed-visual"
 test("a flat stage drains real TSX channel simulation inputs in order and retains the last drawing", async () => {
   const { root } = await routedVisualFixture(2)
   const sections = root.getSolver<
-    RoutedStageSolver<RouteSectionsInput, RouteSectionsOutput>
-  >("RouteSectionsSolver")!
+    RoutedStageSolver<CopperGeometryExtractionInput, CopperGeometry>
+  >("CopperGeometryExtractionSolver")!
   const [inputs] = sections.getConstructorParams()
   const stage = new RoutedStageSolver({
     inputs: [...inputs].reverse(),
-    solverClass: RouteSectionsSolver,
+    solverClass: CopperGeometryExtractionSolver,
   })
   stage.step()
   assert.equal(
@@ -29,12 +29,12 @@ test("a flat stage drains real TSX channel simulation inputs in order and retain
   stage.solve()
   assert.deepEqual(
     stage.getOutput().value,
-    [...root.stageOutput("RouteSectionsSolver").value].reverse(),
+    [...root.stageOutput("CopperGeometryExtractionSolver").value].reverse(),
   )
   assert.equal(stage.getOutput().artifacts.length, 4)
   assert.equal(stage.stats.completedChannelSimulations, 2)
   assert.equal(stage.progress, 1)
-  const last = new RouteSectionsSolver(inputs[0])
+  const last = new CopperGeometryExtractionSolver(inputs[0])
   last.solve()
   assert.deepEqual(stage.visualize(), last.visualize())
   assert.equal(stage.activeSubSolver, undefined)

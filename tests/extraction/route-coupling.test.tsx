@@ -3,8 +3,8 @@ import assert from "node:assert/strict"
 import React from "react"
 import {
   channelCopperScope,
+  extractCopperGeometry,
   getSourcePortConnectivityMapFromCircuitJson,
-  sectionRoutes,
   sourceNetMembers,
 } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
@@ -49,7 +49,7 @@ test("screens pairs by electric and magnetic coupling", async () => {
       railSourceIds: new Set(),
       distanceMm: 32,
     })
-    const geometry = sectionRoutes({ circuit, copperScope: scope })
+    const geometry = extractCopperGeometry({ circuit, copperScope: scope })
     const solver = new RouteFieldsSolver({
       geometry,
       materials,
