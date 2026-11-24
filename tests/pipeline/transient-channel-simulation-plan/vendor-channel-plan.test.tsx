@@ -12,14 +12,16 @@ test.skipIf(!vendorAvailable(vendorModels.cmos.file))(
   "vendor planning uses shared channel simulation preparation",
   async () => {
     const input = await renderTwoTracePlanInput()
-    const [id] = listChannelSimulations(input.circuitJson).map(
+    const [simulationPcbTransientChannelSimulationId] = listChannelSimulations(
+      input.circuitJson,
+    ).map(
       (channelSimulation) =>
         channelSimulation.simulation_pcb_transient_channel_simulation_id,
     )
     const channelSimulation = prepareChannelSimulationById({
       circuit: input.circuitJson,
       sources: input.ibisSources,
-      simulationPcbTransientChannelSimulationId: id,
+      simulationPcbTransientChannelSimulationId,
       distanceMm: input.nearbyGapMm,
     })
     const solver = new TransientChannelSimulationPlanSolver(input)
@@ -68,7 +70,7 @@ test.skipIf(!vendorAvailable(vendorModels.cmos.file))(
           ...input,
           nearbyGapMm: 0,
         }).solve(),
-      /scope distance/,
+      /Copper search gap must be finite and positive/,
     )
   },
 )

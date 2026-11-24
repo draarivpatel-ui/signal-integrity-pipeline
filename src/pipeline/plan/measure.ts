@@ -47,14 +47,14 @@ export function describeTrace(measure: TraceMeasure | undefined): string {
 
 /** Measure a set of trace IDs once, including when several receivers share copper. */
 export function formatTotalLengthMm({
-  traces,
+  sourceTraceIds,
   measures,
 }: {
-  traces: ReadonlySet<SourceTraceId>
+  sourceTraceIds: ReadonlySet<SourceTraceId>
   measures: ReadonlyMap<SourceTraceId, TraceMeasure>
 }): string {
   let totalLengthMm = 0
-  for (const sourceTraceId of traces)
+  for (const sourceTraceId of sourceTraceIds)
     totalLengthMm += measures.get(sourceTraceId)?.lengthMm || 0
   return formatMillimeters(totalLengthMm)
 }

@@ -8,7 +8,7 @@ import { expectPlanPcbSnapshot } from "../../fixtures/plan-pcb-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("a named path leaves a separate unlabeled branch cut intact", async () => {
+test("a named path leaves a separate unlabeled branch trace intact", async () => {
   const circuitJson = await renderSignals({
     tree: <DaisyChainFixture routeFinalLeg idealMiddleLeg namedNet branched />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],

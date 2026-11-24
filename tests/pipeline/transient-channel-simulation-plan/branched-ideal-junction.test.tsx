@@ -23,13 +23,15 @@ test("successive routed branches share one transitive ideal junction", async () 
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  const [driverCut, ...branchCuts] = bindings.traceContacts
-  assert.equal(branchCuts.length, 2)
-  const junction = node(driverCut.toSourcePortId)
-  assert.notEqual(node(driverCut.fromSourcePortId), junction)
-  for (const cut of branchCuts) {
+  const [driverTraceContacts, ...branchTraceContacts] = bindings.traceContacts
+  assert.equal(branchTraceContacts.length, 2)
+  const junction = node(driverTraceContacts.toSourcePortId)
+  assert.notEqual(node(driverTraceContacts.fromSourcePortId), junction)
+  for (const contacts of branchTraceContacts) {
     assert.ok(
-      [node(cut.fromSourcePortId), node(cut.toSourcePortId)].includes(junction),
+      [node(contacts.fromSourcePortId), node(contacts.toSourcePortId)].includes(
+        junction,
+      ),
     )
   }
   assert.deepEqual(

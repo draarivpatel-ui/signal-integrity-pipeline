@@ -24,7 +24,8 @@ import {
 } from "./plan/input"
 import { buildPlanVisualScene, type FailedPlanAttempt } from "./plan/visual"
 import { resolveReceiverTracePaths } from "./resolve-receiver-paths"
-import { compareNames, prepareChannelSimulation } from "./signals"
+import { compareNames } from "./signal-names"
+import { prepareChannelSimulation } from "./signals"
 
 /** Planning starts with the base route mesh resolution. */
 const BASE_REFINEMENT = 1
@@ -41,7 +42,7 @@ export interface TransientChannelSimulationPlan {
 /** The completed channel plans and their plan manifest. */
 type PlanOutput = Produced<readonly TransientChannelSimulationPlan[]>
 
-/** Take the physical port pair from each cut, including loads beyond the receivers. */
+/** Take the physical port pair from each trace, including loads beyond the receivers. */
 function getTraceContacts(channelTrace: ChannelTrace): TraceContacts {
   return {
     sourceTraceId: channelTrace.sourceTraceId,
@@ -66,7 +67,7 @@ function buildChannelPlan({
     boardCircuitJson: input.circuitJson,
     sources: input.ibisSources,
     ...validatedChannelSimulation,
-    distanceMm: nearbyGapMm,
+    nearbyGapMm,
   })
   const artifactPrefix = `channelSimulations/${simulationPcbTransientChannelSimulationId}`
   const circuitJson = snapshot(prepared.circuit)
@@ -81,7 +82,7 @@ function buildChannelPlan({
     ),
   ])
   const receiverPaths = snapshot(
-    resolveReceiverTracePaths({ prepared, cuts: traceContacts }),
+    resolveReceiverTracePaths({ prepared, traceContacts }),
   )
   return Object.freeze({
     simulationPcbTransientChannelSimulationId,
