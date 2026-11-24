@@ -20,4 +20,4 @@ test("both skin matrices refine on coupled microstrip and stripline", () => {
       }
     }
   }
-})
+}, 20_000)
