@@ -70,7 +70,7 @@ test.skipIf(!vendorAvailable(vendorModels.cmos.file))(
           ...input,
           nearbyGapMm: 0,
         }).solve(),
-      /scope distance/,
+      /Copper search gap must be finite and positive/,
     )
   },
 )
