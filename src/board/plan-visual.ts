@@ -21,11 +21,7 @@ import {
   routeBoardBox,
   routeBounds,
 } from "./plan-view"
-import {
-  type PlanVisualEndpoint,
-  type PlanVisualScene,
-  planColors,
-} from "./plan-visual-types"
+import { type PlanVisualScene, planColors } from "./plan-visual-types"
 
 /** Scope envelope, separated from the board outline when fully in scope. */
 function scopeLine({
@@ -56,14 +52,16 @@ function scopeLine({
 
 /** Explain only the symbols that were drawn inside the board window. */
 function planLegend({
-  endpoints,
+  scene,
   polygons,
+  lines,
 }: {
-  endpoints: readonly PlanVisualEndpoint[]
+  scene: PlanVisualScene
   polygons: readonly Polygon[]
-}): string {
+  lines: readonly Line[]
+}): string[] {
   const kinds = new Set(
-    endpoints
+    scene.endpoints
       .filter(({ label }) =>
         polygons.some(
           (shape) => shape.layer === "endpoints" && shape.label === label,
@@ -77,10 +75,40 @@ function planLegend({
   if (kinds.has("ideal") && kinds.has("load"))
     labels.push("◇ direct receiver or end of extra trace")
   else if (kinds.has("ideal")) labels.push("◇ direct receiver")
-  else if (kinds.has("load")) labels.push("◇ end of extra trace")
+  else if (kinds.has("load")) labels.push("◇ extra trace end")
   if (polygons.some(({ layer }) => layer === "mappings"))
     labels.push("› signal direction")
-  return labels.join("   •   ")
+  if (lines.some(({ layer, zIndex }) => layer === "cuts" && zIndex === 3))
+    labels.push("│ trace end")
+  if (polygons.some(({ layer }) => layer === "copper"))
+    labels.push("◉ via (joins layers)")
+  if (lines.some(({ label }) => label === "Copper scope envelope"))
+    labels.push("teal dots = area checked")
+  if (lines.some(({ layer, strokeDash }) => layer === "topology" && strokeDash))
+    labels.push("purple dashes = direct connection")
+  if (polygons.some(({ layer }) => layer === "topology"))
+    labels.push("amber zigzag = part in the signal path")
+  const faults = new Set(
+    lines.filter(({ layer }) => layer === "failure").map(({ label }) => label),
+  )
+  if (
+    scene.links.some(
+      ({ kind, label }) => kind === "missing" && faults.has(label),
+    )
+  )
+    labels.push("red dashed line = missing trace")
+  if (
+    scene.links.some(({ kind, label }) => kind === "short" && faults.has(label))
+  )
+    labels.push("red dashed arc = shortcut")
+  if ([...faults].some((label) => label?.startsWith("Short or loop ·")))
+    labels.push("red dashes on trace = short or loop")
+  const faultMarks = polygons.filter(({ layer }) => layer === "failure")
+  if (faultMarks.some(({ label }) => label?.startsWith("Offending port ·")))
+    labels.push("red ring = pin with the problem")
+  if (faultMarks.some(({ label }) => faults.has(label)))
+    labels.push("red × = problem connection")
+  return labels
 }
 
 /** Draw one attempted simulation with a separate centered text band. */
@@ -108,6 +136,14 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
     ...copper.chevrons,
   ]
   for (const link of scene.links) {
+    if (
+      link.kind === "ideal" &&
+      scene.links.some(
+        ({ kind, from, to }) =>
+          kind === "short" && from === link.from && to === link.to,
+      )
+    )
+      continue
     const from = ports.get(link.from)
     const to = ports.get(link.to)
     if (!from || !to) continue
@@ -167,7 +203,10 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
     scene,
     frame,
     boardTop: extent?.maxY === undefined ? frame.box.maxY : extent.maxY,
-    legend: planLegend({ endpoints: scene.endpoints, polygons: boardPolygons }),
+    legend: [
+      ...planLegend({ scene, polygons: boardPolygons, lines: boardLines }),
+      ...labels.pourLegend,
+    ],
   })
   return {
     title: scene.title,
