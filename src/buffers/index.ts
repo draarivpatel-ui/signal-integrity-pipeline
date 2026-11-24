@@ -1,6 +1,6 @@
 /**
  * buffers — IBIS driver/receiver models as SPICE.
- * Owns: IbisSources admission (path safety, size, ZIP/HTML rejection, UTF-8), content hashes,
+ * Owns: IbisSources admission (path safety, ZIP/HTML rejection, UTF-8), content hashes,
  * the pinned @tscircuit/ibis-to-spice converter, compiled libraries and their evidence,
  * and inspection of IBIS pin bindings, references and capabilities.
  * Order (RouteBindingsSolver): admitBuffers (pure checks, no solver work) -> compileBuffers -> ibisAssembly.
@@ -25,7 +25,7 @@ export {
   pinCapabilities,
   referenceVoltages,
 } from "./inspect"
-export { invalidIbisSource, loadModelSource, relativeFile } from "./source"
+export { failInvalidIbisSource, loadModelSource, relativeFile } from "./source"
 export type {
   AdmittedBuffers,
   AssemblyEntry,

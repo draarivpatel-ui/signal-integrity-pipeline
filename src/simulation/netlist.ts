@@ -301,9 +301,9 @@ function voltageSourceExpression(source: SimulationVoltageSource): string {
       finite({ input: source.voltage, label: "source offset" }) - amplitude / 2
   }
   const high = low + amplitude
-  const riseSeconds = (source.rise_time ?? 0) / MILLISECONDS_PER_SECOND
+  const fastestEdgeSeconds = (source.rise_time ?? 0) / MILLISECONDS_PER_SECOND
   const fallSeconds = (source.fall_time ?? 0) / MILLISECONDS_PER_SECOND
-  if (riseSeconds <= 0 || fallSeconds <= 0)
+  if (fastestEdgeSeconds <= 0 || fallSeconds <= 0)
     fail(
       "source_edge",
       "Square voltage sources require explicit positive rise/fall times",
@@ -313,7 +313,7 @@ function voltageSourceExpression(source: SimulationVoltageSource): string {
   const delaySeconds = (source.pulse_delay ?? 0) / MILLISECONDS_PER_SECOND
   const delay = value({ input: delaySeconds, label: "source delay" })
   const riseValue = value({
-    input: riseSeconds,
+    input: fastestEdgeSeconds,
     label: "source rise",
     positive: true,
   })
@@ -363,15 +363,6 @@ export function passiveSelectionComponents({
       return component.source_component_id === selection.sourceComponentId
     return component.name === selection.component
   })
-}
-
-/** Identify the components that have built-in passive deck models. */
-export function hasBuiltInPassiveModel(
-  component: PassiveSourceComponent,
-): boolean {
-  return ["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
-    component.ftype,
-  )
 }
 
 /**

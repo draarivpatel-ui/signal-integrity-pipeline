@@ -7,7 +7,7 @@ import { loadVendorModel, vendorModels } from "./vendor-models"
 export const inverterModelPath = "models/sn74lvc1g04.ibs"
 
 /** Load the locked vendor bytes and the board used in routed pipeline tests. */
-export async function channelPlanInput({
+export async function renderTwoTracePlanInput({
   props = {},
 }: {
   props?: React.ComponentProps<typeof TwoTraceBoard>
@@ -17,6 +17,6 @@ export async function channelPlanInput({
     ibisSources: {
       [inverterModelPath]: await loadVendorModel(vendorModels.cmos),
     },
-    scopeDistanceMm: 1,
+    nearbyGapMm: 1,
   }
 }

@@ -2,8 +2,8 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TwoTraceBoard } from "../../../examples/routed/two-trace-board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 import { renderCoreSignals } from "../../support/core-render"
 
 test("sectioning and binding share one board in a frozen output", async () => {
