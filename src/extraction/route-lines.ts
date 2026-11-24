@@ -4,9 +4,12 @@ import type {
   TraceWire,
   WireSection,
 } from "../board"
-import { hypotenuse, type Snapshot } from "../kernel"
-import { sectionInverse } from "./cross-section-matrix"
-import type { CrossSection, CrossSectionResult } from "./cross-section-types"
+import { hypotenuse, type Matrix, type Snapshot, snapshot } from "../kernel"
+import {
+  type CrossSection,
+  calculateMatrixInverse,
+  type RlgcMatrices,
+} from "../rlgc"
 import { multiply, transpose } from "./linalg"
 import type { RouteCoupling } from "./route-coupling"
 
@@ -42,7 +45,70 @@ export interface RouteMaterials {
   substrateLoss: number
 }
 /** Per-unit-length field coefficients for a routed section. */
-export type RouteCoefficients = Snapshot<CrossSectionResult>
+export type RouteCoefficients = Snapshot<{
+  conductorIds: RlgcMatrices["conductorIds"]
+  C: Matrix
+  C0: Matrix
+  L: Matrix
+  dielectricLoss: Matrix
+  dcResistance: Matrix
+  skinResistance: Matrix
+  stripSkinResistance: Matrix
+  diagnostics: {
+    panels: number
+    reciprocityResidual: number
+    recessionMm: number
+  }
+}>
+
+/** Geometry stored in routed section keys and presented in route field diagnostics. */
+export interface RouteCrossSection {
+  conductors: (Omit<CrossSection["conductors"][number], "conductorId"> & {
+    id: string
+  })[]
+  planes: CrossSection["planes"]
+  dielectrics: (Omit<
+    CrossSection["dielectricLayers"][number],
+    "relativePermittivity"
+  > & { er: number })[]
+}
+
+/** Translate routed geometry into the RLGC calculation input. */
+export function rlgcCrossSection(section: RouteCrossSection): CrossSection {
+  return {
+    conductors: section.conductors.map(({ id, ...conductor }) => ({
+      conductorId: id,
+      ...conductor,
+    })),
+    planes: section.planes,
+    dielectricLayers: section.dielectrics.map(({ er, ...layer }) => ({
+      relativePermittivity: er,
+      ...layer,
+    })),
+  }
+}
+
+/** Map calculated matrices to the route artifact fields. */
+export function snapshotRouteCoefficients(
+  matrices: RlgcMatrices,
+): RouteCoefficients {
+  const { diagnostics } = matrices
+  return snapshot({
+    conductorIds: matrices.conductorIds,
+    C: matrices.capacitanceFaradsPerMeter,
+    C0: matrices.vacuumCapacitanceFaradsPerMeter,
+    L: matrices.externalInductanceHenriesPerMeter,
+    dielectricLoss: matrices.dielectricLossFaradsPerMeter,
+    dcResistance: matrices.dcResistanceOhmsPerMeter,
+    skinResistance: matrices.totalSkinResistanceOhmsPerMeterPerSqrtHz,
+    stripSkinResistance: matrices.conductorSkinResistanceOhmsPerMeterPerSqrtHz,
+    diagnostics: {
+      panels: diagnostics.panelCount,
+      reciprocityResidual: diagnostics.reciprocityResidual,
+      recessionMm: diagnostics.recessionMm,
+    },
+  })
+}
 
 /** Stackup, slice, and materials used to form one field section. */
 interface RouteCrossSectionInput {
@@ -56,7 +122,7 @@ function routeDielectrics({
   geometry,
   slice,
   materials,
-}: RouteCrossSectionInput): CrossSection["dielectrics"] {
+}: RouteCrossSectionInput): RouteCrossSection["dielectrics"] {
   const { copperLayers, dielectrics: layers } = geometry.stackup
   const bottom = Math.min(...copperLayers.map((layer) => layer.zMinMm))
   const top = Math.max(...copperLayers.map((layer) => layer.zMaxMm))
@@ -122,7 +188,9 @@ function routeDielectrics({
 }
 
 /** Build the conductor, reference and material geometry seen by the cross-section solver. */
-export function routeCrossSection(input: RouteCrossSectionInput): CrossSection {
+export function routeCrossSection(
+  input: RouteCrossSectionInput,
+): RouteCrossSection {
   const { geometry, slice } = input
   const dielectrics = routeDielectrics(input)
   const layers = geometry.stackup.copperLayers
@@ -221,7 +289,7 @@ export function referenceSeries({
   const active = Array.from({ length: size }, (_, i) => i).filter(
     (i) => !grounded.includes(i),
   )
-  const inverse = sectionInverse(
+  const inverse = calculateMatrixInverse(
     grounded.map((i) => grounded.map((j) => line.L[i][j])),
   )
   const current = line.L.map((row, i) =>
