@@ -5,11 +5,11 @@ import type { CopperPoint } from "./geometry/types"
 /** Ignore zero-length copper and section boundaries already at a wire end. */
 export const MIN_WIRE_LENGTH_MM = 1e-7
 /** Coordinate precision in mm and component precision for direction grouping. */
-const ROUTE_DECIMAL_PLACES = 7
+const WIRE_COORDINATE_DECIMAL_PLACES = 7
 
 /** Round longitudinal positions and direction components on the same grid. */
 export function roundWireCoordinate(coordinate: number): number {
-  return Number(coordinate.toFixed(ROUTE_DECIMAL_PLACES)) + 0
+  return Number(coordinate.toFixed(WIRE_COORDINATE_DECIMAL_PLACES)) + 0
 }
 
 /** A rounded direction used to group parallel wires. */
