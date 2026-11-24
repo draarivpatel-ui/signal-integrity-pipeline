@@ -21,14 +21,14 @@ type BoundaryMaterial = Pick<
 /** Material adjacent to a boundary; non-overlapping dielectric layers leave air elsewhere. */
 export function getMaterial({
   dielectricLayers,
-  z,
+  zMm,
 }: {
   dielectricLayers: CrossSectionDielectricLayer[]
-  z: number
+  zMm: number
 }): BoundaryMaterial {
   return (
     dielectricLayers.find(
-      (layer) => z > layer.zMm && z < layer.zMm + layer.thicknessMm,
+      (layer) => zMm > layer.zMm && zMm < layer.zMm + layer.thicknessMm,
     ) ?? { relativePermittivity: 1, lossTangent: 0 }
   )
 }
@@ -51,10 +51,10 @@ export function mergeCoordinates({
 
 /** Segment geometry and material for a conductor or dielectric edge. */
 export interface BoundaryEdge {
-  x1: number
-  z1: number
-  x2: number
-  z2: number
+  startXMm: number
+  startZMm: number
+  endXMm: number
+  endZMm: number
   conductorIndex: number
   relativePermittivity: number
   lossTangent: number
@@ -65,18 +65,19 @@ export interface BoundaryEdge {
 
 /** Number of graded panels on a horizontal edge at the requested resolution. */
 export function calculateHorizontalPanelCount({
-  count,
+  panelsPerEdge,
   lengthMm,
   clearanceMm,
 }: {
-  count: number
+  panelsPerEdge: number
   lengthMm: number
   clearanceMm: number
 }): number {
   return Math.max(
-    count,
+    panelsPerEdge,
     Math.ceil(
-      (count * lengthMm) / (FACE_LENGTH_IN_PLANE_DISTANCES * clearanceMm),
+      (panelsPerEdge * lengthMm) /
+        (FACE_LENGTH_IN_PLANE_DISTANCES * clearanceMm),
     ),
   )
 }
@@ -84,7 +85,7 @@ export function calculateHorizontalPanelCount({
 /** Horizontal face counts in conductor order, reusable across vacuum wall displacements. */
 export function calculateConductorFaceCounts({
   region,
-  count,
+  panelsPerEdge,
 }: RegionMeshInput): number[] {
   return region.conductors.map((conductor) => {
     let clearanceMm = conductor.zMm
@@ -95,7 +96,7 @@ export function calculateConductorFaceCounts({
       )
     }
     return calculateHorizontalPanelCount({
-      count,
+      panelsPerEdge,
       lengthMm: conductor.widthMm,
       clearanceMm,
     })
@@ -117,10 +118,10 @@ function calculatePanelFraction({
 
 /** Build panels along a straight edge with its outward metal normal. */
 export function buildEdgePanels({
-  x1,
-  z1,
-  x2,
-  z2,
+  startXMm,
+  startZMm,
+  endXMm,
+  endZMm,
   conductorIndex,
   relativePermittivity,
   lossTangent,
@@ -129,18 +130,18 @@ export function buildEdgePanels({
   steps,
 }: BoundaryEdge): BoundaryPanel[] {
   const result: BoundaryPanel[] = []
-  const dx = x2 - x1
-  const dz = z2 - z1
-  const length = hypotenuse(dx, dz)
+  const dxMm = endXMm - startXMm
+  const dzMm = endZMm - startZMm
+  const lengthMm = hypotenuse(dxMm, dzMm)
   for (let i = 0; i < steps; i++) {
     const startFraction = calculatePanelFraction({ i, steps })
     const endFraction = calculatePanelFraction({ i: i + 1, steps })
     result.push({
-      centerXMm: x1 + (dx * (startFraction + endFraction)) / 2,
-      centerZMm: z1 + (dz * (startFraction + endFraction)) / 2,
-      tangentX: dx / length,
-      tangentZ: dz / length,
-      lengthMm: length * (endFraction - startFraction),
+      centerXMm: startXMm + (dxMm * (startFraction + endFraction)) / 2,
+      centerZMm: startZMm + (dzMm * (startFraction + endFraction)) / 2,
+      tangentX: dxMm / lengthMm,
+      tangentZ: dzMm / lengthMm,
+      lengthMm: lengthMm * (endFraction - startFraction),
       conductorIndex,
       relativePermittivity,
       lossTangent,
@@ -154,7 +155,7 @@ export function buildEdgePanels({
 /** Plan one conductor's faces, splitting the sides wherever dielectric material changes. */
 export function planConductorEdges({
   verticalSteps,
-  facePanelCounts,
+  facePanelCount,
   conductor,
   conductorIndex,
   dielectricLayers,
@@ -162,43 +163,43 @@ export function planConductorEdges({
   coordinateToleranceMm,
 }: {
   verticalSteps: number
-  facePanelCounts: number
+  facePanelCount: number
   conductor: CrossSectionConductor
   conductorIndex: number
   dielectricLayers: CrossSectionDielectricLayer[]
   materialProbeMm: number
   coordinateToleranceMm: number
 }): BoundaryEdge[] {
-  const bottom = conductor.zMm
-  const top = bottom + conductor.thicknessMm
-  const left = conductor.xMm - conductor.widthMm / 2
-  const right = conductor.xMm + conductor.widthMm / 2
+  const bottomZMm = conductor.zMm
+  const topZMm = bottomZMm + conductor.thicknessMm
+  const leftXMm = conductor.xMm - conductor.widthMm / 2
+  const rightXMm = conductor.xMm + conductor.widthMm / 2
   const bottomMaterial = getMaterial({
     dielectricLayers,
-    z: bottom - materialProbeMm,
+    zMm: bottomZMm - materialProbeMm,
   })
   const topMaterial = getMaterial({
     dielectricLayers,
-    z: top + materialProbeMm,
+    zMm: topZMm + materialProbeMm,
   })
   const edges: BoundaryEdge[] = [
     {
-      x1: left,
-      z1: bottom,
-      x2: right,
-      z2: bottom,
+      startXMm: leftXMm,
+      startZMm: bottomZMm,
+      endXMm: rightXMm,
+      endZMm: bottomZMm,
       conductorIndex,
       ...bottomMaterial,
-      steps: facePanelCounts,
+      steps: facePanelCount,
     },
     {
-      x1: right,
-      z1: top,
-      x2: left,
-      z2: top,
+      startXMm: rightXMm,
+      startZMm: topZMm,
+      endXMm: leftXMm,
+      endZMm: topZMm,
       conductorIndex,
       ...topMaterial,
-      steps: facePanelCounts,
+      steps: facePanelCount,
     },
   ]
   const boundaries = dielectricLayers.flatMap((layer) => [
@@ -206,32 +207,34 @@ export function planConductorEdges({
     layer.zMm + layer.thicknessMm,
   ])
   const interior = boundaries.filter(
-    (z) =>
-      z > bottom + coordinateToleranceMm && z < top - coordinateToleranceMm,
+    (zMm) =>
+      zMm > bottomZMm + coordinateToleranceMm &&
+      zMm < topZMm - coordinateToleranceMm,
   )
   const sidewallBoundaryHeightsMm = mergeCoordinates({
-    coordinatesMm: [bottom, top, ...interior],
+    coordinatesMm: [bottomZMm, topZMm, ...interior],
     coordinateToleranceMm,
   })
   for (let k = 1; k < sidewallBoundaryHeightsMm.length; k++) {
     const adjacent = getMaterial({
       dielectricLayers,
-      z: (sidewallBoundaryHeightsMm[k - 1] + sidewallBoundaryHeightsMm[k]) / 2,
+      zMm:
+        (sidewallBoundaryHeightsMm[k - 1] + sidewallBoundaryHeightsMm[k]) / 2,
     })
     edges.push({
-      x1: right,
-      z1: sidewallBoundaryHeightsMm[k - 1],
-      x2: right,
-      z2: sidewallBoundaryHeightsMm[k],
+      startXMm: rightXMm,
+      startZMm: sidewallBoundaryHeightsMm[k - 1],
+      endXMm: rightXMm,
+      endZMm: sidewallBoundaryHeightsMm[k],
       conductorIndex,
       ...adjacent,
       steps: verticalSteps,
     })
     edges.push({
-      x1: left,
-      z1: sidewallBoundaryHeightsMm[k],
-      x2: left,
-      z2: sidewallBoundaryHeightsMm[k - 1],
+      startXMm: leftXMm,
+      startZMm: sidewallBoundaryHeightsMm[k],
+      endXMm: leftXMm,
+      endZMm: sidewallBoundaryHeightsMm[k - 1],
       conductorIndex,
       ...adjacent,
       steps: verticalSteps,
