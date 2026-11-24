@@ -7,7 +7,7 @@ import { ChannelFixture } from "../../fixtures/channel-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("a collapsed receiver reports cycle evidence without fabricating a lane path", async () => {
+test("a collapsed receiver reports cycle evidence without fabricating a receiver path", async () => {
   const circuitJson = await renderSignals({
     tree: <ChannelFixture route="parallel-passives" short="channel" />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
@@ -18,7 +18,7 @@ test("a collapsed receiver reports cycle evidence without fabricating a lane pat
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const [cut] = bindings.traceContacts
+  const [contacts] = bindings.traceContacts
   assert.equal(bindings.receiverPaths.length, 0)
   assert.throws(
     () =>
@@ -29,7 +29,7 @@ test("a collapsed receiver reports cycle evidence without fabricating a lane pat
     {
       code: "channel_short",
       message: new RegExp(
-        `${cut.sourceTraceId}.*${cut.fromSourcePortId}.*${cut.toSourcePortId}`,
+        `${contacts.sourceTraceId}.*${contacts.fromSourcePortId}.*${contacts.toSourcePortId}`,
       ),
     },
   )

@@ -234,12 +234,12 @@ export interface ScopedSignalPins {
 export function scopeSignalPins({
   circuit,
   sources,
-  distanceMm,
+  nearbyGapMm,
   signalPins,
 }: {
   circuit: CircuitJson
   sources: IbisSources
-  distanceMm: number
+  nearbyGapMm: number
   signalPins: SignalPins
 }): ScopedSignalPins {
   const { connectivity, topology, reference, rails, endpointIds } = signalPins
@@ -249,7 +249,7 @@ export function scopeSignalPins({
     channelSourceIds: new Set(topology.keys()),
     referenceSourceIds: sourceNetMembers({ connectivity, memberId: reference }),
     railSourceIds: rails,
-    distanceMm,
+    distanceMm: nearbyGapMm,
   })
   const retained = new Set(copperScope.extractedSourceIds)
   const ports = new Set([...retained].filter((port) => !rails.has(port)))

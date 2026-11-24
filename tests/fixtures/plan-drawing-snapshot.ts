@@ -30,7 +30,8 @@ export function assertPlanDrawingSnapshot({
     `${name}.snap.svg`,
   )
   // Ignore sub-micro-drawing-unit V8/JavaScriptCore rounding in display coordinates only.
-  const picture = caption ? withPlanCaption({ drawing, caption }) : drawing
+  let picture = drawing
+  if (caption) picture = withPlanCaption({ drawing, caption })
   const serialized = JSON.stringify(picture, (_key, value) => {
     if (typeof value === "number")
       return Number(value.toFixed(SNAPSHOT_DECIMAL_PLACES))

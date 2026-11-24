@@ -97,7 +97,7 @@ test("a pre-existing routed loop has a routed topology diagnostic", async () => 
     {
       domain: "simulation",
       code: "channel_fanout",
-      message: /Routed cuts form a loop/,
+      message: /Routed traces form a loop/,
     },
   )
   const drawing = solver.visualize()
@@ -110,7 +110,7 @@ test("a pre-existing routed loop has a routed topology diagnostic", async () => 
   assert.equal(
     drawing.polygons?.filter(
       (shape) =>
-        shape.layer === "failure" && shape.label?.startsWith("Short or loop"),
+        shape.layer === "failure" && shape.label?.startsWith("Fault trace"),
     ).length,
     3,
   )

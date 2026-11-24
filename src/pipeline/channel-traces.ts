@@ -1,5 +1,5 @@
 import { cju } from "@tscircuit/circuit-json-util"
-import type { SourceTrace } from "circuit-json"
+import type { PcbTrace, SourceTrace } from "circuit-json"
 import type {
   CircuitJson,
   CopperScope,
@@ -7,16 +7,21 @@ import type {
   SimulationPcbTransientChannelSimulation,
   SourceNetId,
   SourcePortId,
+  SourceTraceId,
 } from "../board"
 import { endpointPorts } from "../board"
 import { Diagnostic } from "../kernel"
 import type { ChannelTrace, NumericalSettings } from "./modeling"
+import { compareNames } from "./signal-names"
 import type { SignalPins } from "./signal-pins"
 
-/** Supported lanes and rejection messages from auditing the scoped copper. */
+/** A trace rejected by the scoped copper audit and the reason it was rejected. */
+type TraceRejection = { sourceTrace: SourceTrace; message: string }
+
+/** Supported channel traces and rejections from auditing the scoped copper. */
 type ChannelTraceAudit = {
   channelTraces: NumericalSettings["channelTraces"]
-  rejections: string[]
+  rejections: TraceRejection[]
 }
 
 /** Orient the selected trace from its driver when only one end is driven. */
@@ -29,19 +34,21 @@ function orientChannelTrace({
   topology: ReadonlyMap<SourcePortId | SourceNetId, string>
   driven: ReadonlySet<SourcePortId>
 }): ChannelTrace {
-  const ordered = trace.connected_source_port_ids.toSorted()
+  const ordered = trace.connected_source_port_ids.toSorted((a, b) =>
+    compareNames({ a, b }),
+  )
   if (driven.has(ordered[1]) && !driven.has(ordered[0])) ordered.reverse()
-  const [from, to] = ordered
-  const name = topology.get(from) || "passive"
+  const [fromSourcePortId, toSourcePortId] = ordered
+  const name = topology.get(fromSourcePortId) || "passive"
   return {
     port: `${name}_${trace.source_trace_id}`,
-    from: { sourcePortId: from },
-    to: { sourcePortId: to },
+    from: { sourcePortId: fromSourcePortId },
+    to: { sourcePortId: toSourcePortId },
     sourceTraceId: trace.source_trace_id,
   }
 }
 
-/** Build lanes and report unsupported routed traces on the channel. */
+/** Build channel traces and report unsupported routed traces on the channel. */
 export function auditChannelTraces({
   circuit,
   channelPcbTraceIds,
@@ -56,31 +63,46 @@ export function auditChannelTraces({
   rails: Set<SourcePortId | SourceNetId>
 }): ChannelTraceAudit {
   const channelTraces: NumericalSettings["channelTraces"] = []
-  const rejections: string[] = []
+  const rejections: TraceRejection[] = []
   const db = cju([...circuit])
-  const traces = db.source_trace.list()
-  const pcbTraces = db.pcb_trace.list()
-  const sortedTraces = traces.toSorted((a, b) =>
-    a.source_trace_id.localeCompare(b.source_trace_id),
-  )
-  for (const trace of sortedTraces) {
-    const ports = trace.connected_source_port_ids
-    const pcb = pcbTraces.filter(
-      (route) => route.source_trace_id === trace.source_trace_id,
+  const selectedPcbTraceIds = new Set(channelPcbTraceIds)
+  const pcbTracesBySourceTraceId = new Map<SourceTraceId, PcbTrace[]>()
+  for (const pcbTrace of db.pcb_trace.list()) {
+    const { source_trace_id: sourceTraceId } = pcbTrace
+    if (sourceTraceId === undefined) continue
+    const pcbTraces = pcbTracesBySourceTraceId.get(sourceTraceId)
+    if (pcbTraces) pcbTraces.push(pcbTrace)
+    else pcbTracesBySourceTraceId.set(sourceTraceId, [pcbTrace])
+  }
+  const sourceTraces = db.source_trace
+    .list()
+    .toSorted((a, b) =>
+      compareNames({ a: a.source_trace_id, b: b.source_trace_id }),
     )
-    if (!pcb.some((route) => channelPcbTraceIds.includes(route.pcb_trace_id)))
+  for (const trace of sourceTraces) {
+    const sourcePortIds = trace.connected_source_port_ids
+    const pcbTraces = pcbTracesBySourceTraceId.get(trace.source_trace_id)
+    if (
+      !pcbTraces?.some(({ pcb_trace_id }) =>
+        selectedPcbTraceIds.has(pcb_trace_id),
+      )
+    )
       continue
-    const members = [...ports, ...(trace.connected_source_net_ids ?? [])]
+    const members = [
+      ...sourcePortIds,
+      ...(trace.connected_source_net_ids ?? []),
+    ]
     if (members.some((port) => rails.has(port))) continue
-    if (ports.length !== 2 || pcb.length !== 1) {
+    if (sourcePortIds.length !== 2 || pcbTraces.length !== 1) {
       const name =
-        topology.get(ports[0]) ??
+        topology.get(sourcePortIds[0]) ??
         trace.name ??
         trace.display_name ??
         trace.source_trace_id
-      rejections.push(
-        `Signal "${name}": branched routes are not supported yet.`,
-      )
+      rejections.push({
+        sourceTrace: trace,
+        message: `Signal "${name}": branched routes are not supported yet.`,
+      })
       continue
     }
     channelTraces.push(orientChannelTrace({ trace, topology, driven }))
@@ -88,7 +110,7 @@ export function auditChannelTraces({
   return { channelTraces, rejections }
 }
 
-/** Require routed lanes for all drivers when unrouted traces are disallowed. */
+/** Require routed traces for all drivers when unrouted traces are disallowed. */
 function validateRoutedDrivers({
   channelSimulation,
   driverReceiverChannels,
@@ -118,7 +140,7 @@ function validateRoutedDrivers({
     )
 }
 
-/** Validate scoped lanes and order them by stable physical endpoint identity. */
+/** Validate scoped traces and order them by stable physical endpoint identity. */
 export function prepareChannelTraces({
   circuit,
   copperScope,
@@ -140,17 +162,25 @@ export function prepareChannelTraces({
     driven: new Set(driven.keys()),
     rails,
   })
-  if (rejections.length)
+  const rejection = rejections[0]
+  if (rejection) {
+    const { source_trace_id, connected_source_port_ids } = rejection.sourceTrace
     throw Object.assign(
-      new Diagnostic("pipeline", "channel_fanout", rejections[0]),
-      { rejections, copperScope },
+      new Diagnostic("pipeline", "channel_fanout", rejection.message, {
+        subjects: [source_trace_id, ...connected_source_port_ids].map((id) => ({
+          kind: "record",
+          id,
+        })),
+      }),
+      { rejections: rejections.map(({ message }) => message), copperScope },
     )
+  }
   validateRoutedDrivers({
     channelSimulation,
     driverReceiverChannels,
     channelTraces,
   })
   return channelTraces.toSorted((a, b) =>
-    a.from.sourcePortId.localeCompare(b.from.sourcePortId),
+    compareNames({ a: a.from.sourcePortId, b: b.from.sourcePortId }),
   )
 }
