@@ -115,7 +115,7 @@ export function pinName({
   db: CircuitJsonUtilObjects
 }): string {
   const pin = db.source_port.get(id)
-  if (!pin) return "an unknown pin"
+  if (!pin) return "unknown pin"
   const part = db.source_component.get(pin.source_component_id || "")
   let pinLabel = pin.name
   const number = pinLabel.slice("pin".length)
@@ -371,8 +371,8 @@ export function planBoardShapes({
   ]
   for (const pour of db.pcb_copper_pour.list()) {
     const net = db.source_net.get(pour.source_net_id || "")
-    const name = net?.name || ""
-    const label = `${name} copper (${pour.layer})`.trimStart()
+    let label = `Copper (${pour.layer})`
+    if (net?.name) label = `${net.name} copper (${pour.layer})`
     let fill: string = planPourFills.gray
     if (net?.is_power === true && net.is_ground !== true)
       fill = planPourFills.pink

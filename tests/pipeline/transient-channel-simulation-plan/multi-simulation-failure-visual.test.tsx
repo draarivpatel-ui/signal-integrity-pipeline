@@ -54,11 +54,11 @@ test("attributes a late failure to the failed simulation instead of the earlier 
   })
   assert.equal(solver.stats.channelSimulationCount, 1)
   const drawing = solver.visualize()
-  assert.equal(drawing.title, "RS485 — can't simulate")
+  assert.equal(drawing.title, "RS485: can't simulate")
   assert.ok(drawing.texts?.some((text) => text.text.includes("TX pin A")))
   assert.ok(
     drawing.lines?.some(
-      (line) => line.layer === "failure" && line.label?.includes("BUS +"),
+      (line) => line.layer === "failure" && line.label?.includes("BUS+"),
     ),
   )
   assert.equal(

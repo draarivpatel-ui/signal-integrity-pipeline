@@ -228,6 +228,7 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
         plan: this.channelSimulationPlans.at(-1),
         failed: this.failedAttempt,
         error: this.error || null,
+        solved: this.solved,
       }),
     )
   }
