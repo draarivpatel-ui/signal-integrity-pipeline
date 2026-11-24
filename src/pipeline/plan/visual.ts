@@ -453,6 +453,11 @@ export function buildPlanVisualScene({
   if (diagnostic) title = `${simulationName || "Plan"}: can't simulate`
   else if (plan) title = `${simulationName || "Plan"}: ready to simulate`
   else if (solved) title = "Plan: no signals to simulate"
+  let traceFaultKind: PlanVisualScene["traceFaultKind"]
+  if (issue?.code === "channel_fanout") {
+    traceFaultKind = "loop"
+    if ("rejections" in issue) traceFaultKind = "branch"
+  }
   return {
     db,
     ports,
@@ -464,7 +469,7 @@ export function buildPlanVisualScene({
     endpoints,
     overlays: [...(topology?.overlays || []), ...fault.overlays],
     rows: buildPathRows({ topology, paths, fault, db }),
-    faultCode: issue?.code,
+    traceFaultKind,
     faultSourcePortIds: fault.sourcePortIds,
     faultSourceTraceIds: fault.sourceTraceIds,
     existingSourceTraceIds,

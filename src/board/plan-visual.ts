@@ -86,8 +86,8 @@ function buildPlanLegend({
   if (hasBypass) labels.push("-×- bypass")
   if (lineMarks.has("traceFault")) {
     if (hasBypass) labels.push("× bypassed trace")
-    else if (scene.faultCode === "channel_fanout")
-      labels.push("× trace in loop")
+    else if (scene.traceFaultKind === "loop") labels.push("× trace in loop")
+    else if (scene.traceFaultKind === "branch") labels.push("× branched trace")
     else labels.push("× shorted trace")
   }
   return labels

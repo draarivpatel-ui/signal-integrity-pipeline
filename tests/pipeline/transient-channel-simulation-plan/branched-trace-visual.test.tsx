@@ -56,6 +56,9 @@ test("shows the reason when a routed trace has more than two contacts", async ()
       text.includes("branched routes are not supported"),
     ),
   )
+  assert.ok(
+    drawing.texts?.some(({ text }) => text.includes("× branched trace")),
+  )
   assertPlanDrawingSnapshot({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",

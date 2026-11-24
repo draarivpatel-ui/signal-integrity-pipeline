@@ -102,7 +102,7 @@ export interface PlanVisualScene {
   overlays: readonly PlanOverlay[]
   summary?: PlanVisualSummary
   rows: readonly PlanHeaderRow[]
-  faultCode?: string
+  traceFaultKind?: "branch" | "loop"
   faultSourcePortIds: ReadonlySet<SourcePortId>
   faultSourceTraceIds: ReadonlySet<SourceTraceId>
   existingSourceTraceIds: ReadonlySet<SourceTraceId>
