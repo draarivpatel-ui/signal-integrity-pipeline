@@ -142,7 +142,10 @@ export const RouteSectionsStage: typeof BoardRouteSectionsSolver = class RouteSe
     )
     tone.clear()
     for (const wire of wires) {
-      const at = unrolled.along({ id: wire.wireIndex, position: wire.startMm })
+      const at = unrolled.along({
+        id: wire.wireIndex,
+        position: wire.longitudinalMinMm,
+      })
       if (!at) continue
       const row = rows.get(at.net.label)
       if (!row) continue
@@ -150,7 +153,7 @@ export const RouteSectionsStage: typeof BoardRouteSectionsSolver = class RouteSe
       tone.set(at.net.label, index)
       row.parts!.push({
         from: at.distance,
-        to: at.distance + wire.endMm - wire.startMm,
+        to: at.distance + wire.longitudinalMaxMm - wire.longitudinalMinMm,
         color: sectionColor({ net: at.net, index }),
         casing: wire.pcbTraceId === active,
       })

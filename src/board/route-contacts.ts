@@ -7,9 +7,13 @@ import {
   getSmtPadPolygon,
   getTraceSegmentPolygon,
 } from "@tscircuit/circuit-json-util"
-import type { PcbPort, PcbVia } from "circuit-json"
+import type { PcbPort } from "circuit-json"
 import { hypotenuse, type Snapshot } from "../kernel"
-import { getSourcePortConnectivityMapFromCircuitJson } from "./connectivity"
+import {
+  getSourcePortConnectivityMapFromCircuitJson,
+  type SourceConnectionGroup,
+  sourceNetMembers,
+} from "./connectivity"
 import type { CopperScope } from "./geometry/scope"
 import type { CopperPoint } from "./geometry/types"
 import type { PcbPortId } from "./ids"
@@ -19,6 +23,7 @@ import type {
   RouteWire,
   SectionGeometry,
 } from "./route-section-types"
+import { getTraceMembers, getViaMembers } from "./route-vias"
 import type { CircuitJson, LayerRef } from "./schema"
 
 /** Physical outlines and point contacts use the same tolerance as topology validation. */
@@ -78,19 +83,6 @@ function getPortOutlines(circuit: CircuitJson): PortOutline[] {
   return [...smtPads, ...platedHoles]
 }
 
-/** Convert physical via records, including standalone vias, to geometry. */
-export function readRouteVia(via: PcbVia): RouteVia {
-  return {
-    pcbViaId: via.pcb_via_id,
-    pcbTraceId: via.pcb_trace_id,
-    sourceTraceId: via.source_trace_id,
-    sourceNetId: via.source_net_id,
-    point: [via.x, via.y],
-    layers: via.layers,
-    outerDiameterMm: via.outer_diameter,
-  }
-}
-
 /** Resolve the occupied radius of a barrel or a point-only route via. */
 function touchesVia({
   outline,
@@ -125,15 +117,23 @@ function outlinesTouch({
   )
 }
 
-/** Look for a physical pad or via connection to a planar conductor. */
+/** A via with its declared electrical associations resolved through the source circuit. */
+interface ViaOutline {
+  via: RouteVia
+  members: SourceConnectionGroup
+}
+
+/** Look for a physical pad or via connection to a compatible planar conductor. */
 function findPadWire({
   pad,
   wireOutlines,
   vias,
+  netMembers,
 }: {
   pad: PortOutline
   wireOutlines: WireOutline[]
-  vias: RouteVia[]
+  vias: ViaOutline[]
+  netMembers: ReadonlySet<SourceConnectionGroup[number]>
 }): RouteWire | undefined {
   const direct = wireOutlines.find(
     ({ wire, outline }) =>
@@ -141,8 +141,10 @@ function findPadWire({
       outlinesTouch({ first: pad.outline, second: outline }),
   )
   if (direct) return direct.wire
-  for (const via of vias) {
+  for (const { via, members } of vias) {
     if (
+      !members.length ||
+      !members.every((memberId) => netMembers.has(memberId)) ||
       !via.layers.includes(pad.layer) ||
       !touchesVia({ outline: pad.outline, via })
     )
@@ -156,32 +158,42 @@ function findPadWire({
   return undefined
 }
 
-/** Determine whether an end of the merged wire or an original join reaches a pad. */
+/** Test the physical endcap and any original endpoints translated by a union. */
 function touchesEnd({
   wire,
   point,
-  pads,
+  pad,
 }: {
   wire: RouteWire
   point: CopperPoint
-  pads: PortOutline[]
+  pad: PortOutline
 }): boolean {
+  if (pad.layer !== wire.layer) return false
   const endpoints = [point]
   for (const join of wire.joins || []) {
     if (arePointsCoincident({ first: join.toPoint, second: point }))
       endpoints.push(join.fromPoint)
   }
-  return pads.some(
-    ({ outline, layer }) =>
-      layer === wire.layer &&
-      endpoints.some(([x, y]) => {
-        const endpoint = new Point(x, y)
-        return (
-          outline.contains(endpoint) ||
-          outline.distanceTo(endpoint)[0] <= CONTACT_TOLERANCE_MM
-        )
-      }),
+  return endpoints.some(([x, y]) =>
+    outlinesTouch({
+      first: circlePolygon({ x, y }, wire.widthMm / 2),
+      second: pad.outline,
+    }),
   )
+}
+
+/** Outline of the planar conductor, including rounded copper ends. */
+function getWireOutline(wire: RouteWire): WireOutline {
+  const [startX, startY] = wire.startPoint
+  const [endX, endY] = wire.endPoint
+  return {
+    wire,
+    outline: getTraceSegmentPolygon(
+      { x: startX, y: startY },
+      { x: endX, y: endY },
+      wire.widthMm,
+    ),
+  }
 }
 
 /** Resolve the pads on the same nets as modeled wires and mark their ends. */
@@ -199,39 +211,45 @@ export function resolveRouteContacts({
   const pads = getPortOutlines(circuit)
   const db = cju([...circuit])
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const wireOutlines = wires.flatMap((wire): WireOutline[] => {
-    if (copperScope.nearbyRailPcbTraceIds.includes(wire.pcbTraceId)) return []
-    const [startX, startY] = wire.startPoint
-    const [endX, endY] = wire.endPoint
-    return [
-      {
-        wire,
-        outline: getTraceSegmentPolygon(
-          { x: startX, y: startY },
-          { x: endX, y: endY },
-          wire.widthMm,
-        ),
-      },
-    ]
-  })
+  const wireOutlines = wires
+    .filter(
+      (wire) => !copperScope.nearbyRailPcbTraceIds.includes(wire.pcbTraceId),
+    )
+    .map(getWireOutline)
+  const traceMembers = new Map(
+    db.source_trace
+      .list()
+      .map((trace) => [trace.source_trace_id, getTraceMembers(trace)]),
+  )
+  const viaOutlines = vias.map((via) => ({
+    via,
+    members: getViaMembers({ db, via, traceMembers }),
+  }))
   const portContacts: RoutePortContact[] = []
+  const startContactWireIndices = new Set<number>()
+  const endContactWireIndices = new Set<number>()
   for (const pad of pads) {
-    const sourcePortId = pad.pcbPort.source_port_id
-    const netKey = connectivity.getNetConnectedToId(sourcePortId)
-    const compatible = wireOutlines.filter(({ wire }) => {
-      const source = db.source_trace.get(wire.sourceTraceId)
-      if (!source) return false
-      const sourceMemberId =
-        source.connected_source_port_ids[0] ??
-        source.connected_source_net_ids?.[0]
-      return (
-        sourceMemberId !== undefined &&
-        (sourceMemberId === sourcePortId ||
-          (netKey !== undefined &&
-            connectivity.getNetConnectedToId(sourceMemberId) === netKey))
-      )
+    const netMembers = sourceNetMembers({
+      connectivity,
+      memberId: pad.pcbPort.source_port_id,
     })
-    const wire = findPadWire({ pad, wireOutlines: compatible, vias })
+    const compatibleWires = wireOutlines.filter(({ wire }) =>
+      traceMembers
+        .get(wire.sourceTraceId)
+        ?.some((memberId) => netMembers.has(memberId)),
+    )
+    for (const { wire } of compatibleWires) {
+      if (touchesEnd({ wire, point: wire.startPoint, pad }))
+        startContactWireIndices.add(wire.wireIndex)
+      if (touchesEnd({ wire, point: wire.endPoint, pad }))
+        endContactWireIndices.add(wire.wireIndex)
+    }
+    const wire = findPadWire({
+      pad,
+      wireOutlines: compatibleWires,
+      vias: viaOutlines,
+      netMembers,
+    })
     if (wire)
       portContacts.push({
         pcbPortId: pad.pcbPort.pcb_port_id,
@@ -244,8 +262,8 @@ export function resolveRouteContacts({
     portContacts,
     wires: wires.map((wire) => ({
       ...wire,
-      startTouchesPort: touchesEnd({ wire, point: wire.startPoint, pads }),
-      endTouchesPort: touchesEnd({ wire, point: wire.endPoint, pads }),
+      startTouchesPort: startContactWireIndices.has(wire.wireIndex),
+      endTouchesPort: endContactWireIndices.has(wire.wireIndex),
     })),
   }
 }
@@ -270,6 +288,5 @@ export function findContactWire({
   )
   if (!contact) return undefined
   const wire = geometry.wires[contact.wireIndex]
-  if (wire.layer === layer) return wire
-  return { ...wire, layer }
+  return wire
 }

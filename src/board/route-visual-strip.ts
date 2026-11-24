@@ -269,7 +269,11 @@ export function routeUnrolled({
   view: RouteView
   wires: readonly Pick<
     RouteWire,
-    "wireIndex" | "pcbTraceId" | "sourceTraceId" | "startMm" | "endMm"
+    | "wireIndex"
+    | "pcbTraceId"
+    | "sourceTraceId"
+    | "longitudinalMinMm"
+    | "longitudinalMaxMm"
   >[]
 }): UnrolledRoutes {
   const lengths = new Map<RouteNet, number>()
@@ -281,9 +285,12 @@ export function routeUnrolled({
     offsets.set(wire.wireIndex, {
       net,
       offset: lengths.get(net) ?? 0,
-      start: wire.startMm,
+      start: wire.longitudinalMinMm,
     })
-    lengths.set(net, (lengths.get(net) ?? 0) + wire.endMm - wire.startMm)
+    lengths.set(
+      net,
+      (lengths.get(net) ?? 0) + wire.longitudinalMaxMm - wire.longitudinalMinMm,
+    )
   }
   return {
     lengths,
