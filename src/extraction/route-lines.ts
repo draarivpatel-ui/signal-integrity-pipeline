@@ -1,4 +1,9 @@
-import type { RouteSlice, RouteWire, RouteXY, SectionGeometry } from "../board"
+import type {
+  CopperPoint,
+  RouteSection,
+  RouteWire,
+  SectionGeometry,
+} from "../board"
 import { hypotenuse, type Snapshot } from "../kernel"
 import { sectionInverse } from "./cross-section-matrix"
 import type { CrossSection, CrossSectionResult } from "./cross-section-types"
@@ -19,7 +24,7 @@ export type SolvedRouteSection = {
 
 /** A route slice with its canonical field coefficients. */
 export interface ExtractedRouteSlice
-  extends Snapshot<RouteSlice>,
+  extends Snapshot<RouteSection>,
     SolvedRouteSection {}
 /** Solved slices, unique field sections, and extraction evidence. */
 export type ExtractedRoutes = Snapshot<{
@@ -42,7 +47,7 @@ export type RouteCoefficients = Snapshot<CrossSectionResult>
 /** Stackup, slice, and materials used to form one field section. */
 interface RouteCrossSectionInput {
   geometry: Snapshot<SectionGeometry>
-  slice: Snapshot<RouteSlice>
+  slice: Snapshot<RouteSection>
   materials: RouteMaterials
 }
 
@@ -52,7 +57,7 @@ function routeDielectrics({
   slice,
   materials,
 }: RouteCrossSectionInput): CrossSection["dielectrics"] {
-  const { copperLayers, dielectrics: layers } = geometry.stack
+  const { copperLayers, dielectrics: layers } = geometry.stackup
   const bottom = Math.min(...copperLayers.map((layer) => layer.zMinMm))
   const top = Math.max(...copperLayers.map((layer) => layer.zMaxMm))
   const interfaces = layers.flatMap((layer) => [layer.zMinMm, layer.zMaxMm])
@@ -77,7 +82,7 @@ function routeDielectrics({
   let lower = -Infinity
   let upper = Infinity
   if (slice.references.length > 1) {
-    const heights = slice.references.map((plane) => plane.z)
+    const heights = slice.references.map((plane) => plane.surfaceZMm)
     lower = Math.min(...heights)
     upper = Math.max(...heights)
   }
@@ -120,36 +125,38 @@ function routeDielectrics({
 export function routeCrossSection(input: RouteCrossSectionInput): CrossSection {
   const { geometry, slice } = input
   const dielectrics = routeDielectrics(input)
-  const layers = geometry.stack.copperLayers
-  const offset = slice.wires[0].transverse
+  const layers = geometry.stackup.copperLayers
+  const offset = slice.wires[0].lateralOffsetMm
   const conductors = slice.wires.map((wire, i) => {
     const layer = layers.find((layer) => layer.name === wire.layer)!
     return {
       id: String(i),
-      xMm: Number((wire.transverse - offset).toFixed(OFFSET_DECIMAL_PLACES)),
+      xMm: Number(
+        (wire.lateralOffsetMm - offset).toFixed(OFFSET_DECIMAL_PLACES),
+      ),
       zMm: layer.zMinMm,
-      widthMm: wire.width,
+      widthMm: wire.widthMm,
       thicknessMm: layer.zMaxMm - layer.zMinMm,
     }
   })
-  const planes = slice.references.map((plane) => ({ zMm: plane.z }))
+  const planes = slice.references.map((plane) => ({ zMm: plane.surfaceZMm }))
   return { conductors, planes, dielectrics }
 }
 
 /** The two board coordinates that bound a straight route wire. */
-type RouteEndpoints = Pick<RouteWire, "a" | "b">
+type RouteEndpoints = Pick<RouteWire, "startPoint" | "endPoint">
 
 /** Closest point on each centre-line and the distance between them. */
 interface ClosestRoutePoints {
-  first: RouteXY
-  second: RouteXY
+  first: CopperPoint
+  second: CopperPoint
   distance: number
 }
 
 /** Closest points on two finite centre-lines, used only for the explicit oblique correction. */
 export function closestRoutePoints({
-  first: { a, b },
-  second: { a: c, b: d },
+  first: { startPoint: a, endPoint: b },
+  second: { startPoint: c, endPoint: d },
 }: {
   first: RouteEndpoints
   second: RouteEndpoints
@@ -166,7 +173,7 @@ export function closestRoutePoints({
     s = ((c[0] - a[0]) * uy - (c[1] - a[1]) * ux) / denominator
   }
   if (t >= 0 && t <= 1 && s >= 0 && s <= 1) {
-    const point: RouteXY = [a[0] + t * ux, a[1] + t * uy]
+    const point: CopperPoint = [a[0] + t * ux, a[1] + t * uy]
     return { first: point, second: point, distance: 0 }
   }
   const pairs = [
@@ -184,7 +191,10 @@ export function closestRoutePoints({
         0,
         Math.min(1, projection / (dx * dx + dy * dy)),
       )
-      const near: RouteXY = [start[0] + fraction * dx, start[1] + fraction * dy]
+      const near: CopperPoint = [
+        start[0] + fraction * dx,
+        start[1] + fraction * dy,
+      ]
       const distance = hypotenuse(point[0] - near[0], point[1] - near[1])
       if (reverse) return { first: near, second: point, distance }
       return { first: point, second: near, distance }

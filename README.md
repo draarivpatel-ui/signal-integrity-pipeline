@@ -8,7 +8,7 @@ The stack retains Circuit JSON validation, physical stackup and stimulus helpers
 `TransientChannelSimulationPlanSolver` reads PCB transient channel simulation records written by core from TSX. It checks
 channel endpoints, IBIS models, timing and patterns, including pseudo-random binary sequences (PRBS).
 Each declared channel simulation becomes immutable inputs for route sections and buffer binding.
-RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
+`RouteSectionsSolver` divides scoped wires into sections where nearby copper and reference surfaces stay consistent. It also resolves physical endpoint contacts.
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
 RouteFieldsSolver screens nearby conductor pairs and extracts coupled coefficients for each unique section.
 
