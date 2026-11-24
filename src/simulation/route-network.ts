@@ -1,8 +1,8 @@
 /* eslint-disable local/max-file-lines -- Stage drawings use the same intermediate state as network compilation. */
+import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
-  circuitJsonDb,
   getSourcePortConnectivityMapFromCircuitJson,
   type Point,
   type RouteStripRow,
@@ -93,7 +93,7 @@ export class RouteNetworkSolver extends BaseSolver {
     const { geometry, extracted, bindings, options, materials } = this.input
     const { scope, models, mappings } = bindings
     const probes = [...bindings.plan.probes]
-    const db = circuitJsonDb(bindings.circuitJson)
+    const db = cju([...bindings.circuitJson])
     const stackup = db.pcb_stackup.list()[0]
     const maskLayers = stackup.layers.filter(
       (layer) => layer.layer_type === "soldermask",

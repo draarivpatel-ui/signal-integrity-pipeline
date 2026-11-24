@@ -151,7 +151,7 @@ test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
     assert.ok(solver.visualize().lines!.length > 0)
     const renamed = {
       ...input,
-      circuitJson: JSON.parse(JSON.stringify(input.circuitJson)) as CircuitJson,
+      circuitJson: structuredClone(input.circuitJson),
     }
     for (const record of renamed.circuitJson) {
       if (

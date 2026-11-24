@@ -1,6 +1,6 @@
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
-import type { CircuitJsonDb } from "./circuit-json-db"
 import {
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
@@ -77,7 +77,7 @@ export function routeSourceNets({
   db,
   traces,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   traces: ReadonlySet<PcbTraceId>
 }): RouteSourceNet[] {
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(db.toArray())
@@ -154,7 +154,7 @@ export function routeCopperStyles({
   db,
   traces,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   traces: ReadonlySet<PcbTraceId>
 }): RouteCopperStyles {
   const nets = routeSourceNets({ db, traces })
@@ -185,7 +185,7 @@ export function admissionRouteView({
   scope,
   endpointSourcePortIds,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   scope: Snapshot<CopperScope>
   endpointSourcePortIds: ReadonlySet<SourcePortId>
 }): RouteCopperView {
