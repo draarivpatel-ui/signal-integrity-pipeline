@@ -2,7 +2,10 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import React from "react"
 import { createNativeSolver } from "../../src/adapters"
-import { cloneCircuitJson, RouteSectionsSolver } from "../../src/board"
+import {
+  CopperGeometryExtractionSolver,
+  cloneCircuitJson,
+} from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
 import {
   type TransientChannelSimulationPlanInput,
@@ -25,7 +28,7 @@ function compileNetwork(
   const planner = new TransientChannelSimulationPlanSolver(input)
   planner.solve()
   const plan = planner.getOutput().value[0]
-  const sections = new RouteSectionsSolver(plan.sections)
+  const sections = new CopperGeometryExtractionSolver(plan.sections)
   sections.solve()
   const {
     geometry,

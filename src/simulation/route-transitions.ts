@@ -5,16 +5,16 @@ import {
   type CircuitJson,
   type CopperPoint,
   type CopperScope,
-  findContactWire,
-  findRouteReferences,
+  type ExtractedCopper,
+  findPadContactWire,
+  findWireReferences,
   getSourcePortConnectivityMapFromCircuitJson,
-  type RouteReference,
-  type RouteWire,
+  type ReferenceSurface,
   resolveRouteVias,
-  type SectionGeometry,
   type SourceNetId,
   type SourcePortId,
   sourceNetMembers,
+  type TraceWire,
 } from "../board"
 import { type Matrix, validateMatrix } from "../extraction"
 import { hypotenuse, type Snapshot } from "../kernel"
@@ -190,8 +190,8 @@ function layerHeight({
   layers,
   name,
 }: {
-  layers: Snapshot<SectionGeometry["stackup"]["copperLayers"]>
-  name: RouteReference["layer"]
+  layers: Snapshot<ExtractedCopper["stackup"]["copperLayers"]>
+  name: ReferenceSurface["layer"]
 }): number {
   const layer = layers.find((layer) => layer.name === name)!
   return (layer.zMinMm + layer.zMaxMm) / 2
@@ -202,7 +202,7 @@ function referenceHeight({
   references,
   fallback,
 }: {
-  references: readonly RouteReference[]
+  references: readonly ReferenceSurface[]
   fallback: number
 }): number {
   if (!references.length) return fallback
@@ -219,11 +219,11 @@ function adjacentReferences({
   via,
   geometry,
 }: {
-  wire: Snapshot<RouteWire>
+  wire: Snapshot<TraceWire>
   layer: LayerRef
   via: Point
-  geometry: Snapshot<SectionGeometry>
-}): readonly RouteReference[] {
+  geometry: Snapshot<ExtractedCopper>
+}): readonly ReferenceSurface[] {
   const slices = geometry.sections.filter((slice) => {
     return slice.wires.some(
       (candidate) =>
@@ -251,7 +251,7 @@ function adjacentReferences({
   if (closest?.slice.references != null) return closest.slice.references
   const transverse = -via.x * wire.direction[1] + via.y * wire.direction[0]
   const position = via.x * wire.direction[0] + via.y * wire.direction[1]
-  return findRouteReferences({
+  return findWireReferences({
     geometry,
     wire: { ...wire, layer, lateralOffsetMm: transverse },
     positionMm: position,
@@ -268,7 +268,7 @@ export function routeTransitions({
 }: {
   circuit: CircuitJson
   scope: Snapshot<CopperScope>
-  geometry: Snapshot<SectionGeometry>
+  geometry: Snapshot<ExtractedCopper>
   endpoint: RouteEndpoint
   groundPort: SourcePortId | SourceNetId
 }): RouteTransitions {
@@ -478,7 +478,7 @@ export function routeTransitions({
   for (const port of db.pcb_port.list()) {
     const pad = db.pcb_smtpad.getWhere({ pcb_port_id: port.pcb_port_id })
     if (!pad) continue
-    const wire = findContactWire({
+    const wire = findPadContactWire({
       geometry,
       pcbPortId: port.pcb_port_id,
       layer: pad.layer,
@@ -491,7 +491,7 @@ export function routeTransitions({
       layer: pad.layer,
       lateralOffsetMm: -port.x * wire.direction[1] + port.y * wire.direction[0],
     }
-    const references = findRouteReferences({
+    const references = findWireReferences({
       geometry,
       wire: padWire,
       positionMm: position,
