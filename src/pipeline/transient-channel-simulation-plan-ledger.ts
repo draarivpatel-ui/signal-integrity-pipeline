@@ -1,20 +1,25 @@
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import {
   type PlanHeaderRow,
+  type PlanVisualCut,
   type PlanVisualEndpoint,
-  type PlanVisualLink,
   pinName,
   planColors,
   planCutColor,
   type SourcePortId,
   type SourceTraceId,
 } from "../board"
-import type { Diagnostic } from "../kernel"
-import type { CircuitNodes } from "../simulation"
+import {
+  type CircuitNodes,
+  connectionGraph,
+  connectionPath,
+} from "../simulation"
 import type {
   PlanFault,
+  PlanHop,
   PlanPath,
   PlanTopology,
+  ResolvedPlanPath,
 } from "./transient-channel-simulation-plan-visual"
 
 /** Keep the binding node in geometry hover labels. */
@@ -45,10 +50,14 @@ export function planEndpoints({
 }): PlanVisualEndpoint[] {
   const endpoints = new Map<SourcePortId, PlanVisualEndpoint>()
   const cuts = new Map(topology?.cuts.map((cut) => [cut.trace, cut]))
-  const mapped = new Map(topology?.paths.map((path) => [path.to, path.traces]))
+  const mapped = new Map(
+    topology?.paths.map(({ to, hops }) => [
+      to,
+      hops.find((hop) => hop.kind === "trace")?.trace,
+    ]),
+  )
   for (const { name, from, to } of paths) {
-    const first = mapped.get(to)?.[0]
-    const cut = cuts.get(first || "")
+    const cut = cuts.get(mapped.get(to) || "")
     const color = cut ? planCutColor(cut.index) : planColors.existing
     if (endpoints.get(from)?.kind !== "driver")
       endpoints.set(from, {
@@ -82,194 +91,379 @@ export function planEndpoints({
   return [...endpoints.values()]
 }
 
-/** Summarize the layers and length of each routed copper record. */
-function cutDetails(db: CircuitJsonUtilObjects): Map<SourceTraceId, string> {
-  const measures = new Map<
-    SourceTraceId,
-    { length: number; layers: Set<string> }
-  >()
-  for (const trace of db.pcb_trace.list()) {
-    if (trace.source_trace_id === undefined) continue
-    const details = measures.get(trace.source_trace_id) || {
+/** Board coordinates and layers for each routed source trace. */
+interface TraceMeasure {
+  length: number
+  layers: Set<string>
+}
+
+/** Measure the routed wire runs, including transitions through pads. */
+function traceMeasures(
+  db: CircuitJsonUtilObjects,
+): Map<SourceTraceId, TraceMeasure> {
+  const measures = new Map<SourceTraceId, TraceMeasure>()
+  for (const { source_trace_id: trace, route } of db.pcb_trace.list()) {
+    if (trace === undefined) continue
+    const details = measures.get(trace) || {
       length: 0,
       layers: new Set<string>(),
     }
-    for (const [index, point] of trace.route.entries()) {
+    for (const [index, point] of route.entries()) {
       if (point.route_type === "wire") details.layers.add(point.layer)
-      const previous = trace.route[index - 1]
+      const previous = route[index - 1]
       if (!previous) continue
       const start =
         previous.route_type === "through_pad" ? previous.end : previous
       const end = point.route_type === "through_pad" ? point.start : point
       details.length += Math.hypot(end.x - start.x, end.y - start.y)
     }
-    measures.set(trace.source_trace_id, details)
+    measures.set(trace, details)
   }
-  return new Map(
-    [...measures].map(([trace, { length, layers }]) => [
-      trace,
-      `${[...layers].join("/")} layer, ${Number(length.toFixed(2))} mm`,
-    ]),
+  return measures
+}
+
+/** Format a board dimension with trimmed decimals. */
+export function planMillimeters(length: number): string {
+  return `${Number(length.toFixed(2))} mm`
+}
+
+/** Join a route's dimensions, falling back to the route state without measurements. */
+function traceDetail(measure: TraceMeasure | undefined): string {
+  if (!measure?.layers.size) return "routed"
+  return `${[...measure.layers].join("/")}, ${planMillimeters(measure.length)}`
+}
+
+/** Group the words for a count by number. */
+export function planCount({
+  count,
+  noun,
+}: {
+  count: number
+  noun: string
+}): string {
+  if (count === 1) return `1 ${noun}`
+  return `${count} ${noun}s`
+}
+
+/** Get the part record from the source pin, even without a board pad. */
+export function pinPart({
+  id,
+  db,
+}: {
+  id: SourcePortId
+  db: CircuitJsonUtilObjects
+}): ReturnType<CircuitJsonUtilObjects["source_component"]["get"]> {
+  return db.source_component.get(
+    db.source_port.get(id)?.source_component_id || "",
   )
 }
 
 /** Name the series part using its component record. */
-function seriesPart({
-  link,
+export function seriesPart({
+  from,
   db,
 }: {
-  link: PlanVisualLink
+  from: SourcePortId
   db: CircuitJsonUtilObjects
 }): string {
-  const pin = db.source_port.get(link.from)
-  const part = db.source_component.get(pin?.source_component_id || "")
-  if (!part) return "component"
+  const part = pinPart({ id: from, db })
+  if (!part?.name) return "part"
   if (part.ftype === "simple_resistor") return `resistor ${part.name}`
   if (part.ftype === "simple_capacitor") return `capacitor ${part.name}`
   if (part.ftype === "simple_inductor") return `inductor ${part.name}`
-  return `component ${part.name}`
+  return `part ${part.name}`
 }
 
-/** Join series parts and direct pin connections in a single line. */
-function connectionRow({
-  links,
+/** An orientation-independent key for one physical or ideal hop. */
+export function planHopKey(hop: PlanHop): string {
+  if (hop.kind === "trace") return hop.trace
+  return [hop.kind, ...[hop.from, hop.to].sort()].join(" ")
+}
+
+/** A single readable hop with its on-board endpoints. */
+function pathRow({
+  name,
+  from,
+  to,
+  detail,
+  color,
   db,
-}: {
-  links: readonly PlanVisualLink[]
+}: Pick<PlanPath, "name" | "from" | "to"> & {
+  detail: string
+  color: string
   db: CircuitJsonUtilObjects
 }): PlanHeaderRow {
-  const details = links.map((link) => {
-    if (link.kind === "series") return `Series ${seriesPart({ link, db })}`
-    const from = pinName({ id: link.from, db })
-    const to = pinName({ id: link.to, db })
-    return `Direct connection from ${from} to ${to} (no trace)`
-  })
-  const row: PlanHeaderRow = { text: details.join(" • ") }
-  if (links.every(({ kind }) => kind === "series"))
-    row.color = planColors.series
-  if (links.every(({ kind }) => kind === "ideal")) row.color = planColors.ideal
-  return row
+  return {
+    text: `${name}: ${pinName({ id: from, db })} → ${pinName({ id: to, db })} (${detail})`,
+    color,
+  }
 }
 
-/** Keep a short row per trace, with a single summary for longer routes. */
-export function planLedger({
-  topology,
-  fault,
-  endpoints,
-  db,
-  failed,
-}: {
-  topology?: PlanTopology
-  fault: PlanFault
-  endpoints: readonly PlanVisualEndpoint[]
-  db: CircuitJsonUtilObjects
-  failed: boolean
-}): PlanHeaderRow[] {
-  if (!topology) return []
-  const { cuts, segments, paths } = topology
-  const limit = 3
-  const rows: PlanHeaderRow[] = []
-  if (cuts.length > limit) {
-    rows.push({ text: `The drawing shows ${cuts.length} trace segments.` })
-  } else {
-    const details = cutDetails(db)
-    const loads = new Set(
-      endpoints.filter(({ kind }) => kind === "load").map(({ id }) => id),
+/** Orient extra traces away from their connection to a mapped path. */
+export function planExtraTraces(
+  topology: PlanTopology,
+): readonly PlanVisualCut[] {
+  const contacts = new Set(
+    topology.paths
+      .flatMap(({ from, to, hops }) => [
+        from,
+        to,
+        ...hops.flatMap((hop) => [hop.from, hop.to]),
+      ])
+      .map((id) => topology.nodes[id])
+      .filter((node) => node && node !== "0"),
+  )
+  const extras = topology.cuts.filter(({ mapped }) => !mapped)
+  const ordered: PlanVisualCut[] = []
+  while (extras.length) {
+    const attached = extras.findIndex(
+      ({ from, to }) =>
+        contacts.has(topology.nodes[from]) || contacts.has(topology.nodes[to]),
     )
-    for (const { trace, from, to, index, mapped } of cuts) {
-      const start = pinName({ id: from, db })
-      const end = pinName({ id: to, db })
-      const channel = paths.find(({ traces }) => traces.includes(trace))?.name
-      let text = `Trace from ${start} to ${end}`
-      if (channel) text = `${channel}: ${start} to ${end}`
-      if (!mapped) {
-        text = `Extra trace from ${start} to ${end}`
-        if (loads.has(to)) text = `Extra trace to ${end} (not a receiver)`
-        else if (loads.has(from))
-          text = `Extra trace to ${start} (not a receiver)`
-      }
-      const detail = details.get(trace)
-      if (detail) text += ` — ${detail}`
-      rows.push({
-        text,
-        color: fault.traces.has(trace)
-          ? planColors.failure
-          : planCutColor(index),
-      })
+    const [cut] = extras.splice(Math.max(0, attached), 1)
+    const { from, to } = cut
+    if (!contacts.has(topology.nodes[from]) && contacts.has(topology.nodes[to]))
+      ordered.push({ ...cut, from: to, to: from })
+    else ordered.push(cut)
+    for (const id of [from, to]) {
+      const node = topology.nodes[id]
+      if (node && node !== "0") contacts.add(node)
     }
   }
-  if (!failed && segments.length && rows.length < limit)
-    rows.push(connectionRow({ links: segments, db }))
+  return ordered
+}
+
+/** Descriptive lines for declared legs whose topology could not be built. */
+function partialRows({
+  paths,
+  fault,
+  measures,
+  db,
+}: {
+  paths: readonly PlanPath[]
+  fault: PlanFault
+  measures: ReadonlyMap<SourceTraceId, TraceMeasure>
+  db: CircuitJsonUtilObjects
+}): PlanHeaderRow[] {
+  const graph = connectionGraph(
+    db.source_trace
+      .list()
+      .flatMap(({ source_trace_id, connected_source_port_ids }) => {
+        const evidence = measures.get(source_trace_id)
+        if (!evidence || connected_source_port_ids.length !== 2) return []
+        const [fromNodeId, toNodeId] = connected_source_port_ids
+        return [{ fromNodeId, toNodeId, evidence }]
+      }),
+  )
+  return paths.flatMap((path) => {
+    const { from, to } = path
+    if (
+      fault.links.some(
+        (link) =>
+          link.kind === "missing" && link.from === from && link.to === to,
+      )
+    )
+      return [
+        pathRow({
+          ...path,
+          detail: "missing trace",
+          color: planColors.failure,
+          db,
+        }),
+      ]
+    const route = connectionPath({ graph, fromNodeId: from, toNodeId: to })
+    if (!route?.length) return []
+    const measure = {
+      length: route.reduce((total, { evidence }) => total + evidence.length, 0),
+      layers: new Set(route.flatMap(({ evidence }) => [...evidence.layers])),
+    }
+    return [
+      pathRow({
+        ...path,
+        detail: traceDetail(measure),
+        color: planColors.existing,
+        db,
+      }),
+    ]
+  })
+}
+
+/** Render path hops in signal order, sharing common segments across receivers. */
+function routedRows({
+  topology,
+  extras,
+  measures,
+  db,
+}: {
+  topology: PlanTopology
+  extras: readonly PlanVisualCut[]
+  measures: ReadonlyMap<SourceTraceId, TraceMeasure>
+  db: CircuitJsonUtilObjects
+}): PlanHeaderRow[] {
+  const cuts = new Map(topology.cuts.map((cut) => [cut.trace, cut]))
+  const seen = new Set<string>()
+  const rows: PlanHeaderRow[] = []
+  for (const { name, hops } of topology.paths) {
+    for (const hop of hops) {
+      const key = `${name}: ${planHopKey(hop)} ${hop.from}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      if (hop.kind === "trace") {
+        const cut = cuts.get(hop.trace)
+        if (cut)
+          rows.push(
+            pathRow({
+              ...hop,
+              name,
+              detail: traceDetail(measures.get(hop.trace)),
+              color: planCutColor(cut.index),
+              db,
+            }),
+          )
+      } else if (hop.kind === "series") {
+        const detail = `series ${seriesPart({ from: hop.from, db })}`
+        rows.push(
+          pathRow({ ...hop, name, detail, color: planColors.series, db }),
+        )
+      } else {
+        rows.push(
+          pathRow({
+            ...hop,
+            name,
+            detail: "direct, no trace",
+            color: planColors.ideal,
+            db,
+          }),
+        )
+      }
+    }
+  }
+  for (const cut of extras)
+    rows.push(
+      pathRow({
+        ...cut,
+        name: "Extra trace",
+        detail: traceDetail(measures.get(cut.trace)),
+        color: planCutColor(cut.index),
+        db,
+      }),
+    )
   return rows
 }
 
-/** Explain the failed connection using the same evidence as its red marks. */
-export function planFailure({
-  issue,
-  error,
-  paths,
+/** Measure a set of trace IDs once, including when several receivers share copper. */
+function totalLength({
+  traces,
+  measures,
+}: {
+  traces: ReadonlySet<SourceTraceId>
+  measures: ReadonlyMap<SourceTraceId, TraceMeasure>
+}): string {
+  let length = 0
+  for (const trace of traces) length += measures.get(trace)?.length || 0
+  return planMillimeters(length)
+}
+
+/** Collapse a long route to one row per leg or one line for the whole board. */
+function compactRows({
   topology,
-  fault,
-  placed,
+  extras,
+  limit,
+  measures,
   db,
 }: {
-  issue?: Diagnostic
-  error: unknown
-  paths: readonly PlanPath[]
-  topology?: PlanTopology
-  fault: PlanFault
-  placed: ReadonlySet<SourcePortId>
+  topology: PlanTopology
+  extras: number
+  limit: number
+  measures: ReadonlyMap<SourceTraceId, TraceMeasure>
   db: CircuitJsonUtilObjects
-}): string {
-  if (error instanceof Error && error.cause === "scopeDistanceMm")
-    return "Choose a copper search distance greater than zero."
-  const path = paths.find(
-    ({ from, to }) => fault.ports.has(from) && fault.ports.has(to),
+}): PlanHeaderRow[] {
+  const groups = new Map<string, ResolvedPlanPath[]>()
+  for (const path of topology.paths) {
+    const group = groups.get(path.name) || []
+    group.push(path)
+    groups.set(path.name, group)
+  }
+  if (groups.size > limit || !groups.size) {
+    const signals = new Set(topology.paths.map(({ channel }) => channel))
+    const traces = new Set(topology.cuts.map(({ trace }) => trace))
+    return [
+      {
+        text: `${planCount({ count: signals.size, noun: "signal" })} across ${planCount({ count: traces.size, noun: "trace" })} (${totalLength({ traces, measures })} total).`,
+      },
+    ]
+  }
+  let suffix = ""
+  if (extras) suffix = `, +${extras} extra`
+  const indices = new Map(
+    topology.cuts.map(({ trace, index }) => [trace, index]),
   )
-  const missing = fault.links.find(({ kind }) => kind === "missing")
-  if (missing && path) {
-    const from = pinName({ id: missing.from, db })
-    const to = pinName({ id: missing.to, db })
-    let marker = ""
-    if (placed.has(missing.from) && placed.has(missing.to))
-      marker = " (red dashed line)"
-    if (issue?.code === "channel_receiver_terminal_missing")
-      return `${path.name}: ${to} has no board connection to receive from ${from}${marker}.`
-    return `${path.name}: no copper connects ${from} to ${to}${marker}.`
-  }
-  const pins = [...fault.ports]
-  const names = pins.map((id) => pinName({ id, db }))
-  if (issue?.code === "channel_driver_terminal_missing" && names.length)
-    return `${names[0]} has no board pad for the driver.`
-  if (issue?.code === "channel_fanout" && fault.traces.size)
-    return `The traces through ${names.join(", ")} form a loop (red dashed traces).`
-  if (issue?.code === "channel_fanout" && names.length)
-    return `The route from ${names[0]} branches. This simulation needs a single path.`
-  if (issue?.code === "channel_short") {
-    const grounded = pins.find((id) => topology?.nodes[id] === "0")
-    if (grounded)
-      return `${pinName({ id: grounded, db })} is shorted to ground (red marker).`
-    const bypass = fault.links.find(({ kind }) => kind === "short")
-    if (bypass) {
-      const from = pinName({ id: bypass.from, db })
-      const to = pinName({ id: bypass.to, db })
-      const traces =
-        topology?.cuts.filter(({ trace }) => fault.traces.has(trace)) || []
-      const contacts = new Set(traces.flatMap(({ from, to }) => [from, to]))
-      const series =
-        topology?.segments.filter(
-          ({ kind, from, to }) =>
-            kind === "series" && contacts.has(from) && contacts.has(to),
-        ) || []
-      const parts = series.map((link) => seriesPart({ link, db }))
-      if (traces.length) parts.unshift("the traces")
-      let skipped = ""
-      if (parts.length) skipped = `, skipping ${parts.join(" and ")}`
-      const name = path?.name || "The signal"
-      return `${name} is shorted: ${from} connects directly to ${to}${skipped} (red dashes).`
+  return [...groups].map(([name, paths], index) => {
+    const traces = new Set(
+      paths.flatMap(({ hops }) =>
+        hops.flatMap((hop) => {
+          if (hop.kind === "trace") return [hop.trace]
+          return []
+        }),
+      ),
+    )
+    const first = indices.get([...traces][0])
+    let color: string = planColors.ideal
+    if (first !== undefined) color = planCutColor(first)
+    const driver = pinName({ id: paths[0].from, db })
+    const receivers = paths.map(({ to }) => pinName({ id: to, db })).join(", ")
+    const detail = `${planCount({ count: traces.size, noun: "trace" })}, ${totalLength({ traces, measures })}`
+    return {
+      text: `${name}: ${driver} → ${receivers} (${detail})${index === groups.size - 1 ? suffix : ""}`,
+      color,
     }
-    if (names.length)
-      return `Check the short at ${names.join(", ")} (red marks).`
-  }
-  return "Check the board and simulation settings. Hover here for details."
+  })
+}
+
+/** List the resolved route, leading with the shortcut when one bypasses it. */
+export function planLedger({
+  topology,
+  paths,
+  fault,
+  db,
+}: {
+  topology?: PlanTopology
+  paths: readonly PlanPath[]
+  fault: PlanFault
+  db: CircuitJsonUtilObjects
+}): PlanHeaderRow[] {
+  if (!paths.length) return []
+  const measures = traceMeasures(db)
+  if (!topology) return partialRows({ paths, fault, measures, db })
+  const shortcuts = fault.links
+    .filter(({ kind }) => kind === "short")
+    .map((link) => {
+      const reverse = paths.some(
+        ({ from, to }) => link.to === from && link.from === to,
+      )
+      if (reverse)
+        return pathRow({
+          from: link.to,
+          to: link.from,
+          name: "Shortcut",
+          detail: "direct, no trace",
+          color: planColors.failure,
+          db,
+        })
+      return pathRow({
+        ...link,
+        name: "Shortcut",
+        detail: "direct, no trace",
+        color: planColors.failure,
+        db,
+      })
+    })
+  const extras = planExtraTraces(topology)
+  const rows = routedRows({ topology, extras, measures, db })
+  const limit = 4
+  if (rows.length + shortcuts.length <= limit) return [...shortcuts, ...rows]
+  return [
+    ...shortcuts,
+    ...compactRows({ topology, extras: extras.length, limit, measures, db }),
+  ]
 }
