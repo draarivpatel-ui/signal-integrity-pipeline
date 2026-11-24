@@ -12,9 +12,9 @@ import { type CircuitJson, routeTones } from "../src/board"
 import { boardPictureSvg } from "../src/board/board-picture"
 import { sha256 } from "../src/kernel"
 import {
-  type RoutedAdmissionInput,
   RoutedPipelineSolver,
   routedStages,
+  type TransientChannelSimulationPlanInput,
 } from "../src/pipeline"
 
 // All vendor assets, physical board JSON, decks and renders remain outside Git.
@@ -33,7 +33,7 @@ interface StageRender {
 }
 
 const stageNames = [
-  "admission",
+  "transient-channel-simulation-plan",
   "sections",
   "fields",
   "bindings",
@@ -86,7 +86,7 @@ async function stages({
   input,
 }: {
   name: string
-  input: RoutedAdmissionInput
+  input: TransientChannelSimulationPlanInput
 }): Promise<void> {
   const execute =
     name === "two-trace" && process.argv.includes("--native-two-trace")

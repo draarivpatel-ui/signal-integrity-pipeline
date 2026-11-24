@@ -14,7 +14,7 @@ interface RouteCopperNet {
   color: string
 }
 
-/** Colours for physical copper, endpoint outlines and admission diagnostics. */
+/** Colours for physical copper, endpoint outlines and planning diagnostics. */
 export const routeCopperTones = {
   copper: "#9aa3ad",
   halo: "#0b0f13",

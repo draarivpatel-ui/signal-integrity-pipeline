@@ -9,10 +9,10 @@ import { boardPictureView } from "../../src/board/board-picture"
 import { sha256 } from "../../src/kernel"
 import { formatSpiceVectors } from "../../src/observation"
 import {
-  type RoutedAdmissionInput,
   RoutedPipelineSolver,
   type RoutedStageSolver,
   routedStages,
+  type TransientChannelSimulationPlanInput,
 } from "../../src/pipeline"
 import {
   RouteBindingsSolver,
@@ -28,7 +28,7 @@ import {
   transientDurationSeconds,
   voltageNames,
 } from "../fixtures/routed-deck"
-import { routedAdmissionInput } from "../fixtures/routed-fixture"
+import { channelPlanInput } from "../fixtures/routed-fixture"
 import { VendorDifferential } from "../fixtures/vendor-differential"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
@@ -110,7 +110,7 @@ const testWithInverter = test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))
 testWithInverter(
   "six flat stages visit every channel simulation and produce deterministic artifacts",
   async () => {
-    const input = await routedAdmissionInput()
+    const input = await channelPlanInput()
     const solver = new RoutedPipelineSolver({ input, context: synthetic })
     assert.throws(() => solver.getOutput(), /incomplete/)
     await solver.solveAsync()
@@ -167,7 +167,7 @@ testWithInverter(
   },
 )
 
-test("root with no channel simulations seals only admission and the tuple manifest", () => {
+test("root with no channel simulations seals only the plan and the tuple manifest", () => {
   const solver = new RoutedPipelineSolver({
     input: { circuitJson: [], ibisSources: {} },
     context: synthetic,
@@ -210,8 +210,9 @@ test("every completed stage retains its own final drawing with few, readable lab
   for (const definition of root.pipelineDef) {
     const graphics = root.getSolver(definition.solverName)!.visualize()
     const texts = graphics.texts ?? []
-    const admission = definition.solverName === "RoutedAdmissionSolver"
-    if (admission) {
+    const planner =
+      definition.solverName === "TransientChannelSimulationPlanSolver"
+    if (planner) {
       assert.ok(texts.some((text) => text.text.startsWith("ADMITTED")))
       assert.ok(texts.every((text) => text.anchorSide === "center"))
     } else {
@@ -224,7 +225,7 @@ test("every completed stage retains its own final drawing with few, readable lab
       circuit: root.inputProblem.circuitJson,
       drawing: graphics,
     })
-    const [width, height] = admission ? [1100, 800] : [1000, 540]
+    const [width, height] = planner ? [1100, 800] : [1000, 540]
     const scale = Math.min(
       width / (view.maxX - view.minX),
       height / (view.maxY - view.minY),
@@ -244,12 +245,12 @@ test("every completed stage retains its own final drawing with few, readable lab
 type DriverWeight = [timeSeconds: number, weight: number]
 
 testWithInverter("driver lead-in fits the default capture", async () => {
-  const input = await routedAdmissionInput()
+  const input = await channelPlanInput()
   const solver = new RoutedPipelineSolver({ input, context: synthetic })
   solver.solveUntilStage("RouteTransientSolver")
   assert.equal(
-    solver.stageOutput("RoutedAdmissionSolver").value[0].bindings.options
-      .durationSeconds,
+    solver.stageOutput("TransientChannelSimulationPlanSolver").value[0].bindings
+      .options.durationSeconds,
     40e-9,
   )
   const deck = solver.stageOutput("RouteNetworkSolver").value[0]
@@ -287,7 +288,7 @@ test("all six static stage definitions exist before the first step", () => {
   assert.deepEqual(
     root.pipelineDef,
     definitions,
-    "admission never creates stage definitions at runtime",
+    "channel planning never creates stage definitions at runtime",
   )
 })
 
@@ -310,7 +311,10 @@ test("actual two-channel simulation TSX advances every flat stage and invokes tr
     },
   })
   root.solveUntilStage("RouteBindingsSolver")
-  assert.equal(root.stageOutput("RoutedAdmissionSolver").value.length, 2)
+  assert.equal(
+    root.stageOutput("TransientChannelSimulationPlanSolver").value.length,
+    2,
+  )
   assert.equal(root.stageOutput("RouteSectionsSolver").value.length, 2)
   assert.equal(root.stageOutput("RouteFieldsSolver").value.length, 2)
   const sections = root.getSolver("RouteSectionsSolver")!.visualize()
@@ -367,7 +371,7 @@ function assertDrawing({
 /** Load the synthetic two-trace input or the optional local differential model. */
 async function drawingInput(
   name: "two-trace" | "level1-differential",
-): Promise<RoutedAdmissionInput> {
+): Promise<TransientChannelSimulationPlanInput> {
   if (name === "two-trace")
     return (await routedVisualFixture()).root.inputProblem
   const modelDirectory = process.env.IBIS_MODEL_DIR
@@ -432,10 +436,10 @@ for (const name of ["two-trace", "level1-differential"] as const) {
             state: `${name}: iteration ${solver.iterations}`,
           },
         })
-        if (solver.getStageOutput("RoutedAdmissionSolver")) {
+        if (solver.getStageOutput("TransientChannelSimulationPlanSolver")) {
           assert.ok(
             solver.visualize().lines!.length > 0,
-            `${name}: every admitted stage draws selected copper`,
+            `${name}: every subsequent stage draws selected copper`,
           )
         }
       }

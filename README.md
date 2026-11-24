@@ -38,7 +38,7 @@ Captured solver timestamps are in seconds. Each entry in `channelSimulations` ho
 evidence and completed probe capture.
 Captures are candidate evidence without independent convergence qualification.
 `files` maps every artifact path to its bytes; writing them is the caller's choice.
-A board with no channel simulations completes after admission without invoking a solver.
+A board with no channel simulations completes after planning without invoking a solver.
 
 Branched routes remain unsupported. Inline IBIS coupled package matrices are
 validated before the deck is built and lowered to a passive lumped package. Unlisted
@@ -73,7 +73,7 @@ Vendor IBIS files and board JSON remain local and ignored by git.
 flowchart TD
   board[/"Your board<br/>(Circuit JSON with transient channel simulations)"/] --> s1["1. Admit each channel simulation: drivers, receivers, the copper scope and declared aggressor states<br/><small>pipeline</small>"]
   chips[/"Chip models<br/>(IBIS files; coupled package admission)"/] --> s1
-  s1 --> manifest["Admission manifest"]
+  s1 --> manifest["Transient channel simulation plan manifest"]
   s1 --> s2["2. Cut the scoped copper into straight sections over their reference planes<br/><small>board</small>"]
   s2 --> s3["3. Solve each unique cross-section's coupled R, L, G and C<br/><small>extraction</small>"]
   chips --> s4
@@ -86,13 +86,13 @@ flowchart TD
 ```
 
 The pipeline is inspectable with solver-utils. All six stage rows exist before the
-first step; each stage processes all admitted channel simulations in order, with no nested channel simulation
+first step; each stage processes all planned channel simulations in order, with no nested channel simulation
 pipelines.
 
 <!-- routed-stages:start -->
 | # | Stage solver |
 |---|---|
-| 1 | RoutedAdmissionSolver |
+| 1 | TransientChannelSimulationPlanSolver |
 | 2 | RouteSectionsSolver |
 | 3 | RouteFieldsSolver |
 | 4 | RouteBindingsSolver |
@@ -101,12 +101,12 @@ pipelines.
 
 ```mermaid
 flowchart LR
-  s0["RoutedAdmissionSolver<br/>Admit one channel simulation per step"]
-  s1["RouteSectionsSolver<br/>All admitted channel simulations, one item per step"]
-  s2["RouteFieldsSolver<br/>All admitted channel simulations, one item per step"]
-  s3["RouteBindingsSolver<br/>All admitted channel simulations, one item per step"]
-  s4["RouteNetworkSolver<br/>All admitted channel simulations, one item per step"]
-  s5["RouteTransientSolver<br/>All admitted channel simulations, one item per step"]
+  s0["TransientChannelSimulationPlanSolver<br/>Plan one transient channel simulation per step"]
+  s1["RouteSectionsSolver<br/>All planned channel simulations, one item per step"]
+  s2["RouteFieldsSolver<br/>All planned channel simulations, one item per step"]
+  s3["RouteBindingsSolver<br/>All planned channel simulations, one item per step"]
+  s4["RouteNetworkSolver<br/>All planned channel simulations, one item per step"]
+  s5["RouteTransientSolver<br/>All planned channel simulations, one item per step"]
   s0 --> s1
   s1 --> s2
   s2 --> s3
@@ -117,14 +117,14 @@ flowchart LR
 
 ```mermaid
 stateDiagram-v2
-  [*] --> RoutedAdmissionSolver
-  RoutedAdmissionSolver --> RouteSectionsSolver: all channel simulations completed
+  [*] --> TransientChannelSimulationPlanSolver
+  TransientChannelSimulationPlanSolver --> RouteSectionsSolver: all channel simulations completed
   RouteSectionsSolver --> RouteFieldsSolver: all channel simulations completed
   RouteFieldsSolver --> RouteBindingsSolver: all channel simulations completed
   RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
   RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
-  RoutedAdmissionSolver --> failed: invalid admission, including undeclared aggressors
+  TransientChannelSimulationPlanSolver --> failed: invalid channel simulation input, including undeclared aggressors
   RouteSectionsSolver --> failed
   RouteFieldsSolver --> failed
   RouteBindingsSolver --> failed
