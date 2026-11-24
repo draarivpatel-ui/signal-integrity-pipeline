@@ -1,13 +1,11 @@
-import {
-  type CircuitJsonDb,
-  type CircuitJsonSnapshot,
-  circuitJsonDb,
-  type DriverPattern,
-  type SimulationPcbTransientChannelSimulation,
-  type SourcePortId,
+import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
+import type {
+  CircuitJson,
+  DriverPattern,
+  SimulationPcbTransientChannelSimulation,
+  SourcePortId,
 } from "../board"
 import { type InspectedPin, pinCapabilities } from "../buffers"
-import type { Snapshot } from "../kernel"
 import type { SignalPins } from "./signal-pins"
 import { prbsPatterns } from "./timing"
 
@@ -19,7 +17,7 @@ function aggressorName({
   db,
   pin,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   pin: InspectedPin
 }): string {
   const component = db.source_component.get(pin.model.source_component_id)
@@ -34,8 +32,8 @@ export function planAggressors({
   pins,
   driven,
 }: {
-  circuit: CircuitJsonSnapshot
-  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
+  circuit: CircuitJson
+  channelSimulation: SimulationPcbTransientChannelSimulation
   pins: Map<SourcePortId, InspectedPin>
   driven: SignalPins["driven"]
 }): Aggressors {
@@ -45,7 +43,7 @@ export function planAggressors({
     .sort((a, b) => a.port.localeCompare(b.port, "en"))
   if (aggressorPins.length === 0) return aggressors
 
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   if (channelSimulation.aggressor_disabled === true) {
     for (const pin of aggressorPins) {
       if (!pinCapabilities(pin).disable) {

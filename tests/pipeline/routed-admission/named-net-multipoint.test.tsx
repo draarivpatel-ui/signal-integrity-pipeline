@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb, selectPort } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
+import { selectPort } from "../../../src/board"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { AdmissionDaisyChain } from "../../fixtures/admission-daisy-chain"
@@ -22,7 +23,7 @@ test("a multipoint ideal trace can label the junction between routed cuts", asyn
     ),
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
-  const db = circuitJsonDb(circuitJson)
+  const db = cju([...circuitJson])
   const net = db.source_net.getWhere({ name: "DATA" })
   assert.ok(net)
   const mid = selectPort({

@@ -1,6 +1,6 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type {
-  CircuitJsonSnapshot,
+  CircuitJson,
   CopperScope,
   RouteSlice,
   SectionGeometry,
@@ -32,7 +32,7 @@ const PARALLEL_COUPLING_WARNING = [
 /** Routed geometry, extraction options, and the artifact location. */
 export interface RouteFieldsInput {
   geometry: Snapshot<SectionGeometry>
-  circuitJson?: CircuitJsonSnapshot
+  circuitJson?: CircuitJson
   scope?: Snapshot<CopperScope>
   materials?: RouteMaterials
   maskThicknessMm?: number | null
