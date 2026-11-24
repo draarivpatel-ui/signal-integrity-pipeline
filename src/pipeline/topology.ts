@@ -250,6 +250,7 @@ function checkSignalRoutes({
           fail(
             "channel_driver_terminal_missing",
             `Signal "${name}" is not routed from ${driverName}: the driver has no PCB terminal.`,
+            { subjects: [{ kind: "record", id: port }] },
           )
         continue
       }
@@ -262,20 +263,26 @@ function checkSignalRoutes({
         fail(
           "channel_fanout",
           `Signal "${name}" from ${driverName}: branched routes are not supported yet.`,
+          { subjects: [{ kind: "record", id: port }] },
         )
       if (allowUnroutedTraces) continue
       for (const ports of targets) {
         const target = ports[leg]
         const targetName = names[target]
         const unrouted = `Signal "${name}" is not routed between ${driverName} and ${targetName}`
+        const subjects = [port, target].map((id) => ({
+          kind: "record" as const,
+          id,
+        }))
         const ends =
           terminals.get(target) ??
           fail(
             "channel_receiver_terminal_missing",
             `${unrouted}: the receiver has no PCB terminal on the signal net.`,
+            { subjects },
           )
         if (!ends.some((key) => connected.has(key)))
-          fail("channel_net", `${unrouted}.`)
+          fail("channel_net", `${unrouted}.`, { subjects })
       }
     }
   }

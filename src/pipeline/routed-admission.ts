@@ -1,12 +1,9 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
-  admissionRouteView,
+  admissionDrawing,
   type RouteSectionsInput,
   type SimulationPcbTransientChannelSimulationId,
-  scopedAdmissionDrawing,
-  unscopedAdmissionDrawing,
 } from "../board"
 import type { IbisSources } from "../buffers"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
@@ -19,6 +16,10 @@ import {
   captureRoutedAdmissionInput,
   type RoutedAdmissionInput,
 } from "./routed-admission-input"
+import {
+  buildAdmissionVisualScene,
+  type FailedAdmissionAttempt,
+} from "./routed-admission-visual"
 import { routedReceiverMappings } from "./routed-receiver-paths"
 import { compareNames, prepareChannelSimulation } from "./signals"
 
@@ -147,6 +148,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
   private readonly channelSimulationPlans: RoutedChannelSimulationPlan[] = []
   private channelPcbTraceCount = 0
   private output?: RoutedAdmissionOutput
+  private failedAttempt?: FailedAdmissionAttempt
   /** Capture a single board and model version for the whole admission run. */
   constructor(input: RoutedAdmissionInput) {
     super()
@@ -159,14 +161,22 @@ export class RoutedAdmissionSolver extends BaseSolver {
     const admittedChannelSimulation =
       channelSimulations[this.channelSimulationPlans.length]
     if (admittedChannelSimulation) {
-      const plan = planRoutedChannelSimulation({
-        input: this.input,
-        scopeDistanceMm,
-        admittedChannelSimulation,
-      })
-      this.channelSimulationPlans.push(plan)
-      this.channelPcbTraceCount +=
-        plan.sections.copperScope.channelPcbTraceIds.length
+      try {
+        const plan = planRoutedChannelSimulation({
+          input: this.input,
+          scopeDistanceMm,
+          admittedChannelSimulation,
+        })
+        this.channelSimulationPlans.push(plan)
+        this.channelPcbTraceCount +=
+          plan.sections.copperScope.channelPcbTraceIds.length
+      } catch (error) {
+        this.failedAttempt = {
+          simulation: admittedChannelSimulation.channelSimulation,
+          error,
+        }
+        throw error
+      }
     }
     const channelSimulationCount = this.channelSimulationPlans.length
     this.stats = {
@@ -196,26 +206,15 @@ export class RoutedAdmissionSolver extends BaseSolver {
       }),
     ]
   }
-  /** Inspect the latest channel's copper and endpoints or the whole unscoped board. */
+  /** Inspect the most recent attempted channel simulation and its board. */
   override visualize(): GraphicsObject {
-    const circuit = this.input.circuitJson
-    const plan = this.channelSimulationPlans.at(-1)
-    if (plan === undefined)
-      return unscopedAdmissionDrawing({ circuit, error: this.error })
-    const { mappings } = plan.bindings
-    const db = cju([...circuit])
-    const view = admissionRouteView({
-      db,
-      scope: plan.sections.copperScope,
-      endpointSourcePortIds: new Set(
-        mappings.flatMap(({ from, to }) => [from, to]),
-      ),
-    })
-    return scopedAdmissionDrawing({
-      db,
-      view,
-      mappings,
-      error: this.error,
-    })
+    return admissionDrawing(
+      buildAdmissionVisualScene({
+        circuit: this.input.circuitJson,
+        plan: this.channelSimulationPlans.at(-1),
+        failed: this.failedAttempt,
+        error: this.error,
+      }),
+    )
   }
 }

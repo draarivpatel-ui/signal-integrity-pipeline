@@ -18,9 +18,17 @@ export {
   namespaceSpice,
   voltageSourceTerminals,
 } from "./netlist"
-export { receiverGraphs, receiverPath } from "./receiver-paths"
+export {
+  type ReceiverGraphs,
+  receiverGraphs,
+  receiverPath,
+} from "./receiver-paths"
 export { RouteBindingsSolver } from "./route-bindings"
-export { circuitNodes } from "./routed-nodes"
+export {
+  circuitNodes,
+  numberCircuitNodes,
+  validateRoutedNodes,
+} from "./routed-nodes"
 export type {
   RouteBindingsInput,
   RoutedBindings,
