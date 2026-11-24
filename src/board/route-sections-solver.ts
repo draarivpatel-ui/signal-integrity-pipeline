@@ -8,11 +8,11 @@ import {
   routeSectionSteps,
   type SectionGeometry,
 } from "./route-sections"
-import type { CircuitJsonSnapshot } from "./schema"
+import type { CircuitJson, CircuitJsonSnapshot } from "./schema"
 
 /** The board, copper scope and required ports passed to route sectioning. */
 export interface RouteSectionsInput {
-  readonly circuitJson: CircuitJsonSnapshot
+  readonly circuitJson: CircuitJson
   readonly copperScope: Snapshot<CopperScope>
   readonly requiredSourcePortIds: readonly SourcePortId[]
   readonly artifactPrefix: string

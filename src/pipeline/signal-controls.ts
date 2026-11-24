@@ -1,6 +1,6 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import {
-  type CircuitJsonSnapshot,
-  circuitJsonDb,
+  type CircuitJson,
   type DriverPattern,
   endpointPorts,
   isQuiet,
@@ -12,7 +12,7 @@ import {
   type SourcePortId,
 } from "../board"
 import type { InspectedPin } from "../buffers"
-import { Diagnostic, type Snapshot } from "../kernel"
+import { Diagnostic } from "../kernel"
 import type { RunControls } from "../simulation"
 import type { Aggressors } from "./aggressors"
 import { defaultDurationSeconds, prbsPatterns } from "./timing"
@@ -41,12 +41,12 @@ const MIN_STEPS_PER_RECORDING = 2
 
 /** Circuit, inspected pins and timing used to lower a channel experiment. */
 export interface ChannelSimulationControlOptions {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
-  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
-  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
   pins: Map<SourcePortId, InspectedPin>
-  driven: Map<SourcePortId, Snapshot<SimulationPcbDriverReceiverChannel>>
+  driven: Map<SourcePortId, SimulationPcbDriverReceiverChannel>
   aggressors: Aggressors
   durationSeconds: number
   stepSeconds: number
@@ -64,7 +64,7 @@ export function signalTiming({
   durationSeconds,
   edgeTimesSeconds,
 }: {
-  patterns: readonly Snapshot<DriverPattern>[]
+  patterns: readonly DriverPattern[]
   durationSeconds: number
   edgeTimesSeconds: number[]
 }): SignalTiming {
@@ -89,8 +89,8 @@ export function channelSimulationDurationSeconds({
   channelSimulation,
   patterns,
 }: {
-  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
-  patterns: readonly Snapshot<DriverPattern>[]
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  patterns: readonly DriverPattern[]
 }): number {
   let durationSeconds: number
   if (channelSimulation.duration_ms === undefined)
@@ -116,7 +116,7 @@ export function channelSimulationDurationSeconds({
 
 /** Include a quiet driver as the last probe after the receivers. */
 export function probeEndpoints(
-  signal: Snapshot<SimulationPcbDriverReceiverChannel>,
+  signal: SimulationPcbDriverReceiverChannel,
 ): readonly SignalEndpoint[] {
   if (isQuiet(signal)) return [...signal.receivers, signal.driver]
   return signal.receivers
@@ -136,7 +136,7 @@ export function signalBits({
   signal,
   durationSeconds,
 }: {
-  signal: Snapshot<DriverPattern>
+  signal: DriverPattern
   durationSeconds: number
 }): string {
   const prbs = prbsPatterns.get(signal.pattern)
@@ -202,7 +202,7 @@ function driverStimulus({
   inverted,
 }: {
   name: string
-  signal: Snapshot<DriverPattern>
+  signal: DriverPattern
   port: SourcePortId
   bits: string
   inverted: boolean
@@ -224,7 +224,7 @@ function driverStimulus({
 
 /** Circuit with the lowered experiment and probes, plus their pin states and stimuli. */
 interface ChannelSimulationControls {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   controls: RunControls
 }
 
@@ -241,9 +241,9 @@ export function withChannelSimulationControls({
   stepSeconds,
 }: ChannelSimulationControlOptions): ChannelSimulationControls {
   const controls: RunControls = { states: [], stimuli: [] }
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const scope = db.pcb_board.getWhere({})?.subcircuit_id
-  const records: CircuitJsonSnapshot[number][] = []
+  const records: CircuitJson[number][] = []
   records.push({
     type: "simulation_experiment",
     simulation_experiment_id: simulationPcbTransientChannelSimulationId,
