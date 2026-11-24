@@ -20,7 +20,11 @@ export {
   voltageSourceTerminals,
 } from "./netlist"
 /** @internal */
-export { receiverGraphs, receiverPath } from "./receiver-paths"
+export {
+  type ReceiverGraphs,
+  receiverGraphs,
+  receiverPath,
+} from "./receiver-paths"
 export { RouteBindingsSolver } from "./route-bindings"
 export { type RouteLadder, routeLadder } from "./route-ladder"
 export { RouteNetworkSolver } from "./route-network"
@@ -34,7 +38,12 @@ export {
   terminalInductance,
 } from "./route-transitions"
 export { routedControl } from "./routed-control"
-export { circuitNodes } from "./routed-nodes"
+/** @internal */
+export {
+  circuitNodes,
+  numberCircuitNodes,
+  validateRoutedNodes,
+} from "./routed-nodes"
 export type {
   RouteBindingsInput,
   RoutedBindings,

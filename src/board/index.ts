@@ -6,13 +6,21 @@
  */
 
 /** @internal */
-export { admissionRouteView } from "./admission-view"
+/** @internal */
+export type { AdmissionHeaderRow } from "./admission-header"
+/** @internal */
+export { admissionPorts } from "./admission-view"
+/** @internal */
+export { admissionDrawing } from "./admission-visual"
 /** @internal */
 export {
-  routeAdmissionMarks,
-  scopedAdmissionDrawing,
-  unscopedAdmissionDrawing,
-} from "./admission-visual"
+  type AdmissionVisualCut,
+  type AdmissionVisualEndpoint,
+  type AdmissionVisualLink,
+  type AdmissionVisualScene,
+  admissionColors,
+  admissionCutColor,
+} from "./admission-visual-types"
 /** @internal */
 export {
   type ConnectivityMap,

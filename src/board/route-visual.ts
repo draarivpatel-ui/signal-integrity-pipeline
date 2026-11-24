@@ -2,15 +2,15 @@ import { cju } from "@tscircuit/circuit-json-util"
 import type { GraphicsObject, Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import { routeBoardBox as admissionBoardBox } from "./admission-view"
+import type { CopperScope } from "./geometry/scope"
+import type { PcbTraceId, SourcePortId } from "./ids"
 import {
   routeCircle as circle,
   routeNets as drawRouteNets,
   type RouteDrawing,
   routeCanvas,
   routePointSpacing,
-} from "./admission-visual"
-import type { CopperScope } from "./geometry/scope"
-import type { PcbTraceId, SourcePortId } from "./ids"
+} from "./route-visual-primitives"
 import {
   type RouteNet,
   type RouteView,
@@ -19,20 +19,21 @@ import {
 } from "./route-visual-view"
 import type { CircuitJson } from "./schema"
 
-export { routeBounds, routeHue } from "./admission-view"
+export { routeBounds } from "./admission-view"
 export {
   routeCanvas,
   routeFailure,
   routeMarks,
   routeStroke,
   routeText,
-} from "./admission-visual"
+} from "./route-visual-primitives"
 export {
   type RouteFrame,
   type RouteNet,
   type RouteView,
   routeDisplayItems,
   routeFrame,
+  routeHue,
   routeOutline,
   routeTones,
   routeView,

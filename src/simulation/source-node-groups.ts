@@ -68,6 +68,13 @@ export function shortedCut({
   return fail(
     "channel_short",
     `${cut.sourceTraceId}: ${cut.fromSourcePortId} and ${cut.toSourcePortId} ${reason}`,
+    {
+      subjects: [
+        cut.sourceTraceId,
+        cut.fromSourcePortId,
+        cut.toSourcePortId,
+      ].map((id) => ({ kind: "record", id })),
+    },
   )
 }
 
