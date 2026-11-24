@@ -27,5 +27,7 @@ test("draws the series passive between its two distinct routed cuts", async () =
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "series-passive-visual",
+    caption:
+      "Two copper traces connect TX to RX through resistor RS. The plan follows the signal through both traces and the resistor.",
   })
 })
