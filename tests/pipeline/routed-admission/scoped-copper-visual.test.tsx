@@ -37,8 +37,24 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
   assert.equal(bindings.routedTraceCuts.length, 2)
   assert.equal(artifacts[0].path, "admission.json")
   const drawing = solver.visualize()
-  assert.equal(drawing.polygons?.length, 4)
-  assert.equal(drawing.lines?.length, 2)
+  assert.equal(
+    drawing.polygons?.filter(
+      (shape) => shape.layer === "endpoints" && shape.label?.includes("Driver"),
+    ).length,
+    2,
+  )
+  assert.ok(
+    drawing.polygons?.some((shape) => shape.label?.includes("Load RX.A")),
+  )
+  assert.ok(drawing.lines?.some((line) => line.layer === "scope"))
+  assert.ok(
+    drawing.texts?.every((text) => text.anchorSide === "center" && text.y > 6),
+  )
+  assert.ok(
+    drawing.texts?.some(
+      (text) => text.text.includes("C2") && text.text.includes("LOAD"),
+    ),
+  )
   assertRouteVisual({
     drawing,
     module: "pipeline/routed-admission",

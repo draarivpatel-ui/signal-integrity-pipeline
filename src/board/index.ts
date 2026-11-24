@@ -5,11 +5,17 @@
  * Imports: kernel.
  */
 
-export { admissionRouteView } from "./admission-view"
+export type { AdmissionHeaderRow } from "./admission-header"
+export { admissionPorts } from "./admission-view"
+export { admissionDrawing } from "./admission-visual"
 export {
-  scopedAdmissionDrawing,
-  unscopedAdmissionDrawing,
-} from "./admission-visual"
+  type AdmissionVisualCut,
+  type AdmissionVisualEndpoint,
+  type AdmissionVisualLink,
+  type AdmissionVisualScene,
+  admissionColors,
+  admissionCutColor,
+} from "./admission-visual-types"
 export {
   type ConnectivityMap,
   crossesDifferentialLegs,
