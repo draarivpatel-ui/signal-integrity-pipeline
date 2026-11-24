@@ -4,7 +4,6 @@ import type { PcbCopperPour } from "circuit-json"
 import { hypotenuse, type Snapshot } from "../kernel"
 import {
   containsReferenceInterval,
-  findEdgeHandoffsMm,
   getEdgeCoverage,
   type LongitudinalInterval,
   MAX_REFERENCE_EDGE_DISTANCE_MM,
@@ -16,7 +15,7 @@ import type {
   ReferenceSurface,
   TraceWire,
 } from "./copper-geometry-types"
-import { getWirePoint, MIN_WIRE_LENGTH_MM } from "./copper-geometry-wire"
+import { getWirePoint } from "./copper-geometry-wire"
 import { polygonContains } from "./geometry/polygon"
 import type { CopperPoint } from "./geometry/types"
 import type { CopperLayer } from "./stackup"
@@ -100,7 +99,7 @@ interface ReferenceCandidate {
 
 /** An eligible reference and its position relative to the signal copper. */
 interface PourSurface {
-  pour: ReferencePour
+  pour: Snapshot<ReferencePour>
   reference: ReferenceSurface
   isAboveSignal: boolean
   verticalGapMm: number
@@ -113,7 +112,7 @@ function getReferenceSurface({
   layer,
 }: {
   signal: Snapshot<CopperLayer>
-  pour: ReferencePour
+  pour: Snapshot<ReferencePour>
   layer: Snapshot<CopperLayer>
 }): PourSurface {
   const isAboveSignal = layer.zMinMm > signal.zMaxMm
@@ -176,9 +175,7 @@ function findEdgeReference({
 }
 
 /** Stackup and pours used to locate reference surfaces. */
-type ReferenceGeometry = Snapshot<Pick<ExtractedCopper, "stackup">> & {
-  pours: ReferencePour[]
-}
+type ReferenceGeometry = Snapshot<Pick<ExtractedCopper, "stackup" | "pours">>
 
 /** A wire's copper layer and the available reference surfaces on other layers. */
 interface WireReferenceSurfaces {
@@ -244,85 +241,16 @@ export function findWireReferences({
   return findEdgeReference({ point, surfaces, signal, wire, interval })
 }
 
-/** Include vertices and endpoints of collinear edges; the sweep deduplicates shared positions. */
-function findSurfaceBoundariesMm({
-  wire,
-  pours,
-}: {
-  wire: TraceWire
-  pours: readonly ReferencePour[]
-}): number[] {
-  const [x, y] = wire.direction
-  const boundariesMm: number[] = []
-  for (const pour of pours) {
-    if (pour.layer === wire.layer) continue
-    for (const ring of pour.polygon) {
-      for (const [index, startPoint] of ring.entries()) {
-        const endPoint = ring[(index + 1) % ring.length]
-        const startOffsetMm =
-          -startPoint[0] * y + startPoint[1] * x - wire.lateralOffsetMm
-        const endOffsetMm =
-          -endPoint[0] * y + endPoint[1] * x - wire.lateralOffsetMm
-        if (Math.abs(startOffsetMm) <= MIN_WIRE_LENGTH_MM)
-          boundariesMm.push(startPoint[0] * x + startPoint[1] * y)
-        if (
-          (startOffsetMm < 0 && endOffsetMm > 0) ||
-          (startOffsetMm > 0 && endOffsetMm < 0)
-        ) {
-          const fraction = startOffsetMm / (startOffsetMm - endOffsetMm)
-          const crossingX =
-            startPoint[0] + (endPoint[0] - startPoint[0]) * fraction
-          const crossingY =
-            startPoint[1] + (endPoint[1] - startPoint[1]) * fraction
-          boundariesMm.push(crossingX * x + crossingY * y)
-        }
-      }
-    }
-  }
-  return boundariesMm.filter(
-    (positionMm) =>
-      positionMm > wire.longitudinalMinMm + MIN_WIRE_LENGTH_MM &&
-      positionMm < wire.longitudinalMaxMm - MIN_WIRE_LENGTH_MM,
-  )
-}
-
-/** Add edge handoffs only where no reference surface covers the existing interval. */
-export function findReferenceBoundariesMm({
-  wire,
+/** The intervals within range of at least one of the wire's reference edges. */
+export function getReferenceCoverage({
   geometry,
+  wire,
 }: {
-  wire: TraceWire
   geometry: ReferenceGeometry
-}): number[] {
-  const surfaceBoundariesMm = findSurfaceBoundariesMm({
-    wire,
-    pours: geometry.pours,
-  }).sort((first, second) => first - second)
-  const positionsMm = [
-    wire.longitudinalMinMm,
-    ...surfaceBoundariesMm,
-    wire.longitudinalMaxMm,
-  ]
-  const handoffsMm: number[] = []
-  for (let index = 1; index < positionsMm.length; index++) {
-    const startMm = positionsMm[index - 1]
-    const endMm = positionsMm[index]
-    if (endMm - startMm <= MIN_WIRE_LENGTH_MM) continue
-    const interval = { startMm, endMm }
-    if (
-      findWireReferences({
-        geometry,
-        wire,
-        positionMm: (startMm + endMm) / 2,
-        interval,
-      }).length
-    )
-      continue
-    const { surfaces } = getWireReferenceSurfaces({ geometry, wire })
-    const coverage = surfaces.flatMap(({ pour, verticalGapMm }) =>
-      getEdgeCoverage({ wire, pour, verticalGapMm }),
-    )
-    handoffsMm.push(...findEdgeHandoffsMm({ coverage, interval }))
-  }
-  return [...surfaceBoundariesMm, ...handoffsMm]
+  wire: Snapshot<TraceWire>
+}): LongitudinalInterval[] {
+  const { surfaces } = getWireReferenceSurfaces({ geometry, wire })
+  return surfaces.flatMap(({ pour, verticalGapMm }) =>
+    getEdgeCoverage({ wire, pour, verticalGapMm }),
+  )
 }
