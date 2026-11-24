@@ -112,7 +112,12 @@ export function assertMatrixPassive({
   strict?: boolean
 }): void {
   const size = matrix.length
-  const largest = Math.max(...matrix.flat().map(Math.abs))
+  let largest = -Infinity
+  for (const row of matrix) {
+    for (const coefficient of row) {
+      largest = Math.max(largest, Math.abs(coefficient))
+    }
+  }
   if (!Number.isFinite(largest))
     fail("matrix_format", "Nonfinite cross-section coefficient")
   if (calculateReciprocityResidual(matrix) > PASSIVITY_RELATIVE_TOLERANCE)
