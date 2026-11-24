@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb, selectPort } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
+import { selectPort } from "../../../src/board"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import "../../fixtures/extend-expect-circuit-snapshot"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
@@ -39,7 +40,7 @@ test("mixed routed and ideal terminations cannot carry an open differential leg"
     ),
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
-  assert.equal(circuitJsonDb(circuitJson).pcb_trace.list().length, 3)
+  assert.equal(cju([...circuitJson]).pcb_trace.list().length, 3)
   expect(circuitJson).toMatchPcbSnapshot(import.meta.path)
   const driver = selectPort({
     circuit: circuitJson,
