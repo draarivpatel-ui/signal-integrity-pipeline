@@ -30,7 +30,7 @@ export function calculateExternalInductance(
   )
 }
 
-/** Recede every conducting wall (or only the signal conductors' walls) away from the field, weighted by its surface
+/** Recede every conducting wall (or only the cross-section conductors' walls) away from the field, weighted by its surface
  * resistivity. Vacuum is essential: moving a wall must not change the electrical dielectric geometry.
  */
 function recedeWalls({
@@ -61,30 +61,30 @@ function recedeWalls({
     (lowerPlaneOffsetMm === 0 ||
       (region.planeSpacingMm && planeSpacingMm === region.planeSpacingMm))
   ) {
-    fail(
-      "cross_section_options",
-      "Recession displacement is too small to move the reference planes",
-    )
+    fail({
+      code: "cross_section_options",
+      text: "Recession displacement is too small to move the reference planes",
+    })
   }
   const conductors = region.conductors.map((c) => {
-    const shift =
+    const wallOffsetMm =
       displacementMm *
       Math.sqrt(
         defaultCopperConductivitySm /
           (c.conductivitySm ?? defaultCopperConductivitySm),
       )
-    const widthMm = c.widthMm - 2 * shift
-    const thicknessMm = c.thicknessMm - 2 * shift
-    const zMm = c.zMm + shift + lowerPlaneOffsetMm
+    const widthMm = c.widthMm - 2 * wallOffsetMm
+    const thicknessMm = c.thicknessMm - 2 * wallOffsetMm
+    const zMm = c.zMm + wallOffsetMm + lowerPlaneOffsetMm
     if (
       widthMm === c.widthMm ||
       thicknessMm === c.thicknessMm ||
       zMm === c.zMm
     ) {
-      fail(
-        "cross_section_options",
-        "Recession displacement is too small to move the conductor walls",
-      )
+      fail({
+        code: "cross_section_options",
+        text: "Recession displacement is too small to move the conductor walls",
+      })
     }
     return { ...c, widthMm, thicknessMm, zMm }
   })
@@ -96,37 +96,37 @@ function recedeWalls({
   }
 }
 
-/** Bound wall recession by trace dimensions, dielectric gaps and surface resistivity. */
+/** Bound wall recession by conductor dimensions, conductor clearances and surface resistivity. */
 function calculateRecessionMm({
   region,
-  fraction,
+  recessionFraction,
 }: {
   region: FieldRegion
-  fraction: number
+  recessionFraction: number
 }): number {
-  const gaps = region.conductors.flatMap((a, i) =>
+  const conductorGapsMm = region.conductors.flatMap((a, i) =>
     region.conductors.slice(i + 1).map((b) => {
-      const horizontal = Math.max(
+      const horizontalGapMm = Math.max(
         0,
         Math.abs(a.xMm - b.xMm) - (a.widthMm + b.widthMm) / 2,
       )
-      const vertical = Math.max(
+      const verticalGapMm = Math.max(
         0,
         a.zMm - b.zMm - b.thicknessMm,
         b.zMm - a.zMm - a.thicknessMm,
       )
-      return hypotenuse(horizontal, vertical)
+      return hypotenuse(horizontalGapMm, verticalGapMm)
     }),
   )
-  const conductorSpans = region.conductors.flatMap((c) => {
-    const spans = [c.widthMm, c.thicknessMm, c.zMm]
+  const conductorSpansMm = region.conductors.flatMap((c) => {
+    const spansMm = [c.widthMm, c.thicknessMm, c.zMm]
     if (region.planeSpacingMm)
-      spans.push(region.planeSpacingMm - c.zMm - c.thicknessMm)
-    return spans
+      spansMm.push(region.planeSpacingMm - c.zMm - c.thicknessMm)
+    return spansMm
   })
-  const scale = Math.min(
-    ...conductorSpans.map((span) => span / 2),
-    ...gaps.map((gap) => gap / 4),
+  const scaleMm = Math.min(
+    ...conductorSpansMm.map((spanMm) => spanMm / 2),
+    ...conductorGapsMm.map((gapMm) => gapMm / 4),
   )
   const lowerWeight = Math.sqrt(
     defaultCopperConductivitySm / region.lowerPlaneConductivitySm,
@@ -141,20 +141,23 @@ function calculateRecessionMm({
     )
   })
   const weight = Math.max(1, lowerWeight, upperWeight, ...conductorWeights)
-  return (fraction * scale) / weight
+  return (recessionFraction * scaleMm) / weight
 }
 
 /** Wheeler resistance per sqrt(Hz) from inductances with walls receded by +step and -step. */
 function calculateWheelerCoefficient({
-  plus,
-  minus,
+  positiveDisplacementInductanceHenriesPerMeter,
+  negativeDisplacementInductanceHenriesPerMeter,
   recessionMm,
 }: {
-  plus: number
-  minus: number
+  positiveDisplacementInductanceHenriesPerMeter: number
+  negativeDisplacementInductanceHenriesPerMeter: number
   recessionMm: number
 }): number {
-  const gradient = (plus - minus) / ((2 * recessionMm) / MILLIMETERS_PER_METER)
+  const gradient =
+    (positiveDisplacementInductanceHenriesPerMeter -
+      negativeDisplacementInductanceHenriesPerMeter) /
+    ((2 * recessionMm) / MILLIMETERS_PER_METER)
   return (
     (gradient *
       Math.sqrt(
@@ -188,13 +191,13 @@ interface SkinCoefficients {
 /** Differentiate the inductance on the same vacuum mesh for all four displacements. */
 export function calculateSkinCoefficients({
   mesh,
-  fraction,
+  recessionFraction,
 }: {
   mesh: RegionMeshInput
-  fraction: number
+  recessionFraction: number
 }): SkinCoefficients {
   const { region } = mesh
-  const recessionMm = calculateRecessionMm({ region, fraction })
+  const recessionMm = calculateRecessionMm({ region, recessionFraction })
   const tighterRegion = recedeWalls({ region, displacementMm: -recessionMm })
   // Closing both reference gaps gives the highest horizontal panel count of the four perturbations.
   const facePanelCounts = calculateConductorFaceCounts({
@@ -230,8 +233,8 @@ export function calculateSkinCoefficients({
     totalSkinResistanceOhmsPerMeterPerSqrtHz: totalPlus.map((row, i) =>
       row.map((coefficient, j) =>
         calculateWheelerCoefficient({
-          plus: coefficient,
-          minus: totalMinus[i][j],
+          positiveDisplacementInductanceHenriesPerMeter: coefficient,
+          negativeDisplacementInductanceHenriesPerMeter: totalMinus[i][j],
           recessionMm,
         }),
       ),
@@ -239,12 +242,12 @@ export function calculateSkinCoefficients({
     conductorSkinResistanceOhmsPerMeterPerSqrtHz: conductorPlus.map((row, i) =>
       row.map((coefficient, j) =>
         calculateWheelerCoefficient({
-          plus: coefficient,
-          minus: conductorMinus[i][j],
+          positiveDisplacementInductanceHenriesPerMeter: coefficient,
+          negativeDisplacementInductanceHenriesPerMeter: conductorMinus[i][j],
           recessionMm,
         }),
       ),
     ),
-    recessionMm: recessionMm,
+    recessionMm,
   }
 }

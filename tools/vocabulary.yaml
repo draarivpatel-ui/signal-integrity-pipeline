@@ -72,7 +72,7 @@ domain:
   clamp: a protection circuit that conducts when a signal crosses its reference voltage
   coefficient: a dimensionless multiplier on an IBIS pullup or pulldown current
   component: a part on the board, such as a chip, resistor or capacitor
-  conductivity: how easily a material carries current, in siemens per metre
+  conductivity: how easily a material carries current, in siemens per meter
   conductor: one piece of copper treated as a single electrical body in a cross-section
   constant: a bit pattern that repeats one level, so its driver never switches
   contrast: relative permittivity difference across a dielectric interface
@@ -88,7 +88,7 @@ domain:
   deck: an input file for a solver (the ngspice netlist)
   declare: plan experiments and probes from the board's simulation records before any solver runs
   delay: time needed for a signal edge to propagate through a line
-  derivative: sensitivity of an extracted matrix to material or boundary displacement
+  derivative: sensitivity of a calculated matrix to material or boundary displacement
   deviation: the measured difference between an approximation and its reference
   diagnostic: the library's one error type: a short code, the module that failed and the logs that explain it
   diagonal: matrix entries relating each conductor to itself
@@ -111,12 +111,12 @@ domain:
   fixture: a known resistive load used to capture an IBIS switching waveform
   gate: the start of the interval compared during numerical convergence
   general: shared across supported channel experiment shapes
-  geometry: the board's copper shapes, layers and positions, in millimetres
+  geometry: the board's copper shapes, layers and positions, in millimeters
   ground: the zero-volt reference copper that signal current returns through
   h: inductance measured in henries
   hold: the interval over which a switching coefficient stays fixed
   impedance: a wire's opposition to changing current, in ohms
-  henries: SI units of inductance
+  henry: SI unit of inductance
   inductance: magnetic flux linkage per unit current, measured in henries
   inductive: coupling between conductors through their magnetic field
   initial: the state or value at the beginning of a simulation
@@ -143,7 +143,7 @@ domain:
   loss: energy dissipated in conductors or dielectrics
   mask: insulating soldermask on the outer copper layers
   mesh: the set of boundary panels used to approximate the field in a cross-section
-  metre: SI unit of length used for per-unit-length electrical matrices
+  meter: SI unit of length used for per-unit-length electrical matrices
   modal: describing an electrical mode or the factor that represents its stored energy
   model: a chip model (IBIS) or the electrical model of the channel built from extraction
   modeling: private numerical settings derived from Circuit JSON
@@ -255,16 +255,16 @@ abbreviations:
   id: identifier
   init: initial settings
   json: JavaScript Object Notation
-  m: metre
-  mm: millimetre
+  m: meter
+  mm: millimeter
   ms: millisecond
   ns: nanosecond
   pcb: printed circuit board
   ps: picosecond
   rect: rectangle
-  rlgc: per-unit-length resistance, inductance, conductance and capacitance matrices
+  rlgc: per-unit-length resistance, inductance, conductance and capacitance matrices calculated by a two-dimensional boundary-element method
   sha: Secure Hash Algorithm (as in sha256)
-  sm: siemens per metre, the unit of conductivity
+  sm: siemens per meter, the unit of conductivity
   spice: the standard circuit simulation netlist format (run by ngspice)
   stderr: standard error output of a program
   stdout: standard output of a program
@@ -309,7 +309,7 @@ general:
   - positive preceding previous primitive prior pure quiet range raw relative safe serial target threshold
   - characterization compliance valid invalid vertical
   # quantities, electricity and units
-  - amount amplitude bit current denominator duration electrical energy factor fraction frequency meter millimeter
+  - amount amplitude bit current denominator duration electrical energy factor fraction frequency millimeter
   - interval material matrix measurement milliseconds ohm offset origin peak period phase plateau
   - precision
   - quantity reduction sample scale seconds speed step time timeout tolerance transmission volt voltage zero
