@@ -1,6 +1,7 @@
 import type { GraphicsObject, Line, Polygon, Viewbox } from "graphics-debug"
 import { drawCopper } from "./plan-copper"
 import { planHeader } from "./plan-header"
+import { planLabels } from "./plan-labels"
 import {
   endpointRadius,
   endpointShape,
@@ -147,7 +148,17 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
   }
   const boardPolygons = clipPlanPolygons({ polygons, crop })
   const boardLines = clipPlanLines({ lines, crop })
+  const labels = planLabels({
+    scene,
+    frame,
+    ports,
+    radius,
+    polygons: boardPolygons,
+    lines: boardLines,
+  })
   const extent = routeBounds([
+    ...labels.backgrounds.flatMap(({ points }) => points),
+    ...labels.texts,
     ...boardPolygons.flatMap(({ points }) => points),
     ...boardLines.flatMap(({ points }) => points),
     ...boxPoints(frame.box),
@@ -161,9 +172,9 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
   return {
     title: scene.title,
     coordinateSystem: "cartesian",
-    lines: [...boardLines, ...header.lines],
-    polygons: boardPolygons,
-    texts: header.texts,
+    lines: [...boardLines, ...labels.leaders, ...header.lines],
+    polygons: [...boardPolygons, ...labels.backgrounds],
+    texts: [...labels.texts, ...header.texts],
     rects: header.rects,
   }
 }

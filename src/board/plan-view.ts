@@ -105,6 +105,30 @@ export function planPorts(
   return ports
 }
 
+/** Name a pin from its source records, including pins without a PCB pad. */
+export function pinName({
+  id,
+  db,
+}: {
+  id: SourcePortId
+  db: CircuitJsonUtilObjects
+}): string {
+  const pin = db.source_port.get(id)
+  if (!pin) return "an unknown pin"
+  const part = db.source_component.get(pin.source_component_id || "")
+  let pinLabel = pin.name
+  const number = pinLabel.slice("pin".length)
+  if (
+    pinLabel.startsWith("pin") &&
+    number &&
+    [...number].every((digit) => "0123456789".includes(digit))
+  )
+    pinLabel = number
+  const name = `pin ${pinLabel}`
+  if (part?.name) return `${part.name} ${name}`
+  return name
+}
+
 /** Include a through-pad route's two endpoints in its planar bounds. */
 function tracePoints(trace: PcbTrace): Point[] {
   return trace.route.flatMap((point) => {
@@ -374,14 +398,14 @@ export function planBoardShapes({
       0,
       component.rotation,
     )
+    const name = names.get(component.source_component_id)
     shapes.push({
       points: facePolygons(shape).flat(),
       fill: "rgba(241,245,249,0.18)",
       stroke: "#94a3b8",
       strokeWidth: unit * 0.32,
-      layer: "board",
-      label:
-        names.get(component.source_component_id) || component.pcb_component_id,
+      layer: name ? "parts" : "bodies",
+      label: name || component.pcb_component_id,
     })
   }
   const idByPcbPort = new Map(
@@ -405,7 +429,7 @@ export function planBoardShapes({
         fill,
         stroke,
         strokeWidth: unit * 0.22,
-        layer: "board",
+        layer: "pads",
         label: port ? `${port.label} (${port.id})` : pad.type,
       })
       for (const hole of holes)
@@ -413,7 +437,7 @@ export function planBoardShapes({
           points: facePoints(hole),
           fill: "#fff",
           stroke: "none",
-          layer: "board",
+          layer: "pads",
         })
     }
   }
