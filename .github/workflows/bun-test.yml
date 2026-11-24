@@ -40,10 +40,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ngspice=42+ds-3build1
           ngspice --version
-      - name: Test routed admission through native capture
+      - name: Test the transient channel simulation plan through native capture
         env:
           IBIS_MODEL_DIR: models
-        run: bun test tests/pipeline/routed-pipeline/admission-to-capture.test.tsx
+        run: bun test tests/pipeline/routed-pipeline/plan-to-capture.test.tsx
       - name: Test constant-high waveform
         env:
           SI_TEST_SWITCHING_NGSPICE: '1'
