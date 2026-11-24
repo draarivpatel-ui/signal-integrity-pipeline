@@ -13,7 +13,7 @@ export interface DifferentialContacts {
 }
 
 /** List the physical contacts without losing their leg or declaration order. */
-export function differentialContacts(
+export function listDifferentialContacts(
   channels: readonly SimulationPcbDriverReceiverChannel[],
 ): DifferentialContacts[] {
   return channels.flatMap(({ name, driver, receivers }) => {
@@ -43,7 +43,7 @@ interface DifferentialGroups {
 }
 
 /** Find the differential leg groups before introducing passive bridges. */
-export function differentialGroups({
+export function resolveDifferentialGroups({
   contacts,
   groups,
 }: {

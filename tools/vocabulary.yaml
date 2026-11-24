@@ -23,7 +23,7 @@ domain:
   connectivity: which source contacts are electrically joined
   mark: a symbol carried through drawing and clipping
   bypass: an alternate path around an extracted trace or series passive
-  chevron: a mark indicating the direction of a mapped path
+  chevron: a mark indicating the direction of a receiver path
   dash: one mark in a dashed line
   fault: a diagnostic tied to specific contacts or copper
   header: the text band above the board in a plan drawing
@@ -82,7 +82,7 @@ domain:
   coupling: mutual electrical or magnetic interaction between conductors
   crossover: the frequency band where conductor loss turns from its DC value into skin loss
   cursor: the current position while traversing an ordered route
-  cut: an intentional electrical disconnection at trace contacts
+  cut: an intentional break in physical copper
   deck: an input file for a solver (the ngspice netlist)
   declare: plan experiments and probes from the board's simulation records before any solver runs
   delay: time needed for a signal edge to propagate through a line
@@ -126,6 +126,8 @@ domain:
   group: contacts joined by ideal connections before SPICE node numbering
   receiver: the declared destination of a channel path
   path: the ordered connections from a driver to a receiver
+  leg: one signal path of a differential pair, positive or negative
+  clearance: space left free around a feature
   vertex: a point in a connection graph, represented by a source contact, ideal group or SPICE node
   lateral: distance transverse to a routed line in the board plane
   layer: one copper or insulating sheet in the stackup
@@ -171,7 +173,6 @@ domain:
   rail: a power or ground supply connection
   ramp: the loaded voltage change and duration between 20% and 80% of an IBIS edge
   recede: move a conducting wall away from the field region
-
   recession: displacement of conducting walls away from the field for Wheeler loss
   reciprocity: the check that a matrix is symmetric (the effect of A on B equals B on A)
   refinement: a finer spatial subdivision of a solve, used to check that the answer stops changing
@@ -288,9 +289,9 @@ general:
   - ambiguity approximation button canvas client color description detail download drag font hint issue
   - limitation listener overview plot reason report role summary tab viewer warning drawing frame margin alpha bar hue tick band casing digit glyph lightness pitch fallback
   # describing and comparing
-  - absolute active analytic best canonical common compatible compatibility condition convention direct
+  - absolute active analytic best canonical common compatible compatibility condition convention direct collect
   - empty equivalent exact expected finite fixed flat full global high horizontal inner limit low lowest
-  - max maximum middle min minimum native negative next numeric original other outer own physical half highest least longest median most near far reach leg
+  - max maximum middle min minimum native negative next numeric original other outer own physical half highest least longest median most near far reach
   - positive preceding previous primitive prior pure quiet range raw relative safe serial target threshold
   - characterization compliance valid invalid vertical
   # quantities, electricity and units

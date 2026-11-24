@@ -49,4 +49,11 @@ test("rejects a PRBS string that exceeds the runtime representation", async () =
     ibisSources: { [inverterModelPath]: routedVisualIbis },
   })
   assert.throws(() => solver.solve(), /prbs31 pattern exceeds .* bits/)
+  const header = solver
+    .visualize()
+    .texts?.filter(({ layer }) => layer === "header")
+    .toSorted((a, b) => b.y - a.y)
+    .map(({ text }) => text)
+    .join(" ")
+  assert.match(header || "", /Signal "DATA": prbs31 pattern exceeds .* bits/)
 })

@@ -11,7 +11,7 @@ import {
 import type { DiagnosticSubject, Snapshot } from "../kernel"
 import { findConnectionBridges } from "./connection-paths"
 import { fail } from "./diagnostics"
-import { differentialContacts } from "./differential-contacts"
+import { listDifferentialContacts } from "./differential-contacts"
 import {
   type ConnectedGroups,
   failShortedTrace,
@@ -119,7 +119,7 @@ function validateDifferentialLegs({
   legGroups: SpiceNodeGroups
   graphs: ReceiverGraphs
 }): void {
-  const contacts = differentialContacts(channels)
+  const contacts = listDifferentialContacts(channels)
   for (const {
     name,
     positiveSourcePortIds,
@@ -207,7 +207,7 @@ function createCircuitNodeLookup({
   }
 }
 
-/** Validate mapped channel paths separately from their constituent physical traces. */
+/** Validate receiver paths separately from their constituent physical traces. */
 function validateReceiverPaths({
   receiverPaths,
   node,
@@ -241,7 +241,7 @@ function validateReceiverPaths({
     if (fromSpiceNode === toSpiceNode)
       fail(
         "channel_short",
-        `${channelName}: endpoints ${fromSourcePortId} and ${toSourcePortId} share an ideal node across routed path ${path}`,
+        `${channelName}: endpoints ${fromSourcePortId} and ${toSourcePortId} share an ideal group across routed path ${path}`,
         {
           subjects: getRecordSubjects([
             fromSourcePortId,
@@ -349,7 +349,7 @@ function validateTraceContacts({
         )
       failShortedTrace({
         contacts,
-        reason: "share an ideal node or are bound to ground",
+        reason: "share an ideal group or are bound to ground",
       })
     }
   }
