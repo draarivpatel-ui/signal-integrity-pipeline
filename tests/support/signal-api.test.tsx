@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { simulation } from "@tscircuit/core"
 import React from "react"
+import { cloneCircuitJson } from "../../src/board"
 import { admitBuffers, compileBuffers } from "../../src/buffers"
 import { rootScope } from "../../src/kernel"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
@@ -116,7 +117,7 @@ test.skipIf(!modelDir)(
       circuit: [...otherRecords, ...channels.reverse()],
       sources: ibis,
     })[0]
-    assert.equal(a.settings.lanes.length, 4)
+    assert.equal(a.settings.channelTraces.length, 4)
     assert.deepEqual(a.settings, b.settings)
   },
 )
@@ -165,9 +166,9 @@ test.skipIf(!modelDir)(signalDescription, async () => {
   delete signal.seed
   const bindings = plannedBindings({ circuitJson: circuit, ibisSources: ibis })
   const declarations = generalDeclarations({
-    circuit: bindings.circuitJson,
-    mappings: bindings.mappings,
-    routedTraceCuts: bindings.routedTraceCuts,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+    receiverPaths: bindings.receiverPaths,
+    traceContacts: bindings.traceContacts,
     modeling: bindings.modeling,
     controls: bindings.controls,
   })

@@ -218,7 +218,7 @@ await stages({
   input: {
     circuitJson: core.getCircuitJson() as CircuitJson,
     ibisSources: { "models/sn74lvc1g04.ibs": twoSource },
-    scopeDistanceMm: TWO_TRACE_SCOPE_DISTANCE_MM,
+    nearbyGapMm: TWO_TRACE_SCOPE_DISTANCE_MM,
   },
 })
 
@@ -246,7 +246,7 @@ async function renderDdr3(boardPath?: string): Promise<void> {
   })
   await stages({
     name: "ddr3-addr-cmd",
-    input: { circuitJson, ibisSources, scopeDistanceMm: 1 },
+    input: { circuitJson, ibisSources, nearbyGapMm: 1 },
   })
 }
 await renderDdr3(process.env.SI_DDR3_BOARD)

@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { generalDeclarations } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -17,7 +18,13 @@ test("mapping-only declarations require the selected model for physical cut cont
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const { routedTraceCuts, circuitJson: circuit, mappings, controls } = bindings
+  const {
+    traceContacts,
+    circuitJson: plannedCircuitJson,
+    receiverPaths,
+    controls,
+  } = bindings
+  const circuit = cloneCircuitJson(plannedCircuitJson)
   const modeling = { ...bindings.modeling, passiveComponents: [] }
   const error = {
     domain: "simulation",
@@ -30,13 +37,13 @@ test("mapping-only declarations require the selected model for physical cut cont
         circuit,
         controls,
         modeling,
-        mappings,
-        routedTraceCuts,
+        receiverPaths,
+        traceContacts,
       }),
     error,
   )
   assert.throws(
-    () => generalDeclarations({ circuit, controls, modeling, mappings }),
+    () => generalDeclarations({ circuit, controls, modeling, receiverPaths }),
     error,
   )
 })

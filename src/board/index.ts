@@ -10,6 +10,7 @@ export {
   type ConnectivityMap,
   crossesDifferentialLegs,
   getSourcePortConnectivityMapFromCircuitJson,
+  hasBuiltInPassiveModel,
   type PassiveBridge,
   passiveBridges,
   sourceConnections,
@@ -22,10 +23,10 @@ export { type CopperScope, channelCopperScope } from "./geometry/scope"
 export type {
   CopperPoint,
   CopperPolygon,
-  LaneMapping,
   LaneModeling,
   PcbTrace,
   PortSelector,
+  ReceiverTracePath,
   RoutedPoint,
   RoutePoint,
   SourcePort,
@@ -40,17 +41,17 @@ export type {
 /** @internal */
 export type { PlanHeaderRow } from "./plan-header"
 /** @internal */
-export { pinName, planPorts } from "./plan-view"
+export { getPinName, indexPlanPorts } from "./plan-view"
 /** @internal */
-export { planDrawing } from "./plan-visual"
+export { renderPlanDrawing } from "./plan-visual"
 /** @internal */
 export {
-  type PlanVisualCut,
+  getTraceColor,
+  type PlanOverlay,
+  type PlanTrace,
   type PlanVisualEndpoint,
-  type PlanVisualLink,
   type PlanVisualScene,
   planColors,
-  planCutColor,
 } from "./plan-visual-types"
 export {
   type RouteReference,
@@ -64,18 +65,18 @@ export {
   type SectionGeometry,
   segmentRoutes,
 } from "./route-sections"
+export type { RouteSectionsInput } from "./route-sections-input"
 export {
   type RoutedSections,
-  type RouteSectionsInput,
   RouteSectionsSolver,
 } from "./route-sections-solver"
 export {
+  getBoardBounds,
+  getPointBounds,
   type RouteFrame,
   type RouteNet,
   type RouteView,
-  routeBoardBox,
   routeBoardDrawing,
-  routeBounds,
   routeBuffers,
   routeCanvas,
   routeDisplayItems,
@@ -107,7 +108,11 @@ export type {
   SimulationExperiment,
   SimulationIbisModel,
 } from "./schema"
-export { recordSchema, validateCircuitRecords } from "./schema"
+export {
+  cloneCircuitJson,
+  recordSchema,
+  validateCircuitRecords,
+} from "./schema"
 export {
   type DriverPattern,
   endpointPorts,

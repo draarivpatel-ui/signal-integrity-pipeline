@@ -232,7 +232,7 @@ test("full unrouted check reaches the segment after a series passive", async () 
     sources: inverterSources,
   })
   assert.equal(
-    prepared.settings.lanes.length,
+    prepared.settings.channelTraces.length,
     1,
     "only the routed segment before RS is a physical lane",
   )
@@ -603,11 +603,11 @@ function declarationInput(
 ): DeclarationInput {
   return {
     circuit: prepared.circuit,
-    mappings: prepared.settings.lanes.map((lane) => ({
-      port: lane.port,
-      sourceTraceId: lane.sourceTraceId!,
-      from: lane.from.sourcePortId!,
-      to: lane.to.sourcePortId!,
+    receiverPaths: prepared.settings.channelTraces.map((channelTrace) => ({
+      channelName: channelTrace.port,
+      sourceTraceId: channelTrace.sourceTraceId!,
+      fromSourcePortId: channelTrace.from.sourcePortId!,
+      toSourcePortId: channelTrace.to.sourcePortId!,
     })),
     modeling: prepared.settings,
     controls: prepared.controls,
@@ -712,15 +712,18 @@ test("a routed differential termination shares the receiver endpoint on each leg
   })
   const input = declarationInput(prepared)
   const { nodes, plans } = generalDeclarations(input)
-  assert.equal(input.mappings.length, 4)
+  assert.equal(input.receiverPaths.length, 4)
   const [positive, negative] = endpointPorts(
     prepared.driverReceiverChannels[0].receivers[0],
   )
   assert.ok(negative)
   for (const port of [positive, negative]) {
     assert.equal(
-      input.mappings.filter((lane) => lane.from === port || lane.to === port)
-        .length,
+      input.receiverPaths.filter(
+        (channelTrace) =>
+          channelTrace.fromSourcePortId === port ||
+          channelTrace.toSourcePortId === port,
+      ).length,
       2,
     )
   }
@@ -736,7 +739,7 @@ test("a routed differential termination shares the receiver endpoint on each leg
   assert.equal(plans[0].probes[0].referenceNode, nodes.node(negative))
 })
 
-test("PRBS31 fits the pattern limit at exactly 65536 intervals", async () => {
+test("PRBS31 generates exactly 65536 intervals for this duration", async () => {
   const circuit = await renderSignals({
     tree: <Board pattern="prbs31" duration={65_536 / 20e6} />,
   })
