@@ -29,10 +29,25 @@ test("draws the whole board with the open differential leg diagnostic in red", a
     code: "channel_net",
     message: /BUS: no source path/,
   })
-  const drawing = solver.visualizeCopper()
+  const drawing = solver.visualize()
   assert.ok(drawing.lines?.length)
   assert.ok(drawing.texts?.length)
-  assert.ok(drawing.texts.every((text) => text.color === "#f87171"))
+  const fault = drawing.texts.find((text) =>
+    text.text.includes("no source path"),
+  )
+  assert.equal(fault?.color, "#b91c1c")
+  assert.ok(
+    drawing.texts.every((text) => text.anchorSide === "center" && text.y > 6),
+  )
+  assert.ok(
+    drawing.lines.some(
+      (line) =>
+        line.layer === "failure" &&
+        line.label?.includes("No routed source path"),
+    ),
+  )
+  assert.ok(drawing.texts.some((text) => text.text.includes("TX.A")))
+  assert.ok(drawing.texts.some((text) => text.text.includes("RX.A")))
   assert.match(
     drawing.texts.map((text) => text.text).join(" "),
     /BUS: no source path/,

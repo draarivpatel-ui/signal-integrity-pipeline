@@ -1,20 +1,9 @@
-import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
-  admissionRouteView,
+  admissionDrawing,
   type RouteSectionsInput,
-  routeAdmissionMarks,
-  routeBoardBox,
-  routeBoardDrawing,
-  routeFailure,
-  routeLengths,
-  routeStrip,
-  routeView,
   type SimulationPcbTransientChannelSimulationId,
-  scopedAdmissionDrawing,
-  unscopedAdmissionDrawing,
-  withRouteDrawing,
 } from "../board"
 import type { IbisSources } from "../buffers"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
@@ -27,6 +16,10 @@ import {
   captureRoutedAdmissionInput,
   type RoutedAdmissionInput,
 } from "./routed-admission-input"
+import {
+  buildAdmissionVisualScene,
+  type FailedAdmissionAttempt,
+} from "./routed-admission-visual"
 import { routedReceiverMappings } from "./routed-receiver-paths"
 import { compareNames, prepareChannelSimulation } from "./signals"
 
@@ -157,6 +150,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
   private readonly channelSimulationPlans: RoutedChannelSimulationPlan[] = []
   private channelPcbTraceCount = 0
   private output?: RoutedAdmissionOutput
+  private failedAttempt?: FailedAdmissionAttempt
   /** Capture a single board and model version for the whole admission run. */
   constructor(input: RoutedAdmissionInput) {
     super()
@@ -169,14 +163,22 @@ export class RoutedAdmissionSolver extends BaseSolver {
     const admittedChannelSimulation =
       channelSimulations[this.channelSimulationPlans.length]
     if (admittedChannelSimulation) {
-      const plan = planRoutedChannelSimulation({
-        input: this.input,
-        scopeDistanceMm,
-        admittedChannelSimulation,
-      })
-      this.channelSimulationPlans.push(plan)
-      this.channelPcbTraceCount +=
-        plan.sections.copperScope.channelPcbTraceIds.length
+      try {
+        const plan = planRoutedChannelSimulation({
+          input: this.input,
+          scopeDistanceMm,
+          admittedChannelSimulation,
+        })
+        this.channelSimulationPlans.push(plan)
+        this.channelPcbTraceCount +=
+          plan.sections.copperScope.channelPcbTraceIds.length
+      } catch (error) {
+        this.failedAttempt = {
+          simulation: admittedChannelSimulation.channelSimulation,
+          error,
+        }
+        throw error
+      }
     }
     const channelSimulationCount = this.channelSimulationPlans.length
     this.stats = {
@@ -206,66 +208,15 @@ export class RoutedAdmissionSolver extends BaseSolver {
       }),
     ]
   }
-  /** Inspect the latest channel's copper and endpoints or the whole unscoped board. */
-  visualizeCopper(): GraphicsObject {
-    const circuit = this.input.circuitJson
-    const plan = this.channelSimulationPlans.at(-1)
-    if (plan === undefined)
-      return unscopedAdmissionDrawing({ circuit, error: this.error })
-    const { mappings } = plan.bindings
-    const db = cju([...circuit])
-    const view = admissionRouteView({
-      db,
-      scope: plan.sections.copperScope,
-      endpointSourcePortIds: new Set(
-        mappings.flatMap(({ from, to }) => [from, to]),
-      ),
-    })
-    return scopedAdmissionDrawing({
-      db,
-      view,
-      mappings,
-      error: this.error,
-    })
-  }
-  /** Add the stage camera and its routed-length pane to the shared copper drawing. */
+  /** Inspect the most recent attempted channel simulation and its board. */
   override visualize(): GraphicsObject {
-    const circuit = this.input.circuitJson
-    const plan = this.channelSimulationPlans.at(-1)
-    const scope = plan?.sections.copperScope
-    const board = routeBoardDrawing({ circuit, scope })
-    if (plan === undefined || scope === undefined) {
-      if (this.error === null) return board
-      return {
-        ...board,
-        texts: routeFailure({
-          box: routeBoardBox(circuit),
-          message: this.error,
-        }),
-      }
-    }
-    const view = routeView({ circuit, scope })
-    const drawing = withRouteDrawing({
-      drawing: board,
-      overlay: routeStrip({
-        pane: view.pane,
-        rows: routeLengths({ circuit, view }),
+    return admissionDrawing(
+      buildAdmissionVisualScene({
+        circuit: this.input.circuitJson,
+        plan: this.channelSimulationPlans.at(-1),
+        failed: this.failedAttempt,
+        error: this.error,
       }),
-    })
-    const marks = routeAdmissionMarks({
-      db: cju([...circuit]),
-      mappings: plan.bindings.mappings,
-      view,
-    })
-    const polygons = [...drawing.polygons, ...marks]
-    if (this.error === null) return { ...drawing, polygons }
-    return {
-      ...drawing,
-      polygons,
-      texts: [
-        ...drawing.texts,
-        ...routeFailure({ box: view.pane, message: this.error }),
-      ],
-    }
+    )
   }
 }
