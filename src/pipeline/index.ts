@@ -1,14 +1,14 @@
 /** Derives independent routed signal-integrity runs from Circuit JSON. */
 export type { NumericalSettings } from "./modeling"
 export {
-  RoutedAdmissionSolver,
-  type RoutedChannelSimulationPlan,
-} from "./routed-admission"
-export type { RoutedAdmissionInput } from "./routed-admission-input"
-export {
   type RoutedChannelSimulationView,
   type RoutedInspection,
   RoutedPipelineSolver,
   routedStages,
 } from "./routed-pipeline"
 export { RoutedStageSolver } from "./routed-stage"
+export {
+  type TransientChannelSimulationPlan,
+  TransientChannelSimulationPlanSolver,
+} from "./transient-channel-simulation-plan"
+export type { TransientChannelSimulationPlanInput } from "./transient-channel-simulation-plan-input"

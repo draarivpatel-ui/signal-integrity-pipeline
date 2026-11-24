@@ -2,23 +2,23 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { RouteSectionsSolver } from "../../src/board"
 import {
-  RoutedAdmissionSolver,
   type RoutedStageSolver,
+  TransientChannelSimulationPlanSolver,
 } from "../../src/pipeline"
 import {
   RouteBindingsSolver,
   type RoutedBindings,
   type ScopedRouteBindingsInput,
 } from "../../src/simulation"
-import { routedAdmissionInput } from "../fixtures/routed-fixture"
+import { channelPlanInput } from "../fixtures/routed-fixture"
 import { vendorAvailable } from "../fixtures/vendor-models"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
-  const input = await routedAdmissionInput()
-  const admission = new RoutedAdmissionSolver(input)
-  admission.solve()
-  const plan = admission.getOutput().value[0]
+  const input = await channelPlanInput()
+  const planner = new TransientChannelSimulationPlanSolver(input)
+  planner.solve()
+  const plan = planner.getOutput().value[0]
   const sections = new RouteSectionsSolver(plan.sections)
   sections.solve()
   return new RouteBindingsSolver({
