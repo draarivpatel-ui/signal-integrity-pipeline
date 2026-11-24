@@ -21,7 +21,7 @@ test("groups near-vertical wires whose rounded directions coincide", async () =>
         <SectionTrace
           name="Skew"
           startX={0.3}
-          endX={0.3 - 3e-9}
+          endX={0.3 - 1e-7}
           startY={-3}
           endY={3}
           net="net.OTHER"
