@@ -1,7 +1,7 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
-  type RouteSectionsInput,
+  type CopperGeometryExtractionInput,
   renderPlanDrawing,
   type SimulationPcbTransientChannelSimulationId,
 } from "../board"
@@ -36,7 +36,7 @@ const PLAN_WARNINGS: readonly string[] = Object.freeze([])
 export interface TransientChannelSimulationPlan {
   readonly simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
   readonly name: string
-  readonly sections: RouteSectionsInput
+  readonly sections: CopperGeometryExtractionInput
   readonly bindings: RouteBindingsInput
   readonly warnings: readonly string[]
 }

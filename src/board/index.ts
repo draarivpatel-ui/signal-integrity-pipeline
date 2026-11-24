@@ -16,6 +16,7 @@ export {
   sourceNetMembers,
   sourcePinTies,
 } from "./connectivity"
+export type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
 export { polygonContains } from "./geometry/polygon"
 export { resolveRouteVias, selectPort } from "./geometry/ports"
 export { type CopperScope, channelCopperScope } from "./geometry/scope"
@@ -48,7 +49,6 @@ export {
   type PlanVisualScene,
   planColors,
 } from "./plan-visual-types"
-export type { RouteSectionsInput } from "./route-sections-input"
 export type {
   CircuitJson,
   SimulationExperiment,
