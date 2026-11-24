@@ -372,13 +372,13 @@ export function prepareSignalSettings({
   pruned,
   signalPins,
   scopedPins,
-  channelTraces,
+  traceContacts,
   sources,
 }: {
   pruned: PrunedIbisModels
   signalPins: Pick<SignalPins, "connectivity" | "rails" | "reference">
   scopedPins: Pick<ScopedSignalPins, "copperScope" | "retained">
-  channelTraces: NumericalSettings["channelTraces"]
+  traceContacts: NumericalSettings["traceContacts"]
   sources: IbisSources
 }): SuppliedSignalSettings {
   const { connectivity, rails, reference } = signalPins
@@ -396,7 +396,7 @@ export function prepareSignalSettings({
     )
   }
   const settings: NumericalSettings = {
-    channelTraces,
+    traceContacts,
     copperScope,
     channelReference: { sourcePortId: reference },
   }
