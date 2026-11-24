@@ -7,8 +7,8 @@ import type {
   SourceTraceId,
 } from "../board"
 import type { CompiledBuffer, IbisSources } from "../buffers"
-import type { ExtractedRoutes, RouteMaterials } from "../extraction"
 import type { Snapshot } from "../kernel"
+import type { DielectricMaterials, TransmissionLineRlgc } from "../rlgc"
 import type {
   CircuitNodes,
   RunControls,
@@ -26,7 +26,6 @@ export interface RouteCompileOptions {
   panels?: number
   currentToleranceA?: number
   cellsPerRise?: number
-  readonly materials?: RouteMaterials
 }
 /** One physical conductor removed from ideal connectivity for routed extraction. */
 export interface TraceContacts {
@@ -76,9 +75,9 @@ export interface RouteNetworkInput {
   simulationPcbTransientChannelSimulationId: string
   name: string
   geometry: Snapshot<ExtractedCopper>
-  extracted: ExtractedRoutes
+  extracted: TransmissionLineRlgc
   bindings: RoutedBindings
-  materials: RouteMaterials
+  materials: DielectricMaterials
   options: RouteCompileOptions
   warnings: readonly string[]
   artifactPrefix: string

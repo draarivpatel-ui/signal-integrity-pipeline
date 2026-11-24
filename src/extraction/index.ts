@@ -1,5 +1,5 @@
 /**
- * Routed fields, coupling, causal loss and matrix checks for the channel model.
+ * Causal loss and matrix checks for the channel model.
  * Imports: kernel, board.
  */
 
