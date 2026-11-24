@@ -12,7 +12,7 @@ import {
 } from "../../src/board"
 import { validateNearbyGapMm } from "../../src/pipeline/signals"
 import { signalTopology } from "../../src/pipeline/topology"
-import { signalRailIds } from "../../src/simulation"
+import { collectSignalRailIds } from "../../src/simulation"
 
 export const copperCategories = ["selected", "near", "rail", "far"] as const
 export type CopperCategory = (typeof copperCategories)[number]
@@ -110,7 +110,11 @@ export function categorizeCopper({
     throw new Error("Circuit JSON needs a PCB board to scope its copper.")
 
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const rails = signalRailIds({ db, connectivity, referenceSourcePortIds: [] })
+  const rails = collectSignalRailIds({
+    db,
+    connectivity,
+    referenceSourcePortIds: [],
+  })
   const topology = signalTopology({ circuit, rails })
   const channelBySource = new Map<SourceId, string>()
   for (const channel of channels) {
