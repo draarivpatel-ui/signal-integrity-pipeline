@@ -71,9 +71,26 @@ test("draws the whole board with the open differential leg diagnostic in red", a
       .sort(),
     ["RX pin B", "TX pin B"],
   )
+  const visibleText = drawing.texts.map(({ text }) => text)
+  assert.ok(visibleText.includes("VCC copper (top)"))
+  assert.ok(visibleText.includes("GND copper (bottom)"))
+  assert.ok(
+    visibleText.some((text) =>
+      text.includes("red dashed line = missing trace"),
+    ),
+  )
+  assert.ok(
+    visibleText.some((text) =>
+      text.includes("red ring = pin with the problem"),
+    ),
+  )
+  assert.ok(visibleText.some((text) => text.includes("◉ via (joins layers)")))
+  assert.ok(!visibleText.includes("RTERM"))
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "plan-failure-visual",
+    caption:
+      "TX sends one RS-485 signal to RX over two lines, BUS+ and BUS−. The plan stops because only BUS− has a copper trace.",
   })
 })
