@@ -39,7 +39,7 @@ import {
 export { probeEndpoints, signalBits } from "./signal-controls"
 export { routedLanes } from "./signal-lanes"
 
-/** Default lateral search distance for routed admission, in millimetres. */
+/** Default lateral search distance for channel simulation planning, in millimetres. */
 const DEFAULT_COPPER_SCOPE_DISTANCE_MM = 32
 
 /** The lowered circuit and controls for a single transient channel simulation. */

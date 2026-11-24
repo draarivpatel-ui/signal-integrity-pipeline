@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { inspectPins } from "../../../src/buffers"
-import { AdmissionChannel } from "../../fixtures/admission-channel"
+import { ChannelFixture } from "../../fixtures/channel-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import {
   prepareChannelSimulations,
@@ -11,7 +11,7 @@ import {
 
 test("pin inspection exposes the borrowed IBIS declaration as readonly", async () => {
   const circuit = await renderSignals({
-    tree: <AdmissionChannel route="series" />,
+    tree: <ChannelFixture route="series" />,
   })
   const db = cju([...circuit])
   for (const model of db.simulation_ibis_model.list())
