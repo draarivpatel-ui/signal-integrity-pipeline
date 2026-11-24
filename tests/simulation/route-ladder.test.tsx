@@ -166,7 +166,7 @@ function straightLine({
       row.map((value) => value * lossScale),
     ),
   }
-  const wires: RouteWire[] = section.conductors.map((conductor, wireIndex) => ({
+  const wires: TraceWire[] = section.conductors.map((conductor, wireIndex) => ({
     wireIndex,
     pcbTraceId: `t${wireIndex}`,
     sourceTraceId: `s${wireIndex}`,

@@ -148,7 +148,7 @@ test("golden invariants: every routed TSX section has SPD L/C with |k| < 1, Maxw
   // the largest.
   const { circuitJson, copperScope: scope } = await renderRoutedCopper()
   const copper = new RouteFieldsSolver({
-    geometry: sectionRoutes({
+    geometry: extractCopperGeometry({
       circuit: circuitJson,
       copperScope: scope,
     }),
