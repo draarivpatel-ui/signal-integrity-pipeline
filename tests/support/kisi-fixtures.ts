@@ -1,4 +1,4 @@
-import type { CrossSection } from "../../src/extraction"
+import type { CrossSection } from "../../src/rlgc"
 
 /** Uniform, vendor-free reference coupons; dimensions are millimetres. */
 export interface KisiCoupon {
@@ -24,14 +24,16 @@ export function couponSection(coupon: KisiCoupon): CrossSection {
   }
   return {
     conductors: centresMm.map((xMm, index) => ({
-      id: `signal${index}`,
+      conductorId: `signal${index}`,
       xMm,
       zMm: 1,
       widthMm: coupon.widthMm,
       thicknessMm: 0.035,
     })),
     planes: [{ zMm: 0 }],
-    dielectrics: [{ zMm: 0, thicknessMm: 1, er: 4, lossTangent: 0 }],
+    dielectricLayers: [
+      { zMm: 0, thicknessMm: 1, relativePermittivity: 4, lossTangent: 0 },
+    ],
   }
 }
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { solveCrossSection } from "../../src/extraction"
+import { calculateRlgc } from "../../src/rlgc"
 import { kisiReportSchema, runKisi } from "./kisi"
 import {
   couponLengthMm,
@@ -52,9 +52,13 @@ for (const coupon of kisiCoupons) {
       expect(report.length_mm).toBe(couponLengthMm)
       expect(report.segments[0].len_mm).toBe(couponLengthMm)
       expect(report.differential).toBe(coupon.gapMm !== undefined)
-      const section = solveCrossSection({ section: couponSection(coupon) })
-      const oddInductance = section.L[0][0] - (section.L[0][1] ?? 0)
-      const oddCapacitance = section.C[0][0] - (section.C[0][1] ?? 0)
+      const section = calculateRlgc({ crossSection: couponSection(coupon) })
+      const oddInductance =
+        section.externalInductanceHenriesPerMeter[0][0] -
+        (section.externalInductanceHenriesPerMeter[0][1] ?? 0)
+      const oddCapacitance =
+        section.capacitanceFaradsPerMeter[0][0] -
+        (section.capacitanceFaradsPerMeter[0][1] ?? 0)
       let factor = 1
       if (coupon.gapMm !== undefined) factor = 2
       compareMetric({
@@ -76,8 +80,12 @@ for (const coupon of kisiCoupons) {
         if (!report.mixed_mode)
           throw new Error("Expected independently solved odd and even modes")
         expect(report.mixed_mode.delay_ps_diff).toBe(report.delay_ps)
-        const evenInductance = section.L[0][0] + section.L[0][1]
-        const evenCapacitance = section.C[0][0] + section.C[0][1]
+        const evenInductance =
+          section.externalInductanceHenriesPerMeter[0][0] +
+          section.externalInductanceHenriesPerMeter[0][1]
+        const evenCapacitance =
+          section.capacitanceFaradsPerMeter[0][0] +
+          section.capacitanceFaradsPerMeter[0][1]
         compareMetric({
           label: "differential-microstrip common delay (ps)",
           pipeline:
