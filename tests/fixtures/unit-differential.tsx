@@ -22,6 +22,7 @@ export default function ({
   openPositive = false,
   directNegative = false,
   children,
+  additionalChannels,
 }: {
   reversed?: boolean
   routedTermination?: boolean | "positive"
@@ -32,6 +33,7 @@ export default function ({
   openPositive?: boolean
   directNegative?: boolean
   children?: ReactNode
+  additionalChannels?: ReactNode
   partialSeriesPair?: boolean
 }): JSX.Element {
   let positive = "A"
@@ -162,12 +164,13 @@ export default function ({
           driverRef={driverRef}
           receiverRef={receiverRef}
         />
+        {additionalChannels}
       </simulation.pcbtransientchannelsimulation>
     </board>
   )
 }
 
-/** Give P a longer physical path than the source shortcut through both terminations. */
+/** Give P a longer physical path than the ideal bypass through both terminations. */
 function DualTerminatedPositiveLeg(): JSX.Element {
   const footprints = [-3, -1, 1, 3]
   const names = footprints.map((_, index) => `RS${index + 1}`)

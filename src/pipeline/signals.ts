@@ -30,6 +30,7 @@ import {
   validateComponentModels,
   withUsedIbisModels,
 } from "./signal-models"
+import { compareNames } from "./signal-names"
 import {
   inspectSignalPins,
   scopeSignalPins,
@@ -40,7 +41,7 @@ export { auditChannelTraces } from "./channel-traces"
 export { probeEndpoints, signalBits } from "./signal-controls"
 
 /** Default lateral search distance for channel simulation planning, in millimetres. */
-const DEFAULT_COPPER_SCOPE_DISTANCE_MM = 32
+const DEFAULT_NEARBY_GAP_MM = 32
 
 /** The lowered circuit and controls for a single transient channel simulation. */
 export interface PreparedChannelSimulation {
@@ -97,16 +98,20 @@ export function listChannelSimulations(
   return channelSimulations
 }
 
+/** Shared by the search gap error and the plan drawing. */
+export const INVALID_NEARBY_GAP_MESSAGE =
+  "Copper search gap must be finite and positive (mm)."
+
 /** Normalize a caller's copper search radius at the preparation boundary. */
 export function validateNearbyGapMm(
-  distanceMm: number = DEFAULT_COPPER_SCOPE_DISTANCE_MM,
+  nearbyGapMm: number = DEFAULT_NEARBY_GAP_MM,
 ): number {
-  if (!Number.isFinite(distanceMm) || distanceMm <= 0) {
-    throw new Error("Copper scope distance must be finite and positive", {
+  if (!Number.isFinite(nearbyGapMm) || nearbyGapMm <= 0) {
+    throw new Error(INVALID_NEARBY_GAP_MESSAGE, {
       cause: "nearbyGapMm",
     })
   }
-  return distanceMm
+  return nearbyGapMm
 }
 
 /** Validate one channel simulation and lower its test intent to the private routed declarations. */
@@ -140,19 +145,8 @@ export function prepareChannelSimulationById({
       field: "simulationPcbTransientChannelSimulationId",
     }),
     sources,
-    distanceMm: nearbyGapMm,
+    nearbyGapMm,
   })
-}
-
-/** Unicode code point order, independent of locale and UTF-16 surrogate ordering. */
-export function compareNames({ a, b }: { a: string; b: string }): number {
-  const left = Array.from(a, (character) => character.codePointAt(0)!)
-  const right = Array.from(b, (character) => character.codePointAt(0)!)
-  const sharedLength = Math.min(left.length, right.length)
-  for (let i = 0; i < sharedLength; i++) {
-    if (left[i] !== right[i]) return left[i] - right[i]
-  }
-  return left.length - right.length
 }
 
 /** One channel simulation's validated records. */
@@ -236,7 +230,7 @@ interface ChannelSimulationOptions {
   channelSimulation: SimulationPcbTransientChannelSimulation
   simulationPcbTransientChannelSimulationId: SafeId
   sources: IbisSources
-  distanceMm: number
+  nearbyGapMm: number
 }
 
 /** Lower controls and assemble the prepared simulation. */
@@ -277,9 +271,9 @@ function withPreparedChannelControls({
 export function prepareChannelSimulation(
   options: ChannelSimulationOptions,
 ): PreparedChannelSimulation {
-  const { sources, distanceMm } = options
+  const { sources, nearbyGapMm } = options
   const { circuit, ...selection } = selectChannelSimulation(options)
-  const inspection = { ...selection, circuit, sources, distanceMm }
+  const inspection = { ...selection, circuit, sources, nearbyGapMm }
   const signalPins = inspectSignalPins(inspection)
   const scopedPins = scopeSignalPins({ ...inspection, signalPins })
   const scoped = { ...selection, ...scopedPins, circuit, signalPins }
