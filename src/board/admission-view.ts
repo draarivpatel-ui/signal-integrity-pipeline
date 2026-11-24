@@ -39,6 +39,7 @@ export function routeBounds(points: readonly Point[]): Viewbox | undefined {
 }
 
 /** The board's physical extent, including unscoped copper on boards without a boundary. */
+/** @internal */
 export function routeBoardBox(db: CircuitJsonUtilObjects): Viewbox {
   const board = db.pcb_board.getWhere({})
   if (board?.outline) {
@@ -66,6 +67,7 @@ export function routeBoardBox(db: CircuitJsonUtilObjects): Viewbox {
 }
 
 /** The board window and its geometric scale before reserving header space. */
+/** @internal */
 export interface AdmissionFrame {
   box: Viewbox
   crop?: Box
@@ -74,12 +76,14 @@ export interface AdmissionFrame {
 }
 
 /** Pad, via and through-pad contacts use the same board coordinates. */
+/** @internal */
 export interface AdmissionPort extends Point {
   id: SourcePortId
   label: string
 }
 
 /** Index placed signal ports and prefer a stable human-readable pin name. */
+/** @internal */
 export function admissionPorts(
   db: CircuitJsonUtilObjects,
 ): Map<SourcePortId, AdmissionPort> {
@@ -114,6 +118,7 @@ function tracePoints(trace: PcbTrace): Point[] {
 }
 
 /** Corners in winding order, without a duplicate closing vertex. */
+/** @internal */
 export function boxPoints({ minX, minY, maxX, maxY }: Viewbox): Point[] {
   return [
     { x: minX, y: minY },
@@ -141,6 +146,7 @@ function fitBox(box: Viewbox): Viewbox {
 }
 
 /** Use full board context on small boards and crop large boards around scoped copper. */
+/** @internal */
 export function admissionFrame({
   board,
   focus,
@@ -166,6 +172,7 @@ export function admissionFrame({
 }
 
 /** The containing XY envelope of the selected copper, limited to the board. */
+/** @internal */
 export function admissionScopeBox({
   db,
   board,
@@ -244,6 +251,7 @@ function clippedSegment({
 }
 
 /** Clip strokes to the window using their actual segments. */
+/** @internal */
 export function clipAdmissionLines({
   lines,
   crop,
@@ -262,6 +270,7 @@ export function clipAdmissionLines({
 }
 
 /** Clip board geometry to the window before converting it to graphics primitives. */
+/** @internal */
 export function clipAdmissionPolygons({
   polygons,
   crop,
@@ -318,6 +327,7 @@ function facePolygons(polygon: CopperPolygon): Point[][] {
 }
 
 /** Keep fills subtle since the SVG renderer draws all polygons above trace lines. */
+/** @internal */
 export function admissionBoardShapes({
   db,
   board,
