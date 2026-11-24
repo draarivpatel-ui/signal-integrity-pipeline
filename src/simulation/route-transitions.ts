@@ -486,16 +486,17 @@ export function routeTransitions({
     })
     if (!wire) continue
     const position = port.x * wire.direction[0] + port.y * wire.direction[1]
+    const padWire = {
+      ...wire,
+      layer: pad.layer,
+      lateralOffsetMm: -port.x * wire.direction[1] + port.y * wire.direction[0],
+    }
     const references = findRouteReferences({
       geometry,
-      wire: {
-        ...wire,
-        lateralOffsetMm:
-          -port.x * wire.direction[1] + port.y * wire.direction[0],
-      },
+      wire: padWire,
       positionMm: position,
     })
-    const layer = layers.find((layer) => layer.name === wire.layer)!
+    const layer = layers.find((layer) => layer.name === pad.layer)!
     const area = padArea(pad)
     const gaps = references.map((plane) =>
       Math.min(
@@ -512,7 +513,7 @@ export function routeTransitions({
       gap /
       MM_PER_METRE
     output.lines.push(
-      `CPAD${output.records.length} ${endpoint({ wire, point: [port.x, port.y] })} 0 ${capacitanceF}`,
+      `CPAD${output.records.length} ${endpoint({ wire: padWire, point: [port.x, port.y] })} 0 ${capacitanceF}`,
     )
     output.records.push({
       kind: "pad",

@@ -7,11 +7,11 @@ import {
   routeCrossSection,
   solveCrossSection,
 } from "../../src/extraction"
-import { routedCopper } from "../fixtures/routed-copper"
+import { renderRoutedCopper } from "../fixtures/routed-copper"
 
 /** Input shared by the field solver tests. */
 async function fieldsInput(): Promise<RouteFieldsInput> {
-  const { circuitJson, scope } = await routedCopper()
+  const { circuitJson, copperScope: scope } = await renderRoutedCopper()
   const geometry = sectionRoutes({ circuit: circuitJson, copperScope: scope })
   const materials = {
     maskMm: 0.02,
@@ -143,7 +143,7 @@ test("golden invariants: every routed TSX section has SPD L/C with |k| < 1, Maxw
   // sums. R(f) = R_dc + congruence(sqrt(f) R_skin) and G(f) = 2 pi f D are PSD iff R_dc, R_skin and D are PSD.
   // Tolerances are floating point only: asymmetry 1e-12, row sums >= -1e-9 C_ii, PSD eigenvalues >= -1e-12 of
   // the largest.
-  const { circuitJson, scope } = await routedCopper()
+  const { circuitJson, copperScope: scope } = await renderRoutedCopper()
   const copper = new RouteFieldsSolver({
     geometry: sectionRoutes({
       circuit: circuitJson,
