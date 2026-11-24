@@ -9,7 +9,7 @@ The stack retains Circuit JSON validation, physical stackup and stimulus helpers
 channel endpoints, IBIS models, timing and patterns, including pseudo-random binary sequences (PRBS).
 Each declared channel simulation becomes immutable inputs for copper geometry extraction and buffer binding.
 `CopperGeometryExtractionSolver` models scoped traces, vias, reference pours, and pad contacts. It groups wires into sections with consistent nearby copper and reference surfaces.
-RouteFieldsSolver screens nearby conductor pairs and calculates coupled coefficients for each unique section.
+`TransmissionLineRlgcSolver` screens nearby wire pairs for coupling and calculates per-unit-length RLGC matrices for each coupled group.
 IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during planning.
 RouteBindingsSolver associates compiled buffers, sources and probes with the allocated circuit node map.
 
@@ -47,7 +47,7 @@ flowchart LR
   board["Circuit JSON and channel declarations"] --> plan["TransientChannelSimulationPlanSolver"]
   ibis["IBIS sources"] --> plan
   plan --> geometry["CopperGeometryExtractionSolver"]
-  geometry --> routeFields["RouteFieldsSolver"]
+  geometry --> transmissionLineRlgc["TransmissionLineRlgcSolver"]
   plan --> binding["IBIS binding inputs"]
   plan --> manifest["Transient channel simulation plan manifest"]
 ```
@@ -57,8 +57,8 @@ stateDiagram-v2
   [*] --> Ready
   Ready --> Planned: TransientChannelSimulationPlanSolver
   Planned --> GeometryReady: CopperGeometryExtractionSolver
-  GeometryReady --> Complete: RouteFieldsSolver
-  GeometryReady --> Failed: invalid field geometry or inputs
+  GeometryReady --> Complete: TransmissionLineRlgcSolver
+  GeometryReady --> Failed: invalid cross-section geometry or material options
   Planned --> Failed: missing required contact or reference, unsupported route or soldermask
   Ready --> Failed: invalid input, conflicting IBIS model selections or undeclared aggressors
   Complete --> [*]

@@ -6,7 +6,6 @@ import type {
   SourceTraceId,
 } from "../board"
 import type { CompiledBuffer, IbisSources } from "../buffers"
-import type { RouteMaterials } from "../extraction"
 import type { Snapshot } from "../kernel"
 import type {
   CircuitNodes,
@@ -21,7 +20,6 @@ export interface RouteCompileOptions {
   readonly refinement: number
   readonly durationSeconds: number
   readonly stepSeconds: number
-  readonly materials?: RouteMaterials
 }
 /** One physical conductor removed from ideal connectivity for routed extraction. */
 export interface TraceContacts {
