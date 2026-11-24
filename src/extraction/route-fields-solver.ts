@@ -2,8 +2,8 @@ import { BaseSolver } from "@tscircuit/solver-utils"
 import type {
   CircuitJson,
   CopperScope,
-  RouteSection,
-  SectionGeometry,
+  ExtractedCopper,
+  WireSection,
 } from "../board"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
 import { solveCrossSection } from "./cross-section"
@@ -31,7 +31,7 @@ const PARALLEL_COUPLING_WARNING = [
 
 /** Routed geometry, extraction options, and the artifact location. */
 export interface RouteFieldsInput {
-  geometry: Snapshot<SectionGeometry>
+  geometry: Snapshot<ExtractedCopper>
   circuitJson?: CircuitJson
   scope?: Snapshot<CopperScope>
   materials?: RouteMaterials
@@ -58,9 +58,9 @@ function maskThicknessSource(
 
 /** Queue each conductor pair in slice order so cache population precedes coupling decisions. */
 function couplingPairs(
-  slices: readonly Snapshot<RouteSection>[],
-): Snapshot<RouteSection>[] {
-  const pairs: Snapshot<RouteSection>[] = []
+  slices: readonly Snapshot<WireSection>[],
+): Snapshot<WireSection>[] {
+  const pairs: Snapshot<WireSection>[] = []
   for (const slice of slices) {
     const count = slice.wires.length
     for (let i = 0; i < count; i++) {
@@ -79,8 +79,8 @@ export class RouteFieldsSolver extends BaseSolver {
     SolvedRouteSection["key"],
     RouteCoefficients
   >()
-  private pairs?: Snapshot<RouteSection>[]
-  private groups?: Snapshot<RouteSection>[]
+  private pairs?: Snapshot<WireSection>[]
+  private groups?: Snapshot<WireSection>[]
   private readonly slices: ExtractedRouteSlice[] = []
   private readonly coupling: RouteCoupling[] = []
   private pairIndex = 0
@@ -103,7 +103,7 @@ export class RouteFieldsSolver extends BaseSolver {
     }
   }
   /** Canonical relative geometry owns the cache identity, independent of source IDs and stimulus. */
-  private solveSlice(slice: Snapshot<RouteSection>): SolvedRouteSection {
+  private solveSlice(slice: Snapshot<WireSection>): SolvedRouteSection {
     const section = routeCrossSection({
       geometry: this.input.geometry,
       slice,
@@ -173,7 +173,7 @@ export class RouteFieldsSolver extends BaseSolver {
   }
 
   /** Retrieve the screen coefficient matrix prepared before grouping the routes. */
-  private cachedPair(pair: Snapshot<RouteSection>): RouteCoefficients {
+  private cachedPair(pair: Snapshot<WireSection>): RouteCoefficients {
     const section = routeCrossSection({
       geometry: this.input.geometry,
       slice: pair,
