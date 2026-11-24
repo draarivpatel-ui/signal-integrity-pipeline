@@ -5,9 +5,9 @@ import {
   definePipelineStep,
 } from "@tscircuit/solver-utils"
 import {
+  type CopperGeometry,
+  CopperGeometryExtractionSolver,
   cloneCircuitJson,
-  type RouteSectionsOutput,
-  RouteSectionsSolver,
 } from "../board"
 import { type ExtractedRoutes, RouteFieldsSolver } from "../extraction"
 import {
@@ -45,8 +45,8 @@ export const routedStages = [
     (p: RoutedPipelineSolver) => [p.inputProblem],
   ),
   definePipelineStep(
-    "RouteSectionsSolver",
-    routedStage(RouteSectionsSolver),
+    "CopperGeometryExtractionSolver",
+    routedStage(CopperGeometryExtractionSolver),
     (p: RoutedPipelineSolver) => [
       p
         .stageOutput("TransientChannelSimulationPlanSolver")
@@ -57,17 +57,18 @@ export const routedStages = [
     "RouteFieldsSolver",
     routedStage(RouteFieldsSolver),
     (p: RoutedPipelineSolver) => [
-      p.stageOutput("RouteSectionsSolver").value.map((sections, i) => ({
-        geometry: sections.geometry,
-        circuitJson: cloneCircuitJson(sections.circuitJson),
-        scope: sections.copperScope,
-        maskThicknessMm: sections.maskThicknessMm,
-        materials: p.stageOutput("TransientChannelSimulationPlanSolver").value[
-          i
-        ].bindings.options.materials,
-        artifactPrefix: p.stageOutput("TransientChannelSimulationPlanSolver")
-          .value[i].sections.artifactPrefix,
-      })),
+      p
+        .stageOutput("CopperGeometryExtractionSolver")
+        .value.map((sections, i) => ({
+          geometry: sections.geometry,
+          circuitJson: cloneCircuitJson(sections.circuitJson),
+          scope: sections.copperScope,
+          maskThicknessMm: sections.maskThicknessMm,
+          materials: p.stageOutput("TransientChannelSimulationPlanSolver")
+            .value[i].bindings.options.materials,
+          artifactPrefix: p.stageOutput("TransientChannelSimulationPlanSolver")
+            .value[i].sections.artifactPrefix,
+        })),
     ],
   ),
   definePipelineStep(
@@ -78,7 +79,7 @@ export const routedStages = [
         .stageOutput("TransientChannelSimulationPlanSolver")
         .value.map((plan, i) => ({
           ...plan.bindings,
-          copperScope: p.stageOutput("RouteSectionsSolver").value[i]
+          copperScope: p.stageOutput("CopperGeometryExtractionSolver").value[i]
             .copperScope,
         })),
     ],
@@ -93,7 +94,8 @@ export const routedStages = [
           simulationPcbTransientChannelSimulationId:
             plan.simulationPcbTransientChannelSimulationId,
           name: plan.name,
-          geometry: p.stageOutput("RouteSectionsSolver").value[i].geometry,
+          geometry: p.stageOutput("CopperGeometryExtractionSolver").value[i]
+            .geometry,
           extracted: p.stageOutput("RouteFieldsSolver").value[i],
           bindings: p.stageOutput("RouteBindingsSolver").value[i],
           materials: p.stageOutput("RouteFieldsSolver").value[i].materials,
@@ -122,7 +124,7 @@ interface RoutedStageOutputs {
   TransientChannelSimulationPlanSolver: Produced<
     readonly TransientChannelSimulationPlan[]
   >
-  RouteSectionsSolver: RoutedStageOutput<RouteSectionsOutput>
+  CopperGeometryExtractionSolver: RoutedStageOutput<CopperGeometry>
   RouteFieldsSolver: RoutedStageOutput<ExtractedRoutes>
   RouteBindingsSolver: RoutedStageOutput<RoutedBindings>
   RouteNetworkSolver: RoutedStageOutput<RoutedDeck>
