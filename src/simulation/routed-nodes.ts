@@ -239,7 +239,7 @@ interface ResolvedRoutedNodes {
 }
 
 /** Number one SPICE node per ideal group in source port order. */
-function numberCircuitNodes({
+export function numberCircuitNodes({
   db,
   graphs,
   groundSourcePortId,
@@ -340,7 +340,7 @@ export function resolveRoutedNodes({
 }
 
 /** Validate physical cuts, receiver paths and passive boundaries against the partition. */
-function validateRoutedNodes({
+export function validateRoutedNodes({
   cuts,
   mappings,
   graphs,
