@@ -71,29 +71,9 @@ The runtime imports the shared circuit-json schemas. Local validation must build
 
 Core#5286 emits JLC preset plating (0.018 mm), preserving explicit imported stackup plating; routed vias require it. RFC pours request ground escape routing with `unbroken`; the differential example uses manual paths and retains its original autorouter reproduction. Branched routes and cycles remain unsupported.
 
-## 2D extraction
+## RLGC in the routed pipeline
 
-`extraction/cross-section.ts`, exported by `extraction/index.ts`, owns a separate
-quasi-TEM numerical interface. It consumes rectangles, infinite solid references,
-and dielectric/mask slabs and returns per-unit-length C/C0/L and frequency-dependent
-R/G. `RouteFieldsSolver` consumes it. The routed root folds the ledger once
-all channel simulation stages complete.
-
-```mermaid
-flowchart LR
-  section[Rectangular cross-section and material slabs] --> regions[Split at solid reference planes]
-  regions --> fields[Boundary-element material and vacuum solves]
-  fields --> capacitance[C and C0]
-  capacitance --> inductance[External L from inverse C0]
-  fields --> dielectric[Analytic material-energy sensitivity]
-  regions --> walls[Two vacuum wall perturbations]
-  walls --> skin[Wheeler skin-loss matrix]
-  dielectric --> result[Per-unit-length matrices and frequency sampler]
-  skin --> result
-  inductance --> result
-  result --> routed[Routed pipeline: arc-cell energies and causal ladders]
-  routed --> pilot[Native simulation and failure evidence]
-```
+`RouteFieldsSolver` calls `calculateRlgc` for each unique routed cross-section. The route network consumes the resulting capacitance, inductance and loss coefficients when distributing electrical energy across cells. The routed root publishes its artifacts once all channel simulation stages complete.
 
 ## Routed coupling
 

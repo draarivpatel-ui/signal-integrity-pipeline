@@ -28,7 +28,10 @@ test("rejects touching nets", async () => {
   })
   assert.throws(
     () => solver.solve(),
-    /Signal rectangles overlap or touch/,
+    {
+      code: "cross_section_geometry",
+      message: /Conductor rectangles overlap or touch/,
+    },
     "touching different nets remain an explicit failure",
   )
 })
