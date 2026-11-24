@@ -1,7 +1,7 @@
-import type { Line, Rect, Text, Viewbox } from "graphics-debug"
+import type { Line, Rect, Text } from "graphics-debug"
 import type { PlanFrame } from "./plan-view"
 
-/** One centered line of the plan ledger. */
+/** One centered line of the plan header. */
 export interface PlanHeaderRow {
   text: string
   color?: string
@@ -10,10 +10,8 @@ export interface PlanHeaderRow {
 /** Data needed to frame the header, independent of the copper drawing. */
 interface PlanHeaderScene {
   title: string
-  summary: string
-  diagnostic?: string
+  diagnostic?: { text: string; label: string }
   rows: readonly PlanHeaderRow[]
-  scope?: { readonly nearbyGapMm: number }
 }
 
 /** Primitives reserved above the highest board mark. */
@@ -26,40 +24,7 @@ interface PlanHeader {
 const INK = "#0f172a"
 const QUIET = "#475569"
 const RED = "#b91c1c"
-const MAX_DIAGNOSTIC_LINES = 4
 const SCALE_LENGTHS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
-
-/** Wrap at a word boundary when possible, retaining long tokens and explicit line breaks. */
-function wrapHeader({
-  text,
-  columns,
-  limit = Infinity,
-}: {
-  text: string
-  columns: number
-  limit?: number
-}): string[] {
-  const rows: string[] = []
-  for (const paragraph of text
-    .replaceAll("\r\n", "\n")
-    .replaceAll("\r", "\n")
-    .replaceAll("\u2028", "\n")
-    .replaceAll("\u2029", "\n")
-    .split("\n")) {
-    let remaining = paragraph.trim()
-    while (remaining.length > columns) {
-      let stop = remaining.lastIndexOf(" ", columns)
-      if (stop <= 0) stop = columns
-      rows.push(remaining.slice(0, stop))
-      remaining = remaining.slice(stop).trimStart()
-    }
-    rows.push(remaining)
-  }
-  if (rows.length <= limit) return rows
-  const shown = rows.slice(0, limit)
-  shown[limit - 1] = `${shown[limit - 1].slice(0, columns - 1).trimEnd()}…`
-  return shown
-}
 
 /** Pick a standard length near one eighth of the drawn width. */
 function scaleLength(width: number): number {
@@ -71,113 +36,33 @@ function scaleLength(width: number): number {
   })
 }
 
-/** Format the physical board and the possible local scope envelope. */
-function dimensions({
-  scene,
-  board,
-  scopeBox,
-}: {
-  scene: PlanHeaderScene
-  board: Viewbox
-  scopeBox?: Viewbox
-}): string {
-  const width = Number((board.maxX - board.minX).toFixed(2))
-  const height = Number((board.maxY - board.minY).toFixed(2))
-  const label = `Board ${width} × ${height} mm`
-  if (!scene.scope) return label
-  const gap = scene.scope.nearbyGapMm
-  if (
-    scopeBox &&
-    scopeBox.minX === board.minX &&
-    scopeBox.maxX === board.maxX &&
-    scopeBox.minY === board.minY &&
-    scopeBox.maxY === board.maxY
-  )
-    return `${label}   ·   Full-board scope envelope (${gap} mm)`
-  return `${label}   ·   Copper scope envelope ≤ ${gap} mm`
-}
-
-/** Legend rows show the symbols and line encodings used by the visible layers. */
-function legend(scene: PlanHeaderScene): PlanHeaderRow[] {
-  const rows: PlanHeaderRow[] = []
-  if (scene.rows.length) {
-    rows.push({
-      text: "▶ Driver    ◎ Receiver    ◇ Ideal receiver / load    › Mapped direction",
-    })
-    rows.push({
-      text: "│ Cut boundary    ≋ Inner    – – Bottom    ▧ Series    ╌ Ideal join",
-    })
+/** Bound the width in sans-serif ems, including wide glyphs and fallback fonts. */
+function headerWidth(text: string): number {
+  let width = 0
+  for (const char of text) {
+    if (" ilI.,:;'|".includes(char)) width += 0.4
+    else if ("mwMW@".includes(char)) width += 1.05
+    else if (char > "~") width += 1.25
+    else width += 0.8
   }
-  if (scene.scope)
-    rows.push({
-      text: "Dotted teal · Scope    Teal · Nearby    Rose · Rail    Gray · Outside",
-    })
-  if (scene.diagnostic)
-    rows.push({
-      text: "⊙ Offending pin    – ✕ – Broken path    Blue · Existing route",
-    })
-  return rows
+  return width
 }
 
-/** Center every text primitive above all physical geometry and put the scale on its own row. */
+/** Center each line above the board, sizing long captions to fit the frame. */
 export function planHeader({
   scene,
   frame,
-  board,
   boardTop,
-  scopeBox,
+  legend,
 }: {
   scene: PlanHeaderScene
   frame: PlanFrame
-  board: Viewbox
   boardTop: number
-  scopeBox?: Viewbox
+  legend: string
 }): PlanHeader {
   const { width, box } = frame
   const x = (box.minX + box.maxX) / 2
   const size = width / 52
-  const rows = [
-    {
-      text: scene.title,
-      color: scene.diagnostic ? RED : INK,
-      size: size * 1.32,
-    },
-    { text: scene.summary, color: QUIET, size },
-    ...wrapHeader({
-      text: scene.diagnostic || "",
-      columns: 69,
-      limit: MAX_DIAGNOSTIC_LINES,
-    })
-      .filter(Boolean)
-      .map((text) => ({ text, color: RED, size })),
-    { text: dimensions({ scene, board, scopeBox }), color: QUIET, size },
-    ...scene.rows.flatMap((row) =>
-      wrapHeader({ text: row.text, columns: 74 }).map((text) => ({
-        text,
-        color: row.color || INK,
-        size,
-      })),
-    ),
-    ...legend(scene).map((row) => ({
-      ...row,
-      color: row.color || QUIET,
-      size,
-    })),
-  ]
-    .flatMap((row, index) => {
-      if (index === 0)
-        return wrapHeader({ text: row.text, columns: 54 }).map((text) => ({
-          ...row,
-          text,
-        }))
-      if (index === 1)
-        return wrapHeader({ text: row.text, columns: 72 }).map((text) => ({
-          ...row,
-          text,
-        }))
-      return [row]
-    })
-    .filter((row) => row.text.length > 0)
   const scale = scaleLength(width)
   const scaleY = boardTop + size * 1.54
   const labelY = scaleY + size * 0.88
@@ -206,30 +91,56 @@ export function planHeader({
       layer: "header",
     },
   ]
+  const rows = [
+    {
+      text: scene.title,
+      color: scene.diagnostic ? RED : INK,
+      size: size * 1.32,
+    },
+    {
+      text: scene.diagnostic?.text,
+      color: RED,
+      size,
+      label: scene.diagnostic?.label,
+    },
+    ...scene.rows.map((row) => ({ ...row, size })),
+    { text: legend, color: QUIET, size },
+  ]
+  const rects: Rect[] = []
   let y = labelY + size * 1.66
   for (const row of rows.reverse()) {
+    if (!row.text) continue
+    const fontSize = Math.min(row.size, width / headerWidth(row.text))
     texts.push({
       x,
       y,
       text: row.text,
-      color: row.color,
-      fontSize: row.size,
+      color: row.color || INK,
+      fontSize,
       anchorSide: "center",
       layer: "header",
     })
+    if ("label" in row && row.label)
+      rects.push({
+        center: { x, y },
+        width: headerWidth(row.text) * fontSize,
+        height: size * 1.25,
+        fill: "transparent",
+        stroke: "none",
+        label: row.label,
+        layer: "header",
+      })
     y += row.size * 1.31
   }
   const top = y + size * 0.3
   const bottom = box.minY - size * 0.9
-  const rects: Rect[] = [
-    {
-      center: { x, y: (top + bottom) / 2 },
-      width: width + size * 3.6,
-      height: top - bottom,
-      fill: "none",
-      stroke: "none",
-      layer: "frame",
-    },
-  ]
+  rects.push({
+    center: { x, y: (top + bottom) / 2 },
+    width: width + size * 3.6,
+    height: top - bottom,
+    fill: "none",
+    stroke: "none",
+    layer: "frame",
+  })
   return { texts, rects, lines }
 }
