@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test"
+import { cju } from "@tscircuit/circuit-json-util"
 import { loadInspectorSample } from "../../site/channel-inspector/sample"
 import {
   editStimulus,
   stimulusRadius,
 } from "../../site/workbench/model/stimulus"
-import { circuitJsonDb } from "../../src/board"
 
 test("editing the stimulus updates only the active simulation and its channel", async () => {
   const circuit = await loadInspectorSample()
   const original = JSON.stringify(circuit)
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const simulation = db.simulation_pcb_transient_channel_simulation.getWhere({})
   const channel = db.simulation_pcb_driver_receiver_channel.getWhere({})
   if (!simulation || !channel) throw new Error("Expected a sample channel.")
@@ -32,7 +32,7 @@ test("editing the stimulus updates only the active simulation and its channel", 
       },
     },
   })
-  const updated = circuitJsonDb(edited)
+  const updated = cju([...edited])
   expect(
     updated.simulation_pcb_driver_receiver_channel.getWhere({})?.seed,
   ).toBe(1)

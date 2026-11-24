@@ -1,17 +1,17 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cju } from "@tscircuit/circuit-json-util"
 import { categorizeCopper } from "../../site/channel-inspector/copper"
 import {
   loadInspectorSample,
   sampleScopeDistanceMm,
 } from "../../site/channel-inspector/sample"
-import { circuitJsonDb } from "../../src/board"
 import { listChannelSimulations } from "../../src/pipeline/signals"
 import { scopeTrace } from "../fixtures/copper-scope-board"
 
 test("channel inspector distinguishes a declared trace, its neighbor and a spare", async () => {
   const circuit = await loadInspectorSample()
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const [simulation] = listChannelSimulations(circuit)
   const [channel] = db.simulation_pcb_driver_receiver_channel.list()
   assert.ok("source_port_id" in channel.driver)

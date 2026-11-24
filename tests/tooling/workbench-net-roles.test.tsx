@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test"
+import { cju } from "@tscircuit/circuit-json-util"
 import { categorizeCopper } from "../../site/channel-inspector/copper"
 import { loadInspectorSample } from "../../site/channel-inspector/sample"
 import { editNetRole, netRoles } from "../../site/workbench/model/net-roles"
-import { circuitJsonDb } from "../../src/board"
 
 test("net role edits promote a modeled nearby trace to a victim and preserve the loaded design", async () => {
   const circuit = await loadInspectorSample()
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const simulation = db.simulation_pcb_transient_channel_simulation.getWhere(
     {},
   )!
@@ -19,9 +19,9 @@ test("net role edits promote a modeled nearby trace to a victim and preserve the
     trace: near.record,
     role: "selected",
   })
-  const promoted = circuitJsonDb(
-    edited,
-  ).simulation_pcb_transient_channel_simulation.getWhere({})!
+  const promoted = cju([
+    ...edited,
+  ]).simulation_pcb_transient_channel_simulation.getWhere({})!
   expect(netRoles(promoted)[near.id]).toBe("selected")
   expect(
     categorizeCopper({

@@ -1,11 +1,12 @@
-import type { CircuitJsonDb, SourcePortId } from "../../../src/board"
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
+import type { SourcePortId } from "../../../src/board"
 
 /** Display a physical pin without ambiguity across multiple components. */
 export function qualifiedPort({
   db,
   port,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   port: SourcePortId
 }): string {
   const pin = db.source_port.get(port)

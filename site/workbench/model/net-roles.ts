@@ -1,9 +1,8 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { parseIbis } from "@tscircuit/ibis-to-spice"
 import type { PcbTrace } from "circuit-json"
 import {
   type CircuitJson,
-  type CircuitJsonSnapshot,
-  circuitJsonDb,
   endpointPorts,
   getSourcePortConnectivityMapFromCircuitJson,
   type SimulationPcbDriverReceiverChannel,
@@ -24,7 +23,7 @@ type SimulationWithRoles = SimulationPcbTransientChannelSimulation & {
 
 /** Read explicit roles alongside the schema's implicit copper categories. */
 export function netRoles(
-  simulation?: Snapshot<SimulationPcbTransientChannelSimulation>,
+  simulation?: SimulationPcbTransientChannelSimulation,
 ): Readonly<SimulationNetRoles> {
   return (
     (simulation as Snapshot<SimulationWithRoles> | undefined)
@@ -37,10 +36,10 @@ export function tracePorts({
   circuit,
   trace,
 }: {
-  circuit: CircuitJsonSnapshot
-  trace: Snapshot<PcbTrace>
+  circuit: CircuitJson
+  trace: PcbTrace
 }): SourcePortId[] {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   if (!trace.source_trace_id) return []
   const source = db.source_trace.get(trace.source_trace_id)
   if (!source) return []
@@ -70,12 +69,12 @@ function netPins({
   circuit,
   ports,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   ports: SourcePortId[]
 }): NetPins {
   const drivers: SourcePortId[] = []
   const receivers: SourcePortId[] = []
-  for (const model of circuitJsonDb(circuit).simulation_ibis_model.list()) {
+  for (const model of cju([...circuit]).simulation_ibis_model.list()) {
     const source = readInlineIbis(model.ibis_model_asset.url)
     if (!source) continue
     const document = parseIbis(source)
@@ -101,11 +100,11 @@ function victimChannel({
   ports,
 }: {
   circuit: CircuitJson
-  simulation: Snapshot<SimulationPcbTransientChannelSimulation>
-  trace: Snapshot<PcbTrace>
+  simulation: SimulationPcbTransientChannelSimulation
+  trace: PcbTrace
   ports: SourcePortId[]
 }): SimulationPcbDriverReceiverChannel {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const { drivers, receivers } = netPins({ circuit, ports })
   const driver = drivers[0]
   const loads = receivers.filter((port) => port !== driver)
@@ -136,17 +135,17 @@ export function editNetRole({
   role,
 }: {
   circuit: CircuitJson
-  simulation: Snapshot<SimulationPcbTransientChannelSimulation>
-  trace: Snapshot<PcbTrace>
+  simulation: SimulationPcbTransientChannelSimulation
+  trace: PcbTrace
   role: NetRole
 }): CircuitJson {
   const ports = tracePorts({ circuit, trace })
   if (!ports.length)
     throw new Error("This copper has no connected source ports.")
   const id = simulation.simulation_pcb_transient_channel_simulation_id
-  const channels = circuitJsonDb(
-    circuit,
-  ).simulation_pcb_driver_receiver_channel.list({
+  const channels = cju([
+    ...circuit,
+  ]).simulation_pcb_driver_receiver_channel.list({
     simulation_pcb_transient_channel_simulation_id: id,
   })
   const matching = channels.filter(({ driver }) =>

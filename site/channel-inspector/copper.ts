@@ -1,9 +1,8 @@
+import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import type { PcbCopperPour, PcbTrace, PcbVia } from "circuit-json"
 import {
-  type CircuitJsonDb,
-  type CircuitJsonSnapshot,
+  type CircuitJson,
   channelCopperScope,
-  circuitJsonDb,
   endpointPorts,
   getSourcePortConnectivityMapFromCircuitJson,
   type SimulationPcbTransientChannelSimulation,
@@ -11,7 +10,6 @@ import {
   type SourcePortId,
   sourceNetMembers,
 } from "../../src/board"
-import type { Snapshot } from "../../src/kernel"
 import { validatedScopeDistanceMm } from "../../src/pipeline/signals"
 import { signalTopology } from "../../src/pipeline/topology"
 import { signalRailIds } from "../../src/simulation"
@@ -20,7 +18,7 @@ export const copperCategories = ["selected", "near", "rail", "far"] as const
 export type CopperCategory = (typeof copperCategories)[number]
 
 /** Copper planes are represented by pcb_copper_pour records in Circuit JSON. */
-type CopperRecord = Snapshot<PcbTrace | PcbVia | PcbCopperPour>
+type CopperRecord = PcbTrace | PcbVia | PcbCopperPour
 type SourceId = SourceNetId | SourcePortId
 
 /** One physical record and the scope evidence shown in the inspector. */
@@ -42,7 +40,7 @@ function traceMembers({
   db,
   sourceTraceId,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   sourceTraceId?: PcbTrace["source_trace_id"]
 }): SourceId[] {
   if (sourceTraceId === undefined) return []
@@ -59,8 +57,8 @@ function viaMembers({
   db,
   via,
 }: {
-  db: CircuitJsonDb
-  via: Snapshot<PcbVia>
+  db: CircuitJsonUtilObjects
+  via: PcbVia
 }): SourceId[] {
   let sourceTraceId = via.source_trace_id
   if (sourceTraceId === undefined && via.pcb_trace_id !== undefined)
@@ -75,7 +73,7 @@ function primaryReference({
   db,
   driverPorts,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   driverPorts: SourcePortId[]
 }): SourcePortId | undefined {
   const primary = driverPorts.sort()[0]
@@ -97,11 +95,11 @@ export function categorizeCopper({
   simulation,
   distanceMm,
 }: {
-  circuit: CircuitJsonSnapshot
-  simulation: Snapshot<SimulationPcbTransientChannelSimulation>
+  circuit: CircuitJson
+  simulation: SimulationPcbTransientChannelSimulation
   distanceMm?: number
 }): InspectorCopperScope {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const simulationId = simulation.simulation_pcb_transient_channel_simulation_id
   const channels = db.simulation_pcb_driver_receiver_channel.list({
     simulation_pcb_transient_channel_simulation_id: simulationId,

@@ -1,8 +1,8 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbBoard, PcbComponent, PcbTraceRoutePoint } from "circuit-json"
 import { all_layers, type LayerRef, type Point } from "circuit-json"
 import {
-  type CircuitJsonSnapshot,
-  circuitJsonDb,
+  type CircuitJson,
   type DielectricLayer,
   stackupFromCircuitJson,
 } from "../../src/board"
@@ -66,8 +66,8 @@ export interface InspectorBoard {
 }
 
 /** Fit both views to the board outline and use the stackup's physical copper positions. */
-export function inspectorBoard(circuit: CircuitJsonSnapshot): InspectorBoard {
-  const db = circuitJsonDb(circuit)
+export function inspectorBoard(circuit: CircuitJson): InspectorBoard {
+  const db = cju([...circuit])
   const board = db.pcb_board.getWhere({})
   if (!board) throw new Error("Circuit JSON needs a PCB board.")
   const outline = boardOutline(board)
@@ -140,9 +140,7 @@ function boardOutline(board: Snapshot<PcbBoard>): readonly Point[] {
 }
 
 /** Assign each trace segment to its wire layer, including approaches to a via. */
-function traceShapes(
-  route: readonly Snapshot<PcbTraceRoutePoint>[],
-): InspectorWire[] {
+function traceShapes(route: readonly PcbTraceRoutePoint[]): InspectorWire[] {
   return route.flatMap((start, index): InspectorWire[] => {
     if (start.route_type === "through_pad") {
       return [

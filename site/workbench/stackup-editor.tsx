@@ -1,3 +1,4 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { LayerRef } from "circuit-json"
 import {
   type Dispatch,
@@ -6,7 +7,7 @@ import {
   useMemo,
   useState,
 } from "react"
-import { type CircuitJson, circuitJsonDb } from "../../src/board"
+import type { CircuitJson } from "../../src/board"
 import type { InspectorFeature } from "../channel-inspector/geometry"
 import {
   copperOunceMm,
@@ -133,7 +134,7 @@ export function StackupEditor({
   apply: (circuit: CircuitJson) => void
   close: () => void
 }): JSX.Element {
-  const db = useMemo(() => circuitJsonDb(circuit), [circuit])
+  const db = useMemo(() => cju([...circuit]), [circuit])
   const original = db.pcb_stackup.getWhere({})!.layers
   const [patches, setPatches] = useState<Record<number, LayerFields>>({})
   const [signalLayer, setSignalLayer] = useState<LayerRef>()

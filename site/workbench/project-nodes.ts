@@ -1,11 +1,9 @@
+import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import {
-  type CircuitJsonDb,
-  circuitJsonDb,
   endpointPorts,
   type SimulationPcbDriverReceiverChannel,
   type SourcePortId,
 } from "../../src/board"
-import type { Snapshot } from "../../src/kernel"
 import type { InspectorFeature } from "../channel-inspector/geometry"
 import type {
   ChannelSimulation,
@@ -25,7 +23,7 @@ import type { ProjectNode, ResultNode } from "./project"
 /** Shared board lookups for simulation and component branches. */
 interface BoardBranches {
   input: InspectorInput
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   features: InspectorFeature[]
   featurePorts: Map<InspectorFeature["id"], SourcePortId[]>
 }
@@ -37,8 +35,8 @@ function channelNode({
   copper,
   featurePorts,
 }: {
-  channel: Snapshot<SimulationPcbDriverReceiverChannel>
-  db: CircuitJsonDb
+  channel: SimulationPcbDriverReceiverChannel
+  db: CircuitJsonUtilObjects
   copper: InspectorFeature[]
   featurePorts: BoardBranches["featurePorts"]
 }): ProjectNode {
@@ -87,7 +85,7 @@ function copperNode({
   port,
 }: {
   feature: InspectorFeature
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   port?: SourcePortId
 }): ProjectNode {
   const record = feature.record
@@ -256,7 +254,7 @@ function componentNodes({
 }
 
 /** Describe physical layers in the same order as the stackup editor. */
-function stackupNodes(db: CircuitJsonDb): ProjectNode[] {
+function stackupNodes(db: CircuitJsonUtilObjects): ProjectNode[] {
   const layers = db.pcb_stackup.getWhere({})?.layers ?? []
   return layers.map((layer, index): ProjectNode => {
     const name =
@@ -307,7 +305,7 @@ export function projectNodes({
   features: InspectorFeature[]
   results?: ResultNode[]
 }): ProjectNode {
-  const db = circuitJsonDb(input.circuit)
+  const db = cju([...input.circuit])
   const featurePorts = new Map(
     features.flatMap((feature) => {
       if (feature.record.type !== "pcb_trace") return []

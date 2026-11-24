@@ -1,15 +1,14 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import {
   type IbisBuffer,
   type IbisCorner,
   type IbisDocument,
   parseIbis,
 } from "@tscircuit/ibis-to-spice"
-import {
-  type CircuitJson,
-  type CircuitJsonSnapshot,
-  circuitJsonDb,
-  type SimulationIbisModel,
-  type SourcePortId,
+import type {
+  CircuitJson,
+  SimulationIbisModel,
+  SourcePortId,
 } from "../../../src/board"
 import type { Snapshot } from "../../../src/kernel"
 import { pinModel, readInlineIbis } from "../../channel-inspector/ibis-panel"
@@ -36,8 +35,8 @@ export interface ModelPin {
 }
 
 /** Load only Circuit JSON embedded sources; external references stay visible by path. */
-export function embeddedModels(circuit: CircuitJsonSnapshot): EmbeddedModel[] {
-  const db = circuitJsonDb(circuit)
+export function embeddedModels(circuit: CircuitJson): EmbeddedModel[] {
+  const db = cju([...circuit])
   return db.simulation_ibis_model.list().map((record) => {
     const component =
       db.source_component.get(record.source_component_id)?.name ??
@@ -69,10 +68,10 @@ export function modelPins({
   circuit,
   models,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   models: EmbeddedModel[]
 }): ModelPin[] {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   return models.flatMap((model) =>
     Object.entries(model.record.ibis_pin_name_to_source_port_id).map(
       ([pin, port]): ModelPin => {

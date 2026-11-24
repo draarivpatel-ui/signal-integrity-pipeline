@@ -3,7 +3,6 @@ import {
   type SimulationPcbTransientChannelSimulation,
   validateCircuitRecords,
 } from "../../src/board"
-import type { Snapshot } from "../../src/kernel"
 import {
   listChannelSimulations,
   validatedScopeDistanceMm,
@@ -11,8 +10,7 @@ import {
 import { type InspectorBoard, inspectorBoard } from "./geometry"
 import { isInlineIbis } from "./ibis-panel"
 
-export type ChannelSimulation =
-  Snapshot<SimulationPcbTransientChannelSimulation>
+export type ChannelSimulation = SimulationPcbTransientChannelSimulation
 
 /** A loaded board and the channel simulations available for inspection. */
 export interface InspectorInput {

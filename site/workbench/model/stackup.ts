@@ -1,10 +1,6 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { LayerRef, PcbStackup } from "circuit-json"
-import {
-  type CircuitJson,
-  type CircuitJsonSnapshot,
-  circuitJsonDb,
-  stackupFromCircuitJson,
-} from "../../../src/board"
+import { type CircuitJson, stackupFromCircuitJson } from "../../../src/board"
 import { solveCrossSection } from "../../../src/extraction"
 
 /** Copper foil thickness in mm for one ounce per square foot. */
@@ -19,7 +15,7 @@ export function editStackup({
   circuit: CircuitJson
   layers: StackLayer[]
 }): CircuitJson {
-  const stackup = circuitJsonDb(circuit).pcb_stackup.getWhere({})
+  const stackup = cju([...circuit]).pcb_stackup.getWhere({})
   if (!stackup) throw new Error("The board has no PCB stackup.")
   for (const layer of layers) {
     if (layer.layer_type === "soldermask" && layer.thickness === undefined)
@@ -73,12 +69,12 @@ export function stackupImpedance({
   reference,
   widthMm,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   signal: LayerRef
   reference?: LayerRef
   widthMm: number
 }): ImpedanceReadout {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const stack = stackupFromCircuitJson(circuit)
   const conductor = stack.copperLayers.find(({ name }) => name === signal)
   const plane = stack.copperLayers.find(({ name }) => name === reference)

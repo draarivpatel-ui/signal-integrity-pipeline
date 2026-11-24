@@ -1,5 +1,6 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { type JSX, useId, useMemo, useState } from "react"
-import { type CircuitJson, circuitJsonDb, endpointPorts } from "../../src/board"
+import { type CircuitJson, endpointPorts } from "../../src/board"
 import type {
   ChannelSimulation,
   InspectorInput,
@@ -43,10 +44,9 @@ function previewAggressors({
 }): AggressorPreview {
   try {
     const circuit = editStimulus({ circuit: input.circuit, id, edit })
-    const simulation =
-      circuitJsonDb(circuit).simulation_pcb_transient_channel_simulation.get(
-        id,
-      )!
+    const simulation = cju([
+      ...circuit,
+    ]).simulation_pcb_transient_channel_simulation.get(id)!
     return {
       drivers: admittedAggressors({ input: { ...input, circuit }, simulation }),
     }
@@ -82,7 +82,7 @@ export function StimulusDialog({
 }): JSX.Element {
   const { circuit } = input
   const id = simulation.simulation_pcb_transient_channel_simulation_id
-  const db = useMemo(() => circuitJsonDb(circuit), [circuit])
+  const db = useMemo(() => cju([...circuit]), [circuit])
   const channels = db.simulation_pcb_driver_receiver_channel.list({
     simulation_pcb_transient_channel_simulation_id: id,
   })

@@ -1,7 +1,7 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { createHttpSolver } from "../../src/adapters/browser"
 import {
   type CircuitJson,
-  circuitJsonDb,
   endpointPorts,
   type SourcePortId,
 } from "../../src/board"
@@ -110,7 +110,7 @@ function localProblem({
     ibisSources[path] = text
     return [{ ...record, ibis_model_asset: { ...asset, url: path } }]
   })
-  const db = circuitJsonDb(input.circuit)
+  const db = cju([...input.circuit])
   const disabledAggressorPorts = new Set<SourcePortId>()
   for (const [traceId, role] of Object.entries(netRoles(simulation))) {
     if (role !== "excluded") continue
@@ -152,7 +152,7 @@ export function admittedAggressors({
   if (admission.failed)
     throw new Error(admission.error ?? "Routed admission failed.")
   const [plan] = admission.getOutput().value
-  const db = circuitJsonDb(input.circuit)
+  const db = cju([...input.circuit])
   const declaredDrivers = new Set(
     db.simulation_pcb_driver_receiver_channel
       .list({
@@ -179,7 +179,7 @@ function capturedChannels({
   circuit: CircuitJson
   simulation: ChannelSimulation
 }): Record<string, ProbeChannel> {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const channels = db.simulation_pcb_driver_receiver_channel.list({
     simulation_pcb_transient_channel_simulation_id:
       simulation.simulation_pcb_transient_channel_simulation_id,
@@ -244,7 +244,7 @@ export async function runLocalSimulation({
       level: "Info",
       message: status.version ?? "Local ngspice available",
     })
-    const db = circuitJsonDb(input.circuit)
+    const db = cju([...input.circuit])
     for (const issue of db.pcb_trace_error.list()) {
       log({
         stage: "Board",

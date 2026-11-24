@@ -1,8 +1,8 @@
-import {
-  type CircuitJson,
-  circuitJsonDb,
-  type SimulationPcbDriverReceiverChannel,
-  type SimulationPcbTransientChannelSimulation,
+import { cju } from "@tscircuit/circuit-json-util"
+import type {
+  CircuitJson,
+  SimulationPcbDriverReceiverChannel,
+  SimulationPcbTransientChannelSimulation,
 } from "../../../src/board"
 import type { Snapshot } from "../../../src/kernel"
 import {
@@ -36,7 +36,7 @@ export function stimulusRadius({
   simulation,
   defaultMm,
 }: {
-  simulation?: Snapshot<SimulationPcbTransientChannelSimulation>
+  simulation?: SimulationPcbTransientChannelSimulation
   defaultMm: number
 }): number {
   return (
@@ -69,7 +69,7 @@ export function editStimulus({
   id: string
   edit: StimulusEdit
 }): CircuitJson {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const current = db.simulation_pcb_transient_channel_simulation.get(id)
   if (!current) throw new Error("Choose a transient simulation.")
   if (!Number.isFinite(edit.rateBps) || edit.rateBps <= 0)
@@ -114,9 +114,9 @@ export function editStimulus({
       throw new Error(`${channel.name}: offset must be nonnegative.`)
     return channel
   })
-  const channels = circuitJsonDb(
-    updated,
-  ).simulation_pcb_driver_receiver_channel.list({
+  const channels = cju([
+    ...updated,
+  ]).simulation_pcb_driver_receiver_channel.list({
     simulation_pcb_transient_channel_simulation_id: id,
   })
   if (channels.length === 0)

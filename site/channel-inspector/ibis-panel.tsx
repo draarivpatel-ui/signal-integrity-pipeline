@@ -1,14 +1,11 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import {
   type IbisBuffer,
   type IbisDocument,
   parseIbis,
 } from "@tscircuit/ibis-to-spice"
 import type React from "react"
-import {
-  type CircuitJsonSnapshot,
-  circuitJsonDb,
-  type SimulationIbisModel,
-} from "../../src/board"
+import type { CircuitJson, SimulationIbisModel } from "../../src/board"
 import type { Snapshot } from "../../src/kernel"
 import type { InspectorCopperScope } from "./copper"
 
@@ -220,10 +217,10 @@ export function IbisPanel({
   circuit,
   retainedSourceIds,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   retainedSourceIds: InspectorCopperScope["retainedSourceIds"]
 }): React.JSX.Element {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const models = db.simulation_ibis_model
     .list()
     .filter((model) =>
