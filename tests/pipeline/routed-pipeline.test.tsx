@@ -220,9 +220,7 @@ test("every completed stage retains its own final drawing with few, readable lab
     const planner =
       definition.solverName === "TransientChannelSimulationPlanSolver"
     if (planner) {
-      assert.ok(
-        texts.some((text) => text.text.endsWith(" — ready to simulate")),
-      )
+      assert.ok(texts.some((text) => text.text.endsWith(": ready to simulate")))
       assert.ok(texts.every((text) => text.anchorSide === "center"))
     } else {
       assert.ok(
