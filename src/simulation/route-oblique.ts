@@ -8,10 +8,11 @@ import {
   closestRoutePoints,
   type ExtractedRoutes,
   type RouteMaterials,
+  rlgcCrossSection,
   routeCrossSection,
-  solveSectionCapacitance,
 } from "../extraction"
 import type { Snapshot } from "../kernel"
+import { calculateCapacitanceMatrix } from "../rlgc"
 import type { RouteLadder } from "./route-ladder"
 
 /** Serialized cross-section geometry used to reuse capacitance solves. */
@@ -183,8 +184,8 @@ export function routeOblique({
         try {
           capacitancePerM = Math.max(
             0,
-            -solveSectionCapacitance({
-              section,
+            -calculateCapacitanceMatrix({
+              crossSection: rlgcCrossSection(section),
               options: { panelsPerEdge: panels },
             })[0][1],
           )
