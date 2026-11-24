@@ -51,10 +51,10 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
   assert.ok(header?.every((text) => text.anchorSide === "center" && text.y > 6))
   assert.ok(
     drawing.texts?.some((text) =>
-      text.text.includes("Extra trace to RX pin A (not a receiver)"),
+      text.text.includes("Extra trace: MID pin A → RX pin A (top, 5 mm)"),
     ),
   )
-  assert.equal(drawing.title, "DAISY — ready to simulate")
+  assert.equal(drawing.title, "DAISY: ready to simulate")
   assert.equal(header?.length, 6)
   assert.deepEqual(
     drawing.texts
@@ -75,6 +75,6 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
     module: "pipeline/transient-channel-simulation-plan",
     name: "scoped-copper-visual",
     caption:
-      "One trace runs from TX to MID and another continues to RX. The plan uses MID as the receiver and includes the extra trace to RX.",
+      "One trace runs from TX to MID and another continues to RX, which is not a receiver. This test checks that the plan still includes the extra trace to RX.",
   })
 })

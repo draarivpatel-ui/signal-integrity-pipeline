@@ -25,22 +25,20 @@ test("shows the ideal join and ordered cuts through the two receiver paths", asy
   )
   assert.ok(
     drawing.texts?.some(
-      (text) =>
-        text.text ===
-        "Direct connection from MID pin A to JOIN pin A (no trace)",
+      (text) => text.text === "DATA: MID pin A → JOIN pin A (direct, no trace)",
     ),
   )
   assert.ok(
-    drawing.texts?.some((text) => text.text.includes("TX pin Y to MID pin A")),
+    drawing.texts?.some((text) => text.text.includes("TX pin Y → MID pin A")),
   )
   assert.ok(
-    drawing.texts?.some((text) => text.text.includes("JOIN pin A to RX pin A")),
+    drawing.texts?.some((text) => text.text.includes("JOIN pin A → RX pin A")),
   )
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "ideal-join-visual",
     caption:
-      "Copper runs from TX to MID and from JOIN to RX. The test lets MID and JOIN connect without a trace, so the signal can reach both receivers.",
+      "Traces run from TX to MID and JOIN to RX, while MID and JOIN connect without a trace. This test allows that connection, so the plan reaches both receivers.",
   })
 })
