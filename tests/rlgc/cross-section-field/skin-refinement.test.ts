@@ -1,11 +1,11 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { calculateRlgc } from "../../../src/rlgc"
-import { sectionFixture } from "../../fixtures/cross-section"
+import { crossSectionFixture } from "../../fixtures/cross-section"
 
 test("both skin matrices refine on coupled microstrip and stripline", () => {
   for (const kind of ["microstrip", "stripline"] as const) {
-    const crossSection = sectionFixture({ kind, count: 2 })
+    const crossSection = crossSectionFixture({ kind, count: 2 })
     const base = calculateRlgc({ crossSection, options: { panelsPerEdge: 32 } })
     const fine = calculateRlgc({ crossSection, options: { panelsPerEdge: 48 } })
     for (const key of [

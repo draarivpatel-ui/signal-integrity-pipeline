@@ -1,11 +1,10 @@
+import { LIGHT_SPEED } from "./cross-section"
+
 /** Vacuum impedance in ohms, from the reference formulas. */
 const VACUUM_IMPEDANCE = 376.730313668
 
 /** Vacuum permittivity in farads per meter, CODATA 2018. */
 const VACUUM_PERMITTIVITY = 8.8541878128e-12
-
-/** Speed of light in vacuum in meters per second, exact in SI. */
-const LIGHT_SPEED = 299792458
 
 /** Number of image terms in the independent thin-sheet calculation. */
 const IMAGE_TERMS = 64
@@ -44,10 +43,8 @@ function fillingFactor({ u, er }: { u: number; er: number }): number {
   return (1 + 10 / u) ** (-a * b)
 }
 
-/** Independent H–J quasi-static oracle, Qucs technical manual eqs. 11.156–11.176.
- * https://qucs.sourceforge.net/tech/node77.html (Hammerstad & Jensen, MTT-S 1980).
- * These published empirical coefficients belong to the oracle, never the numerical field solver.
- */
+/** Independent Hammerstad–Jensen quasi-static oracle, Qucs technical manual eqs. 11.156–11.176.
+ * https://qucs.sourceforge.net/tech/node77.html (Hammerstad & Jensen, MTT-S 1980). */
 export function coupledMicrostrip({
   width: w,
   gap,
@@ -150,7 +147,7 @@ interface MicrostripReference {
   ee: number
 }
 
-/** H–J single microstrip, Qucs equations 11.4–11.7 and 11.15–11.16; dimensions normalized to h. */
+/** Hammerstad–Jensen single microstrip, Qucs equations 11.4–11.7 and 11.15–11.16; dimensions normalized to h. */
 export function singleMicrostrip({
   u,
   er,
@@ -247,34 +244,39 @@ export function imageMicrostrip({
       return potential / (Math.PI * (er + 1))
     }),
   )
-  const rhs = panels.map((q) => [Number(q.group === 0), Number(q.group === 1)])
+  const rightHandSides = panels.map((q) => [
+    Number(q.group === 0),
+    Number(q.group === 1),
+  ])
   // Independent small SPD elimination; deliberately does not import the production linear algebra.
   for (let k = 0; k < panels.length; k++) {
     for (let i = k + 1; i < panels.length; i++) {
       const factor = a[i][k] / a[k][k]
       for (let j = k + 1; j < panels.length; j++) a[i][j] -= factor * a[k][j]
-      for (let j = 0; j < 2; j++) rhs[i][j] -= factor * rhs[k][j]
+      for (let j = 0; j < 2; j++)
+        rightHandSides[i][j] -= factor * rightHandSides[k][j]
     }
   }
   for (let i = panels.length - 1; i >= 0; i--) {
     for (let j = 0; j < 2; j++) {
       for (let k = i + 1; k < panels.length; k++)
-        rhs[i][j] -= a[i][k] * rhs[k][j]
-      rhs[i][j] /= a[i][i]
+        rightHandSides[i][j] -= a[i][k] * rightHandSides[k][j]
+      rightHandSides[i][j] /= a[i][i]
     }
   }
   return [0, 1].map((i) =>
     [0, 1].map((j) =>
       panels.reduce((potential, q, k) => {
         let contribution = 0
-        if (q.group === i) contribution = VACUUM_PERMITTIVITY * rhs[k][j]
+        if (q.group === i)
+          contribution = VACUUM_PERMITTIVITY * rightHandSides[k][j]
         return potential + contribution
       }, 0),
     ),
   )
 }
 
-/** H–J finite-thickness correction, Qucs 11.22–11.25; dimensions normalized to substrate height. */
+/** Hammerstad–Jensen finite-thickness correction, Qucs 11.22–11.25; dimensions normalized to substrate height. */
 export function thickMicrostrip({
   width: u,
   er,

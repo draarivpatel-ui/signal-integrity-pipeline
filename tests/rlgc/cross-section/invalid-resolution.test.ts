@@ -1,10 +1,10 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { calculateCapacitanceMatrix } from "../../../src/rlgc"
-import { sectionFixture } from "../../fixtures/cross-section"
+import { crossSectionFixture } from "../../fixtures/cross-section"
 
 test("electrostatic capacitance checks resolution", () => {
-  const crossSection = sectionFixture({ kind: "microstrip", count: 1 })
+  const crossSection = crossSectionFixture({ kind: "microstrip", count: 1 })
   assert.throws(
     () =>
       calculateCapacitanceMatrix({
