@@ -1,6 +1,5 @@
-import { Point, type Polygon } from "@flatten-js/core"
+import type { Polygon } from "@flatten-js/core"
 import {
-  circlePolygon,
   type cju,
   copperPolygonsTouch,
   getPlatedHolePolygon,
@@ -65,7 +64,7 @@ function getPortOutlines(db: ReturnType<typeof cju>): PortOutline[] {
   return [...smtPads, ...platedHoles]
 }
 
-/** Resolve the occupied radius of a barrel or a point-only route via. */
+/** Check contact against measured via copper, including the drill bore. */
 function touchesVia({
   outline,
   via,
@@ -73,18 +72,17 @@ function touchesVia({
   outline: Polygon
   via: CopperVia
 }): boolean {
+  const { outerDiameterMm, holeDiameterMm } = via
+  if (
+    !Number.isFinite(outerDiameterMm) ||
+    holeDiameterMm === undefined ||
+    !Number.isFinite(holeDiameterMm) ||
+    holeDiameterMm <= 0 ||
+    holeDiameterMm >= outerDiameterMm
+  )
+    return false
   const [x, y] = via.point
-  if (via.outerDiameterMm <= 0) {
-    const point = new Point(x, y)
-    return (
-      outline.contains(point) ||
-      outline.distanceTo(point)[0] <= CONTACT_TOLERANCE_MM
-    )
-  }
-  let barrel: Polygon
-  if (via.holeDiameterMm === undefined)
-    barrel = circlePolygon({ x, y }, via.outerDiameterMm / 2)
-  else barrel = getViaPolygon({ x, y }, via.outerDiameterMm, via.holeDiameterMm)
+  const barrel = getViaPolygon({ x, y }, outerDiameterMm, holeDiameterMm)
   return outlinesTouch({ first: outline, second: barrel })
 }
 
