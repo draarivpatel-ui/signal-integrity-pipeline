@@ -24,6 +24,7 @@ import {
 } from "../connectivity"
 import { fail } from "../diagnostics"
 import type {
+  PcbCopperPourId,
   PcbPortId,
   PcbTraceId,
   PcbViaId,
@@ -54,6 +55,8 @@ export interface CopperScope {
   extractedPcbTraceIds: PcbTraceId[]
   /** Vias for field extraction, including reference vias across the board. */
   extractedPcbViaIds: PcbViaId[]
+  /** Pours on the declared reference and supply nets. */
+  referencePcbCopperPourIds: PcbCopperPourId[]
   /** Supply or ground traces near the channel, kept as local copper only. */
   nearbyRailPcbTraceIds: PcbTraceId[]
   /** Source ports and nets included with their full electrical nets. */
@@ -487,6 +490,13 @@ export function channelCopperScopeWithBounds({
       channelPcbTraceIds: channelTraces.map((trace) => trace.pcb_trace_id),
       extractedPcbTraceIds: extractedTraces.map((trace) => trace.pcb_trace_id),
       extractedPcbViaIds: extractedVias.map((via) => via.pcb_via_id),
+      referencePcbCopperPourIds: pours
+        .filter(
+          (pour) =>
+            pour.source_net_id !== undefined &&
+            referenceAndRailSourceIds.has(pour.source_net_id),
+        )
+        .map((pour) => pour.pcb_copper_pour_id),
       nearbyRailPcbTraceIds: [...nearbyRailPcbTraceIds],
       extractedSourceIds,
     },

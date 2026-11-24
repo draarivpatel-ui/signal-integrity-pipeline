@@ -1,8 +1,8 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import {
-  type RoutedSections,
   type RouteSectionsInput,
+  type RouteSectionsOutput,
   RouteSectionsSolver,
 } from "../../src/board"
 import { RoutedStageSolver } from "../../src/pipeline"
@@ -12,7 +12,7 @@ import { routedVisualFixture } from "../fixtures/routed-visual"
 test("a flat stage drains real TSX channel simulation inputs in order", async () => {
   const { root } = await routedVisualFixture(2)
   const sections = root.getSolver<
-    RoutedStageSolver<RouteSectionsInput, RoutedSections>
+    RoutedStageSolver<RouteSectionsInput, RouteSectionsOutput>
   >("RouteSectionsSolver")!
   const [inputs] = sections.getConstructorParams()
   const stage = new RoutedStageSolver({

@@ -4,7 +4,11 @@ import {
   type BaseSolver,
   definePipelineStep,
 } from "@tscircuit/solver-utils"
-import { type RoutedSections, RouteSectionsSolver } from "../board"
+import {
+  cloneCircuitJson,
+  type RouteSectionsOutput,
+  RouteSectionsSolver,
+} from "../board"
 import { type ExtractedRoutes, RouteFieldsSolver } from "../extraction"
 import {
   ArtifactLedger,
@@ -55,8 +59,8 @@ export const routedStages = [
     (p: RoutedPipelineSolver) => [
       p.stageOutput("RouteSectionsSolver").value.map((sections, i) => ({
         geometry: sections.geometry,
-        circuitJson: sections.circuitJson,
-        scope: sections.scope,
+        circuitJson: cloneCircuitJson(sections.circuitJson),
+        scope: sections.copperScope,
         maskThicknessMm: sections.maskThicknessMm,
         materials: p.stageOutput("TransientChannelSimulationPlanSolver").value[
           i
@@ -74,7 +78,8 @@ export const routedStages = [
         .stageOutput("TransientChannelSimulationPlanSolver")
         .value.map((plan, i) => ({
           ...plan.bindings,
-          copperScope: p.stageOutput("RouteSectionsSolver").value[i].scope,
+          copperScope: p.stageOutput("RouteSectionsSolver").value[i]
+            .copperScope,
         })),
     ],
   ),
@@ -117,7 +122,7 @@ interface RoutedStageOutputs {
   TransientChannelSimulationPlanSolver: Produced<
     readonly TransientChannelSimulationPlan[]
   >
-  RouteSectionsSolver: RoutedStageOutput<RoutedSections>
+  RouteSectionsSolver: RoutedStageOutput<RouteSectionsOutput>
   RouteFieldsSolver: RoutedStageOutput<ExtractedRoutes>
   RouteBindingsSolver: RoutedStageOutput<RoutedBindings>
   RouteNetworkSolver: RoutedStageOutput<RoutedDeck>
