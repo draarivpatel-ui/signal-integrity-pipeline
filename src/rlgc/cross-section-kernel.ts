@@ -34,7 +34,7 @@ const NEAR_PANEL_LENGTHS = 2
 /** Integrated log singularity across a panel's own length. */
 const SELF_LOG_INTEGRAL = 1.5
 
-/** Antiderivative of log distance, including points on targetPanel source panel. */
+/** Antiderivative of log distance, including points on a source panel. */
 function logDistanceIntegral({ x, y }: { x: number; y: number }): number {
   let correction = 0
   if (y) correction = Math.abs(y) * atan(x / Math.abs(y))
@@ -213,7 +213,8 @@ export function evaluatePanelKernel({
 }: PanelPair & { planeSpacingMm: number }): number {
   const isNormalField = targetPanel.conductorIndex < 0
   const self = evaluateDirectKernel({
-    ...{ targetPanel, sourcePanel },
+    targetPanel,
+    sourcePanel,
     isNormalField,
   })
   if (!planeSpacingMm) {

@@ -12,7 +12,7 @@ import {
 } from "./cross-section-types"
 import { fail } from "./diagnostics"
 
-/** Largest raw reciprocity residual allowed before requesting targetPanel finer mesh or wider domain. */
+/** Largest raw reciprocity residual allowed before requesting a finer mesh or wider domain. */
 const MAX_RECIPROCITY_RESIDUAL = 0.015
 
 /** Capacitance and dielectric loss matrices with mesh size and reciprocity error. */
