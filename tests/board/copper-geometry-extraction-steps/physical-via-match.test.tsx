@@ -3,15 +3,15 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("uses one physical via when its source trace and nearby center match the route", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
-      <SectionTrace
+      <CopperTrace
         name="Signal"
         endLayer="inner1"
         points={[
@@ -36,7 +36,8 @@ test("uses one physical via when its source trace and nearby center match the ro
   })
   const { vias } = extractCopperGeometry({
     circuit: board,
-    copperScope: getCopperExtractionInput({ circuit: board }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit: board })
+      .copperScope,
   })
   assert.deepEqual(
     vias.map(({ pcbViaId, outerDiameterMm }) => [pcbViaId, outerDiameterMm]),

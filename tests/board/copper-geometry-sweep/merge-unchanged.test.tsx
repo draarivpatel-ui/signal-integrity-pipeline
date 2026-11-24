@@ -2,14 +2,14 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("coalesces intervals split by an unused reference boundary", async () => {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
     reference: (
       <>
         <copperpour connectsTo="net.GND" layer="inner1" unbroken />
@@ -29,7 +29,7 @@ test("coalesces intervals split by an unused reference boundary", async () => {
   })
   const { sections, pours } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert.equal(pours.length, 2)
   assert.deepEqual(
