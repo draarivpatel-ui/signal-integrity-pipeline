@@ -42,7 +42,11 @@ function groupSectionReferences({
   const profiles = new Map<ReferenceProfileKey, SectionProfile>()
   const positionMm = (interval.startMm + interval.endMm) / 2
   for (const wire of wires) {
-    if (wire.startMm > positionMm || wire.endMm < positionMm) continue
+    if (
+      wire.longitudinalMinMm > positionMm ||
+      wire.longitudinalMaxMm < positionMm
+    )
+      continue
     const references = findRouteReferences({
       geometry,
       wire,
@@ -75,8 +79,8 @@ function sweepDirection({
   copperScope: Snapshot<CopperScope>
 }): RouteSection[] {
   const positionsMm = wires.flatMap((wire) => [
-    wire.startMm,
-    wire.endMm,
+    wire.longitudinalMinMm,
+    wire.longitudinalMaxMm,
     ...findReferenceBoundariesMm({ wire, pours: geometry.pours }),
   ])
   const boundariesMm = [...new Set(positionsMm.map(roundRouteCoordinate))].sort(

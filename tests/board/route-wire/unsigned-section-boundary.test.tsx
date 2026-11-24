@@ -24,5 +24,5 @@ test("rounds a slightly negative boundary to unsigned zero", async () => {
     circuit,
     copperScope: getSectionInput({ circuit }).copperScope,
   })
-  assert.equal(roundRouteCoordinate(wires[0].startMm), 0)
+  assert.equal(roundRouteCoordinate(wires[0].longitudinalMinMm), 0)
 })

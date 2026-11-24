@@ -80,7 +80,7 @@ domain:
   coupling: mutual electrical or magnetic interaction between conductors
   crossover: the frequency band where conductor loss turns from its DC value into skin loss
   cursor: the current position while traversing an ordered route
-  cut: a deliberate break in physical copper or a boundary in a geometric sweep
+  cut: a deliberate break in physical copper
   deck: an input file for a solver (the ngspice netlist)
   declare: plan experiments and probes from the board's simulation records before any solver runs
   delay: time needed for a signal edge to propagate through a line
@@ -125,6 +125,7 @@ domain:
   leg: one signal path of a differential pair, positive or negative
   clearance: space left free around a feature
   vertex: a point in a connection graph, represented by a source contact, ideal group or SPICE node
+  longitudinal: along the canonical direction of a wire
   lateral: across a wire within the board plane
   layer: one copper or insulating sheet in the stackup
   ledger: the single record of every artifact path the pipeline writes; a second write to a path fails
@@ -186,7 +187,6 @@ domain:
   slab: a flat layer of laminate or mask in a cross-section
   sweep: partition geometry by visiting consecutive boundaries in order
   section: a longitudinal interval with the same wires and reference surfaces
-  slice: one local cross-section of conductors and reference surfaces
   snapshot: a copied and frozen domain value published by a completed stage
   solver: an external program that does the physics (ngspice), or one stepped pipeline stage
   span: the range of layers a via crosses
@@ -308,6 +308,7 @@ general:
 avoid:
   centre: center
   transverse: lateral
+  slice: section
   col: column
   ctx: context
   eps: epsilon

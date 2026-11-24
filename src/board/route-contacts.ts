@@ -16,13 +16,14 @@ import {
 } from "./connectivity"
 import type { CopperScope } from "./geometry/scope"
 import type { CopperPoint } from "./geometry/types"
-import type { PcbPortId, SourceTraceId } from "./ids"
+import type { PcbPortId } from "./ids"
 import type {
   RoutePortContact,
   RouteVia,
   RouteWire,
   SectionGeometry,
 } from "./route-section-types"
+import { getTraceMembers, getViaMembers } from "./route-vias"
 import type { CircuitJson, LayerRef } from "./schema"
 
 /** Physical outlines and point contacts use the same tolerance as topology validation. */
@@ -181,41 +182,6 @@ function touchesEnd({
   )
 }
 
-/** Find ports and nets named by a source trace. */
-function getTraceMembers({
-  db,
-  sourceTraceId,
-}: {
-  db: ReturnType<typeof cju>
-  sourceTraceId: SourceTraceId | undefined
-}): SourceConnectionGroup {
-  if (sourceTraceId === undefined) return []
-  const trace = db.source_trace.get(sourceTraceId)
-  if (!trace) return []
-  return [
-    ...trace.connected_source_port_ids,
-    ...(trace.connected_source_net_ids || []),
-  ]
-}
-
-/** Via ownership can come from a net, a source trace or a PCB trace. */
-function getViaMembers({
-  db,
-  via,
-}: {
-  db: ReturnType<typeof cju>
-  via: RouteVia
-}): SourceConnectionGroup {
-  const members = getTraceMembers({ db, sourceTraceId: via.sourceTraceId })
-  if (via.pcbTraceId !== undefined) {
-    const sourceTraceId = db.pcb_trace.get(via.pcbTraceId)?.source_trace_id
-    if (sourceTraceId !== via.sourceTraceId)
-      members.push(...getTraceMembers({ db, sourceTraceId }))
-  }
-  if (via.sourceNetId !== undefined) members.push(via.sourceNetId)
-  return members
-}
-
 /** Outline of the planar conductor, including rounded copper ends. */
 function getWireOutline(wire: RouteWire): WireOutline {
   const [startX, startY] = wire.startPoint
@@ -250,21 +216,18 @@ export function resolveRouteContacts({
       (wire) => !copperScope.nearbyRailPcbTraceIds.includes(wire.pcbTraceId),
     )
     .map(getWireOutline)
-  const viaOutlines = vias.map((via) => ({
-    via,
-    members: getViaMembers({ db, via }),
-  }))
   const traceMembers = new Map(
     db.source_trace
       .list()
-      .map(({ source_trace_id: sourceTraceId }) => [
-        sourceTraceId,
-        getTraceMembers({ db, sourceTraceId }),
-      ]),
+      .map((trace) => [trace.source_trace_id, getTraceMembers(trace)]),
   )
+  const viaOutlines = vias.map((via) => ({
+    via,
+    members: getViaMembers({ db, via, traceMembers }),
+  }))
   const portContacts: RoutePortContact[] = []
-  const startsTouchingPorts = new Set<number>()
-  const endsTouchingPorts = new Set<number>()
+  const startContactWireIndices = new Set<number>()
+  const endContactWireIndices = new Set<number>()
   for (const pad of pads) {
     const netMembers = sourceNetMembers({
       connectivity,
@@ -277,9 +240,9 @@ export function resolveRouteContacts({
     )
     for (const { wire } of compatibleWires) {
       if (touchesEnd({ wire, point: wire.startPoint, pad }))
-        startsTouchingPorts.add(wire.wireIndex)
+        startContactWireIndices.add(wire.wireIndex)
       if (touchesEnd({ wire, point: wire.endPoint, pad }))
-        endsTouchingPorts.add(wire.wireIndex)
+        endContactWireIndices.add(wire.wireIndex)
     }
     const wire = findPadWire({
       pad,
@@ -299,8 +262,8 @@ export function resolveRouteContacts({
     portContacts,
     wires: wires.map((wire) => ({
       ...wire,
-      startTouchesPort: startsTouchingPorts.has(wire.wireIndex),
-      endTouchesPort: endsTouchingPorts.has(wire.wireIndex),
+      startTouchesPort: startContactWireIndices.has(wire.wireIndex),
+      endTouchesPort: endContactWireIndices.has(wire.wireIndex),
     })),
   }
 }

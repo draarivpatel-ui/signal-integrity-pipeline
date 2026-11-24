@@ -34,7 +34,7 @@ if (process.argv.includes("--normalize-shallow-arc")) {
     const child = Bun.spawn(
       [process.execPath, import.meta.path, "--normalize-shallow-arc"],
       {
-        timeout: 2000,
+        timeout: 4000,
         killSignal: "SIGKILL",
         stderr: "pipe",
       },

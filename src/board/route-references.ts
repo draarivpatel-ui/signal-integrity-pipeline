@@ -1,30 +1,26 @@
-import { Line, Point, type PolygonEdge, Vector } from "@flatten-js/core"
-import {
-  getPourPolygon,
-  getTraceSegmentPolygon,
-} from "@tscircuit/circuit-json-util"
+import type { PolygonEdge } from "@flatten-js/core"
+import { getPourPolygon } from "@tscircuit/circuit-json-util"
 import type { PcbCopperPour } from "circuit-json"
 import { hypotenuse, type Snapshot } from "../kernel"
 import { polygonContains } from "./geometry/polygon"
 import type { CopperPoint } from "./geometry/types"
+import {
+  coversReferenceInterval,
+  type LongitudinalInterval,
+  MAX_REFERENCE_EDGE_DISTANCE_MM,
+  measurePourGapMm,
+} from "./route-reference-range"
 import type {
   ReferencePour,
   RouteReference,
-  RouteSection,
   RouteWire,
   SectionGeometry,
 } from "./route-section-types"
-import {
-  getRoutePoint,
-  MIN_WIRE_LENGTH_MM,
-  measureChordDistanceMm,
-} from "./route-wire"
+import { getRoutePoint, MIN_WIRE_LENGTH_MM } from "./route-wire"
 import type { CopperLayer } from "./stackup"
 
 /** One micrometre limits the polygonal approximation of curved pour boundaries. */
 const POUR_CHORD_TOLERANCE_MM = 0.001
-/** Limit the edge approximation to the local neighborhood of ordinary board thicknesses. */
-export const MAX_REFERENCE_EDGE_DISTANCE_MM = 2
 
 /** Tessellate a pour edge with bounded sagitta, preserving its start and axis extrema. */
 function samplePourEdge(edge: PolygonEdge): CopperPoint[] {
@@ -100,27 +96,6 @@ interface ReferenceCandidate {
   distanceMm: number
 }
 
-/** The distance from the wire centerline to the copper outline, including holes. */
-function measurePourGapMm({
-  point,
-  pour,
-}: {
-  point: CopperPoint
-  pour: ReferencePour
-}): number {
-  let gapMm = Infinity
-  for (const ring of pour.polygon) {
-    for (const [index, startPoint] of ring.entries()) {
-      const endPoint = ring[(index + 1) % ring.length]
-      gapMm = Math.min(
-        gapMm,
-        measureChordDistanceMm({ point, startPoint, endPoint }),
-      )
-    }
-  }
-  return gapMm
-}
-
 /** An eligible reference and its position relative to the signal copper. */
 interface ReferenceSurface {
   pour: ReferencePour
@@ -159,82 +134,6 @@ function getReferenceSurface({
   }
 }
 
-/** An interval along a section's canonical longitudinal axis, in millimetres. */
-type LongitudinalInterval = Pick<RouteSection, "startMm" | "endMm">
-
-/** Intersect a wire's axis with the capsule of points within range of one edge. */
-function getEdgeInterval({
-  line,
-  direction,
-  startPoint,
-  endPoint,
-  lateralLimitMm,
-}: {
-  line: Line
-  direction: Snapshot<RouteWire["direction"]>
-  startPoint: CopperPoint
-  endPoint: CopperPoint
-  lateralLimitMm: number
-}): LongitudinalInterval | undefined {
-  const capsule = getTraceSegmentPolygon(
-    { x: startPoint[0], y: startPoint[1] },
-    { x: endPoint[0], y: endPoint[1] },
-    lateralLimitMm * 2,
-  )
-  const positionsMm = line
-    .intersect(capsule)
-    .map(({ x, y }) => x * direction[0] + y * direction[1])
-  if (positionsMm.length < 2) return undefined
-  return { startMm: Math.min(...positionsMm), endMm: Math.max(...positionsMm) }
-}
-
-/** A single pour must cover the entire edge-referenced interval, without gaps. */
-function coversReferenceInterval({
-  interval,
-  wire,
-  surface,
-}: {
-  interval: LongitudinalInterval
-  wire: Snapshot<RouteWire>
-  surface: ReferenceSurface
-}): boolean {
-  const lateralLimitMm = Math.sqrt(
-    MAX_REFERENCE_EDGE_DISTANCE_MM ** 2 - surface.verticalGapMm ** 2,
-  )
-  const start = getRoutePoint({ wire, positionMm: interval.startMm })
-  const end = getRoutePoint({ wire, positionMm: interval.endMm })
-  if (
-    measurePourGapMm({ point: start, pour: surface.pour }) >= lateralLimitMm ||
-    measurePourGapMm({ point: end, pour: surface.pour }) >= lateralLimitMm
-  )
-    return false
-
-  const [x, y] = wire.direction
-  const line = new Line(new Point(...start), new Vector(-y, x))
-  const spans = surface.pour.polygon
-    .flatMap((ring) =>
-      ring.flatMap((startPoint, index) => {
-        const span = getEdgeInterval({
-          line,
-          direction: wire.direction,
-          startPoint,
-          endPoint: ring[(index + 1) % ring.length],
-          lateralLimitMm,
-        })
-        if (!span) return []
-        return [span]
-      }),
-    )
-    .sort((first, second) => first.startMm - second.startMm)
-  let coveredToMm = interval.startMm
-  for (const span of spans) {
-    if (span.startMm >= coveredToMm) break
-    coveredToMm = Math.max(coveredToMm, span.endMm)
-    if (coveredToMm > interval.endMm) return true
-  }
-  return false
-}
-
 /** Find the nearest reference edge when the centerline crosses no reference copper. */
 function findEdgeReference({
   point,
@@ -256,7 +155,10 @@ function findEdgeReference({
     const distanceMm = hypotenuse(verticalGapMm, lateralGapMm)
     if (distanceMm >= MAX_REFERENCE_EDGE_DISTANCE_MM) continue
     if (nearest && nearest.distanceMm <= distanceMm) continue
-    if (interval && !coversReferenceInterval({ interval, wire, surface }))
+    if (
+      interval &&
+      !coversReferenceInterval({ interval, wire, pour, verticalGapMm })
+    )
       continue
     let surfaceZMm = signal.zMinMm - distanceMm
     if (isAboveSignal) surfaceZMm = signal.zMaxMm + distanceMm
@@ -352,7 +254,7 @@ export function findReferenceBoundariesMm({
   }
   return boundariesMm.filter(
     (positionMm) =>
-      positionMm > wire.startMm + MIN_WIRE_LENGTH_MM &&
-      positionMm < wire.endMm - MIN_WIRE_LENGTH_MM,
+      positionMm > wire.longitudinalMinMm + MIN_WIRE_LENGTH_MM &&
+      positionMm < wire.longitudinalMaxMm - MIN_WIRE_LENGTH_MM,
   )
 }

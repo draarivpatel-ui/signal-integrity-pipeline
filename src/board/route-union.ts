@@ -6,7 +6,12 @@ import {
 } from "./connectivity"
 import type { SourceTraceId } from "./ids"
 import type { RouteWire } from "./route-section-types"
-import { getDirectionKey, getRoutePoint, groupWiresByGap } from "./route-wire"
+import {
+  getDirectionKey,
+  getRoutePoint,
+  groupWiresByGap,
+  type WireGroup,
+} from "./route-wire"
 import type { CircuitJson, SourceTrace } from "./schema"
 
 /** Require a positive shared length before merging parallel copper. */
@@ -15,9 +20,6 @@ const MIN_OVERLAP_LENGTH_MM = 1e-6
 const UNION_TOLERANCE_MM = 1e-7
 
 type CopperGroupKey = string
-
-/** A set of wires in contact on the same electrical net and layer. */
-type WireGroup = RouteWire[]
 
 /** Find the common root index without modifying the caller's array. */
 function findRootIndex({
@@ -64,8 +66,8 @@ function groupConnectedWires(wires: WireGroup): Iterable<WireGroup> {
     for (let otherIndex = index + 1; otherIndex < wires.length; otherIndex++) {
       const otherWire = wires[otherIndex]
       const overlapMm =
-        Math.min(wire.endMm, otherWire.endMm) -
-        Math.max(wire.startMm, otherWire.startMm)
+        Math.min(wire.longitudinalMaxMm, otherWire.longitudinalMaxMm) -
+        Math.max(wire.longitudinalMinMm, otherWire.longitudinalMinMm)
       if (overlapMm <= MIN_OVERLAP_LENGTH_MM) continue
       const separationMm = Math.abs(
         wire.lateralOffsetMm - otherWire.lateralOffsetMm,
@@ -94,9 +96,9 @@ function groupConnectedWires(wires: WireGroup): Iterable<WireGroup> {
 /** Build the occupied rectangle and join the original wires to its centerline. */
 function mergeWires({
   wires,
-  startMm,
-  endMm,
-}: Pick<RouteWire, "startMm" | "endMm"> & {
+  longitudinalMinMm,
+  longitudinalMaxMm,
+}: Pick<RouteWire, "longitudinalMinMm" | "longitudinalMaxMm"> & {
   wires: WireGroup
 }): RouteWire {
   const orderedWires = wires.toSorted((a, b) => a.wireIndex - b.wireIndex)
@@ -109,12 +111,12 @@ function mergeWires({
   )
   const mergedWire = {
     ...firstWire,
-    startMm,
-    endMm,
+    longitudinalMinMm,
+    longitudinalMaxMm,
     widthMm: maxMm - minMm,
     lateralOffsetMm: (minMm + maxMm) / 2,
   }
-  const positionsMm = [startMm, endMm]
+  const positionsMm = [longitudinalMinMm, longitudinalMaxMm]
   if (getWireOrientation(firstWire) < 0) positionsMm.reverse()
   const [startPoint, endPoint] = positionsMm.map((positionMm) =>
     getRoutePoint({ wire: mergedWire, positionMm }),
@@ -126,7 +128,7 @@ function mergeWires({
         UNION_TOLERANCE_MM,
     )
     .flatMap((wire) =>
-      [startMm, endMm].map((positionMm) => ({
+      [longitudinalMinMm, longitudinalMaxMm].map((positionMm) => ({
         sourceTraceId: wire.sourceTraceId,
         pcbTraceId: wire.pcbTraceId,
         fromPoint: getRoutePoint({ wire, positionMm }),
@@ -146,27 +148,36 @@ function mergeWires({
 function unionWireGroup(wires: WireGroup): RouteWire[] {
   if (wires.length === 1) return wires
   const boundariesMm = [
-    ...new Set(wires.flatMap(({ startMm, endMm }) => [startMm, endMm])),
+    ...new Set(
+      wires.flatMap(({ longitudinalMinMm, longitudinalMaxMm }) => [
+        longitudinalMinMm,
+        longitudinalMaxMm,
+      ]),
+    ),
   ].sort((a, b) => a - b)
   const mergedWires: RouteWire[] = []
   for (let index = 1; index < boundariesMm.length; index++) {
-    const startMm = boundariesMm[index - 1]
-    const endMm = boundariesMm[index]
-    if (endMm - startMm < UNION_TOLERANCE_MM) continue
-    const midpointMm = (startMm + endMm) / 2
+    const longitudinalMinMm = boundariesMm[index - 1]
+    const longitudinalMaxMm = boundariesMm[index]
+    if (longitudinalMaxMm - longitudinalMinMm < UNION_TOLERANCE_MM) continue
+    const midpointMm = (longitudinalMinMm + longitudinalMaxMm) / 2
     const active = wires.filter(
-      (wire) => wire.startMm < midpointMm && wire.endMm > midpointMm,
+      (wire) =>
+        wire.longitudinalMinMm < midpointMm &&
+        wire.longitudinalMaxMm > midpointMm,
     )
     for (const group of groupWiresByGap({
       wires: active,
       gapMm: UNION_TOLERANCE_MM,
     }))
-      mergedWires.push(mergeWires({ wires: group, startMm, endMm }))
+      mergedWires.push(
+        mergeWires({ wires: group, longitudinalMinMm, longitudinalMaxMm }),
+      )
   }
   return mergedWires
 }
 
-/** Union touching, parallel same-net conductors and retain their lateral joins. */
+/** Union touching, parallel same-net conductors and keep their lateral joins. */
 export function unionRouteWires({
   wires,
   circuit,
@@ -203,7 +214,10 @@ export function unionRouteWires({
   )
   mergedWires.sort((a, b) => {
     if (a.wireIndex !== b.wireIndex) return a.wireIndex - b.wireIndex
-    return getWireOrientation(wires[a.wireIndex]) * (a.startMm - b.startMm)
+    return (
+      getWireOrientation(wires[a.wireIndex]) *
+      (a.longitudinalMinMm - b.longitudinalMinMm)
+    )
   })
   return mergedWires.map((wire, wireIndex) => ({ ...wire, wireIndex }))
 }

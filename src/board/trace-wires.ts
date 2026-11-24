@@ -69,7 +69,7 @@ function extractWire({
   }
 }
 
-/** Read each pair in routing order and retain via positions for pad contact. */
+/** Read each pair in routing order and read via positions for pad contact. */
 export function extractTraceWires({
   circuit,
   trace,

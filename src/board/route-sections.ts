@@ -2,10 +2,8 @@ import { cju } from "@tscircuit/circuit-json-util"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
 import { resolveRouteContacts } from "./route-contacts"
-import {
-  MAX_REFERENCE_EDGE_DISTANCE_MM,
-  normalizeReferencePour,
-} from "./route-references"
+import { MAX_REFERENCE_EDGE_DISTANCE_MM } from "./route-reference-range"
+import { normalizeReferencePour } from "./route-references"
 import { sweepRouteSections } from "./route-section-sweep"
 import type {
   RouteVia,

@@ -48,7 +48,7 @@ export function measureChordDistanceMm({
 /** Canonical direction and projected coordinates for a straight wire. */
 type WireProjection = Pick<
   RouteWire,
-  "direction" | "startMm" | "endMm" | "lateralOffsetMm"
+  "direction" | "longitudinalMinMm" | "longitudinalMaxMm" | "lateralOffsetMm"
 >
 
 /** Project physical endpoints onto canonical longitudinal and lateral axes. */
@@ -70,12 +70,14 @@ export function projectRouteWire({
     (sign * dx) / lengthMm,
     (sign * dy) / lengthMm,
   ]
-  const startMm = startPoint[0] * direction[0] + startPoint[1] * direction[1]
-  const endMm = endPoint[0] * direction[0] + endPoint[1] * direction[1]
+  const startProjectionMm =
+    startPoint[0] * direction[0] + startPoint[1] * direction[1]
+  const endProjectionMm =
+    endPoint[0] * direction[0] + endPoint[1] * direction[1]
   return {
     direction,
-    startMm: Math.min(startMm, endMm),
-    endMm: Math.max(startMm, endMm),
+    longitudinalMinMm: Math.min(startProjectionMm, endProjectionMm),
+    longitudinalMaxMm: Math.max(startProjectionMm, endProjectionMm),
     lateralOffsetMm:
       -startPoint[0] * direction[1] + startPoint[1] * direction[0],
   }
@@ -96,6 +98,12 @@ export function getRoutePoint({
   ]
 }
 
+/** Set of wires grouped by the gap between their lateral edges. */
+export type WireGroup = RouteWire[]
+
+/** Wire groups ordered along the lateral axis. */
+type WireGroups = WireGroup[]
+
 /** Partition laterally ordered wire intervals, tracking each group's full extent. */
 export function groupWiresByGap({
   wires,
@@ -103,14 +111,14 @@ export function groupWiresByGap({
 }: {
   wires: readonly RouteWire[]
   gapMm: number
-}): RouteWire[][] {
+}): WireGroups {
   const ordered = wires.toSorted(
     (a, b) =>
       a.lateralOffsetMm - a.widthMm / 2 - (b.lateralOffsetMm - b.widthMm / 2) ||
       a.wireIndex - b.wireIndex,
   )
-  const groups: RouteWire[][] = []
-  let group: RouteWire[] = []
+  const groups: WireGroups = []
+  let group: WireGroup = []
   let groupMaxMm = -Infinity
   for (const wire of ordered) {
     const minMm = wire.lateralOffsetMm - wire.widthMm / 2

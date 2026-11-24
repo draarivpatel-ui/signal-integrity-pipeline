@@ -1,10 +1,10 @@
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
-import type { Circle, GraphicsObject, Line, Point, Text } from "graphics-debug"
+import type { GraphicsObject, Line, Text, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
-import type { CopperPoint } from "./geometry/types"
 import { drawPlanPolygon } from "./plan-shapes"
 import { getBoardBounds, getBoxPoints } from "./plan-view"
 import { getTraceColor, planColors, planPourFills } from "./plan-visual-types"
+import { drawContacts, drawJoin, toBoardPoint } from "./route-section-marks"
 import type {
   RouteSection,
   RouteWire,
@@ -21,12 +21,7 @@ interface SectionMarks {
   text?: Text
 }
 
-/** Use the same vertical axis for graphics and PCB coordinates. */
-function boardPoint([x, y]: Snapshot<CopperPoint>): Point {
-  return { x, y }
-}
-
-/** A tick through the wire width at a longitudinal section boundary. */
+/** Ticks stay outside the copper so ideal joins remain visible inside it. */
 function drawSectionBoundary({
   wire,
   positionMm,
@@ -35,18 +30,19 @@ function drawSectionBoundary({
   wire: Snapshot<RouteWire>
   positionMm: number
   unitMm: number
-}): Line {
-  const point = getRoutePoint({ wire, positionMm })
-  const halfTickMm = wire.widthMm / 2 + unitMm * 0.55
+}): Line[] {
+  const [centerX, centerY] = getRoutePoint({ wire, positionMm })
   const [x, y] = wire.direction
-  return {
-    points: [
-      { x: point[0] - y * halfTickMm, y: point[1] + x * halfTickMm },
-      { x: point[0] + y * halfTickMm, y: point[1] - x * halfTickMm },
-    ],
-    strokeWidth: unitMm * 0.13,
+  const innerMm = wire.widthMm / 2 + unitMm * 0.08
+  const outerMm = innerMm + unitMm * 0.5
+  return [-1, 1].map((side) => ({
+    points: [innerMm, outerMm].map((distanceMm) => ({
+      x: centerX - y * side * distanceMm,
+      y: centerY + x * side * distanceMm,
+    })),
+    strokeWidth: unitMm * 0.18,
     strokeColor: planColors.ink,
-  }
+  }))
 }
 
 /** Draw one section with the layer and net of its reference. */
@@ -66,32 +62,33 @@ function drawSection({
   const label = references
     .map(({ layer, sourceNetId, lateralGapMm }) => {
       const name = db.source_net.get(sourceNetId)?.name || sourceNetId
-      if (lateralGapMm === undefined) return `${name} · ${layer}`
-      return `${name} edge · ${lateralGapMm.toFixed(2)} mm gap`
+      if (lateralGapMm === undefined) return `${name} (${layer})`
+      return `${name} edge (${layer})`
     })
     .join(" / ")
   const lines = wires.flatMap((wire): Line[] => [
     {
       points: [startMm, endMm].map((positionMm) =>
-        boardPoint(getRoutePoint({ wire, positionMm })),
+        toBoardPoint(getRoutePoint({ wire, positionMm })),
       ),
       strokeWidth: wire.widthMm,
       strokeColor: color,
       label: `${wire.layer} wire · ${label}`,
     },
-    ...[startMm, endMm].map((positionMm) =>
+    ...[startMm, endMm].flatMap((positionMm) =>
       drawSectionBoundary({ wire, positionMm, unitMm }),
     ),
   ])
   const wire = wires.at(-1)
   if (!wire) return { lines }
   const center = getRoutePoint({ wire, positionMm: (startMm + endMm) / 2 })
+  const wireLayers = [...new Set(wires.map(({ layer }) => layer))].join(" / ")
   return {
     lines,
     text: {
       x: center[0],
       y: center[1] + wire.widthMm / 2 + unitMm * 0.9,
-      text: label,
+      text: `${wireLayers} · ${label}`,
       fontSize: unitMm * 1.65,
       anchorSide: "bottom_center",
       color,
@@ -134,23 +131,25 @@ function drawOriginalWires({
   })
 }
 
-/** Draw physical reference copper, section boundaries, contacts, vias and joins. */
-export function drawRouteSections({
+/** Draw the board title, caption and outline before adding copper. */
+function drawBoard({
   db,
-  geometry,
+  board,
+  unitMm,
   error,
 }: {
   db: CircuitJsonUtilObjects
-  geometry?: Snapshot<SectionGeometry>
+  board: Viewbox
+  unitMm: number
   error?: string
 }): GraphicsObject {
-  const board = getBoardBounds(db)
-  const unitMm = (board.maxX - board.minX) / BOARD_UNITS || 0.1
-  const outline = db.pcb_board.getWhere({})?.outline || getBoxPoints(board)
+  let outline = getBoxPoints(board)
+  const boardOutline = db.pcb_board.getWhere({})?.outline
+  if (boardOutline?.length) outline = boardOutline
   const title = "Route sections"
   let statusColor: string = planColors.quiet
   if (error) statusColor = planColors.failure
-  const drawing: GraphicsObject = {
+  return {
     title,
     coordinateSystem: "cartesian",
     polygons: [
@@ -182,61 +181,52 @@ export function drawRouteSections({
       },
     ],
   }
+}
+
+/** Draw physical reference copper, section boundaries, contacts, vias and joins. */
+export function drawRouteSections({
+  db,
+  geometry,
+  error,
+}: {
+  db: CircuitJsonUtilObjects
+  geometry?: Snapshot<SectionGeometry>
+  error?: string
+}): GraphicsObject {
+  const board = getBoardBounds(db)
+  const unitMm = (board.maxX - board.minX) / BOARD_UNITS || 0.1
+  const drawing = drawBoard({ db, board, unitMm, error })
   if (!geometry) return drawing
 
   const sections = geometry.sections.map((section, index) =>
     drawSection({ section, index, db, unitMm }),
   )
   const joins = geometry.wires.flatMap((wire) => wire.joins || [])
-  const traceIds = new Set([
-    ...geometry.wires.map((wire) => wire.pcbTraceId),
-    ...joins.map((join) => join.pcbTraceId),
-  ])
+  const pcbTraceIds = new Set(
+    geometry.wires.flatMap(
+      (wire) => wire.contributingPcbTraceIds || [wire.pcbTraceId],
+    ),
+  )
   const pours = geometry.pours.flatMap(({ polygon }) => {
     const [outer, ...holes] = polygon
     if (!outer?.length) return []
     return drawPlanPolygon({
-      points: outer.map(boardPoint),
-      holes: holes.map((ring) => ring.map(boardPoint)),
+      points: outer.map(toBoardPoint),
+      holes: holes.map((ring) => ring.map(toBoardPoint)),
       fill: planPourFills.pink,
       stroke: planColors.rail,
       strokeWidth: unitMm * 0.12,
     })
   })
-  const vias = geometry.vias.map(
-    (via): Circle => ({
-      center: boardPoint(via.point),
-      radius: Math.max(via.outerDiameterMm / 2, unitMm * 0.55),
-      stroke: planColors.ideal,
-      fill: "white",
-      label: `Via · ${via.layers.join(" / ")}`,
-    }),
-  )
-  const ports = geometry.portContacts.map(
-    (contact): Circle => ({
-      center: boardPoint(contact.point),
-      radius: unitMm * 0.42,
-      stroke: planColors.ink,
-      fill: "white",
-      label: `Port · ${contact.layer}`,
-    }),
-  )
   return {
     ...drawing,
     polygons: [...(drawing.polygons || []), ...pours],
     lines: [
-      ...drawOriginalWires({ db, pcbTraceIds: traceIds, unitMm }),
+      ...drawOriginalWires({ db, pcbTraceIds, unitMm }),
       ...sections.flatMap(({ lines }) => lines),
-      ...joins.map(
-        (join): Line => ({
-          points: [join.fromPoint, join.toPoint].map(boardPoint),
-          strokeColor: planColors.ideal,
-          strokeWidth: unitMm * 0.2,
-          strokeDash: "3,2",
-        }),
-      ),
+      ...joins.flatMap((join) => drawJoin({ join, unitMm })),
     ],
-    circles: [...ports, ...vias],
+    circles: drawContacts({ geometry, unitMm }),
     texts: [
       ...(drawing.texts || []),
       ...sections.flatMap(({ text }) => {
