@@ -8,7 +8,7 @@ import { expectPlanPcbSnapshot } from "../../fixtures/plan-pcb-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("a redundant named net preserves the ideal junction between two cuts", async () => {
+test("a redundant named net preserves the ideal junction between two traces", async () => {
   const circuitJson = await renderSignals({
     tree: <DaisyChainFixture routeFinalLeg idealMiddleLeg namedNet />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
@@ -24,12 +24,12 @@ test("a redundant named net preserves the ideal junction between two cuts", asyn
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  const [driverCut, receiverCut] = bindings.traceContacts
-  const middleNode = node(driverCut.toSourcePortId)
+  const [driverTraceContacts, receiverTraceContacts] = bindings.traceContacts
+  const middleNode = node(driverTraceContacts.toSourcePortId)
   assert.ok(
     [
-      node(receiverCut.fromSourcePortId),
-      node(receiverCut.toSourcePortId),
+      node(receiverTraceContacts.fromSourcePortId),
+      node(receiverTraceContacts.toSourcePortId),
     ].includes(middleNode),
   )
   assert.equal(new Set(plan.sections.requiredSourcePortIds.map(node)).size, 3)
@@ -39,6 +39,6 @@ test("a redundant named net preserves the ideal junction between two cuts", asyn
     plan,
     expectedTraceCount: 2,
     testPath: import.meta.path,
-    caption: `DATA names both cuts; MID.A and JOIN.A share ${middleNode}`,
+    caption: `DATA names both traces; MID.A and JOIN.A share ${middleNode}`,
   })
 })

@@ -126,7 +126,7 @@ export function ChannelFixture({
   )
 }
 
-/** One interior physical cut with two parallel passives on each side. */
+/** One interior trace with two parallel passives on each side. */
 function ParallelPassives({
   driver,
   receiver,

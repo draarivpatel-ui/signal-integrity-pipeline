@@ -23,15 +23,15 @@ test("draws the receiver path and extra trace on a daisy chain", async () => {
   const [{ name, sections, bindings }] = value
   assert.equal(name, "DAISY")
   assert.equal(sections.copperScope.channelPcbTraceIds.length, 2)
-  const [mapping] = bindings.receiverPaths
+  const [receiverPath] = bindings.receiverPaths
   assert.equal(bindings.receiverPaths.length, 1)
-  assert.equal(mapping.channelName, "DATA")
+  assert.equal(receiverPath.channelName, "DATA")
   assert.ok(
     bindings.traceContacts.some(
-      (cut) =>
-        cut.sourceTraceId === mapping.sourceTraceId &&
-        cut.fromSourcePortId === mapping.fromSourcePortId &&
-        cut.toSourcePortId === mapping.toSourcePortId,
+      (contacts) =>
+        contacts.sourceTraceId === receiverPath.sourceTraceId &&
+        contacts.fromSourcePortId === receiverPath.fromSourcePortId &&
+        contacts.toSourcePortId === receiverPath.toSourcePortId,
     ),
   )
   assert.equal(bindings.traceContacts.length, 2)
