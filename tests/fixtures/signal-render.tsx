@@ -1,7 +1,7 @@
 import type React from "react"
 import type { CircuitJson } from "../../src/board"
 import type { IbisSources } from "../../src/buffers"
-import { RoutedAdmissionSolver } from "../../src/pipeline"
+import { TransientChannelSimulationPlanSolver } from "../../src/pipeline"
 import {
   listChannelSimulations,
   type PreparedChannelSimulation,
@@ -63,7 +63,7 @@ export function prepareChannelSimulations({
 type AdmittedRouteBindings = Omit<RouteBindingsInput, "scope">
 
 /** The first admitted channel simulation's bindings, checked by the standalone admission solver. */
-export function admittedBindings({
+export function plannedBindings({
   circuitJson,
   ibisSources,
 }: {
@@ -81,7 +81,7 @@ export function admittedBindings({
       ] as const
     }),
   )
-  const admission = new RoutedAdmissionSolver({
+  const admission = new TransientChannelSimulationPlanSolver({
     circuitJson,
     ibisSources: textSources,
   })

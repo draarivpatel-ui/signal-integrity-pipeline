@@ -11,7 +11,7 @@ Each declared channel simulation becomes immutable inputs for route sections and
 RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
 RouteFieldsSolver screens nearby conductor pairs and extracts coupled coefficients for each unique section.
-IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during admission.
+IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during planning.
 
 Aggressors are output-capable pins retained by the copper scope that do not
 drive a declared channel in the simulation. This includes bidirectional

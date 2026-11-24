@@ -14,7 +14,7 @@ An alternate path reports the physical contacts and distinguishes an entirely ro
 RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
 RouteFieldsSolver screens nearby conductor pairs and extracts coupled coefficients for each unique section.
-IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during admission.
+IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during planning.
 
 ```mermaid
 flowchart LR

@@ -5,7 +5,7 @@ import React from "react"
 import { admitBuffers, compileBuffers } from "../../src/buffers"
 import { rootScope, sha256 } from "../../src/kernel"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
-import { admittedBindings, renderSignals } from "../fixtures/signal-render"
+import { plannedBindings, renderSignals } from "../fixtures/signal-render"
 import Single from "../fixtures/unit-single-ended"
 
 const modelDir = process.env.IBIS_MODEL_DIR
@@ -15,7 +15,7 @@ const description =
 test.skipIf(!modelDir)(description, async () => {
   const bytes = await readFile(`${modelDir}/sn74lvc1g04.ibs`)
   const ibis = { "models/sn74lvc1g04.ibs": bytes }
-  const bindings = admittedBindings({
+  const bindings = plannedBindings({
     circuitJson: await renderSignals({ tree: <Single /> }),
     ibisSources: ibis,
   })
