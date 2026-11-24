@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
-import { endpointPorts } from "../../../src/board"
+import { cloneCircuitJson, endpointPorts } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -29,7 +29,7 @@ test("a partially routed daisy chain keeps its ideal receiver connection", async
     driverReceiverChannel.receivers.flatMap(endpointPorts)
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   assert.notEqual(node(driverSourcePortId), node(middleSourcePortId))
   assert.equal(node(middleSourcePortId), node(finalSourcePortId))

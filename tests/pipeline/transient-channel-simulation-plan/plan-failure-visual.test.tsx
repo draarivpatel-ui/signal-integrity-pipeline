@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
-import { assertRouteVisual } from "../../fixtures/route-visual-snapshot"
+import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 import Differential from "../../fixtures/unit-differential"
@@ -34,7 +34,7 @@ test("draws the whole board with the open differential leg diagnostic in red", a
   assert.ok(drawing.lines?.length)
   assert.ok(drawing.texts?.length)
   const fault = drawing.texts.find((text) =>
-    text.text.includes("has no copper trace"),
+    text.text.includes("has an incomplete route"),
   )
   assert.equal(fault?.color, "#b91c1c")
   assert.ok(header?.every((text) => text.anchorSide === "center" && text.y > 6))
@@ -45,7 +45,7 @@ test("draws the whole board with the open differential leg diagnostic in red", a
         line.label?.includes("No routed source path"),
     ),
   )
-  assert.equal(fault?.text, "BUS+ has no copper trace between TX and RX.")
+  assert.equal(fault?.text, "BUS+ has an incomplete route between TX and RX.")
   assert.ok(
     drawing.rects?.some(
       (rect) =>
@@ -72,12 +72,16 @@ test("draws the whole board with the open differential leg diagnostic in red", a
   assert.ok(visibleText.includes("VCC copper (top)"))
   assert.ok(visibleText.includes("GND copper (bottom)"))
   assert.ok(
-    visibleText.includes("▶ driver · ◉ receiver · ◎ via · -×- missing trace"),
+    visibleText.includes(
+      "▶ driver · ◉ receiver · ◎ via · -×- incomplete route",
+    ),
   )
-  assert.ok(visibleText.includes("BUS+: TX pin A → RX pin A (missing trace)"))
+  assert.ok(
+    visibleText.includes("BUS+: TX pin A → RX pin A (incomplete route)"),
+  )
   assert.ok(visibleText.includes("BUS−: TX pin B → RX pin B (top, 10 mm)"))
   assert.ok(!visibleText.includes("RTERM"))
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "plan-failure-visual",

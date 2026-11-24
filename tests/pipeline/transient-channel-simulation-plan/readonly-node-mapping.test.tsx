@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -16,8 +17,11 @@ test("the published SPICE names cannot change the node lookup", async () => {
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const nodes = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
-  const port = bindings.mappings[0].from
+  const nodes = circuitNodes({
+    ...bindings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+  })
+  const port = bindings.receiverPaths[0].fromSourcePortId
   const original = nodes.node(port)
   assert.notEqual(original, "0")
   assert.throws(() => {
