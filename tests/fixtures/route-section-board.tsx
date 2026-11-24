@@ -59,6 +59,7 @@ interface SectionTraceProps {
   endX?: number
   startY?: number
   endY?: number
+  startLayer?: LayerRef
   endLayer?: LayerRef
   width?: number
   net?: string
@@ -73,7 +74,8 @@ export function SectionTrace({
   endX = 4,
   startY = 0,
   endY = startY,
-  endLayer = "top",
+  startLayer = "top",
+  endLayer = startLayer,
   width = 0.2,
   net = "net.SIGNAL",
   points = [],
@@ -83,7 +85,13 @@ export function SectionTrace({
   const to = `.${name}End > .P`
   return (
     <>
-      <SectionPin name={`${name}Start`} x={startX} y={startY} net={net} />
+      <SectionPin
+        name={`${name}Start`}
+        x={startX}
+        y={startY}
+        net={net}
+        layer={startLayer}
+      />
       <SectionPin
         name={`${name}End`}
         x={endX}
@@ -106,9 +114,11 @@ export function SectionTrace({
 /** Render the test geometry through core. Overlaps and open ports are deliberate. */
 export async function renderSectionBoard({
   children,
+  allowBlindAndBuriedVias = true,
   reference = <copperpour connectsTo="net.GND" layer="bottom" unbroken />,
 }: {
   children: ReactNode
+  allowBlindAndBuriedVias?: boolean
   reference?: ReactNode
 }): Promise<CircuitJson> {
   const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
@@ -119,7 +129,7 @@ export async function renderSectionBoard({
       layers={4}
       thickness={1.6}
       fabricatorPreset="jlcpcb_standard"
-      allowBlindAndBuriedVias
+      allowBlindAndBuriedVias={allowBlindAndBuriedVias}
       routeRemaining={false}
       schematicDisabled
     >
