@@ -12,12 +12,12 @@ import { routedVisualFixture } from "../fixtures/routed-visual"
 test("a flat stage drains real TSX channel simulation inputs in order and retains the last drawing", async () => {
   const { root } = await routedVisualFixture(2)
   const sections = root.getSolver<
-    RoutedStageSolver<RouteSectionsInput, RouteSectionsOutput>
-  >("RouteSectionsSolver")!
+    RoutedStageSolver<CopperGeometryExtractionInput, CopperGeometry>
+  >("CopperGeometryExtractionSolver")!
   const [inputs] = sections.getConstructorParams()
   const stage = new RoutedStageSolver({
     inputs: [...inputs].reverse(),
-    solverClass: RouteSectionsSolver,
+    solverClass: CopperGeometryExtractionSolver,
   })
   stage.step()
   assert.equal(
@@ -29,7 +29,7 @@ test("a flat stage drains real TSX channel simulation inputs in order and retain
   stage.solve()
   assert.deepEqual(
     stage.getOutput().value,
-    [...root.stageOutput("RouteSectionsSolver").value].reverse(),
+    [...root.stageOutput("CopperGeometryExtractionSolver").value].reverse(),
   )
   assert.equal(stage.getOutput().artifacts.length, 4)
   assert.equal(stage.stats.completedChannelSimulations, 2)

@@ -17,6 +17,24 @@ export {
   sourceNetMembers,
   sourcePinTies,
 } from "./connectivity"
+export { findPadContactWire } from "./copper-geometry-contacts"
+export {
+  type CopperGeometry,
+  CopperGeometryExtractionSolver,
+} from "./copper-geometry-extraction"
+export type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
+export {
+  extractCopperGeometry,
+  stepCopperGeometryExtraction,
+} from "./copper-geometry-extraction-steps"
+export { findWireReferences } from "./copper-geometry-references"
+export type {
+  ExtractedCopper,
+  ReferenceSurface,
+  TraceWire,
+  WireSection,
+} from "./copper-geometry-types"
+export { getWirePoint } from "./copper-geometry-wire"
 export { polygonContains } from "./geometry/polygon"
 export { resolveRouteVias, selectPort } from "./geometry/ports"
 export { type CopperScope, channelCopperScope } from "./geometry/scope"
@@ -53,20 +71,6 @@ export {
   type PlanVisualScene,
   planColors,
 } from "./plan-visual-types"
-export { findContactWire } from "./route-contacts"
-export { findRouteReferences } from "./route-references"
-export type {
-  RouteReference,
-  RouteSection,
-  RouteWire,
-  SectionGeometry,
-} from "./route-section-types"
-export { sectionRoutes, stepRouteSections } from "./route-sections"
-export type { RouteSectionsInput } from "./route-sections-input"
-export {
-  type RouteSectionsOutput,
-  RouteSectionsSolver,
-} from "./route-sections-solver"
 export { RouteSectionsStage } from "./route-sections-stage"
 export {
   getBoardBounds,
@@ -100,7 +104,6 @@ export {
   routeStrip,
   routeUnrolled,
 } from "./route-visual-strip"
-export { getRoutePoint } from "./route-wire"
 export type {
   CircuitJson,
   Point,

@@ -106,7 +106,7 @@ export class RouteNetworkSolver extends BaseSolver {
       for (const layer of port.layers) {
         const point: CopperPoint = [port.x, port.y]
         if (
-          !findContactWire({
+          !findPadContactWire({
             geometry,
             pcbPortId: port.pcb_port_id,
             layer,
@@ -282,7 +282,7 @@ export class RouteNetworkSolver extends BaseSolver {
       if (mapped.has(port.source_port_id)) return false
       const point: CopperPoint = [port.x, port.y]
       return port.layers.some((layer) =>
-        findContactWire({
+        findPadContactWire({
           geometry,
           pcbPortId: port.pcb_port_id,
           layer,
@@ -425,7 +425,7 @@ export class RouteNetworkSolver extends BaseSolver {
       slices: extracted.slices.map((slice) => ({
         start: slice.startMm,
         end: slice.endMm,
-        point: getRoutePoint({
+        point: getWirePoint({
           wire: slice.wires[0],
           positionMm: (slice.startMm + slice.endMm) / 2,
         }),
@@ -681,7 +681,7 @@ function routedNode({
 
 /** Resolves a physical point on a routed wire to its electrical node. */
 export type RouteEndpoint = (input: {
-  wire: Snapshot<RouteWire>
+  wire: Snapshot<TraceWire>
   point: Snapshot<CopperPoint>
 }) => string
 
