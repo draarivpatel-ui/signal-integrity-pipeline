@@ -10,6 +10,6 @@ test("rejects recession below representable wall displacement", () => {
         section: sectionFixture({ kind: "stripline" }),
         options: { recessionFraction: Number.MIN_VALUE },
       }),
-    { code: "mesh_convergence", message: /recession displacement/i },
+    { code: "cross_section_options", message: /recession displacement/i },
   )
 })

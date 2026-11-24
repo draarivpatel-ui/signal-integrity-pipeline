@@ -9,11 +9,15 @@ const MIN_PIVOT_MAGNITUDE = 1e-20
 /** Allow matrix roundoff relative to the largest coefficient when checking passivity. */
 const PASSIVITY_RELATIVE_TOLERANCE = 1e-9
 
-/** Solves a matrix of right-hand sides using saved boundary factors. */
-type SectionMatrixSolve = (values: Matrix) => Matrix
+/** Partial-pivoted LU factors and row swaps for reuse across excitations. */
+interface BoundaryFactors {
+  matrix: Float64Array[]
+  swaps: Int32Array
+}
 
-/** In-place partial-pivoted LU of a small boundary matrix; reuse for every excitation/sensitivity. */
-export function sectionFactor(matrix: Float64Array[]): SectionMatrixSolve {
+/** Factor a copy of the boundary matrix. */
+export function sectionFactor(boundaryMatrix: Float64Array[]): BoundaryFactors {
+  const matrix = boundaryMatrix.map((row) => row.slice())
   const n = matrix.length
   const swaps = new Int32Array(n)
   for (let k = 0; k < n; k++) {
@@ -21,10 +25,10 @@ export function sectionFactor(matrix: Float64Array[]): SectionMatrixSolve {
     for (let i = k + 1; i < n; i++) {
       if (Math.abs(matrix[i][k]) > Math.abs(matrix[pivot][k])) pivot = i
     }
-    const pivotValue = matrix[pivot][k]
+    const pivotCoefficient = matrix[pivot][k]
     if (
-      !Number.isFinite(pivotValue) ||
-      Math.abs(pivotValue) < MIN_PIVOT_MAGNITUDE
+      !Number.isFinite(pivotCoefficient) ||
+      Math.abs(pivotCoefficient) < MIN_PIVOT_MAGNITUDE
     ) {
       fail("matrix_zero", "Singular cross-section boundary matrix")
     }
@@ -38,36 +42,47 @@ export function sectionFactor(matrix: Float64Array[]): SectionMatrixSolve {
       for (let j = k + 1; j < n; j++) matrix[i][j] -= factor * matrix[k][j]
     }
   }
-  /** Solve using the saved factors without changing the right-hand side. */
-  const solve = (values: Matrix): Matrix => {
-    const result = values.map((row) => [...row])
-    const m = result[0].length
-    for (let k = 0; k < n; k++) {
-      const row = result[k]
-      result[k] = result[swaps[k]]
-      result[swaps[k]] = row
-    }
-    for (let i = 0; i < n; i++) {
-      for (let k = 0; k < i; k++) {
-        for (let j = 0; j < m; j++) result[i][j] -= matrix[i][k] * result[k][j]
-      }
-    }
-    for (let i = n - 1; i >= 0; i--) {
-      for (let j = 0; j < m; j++) {
-        for (let k = i + 1; k < n; k++)
-          result[i][j] -= matrix[i][k] * result[k][j]
-        result[i][j] /= matrix[i][i]
-      }
-    }
-    return result
+  return { matrix, swaps }
+}
+
+/** Apply the saved factors without changing the right-hand sides. */
+export function solveBoundarySystem({
+  factors: { matrix, swaps },
+  rightHandSides,
+}: {
+  factors: BoundaryFactors
+  rightHandSides: Matrix
+}): Matrix {
+  const n = matrix.length
+  const result = rightHandSides.map((row) => [...row])
+  const m = result[0].length
+  for (let k = 0; k < n; k++) {
+    const row = result[k]
+    result[k] = result[swaps[k]]
+    result[swaps[k]] = row
   }
-  return solve
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < i; k++) {
+      for (let j = 0; j < m; j++) result[i][j] -= matrix[i][k] * result[k][j]
+    }
+  }
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = 0; j < m; j++) {
+      for (let k = i + 1; k < n; k++)
+        result[i][j] -= matrix[i][k] * result[k][j]
+      result[i][j] /= matrix[i][i]
+    }
+  }
+  return result
 }
 
 /** Inverse of a conductor matrix (not of the field operator). */
 export function sectionInverse(matrix: Matrix): Matrix {
-  const rhs = matrix.map((row, i) => row.map((_, j) => Number(i === j)))
-  return sectionFactor(matrix.map((row) => Float64Array.from(row)))(rhs)
+  const rightHandSides = matrix.map((row, i) =>
+    row.map((_, j) => Number(i === j)),
+  )
+  const factors = sectionFactor(matrix.map((row) => Float64Array.from(row)))
+  return solveBoundarySystem({ factors, rightHandSides })
 }
 
 /** Maximum unprojected reciprocity error, scaled by the largest matrix coefficient. */

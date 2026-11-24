@@ -61,9 +61,6 @@ export interface CrossSectionResult {
 export const sectionEpsilon0 = 8.8541878128e-12
 /** Vacuum permeability in henries per meter. */
 export const sectionMu0 = 1.25663706212e-6
-/** Default conductivity of copper in siemens per meter. */
-export const copperConductivity = 5.8e7
-
 /** A constant-charge boundary element, carrying total equivalent charge divided by epsilon0. */
 export interface SectionPanel {
   x: number
@@ -92,5 +89,6 @@ export interface SectionMeshInput {
   count: number
   extent: number
   vacuum?: boolean
+  includeDielectricLoss?: boolean
   faceSteps?: number[]
 }

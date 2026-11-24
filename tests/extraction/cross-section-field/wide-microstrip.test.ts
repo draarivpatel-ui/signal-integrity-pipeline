@@ -1,8 +1,11 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { type CrossSection, solveCrossSection } from "../../src/extraction"
+import {
+  type CrossSection,
+  solveCrossSection,
+  solveSectionCapacitance,
+} from "../../../src/extraction"
 
-// The parallel-plate limit independently tests material energy weighting and both reference/signal loss.
 test("layered/mask energy sensitivity and Wheeler loss approach the analytic parallel-plate limits", () => {
   const section: CrossSection = {
     conductors: [
@@ -30,13 +33,20 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
       },
     ],
   }
-  const result = solveCrossSection({ section })
+  const options = { panelsPerEdge: 6 }
+  const result = solveCrossSection({ section, options })
   const electrical = 0.18 / 4.1 + 0.02 / 3.3
   const expectedC = (8.8541878128e-12 * 100) / electrical
   const expectedLoss =
     (expectedC * ((0.18 / 4.1) * 0.02 + (0.02 / 3.3) * 0.025)) / electrical
   const rs = Math.sqrt((Math.PI * 1.25663706212e-6) / 5.8e7)
   const expectedSkin = rs * (2 / 0.1 + (2 * 0.0002) / 0.1 ** 2)
+  const expectedConductorSkin = rs * (1 / 0.1 + (2 * 0.0002) / 0.1 ** 2)
+  assert.ok(
+    Math.abs(result.stripSkinResistance[0][0] / expectedConductorSkin - 1) <
+      0.02,
+  )
+  assert.ok(result.stripSkinResistance[0][0] < result.skinResistance[0][0])
   assert.ok(Math.abs(result.C[0][0] / expectedC - 1) < 0.01)
   assert.ok(Math.abs(result.dielectricLoss[0][0] / expectedLoss - 1) < 0.01)
   assert.ok(Math.abs(result.skinResistance[0][0] / expectedSkin - 1) < 0.02)
@@ -45,7 +55,8 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
   )
   // Finite difference is an independent oracle for the analytic directional sensitivity.
   const step = 0.001
-  const plus = solveCrossSection({
+  const plus = solveSectionCapacitance({
+    options,
     section: {
       ...section,
       dielectrics: section.dielectrics.map((d) => ({
@@ -54,7 +65,8 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
       })),
     },
   })
-  const minus = solveCrossSection({
+  const minus = solveSectionCapacitance({
+    options,
     section: {
       ...section,
       dielectrics: section.dielectrics.map((d) => ({
@@ -65,15 +77,13 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
   })
   assert.ok(
     Math.abs(
-      (plus.C[0][0] - minus.C[0][0]) /
-        (2 * step) /
-        result.dielectricLoss[0][0] -
-        1,
+      (plus[0][0] - minus[0][0]) / (2 * step) / result.dielectricLoss[0][0] - 1,
     ) < 1e-6,
   )
   // Quartering conductivity doubles skin resistance and quadruples DC resistance.
   const conductivitySm = 5.8e7 / 4
   const lowerConductivity = solveCrossSection({
+    options,
     section: {
       ...section,
       conductors: section.conductors.map((c) => ({ ...c, conductivitySm })),
@@ -92,7 +102,7 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
   )
   const half = solveCrossSection({
     section,
-    options: { recessionFraction: 0.005 },
+    options: { ...options, recessionFraction: 0.005 },
   })
   assert.ok(
     Math.abs(half.skinResistance[0][0] / result.skinResistance[0][0] - 1) <
@@ -100,7 +110,10 @@ test("layered/mask energy sensitivity and Wheeler loss approach the analytic par
   )
   // Equal er but different tangents must retain a loss-only dielectric interface.
   const dielectrics = section.dielectrics.map((d) => ({ ...d, er: 4 }))
-  const equal = solveCrossSection({ section: { ...section, dielectrics } })
+  const equal = solveCrossSection({
+    section: { ...section, dielectrics },
+    options,
+  })
   const expectedEqual = (equal.C[0][0] * (0.18 * 0.02 + 0.02 * 0.025)) / 0.2
   assert.ok(Math.abs(equal.dielectricLoss[0][0] / expectedEqual - 1) < 0.005)
-}, 300_000)
+}, 60_000)

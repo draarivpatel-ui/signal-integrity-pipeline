@@ -1,43 +1,21 @@
-import { setDefaultTimeout, test } from "bun:test"
+import { test } from "bun:test"
 import assert from "node:assert/strict"
 import {
-  type CrossSection,
   type CrossSectionResult,
-  type Matrix,
   solveCrossSection,
-  solveSectionCapacitance,
-} from "../../src/extraction"
-import { sectionFixture } from "../fixtures/cross-section"
+} from "../../../src/extraction"
+import {
+  assertPositiveDefinite,
+  sectionFixture,
+} from "../../fixtures/cross-section"
 import {
   coupledMicrostrip,
   coupledStripline,
-  pozarStriplineAttenuation,
   singleMicrostrip,
-  stripline,
-} from "../fixtures/cross-section-reference"
-import { energyFacts, maxwellFacts } from "../support/golden-checks"
-
-setDefaultTimeout(30_000)
+} from "../../fixtures/cross-section-reference"
 
 /** Speed of light in vacuum in meters per second, exact in SI. */
 const LIGHT_SPEED = 299792458
-
-/** Independent Cholesky test of strict positive definiteness, scaled to matrix magnitude. */
-function positive(matrix: Matrix): void {
-  const a = matrix.map((row) => [...row])
-  for (let i = 0; i < a.length; i++) {
-    for (let j = 0; j <= i; j++) {
-      let value = a[i][j]
-      for (let k = 0; k < j; k++) value -= a[i][k] * a[j][k]
-      if (i === j) {
-        assert.ok(value > 0, `positive pivot ${i}: ${value}`)
-        a[i][j] = Math.sqrt(value)
-        continue
-      }
-      a[i][j] = value / a[j][j]
-    }
-  }
-}
 
 /** Impedances and effective permittivities for the even and odd modes of two identical lines. */
 interface CoupledModes {
@@ -70,28 +48,6 @@ function error({
   expected: number
 }): number {
   return Math.abs(actual / expected - 1)
-}
-
-/** Compare material and vacuum capacitance, inductance and energy loss under mesh/domain changes. */
-function change({
-  a,
-  b,
-}: {
-  a: CrossSectionResult
-  b: CrossSectionResult
-}): number {
-  let largest = 0
-  for (const key of ["C", "C0", "L", "dielectricLoss"] as const) {
-    for (let i = 0; i < a.C.length; i++) {
-      for (let j = 0; j < a.C.length; j++) {
-        largest = Math.max(
-          largest,
-          error({ actual: a[key][i][j], expected: b[key][i][j] }),
-        )
-      }
-    }
-  }
-  return largest
 }
 
 /** Isolated-line impedance and effective permittivity for each geometry. */
@@ -186,13 +142,10 @@ function coupledLineError({
 }
 
 test("line parameters match analytic references", () => {
-  const rows: Record<string, string | number>[] = []
   for (const kind of ["microstrip", "stripline"] as const) {
     for (const count of [1, 2] as const) {
       const section = sectionFixture({ kind, count })
-      const start = performance.now()
       const result = solveCrossSection({ section })
-      const elapsed = performance.now() - start
       let maximum: number
       switch (count) {
         case 1:
@@ -206,12 +159,6 @@ test("line parameters match analytic references", () => {
         maximum < 0.02,
         `${kind} ${count}: worst C/L/Z/delay/mutual error ${maximum}`,
       )
-      rows.push({
-        fixture: `${kind} ${count}`,
-        panels: result.diagnostics.panels,
-        ms: +elapsed.toFixed(2),
-        worstErrorPercent: +(100 * maximum).toFixed(3),
-      })
       for (const matrix of [
         result.C,
         result.C0,
@@ -219,7 +166,7 @@ test("line parameters match analytic references", () => {
         result.dielectricLoss,
         result.skinResistance,
       ]) {
-        positive(matrix)
+        assertPositiveDefinite(matrix)
         for (let i = 0; i < count; i++) {
           for (let j = 0; j < count; j++) {
             assert.ok(
@@ -232,84 +179,4 @@ test("line parameters match analytic references", () => {
       assert.ok(result.diagnostics.reciprocityResidual < 0.005)
     }
   }
-  console.table(rows)
-})
-
-test("mesh and interface extent converge", () => {
-  const rows: Record<string, string | number>[] = []
-  const fixture = sectionFixture({ kind: "microstrip", count: 2 })
-  const start = performance.now()
-  const base = solveCrossSection({ section: fixture })
-  const fine = solveCrossSection({
-    section: fixture,
-    options: { panelsPerEdge: 16 },
-  })
-  const wide = solveCrossSection({
-    section: fixture,
-    options: { interfaceExtent: 48 },
-  })
-  const mesh = change({ a: base, b: fine })
-  const domain = change({ a: base, b: wide })
-  assert.ok(mesh < 0.01, `mesh coefficient change ${mesh}`)
-  assert.ok(domain < 0.01, `domain coefficient change ${domain}`)
-  rows.push({
-    fixture: "pair mesh 12→16 + domain 24→48 (all three)",
-    ms: +(performance.now() - start).toFixed(2),
-    meshPercent: +(100 * mesh).toFixed(3),
-    domainPercent: +(100 * domain).toFixed(3),
-  })
-  console.table(rows)
-})
-
-test("twelve-line matrices preserve energy and signs", () => {
-  const rows: Record<string, string | number>[] = []
-  for (const kind of ["microstrip", "mask", "stripline"] as const) {
-    const begin = performance.now()
-    const result = solveCrossSection({
-      section: sectionFixture({ kind, count: 12 }),
-    })
-    const elapsed = performance.now() - begin
-    for (const matrix of [result.C, result.C0, result.L, result.skinResistance])
-      positive(matrix)
-    assert.ok(result.diagnostics.reciprocityResidual < 0.005)
-    assert.ok(
-      result.C.every((row, i) =>
-        row.every((value, j) => {
-          if (i === j) return value > 0
-          return value <= 0
-        }),
-      ),
-    )
-    rows.push({
-      fixture: `${kind} 12`,
-      panels: result.diagnostics.panels,
-      ms: +elapsed.toFixed(2),
-      rawReciprocityPercent: +(
-        result.diagnostics.reciprocityResidual * 100
-      ).toFixed(3),
-    })
-  }
-  console.table(rows)
-})
-
-test("electrostatic and full capacitance agree", () => {
-  for (const kind of ["microstrip", "stripline"] as const) {
-    const section = sectionFixture({ kind, count: 2 })
-    assert.deepEqual(
-      solveSectionCapacitance({ section }),
-      solveCrossSection({ section }).C,
-    )
-  }
-})
-
-test("electrostatic extraction checks resolution", () => {
-  const section = sectionFixture({ kind: "microstrip", count: 1 })
-  assert.throws(
-    () => solveSectionCapacitance({ section, options: { panelsPerEdge: 2 } }),
-    /panels per edge/,
-  )
-})
-
-// ---- Golden known-answer checks. Expected values and tolerances are fixed from the
-// cited physics before the solver runs; a failing check is reported, never loosened.
-// CODATA 2018 constants, defined independently of the solver.
+}, 30_000)

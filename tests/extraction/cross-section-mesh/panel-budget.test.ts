@@ -11,10 +11,10 @@ test("rejects meshes exceeding the region budget before creating panels", () => 
   const [{ region }] = sectionRegions(section)
   const [conductor] = region.conductors
   const closePlane = { ...region, conductors: [{ ...conductor, zMm: 0.001 }] }
-  assert.throws(
-    () => sectionPanels({ region, count: 2000, extent: 24 }),
-    { code: "mesh_panel_limit", message: /panel limit/i },
-  )
+  assert.throws(() => sectionPanels({ region, count: 2000, extent: 24 }), {
+    code: "mesh_panel_limit",
+    message: /panel limit/i,
+  })
   assert.throws(
     () => sectionPanels({ region: closePlane, count: 12, extent: 24 }),
     { code: "mesh_panel_limit", message: /panel limit/i },

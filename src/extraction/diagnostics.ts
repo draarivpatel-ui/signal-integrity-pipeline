@@ -1,12 +1,12 @@
 import { type DiagnosticInit, diagnostics } from "../kernel"
 
 const raise = diagnostics("extraction", [
-  "native_geometry",
+  "cross_section_geometry",
   "matrix_format",
   "matrix_zero",
   "reciprocity",
   "passivity",
-  "mesh_convergence",
+  "cross_section_options",
   "mesh_panel_limit",
 ] as const)
 export type ExtractionCode = Parameters<typeof raise>[0]

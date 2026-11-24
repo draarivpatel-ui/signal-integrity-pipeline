@@ -1,17 +1,17 @@
+import { defaultCopperConductivitySm } from "../board"
 import { hypotenuse } from "../kernel"
-import {
-  type CrossSection,
-  copperConductivity,
-  type SectionConductor,
-  type SectionDielectric,
-  type SectionMeshInput,
-  type SectionPanel,
-  type SectionRegion,
+import type {
+  CrossSection,
+  SectionConductor,
+  SectionDielectric,
+  SectionMeshInput,
+  SectionPanel,
+  SectionRegion,
 } from "./cross-section-types"
 import { fail } from "./diagnostics"
 
 /** Ignore sub-femtometer differences between slab boundaries after projection or clipping, in millimeters. */
-const SLAB_TOLERANCE_MM = 1e-12
+export const DIELECTRIC_BOUNDARY_TOLERANCE_MM = 1e-12
 
 /** Sample just inside each material relative to the smallest feature in the cross-section. */
 const MATERIAL_PROBE_FRACTION = 1e-7
@@ -27,9 +27,6 @@ const FACE_LENGTH_IN_PLANE_DISTANCES = 6
 
 /** Bound each dense field matrix to fewer than ten million coefficients. */
 const MAX_REGION_PANELS = 3072
-
-/** Bound the dense conductor matrices assembled across all shielded regions. */
-const MAX_CONDUCTORS = 512
 
 /** Mesh a short vertical face at roughly one third of the horizontal panel count. */
 const VERTICAL_PANEL_DIVISOR = 3
@@ -60,15 +57,18 @@ function material({
 
 /** Merge floating-point copies of one boundary before making panels; never create zero-size seams. */
 function coordinates({
-  values,
+  coordinatesMm,
   tolerance,
 }: {
-  values: number[]
+  coordinatesMm: number[]
   tolerance: number
 }): number[] {
-  return values
+  return [...coordinatesMm]
     .sort((a, b) => a - b)
-    .filter((value, i, sorted) => !i || value - sorted[i - 1] > tolerance)
+    .filter(
+      (coordinateMm, i, sorted) =>
+        !i || coordinateMm - sorted[i - 1] > tolerance,
+    )
 }
 
 /** A shielded region and its conductor indices in the original cross-section. */
@@ -99,26 +99,26 @@ export function sectionRegions(section: CrossSection): IndexedSectionRegion[] {
     if (below && above) height = above.zMm - below.zMm
     const dielectrics = section.dielectrics
       .map((layer) => {
-        let lo = Math.max(0, layer.zMm - origin)
-        let hi = Math.min(
+        let lowMm = Math.max(0, layer.zMm - origin)
+        let highMm = Math.min(
           height || Infinity,
           layer.zMm + layer.thicknessMm - origin,
         )
         if (!below) {
-          lo = Math.max(0, origin - layer.zMm - layer.thicknessMm)
-          hi = Math.min(height || Infinity, origin - layer.zMm)
+          lowMm = Math.max(0, origin - layer.zMm - layer.thicknessMm)
+          highMm = Math.min(height || Infinity, origin - layer.zMm)
         }
-        return { ...layer, zMm: lo, thicknessMm: hi - lo }
+        return { ...layer, zMm: lowMm, thicknessMm: highMm - lowMm }
       })
-      .filter((layer) => layer.thicknessMm > SLAB_TOLERANCE_MM)
+      .filter((layer) => layer.thicknessMm > DIELECTRIC_BOUNDARY_TOLERANCE_MM)
     return {
       indices,
       region: {
         conductors,
         dielectrics,
         height,
-        lowerConductivity: lower.conductivitySm ?? copperConductivity,
-        upperConductivity: above?.conductivitySm ?? copperConductivity,
+        lowerConductivity: lower.conductivitySm ?? defaultCopperConductivitySm,
+        upperConductivity: above?.conductivitySm ?? defaultCopperConductivitySm,
       },
     }
   })
@@ -198,14 +198,14 @@ function buildEdgePanels({
   const dz = z2 - z1
   const length = hypotenuse(dx, dz)
   for (let i = 0; i < steps; i++) {
-    const lo = panelFraction({ i, steps })
-    const hi = panelFraction({ i: i + 1, steps })
+    const startFraction = panelFraction({ i, steps })
+    const endFraction = panelFraction({ i: i + 1, steps })
     result.push({
-      x: x1 + (dx * (lo + hi)) / 2,
-      z: z1 + (dz * (lo + hi)) / 2,
+      x: x1 + (dx * (startFraction + endFraction)) / 2,
+      z: z1 + (dz * (startFraction + endFraction)) / 2,
       tx: dx / length,
       tz: dz / length,
-      length: length * (hi - lo),
+      length: length * (endFraction - startFraction),
       group,
       er,
       tangent: lossTangent,
@@ -267,7 +267,10 @@ function planConductorEdges({
   const interior = boundaries.filter(
     (z) => z > bottom + tolerance && z < top - tolerance,
   )
-  const cuts = coordinates({ values: [bottom, top, ...interior], tolerance })
+  const cuts = coordinates({
+    coordinatesMm: [bottom, top, ...interior],
+    tolerance,
+  })
   for (let k = 1; k < cuts.length; k++) {
     const adjacent = material({ layers, z: (cuts[k - 1] + cuts[k]) / 2 })
     edges.push({
@@ -344,16 +347,20 @@ function* planRegionEdges(mesh: SectionMeshInput): Iterable<SectionEdge> {
     )
   const first = Math.min(...projections) - padding
   const last = Math.max(...projections) + padding
-  const xs = coordinates({ values: [first, ...projections, last], tolerance })
+  const xs = coordinates({
+    coordinatesMm: [first, ...projections, last],
+    tolerance,
+  })
   const slabBoundaries = layers.flatMap((layer) => [
     layer.zMm,
     layer.zMm + layer.thicknessMm,
   ])
-  const boundaries = coordinates({ values: slabBoundaries, tolerance }).filter(
-    (z) => {
-      return z > tolerance && (!region.height || z < region.height - tolerance)
-    },
-  )
+  const boundaries = coordinates({
+    coordinatesMm: slabBoundaries,
+    tolerance,
+  }).filter((z) => {
+    return z > tolerance && (!region.height || z < region.height - tolerance)
+  })
   for (const z of boundaries) {
     const below = material({ layers, z: z - probe })
     const above = material({ layers, z: z + probe })
@@ -415,94 +422,4 @@ export function sectionPanels(mesh: SectionMeshInput): SectionPanel[] {
     edges.push(edge)
   }
   return edges.flatMap(buildEdgePanels)
-}
-
-/** Check conductor dimensions, clearance from planes and separation between rectangular signals. */
-function validateConductors({ conductors, planes }: CrossSection): void {
-  const ids = new Set(conductors.map((c) => c.id))
-  if (ids.size !== conductors.length || [...ids].some((id) => !id)) {
-    fail(
-      "native_geometry",
-      "Cross-section conductor IDs must be unique and nonempty",
-    )
-  }
-  for (const c of conductors) {
-    const conductivity = c.conductivitySm ?? copperConductivity
-    const finite = [c.xMm, c.zMm, c.widthMm, c.thicknessMm, conductivity].every(
-      Number.isFinite,
-    )
-    if (!finite || c.widthMm <= 0 || c.thicknessMm <= 0 || conductivity <= 0) {
-      fail(
-        "native_geometry",
-        "Finite positive conductor dimensions and conductivity required",
-      )
-    }
-    if (planes.some((p) => p.zMm >= c.zMm && p.zMm <= c.zMm + c.thicknessMm)) {
-      fail("native_geometry", "A signal touches or crosses a reference plane")
-    }
-  }
-  for (const [i, a] of conductors.entries()) {
-    for (const b of conductors.slice(i + 1)) {
-      const horizontalOverlap =
-        Math.abs(a.xMm - b.xMm) <= (a.widthMm + b.widthMm) / 2
-      const verticalOverlap =
-        a.zMm <= b.zMm + b.thicknessMm && b.zMm <= a.zMm + a.thicknessMm
-      if (horizontalOverlap && verticalOverlap)
-        fail("native_geometry", "Signal rectangles overlap or touch")
-    }
-  }
-}
-
-/** Check that dielectric slabs have physical properties and occupy distinct height intervals. */
-function validateDielectrics(dielectrics: SectionDielectric[]): void {
-  for (const [i, a] of dielectrics.entries()) {
-    const finite = [a.zMm, a.thicknessMm, a.er, a.lossTangent].every(
-      Number.isFinite,
-    )
-    if (!finite || a.thicknessMm <= 0 || a.er < 1 || a.lossTangent < 0) {
-      fail(
-        "native_geometry",
-        "Finite positive slabs, er >= 1 and nonnegative loss tangent required",
-      )
-    }
-    const overlaps = dielectrics.slice(i + 1).some((b) => {
-      return (
-        a.zMm < b.zMm + b.thicknessMm - SLAB_TOLERANCE_MM &&
-        b.zMm < a.zMm + a.thicknessMm - SLAB_TOLERANCE_MM
-      )
-    })
-    if (overlaps) fail("native_geometry", "Dielectric slabs overlap")
-  }
-}
-
-/** Reject unsupported/degenerate geometry rather than changing copper or material boundaries. */
-export function validateSection(section: CrossSection): void {
-  if (!section.conductors.length || !section.planes.length) {
-    fail(
-      "native_geometry",
-      "A cross-section needs signals and at least one solid reference plane",
-    )
-  }
-  if (section.conductors.length > MAX_CONDUCTORS) {
-    fail(
-      "mesh_panel_limit",
-      `Cross-section exceeds the conductor limit of ${MAX_CONDUCTORS}`,
-    )
-  }
-  validateConductors(section)
-  for (const [i, plane] of section.planes.entries()) {
-    const conductivity = plane.conductivitySm ?? copperConductivity
-    const finite = [plane.zMm, conductivity].every(Number.isFinite)
-    if (
-      !finite ||
-      conductivity <= 0 ||
-      section.planes.slice(i + 1).some((p) => p.zMm === plane.zMm)
-    ) {
-      fail(
-        "native_geometry",
-        "Reference planes need unique finite heights and positive conductivity",
-      )
-    }
-  }
-  validateDielectrics(section.dielectrics)
 }

@@ -1,23 +1,16 @@
-import { hypotenuse } from "../kernel"
+import { defaultCopperConductivitySm } from "../board"
 import { sectionField } from "./cross-section-field"
-import { sectionInverse, sectionPassive } from "./cross-section-matrix"
-import {
-  sectionConductorFaceSteps,
-  sectionRegions,
-  validateSection,
-} from "./cross-section-mesh"
-import {
-  type CrossSection,
-  type CrossSectionOptions,
-  type CrossSectionResult,
-  copperConductivity,
-  type SectionMeshInput,
-  type SectionRegion,
-  sectionEpsilon0,
-  sectionMu0,
+import { sectionPassive } from "./cross-section-matrix"
+import { sectionRegions } from "./cross-section-mesh"
+import type {
+  CrossSection,
+  CrossSectionOptions,
+  CrossSectionResult,
 } from "./cross-section-types"
+import { validateSection } from "./cross-section-validation"
+import { calculateSkinCoefficients, inductance } from "./cross-section-wheeler"
 import { fail } from "./diagnostics"
-import { type Matrix, symmetrize } from "./linalg"
+import type { Matrix } from "./linalg"
 
 export type {
   CrossSection,
@@ -42,9 +35,6 @@ const MIN_INTERFACE_EXTENT = 4
 const DEFAULT_RECESSION_FRACTION = 0.01
 /** Keep the recession step small relative to nearby features. */
 const MAX_RECESSION_FRACTION = 0.1
-
-/** Wall displacement is in millimeters and resistance is computed in SI units. */
-const MILLIMETERS_PER_METER = 1000
 
 /** Cross-sectional area is in square millimeters and DC resistance is computed in SI units. */
 const SQUARE_MILLIMETERS_PER_SQUARE_METER = 1e6
@@ -77,10 +67,18 @@ export function solveSectionCapacitance({
   const count = options.panelsPerEdge ?? DEFAULT_PANELS_PER_EDGE
   const extent = options.interfaceExtent ?? DEFAULT_INTERFACE_EXTENT
   if (!validMesh({ count, extent }))
-    fail("mesh_convergence", "Use >=6 panels per edge and interface extent >=4")
+    fail(
+      "cross_section_options",
+      "Use >=6 panels per edge and interface extent >=4",
+    )
   const C = section.conductors.map(() => section.conductors.map(() => 0))
   for (const { region, indices } of sectionRegions(section)) {
-    const field = sectionField({ region, count, extent })
+    const field = sectionField({
+      region,
+      count,
+      extent,
+      includeDielectricLoss: false,
+    })
     for (const [i, ii] of indices.entries()) {
       for (const [j, jj] of indices.entries()) C[ii][jj] = field.C[i][j]
     }
@@ -89,144 +87,9 @@ export function solveSectionCapacitance({
   return C
 }
 
-/** High-frequency external inductance from the vacuum Maxwell capacitance. */
-function inductance(C0: Matrix): Matrix {
-  return symmetrize(
-    sectionInverse(C0).map((row) =>
-      row.map((value) => sectionMu0 * sectionEpsilon0 * value),
-    ),
-  )
-}
-
-/** Recede every conducting wall (or only the signal conductors' walls) away from the field, weighted by its surface
- * resistivity. Vacuum is essential: moving a wall must not change the electrical dielectric geometry.
- */
-function recede({
-  region,
-  distance,
-  fixedPlanes = false,
-}: {
-  region: SectionRegion
-  distance: number
-  fixedPlanes?: boolean
-}): SectionRegion {
-  let lower = 0
-  let upper = 0
-  if (!fixedPlanes) {
-    lower = distance * Math.sqrt(copperConductivity / region.lowerConductivity)
-    upper = distance * Math.sqrt(copperConductivity / region.upperConductivity)
-  }
-  let height = 0
-  if (region.height) height = region.height + lower + upper
-  if (
-    !fixedPlanes &&
-    (lower === 0 || (region.height && height === region.height))
-  ) {
-    fail(
-      "mesh_convergence",
-      "Recession displacement is too small to move the reference planes",
-    )
-  }
-  const conductors = region.conductors.map((c) => {
-    const shift =
-      distance *
-      Math.sqrt(copperConductivity / (c.conductivitySm ?? copperConductivity))
-    const widthMm = c.widthMm - 2 * shift
-    const thicknessMm = c.thicknessMm - 2 * shift
-    const zMm = c.zMm + shift + lower
-    if (
-      widthMm === c.widthMm ||
-      thicknessMm === c.thicknessMm ||
-      zMm === c.zMm
-    ) {
-      fail(
-        "mesh_convergence",
-        "Recession displacement is too small to move the conductor walls",
-      )
-    }
-    return { ...c, widthMm, thicknessMm, zMm }
-  })
-  return {
-    ...region,
-    dielectrics: [],
-    height,
-    conductors,
-  }
-}
-
 /** Zero matrix in input conductor order. */
 function zeroMatrix(size: number): Matrix {
   return Array.from({ length: size }, () => Array(size).fill(0))
-}
-
-/** Bound wall recession by trace dimensions, dielectric gaps and surface resistivity. */
-function recessionStep({
-  region,
-  fraction,
-}: {
-  region: SectionRegion
-  fraction: number
-}): number {
-  const gaps = region.conductors.flatMap((a, i) =>
-    region.conductors.slice(i + 1).map((b) => {
-      const horizontal = Math.max(
-        0,
-        Math.abs(a.xMm - b.xMm) - (a.widthMm + b.widthMm) / 2,
-      )
-      const vertical = Math.max(
-        0,
-        a.zMm - b.zMm - b.thicknessMm,
-        b.zMm - a.zMm - a.thicknessMm,
-      )
-      return hypotenuse(horizontal, vertical)
-    }),
-  )
-  const conductorSpans = region.conductors.flatMap((c) => {
-    const spans = [c.widthMm, c.thicknessMm, c.zMm]
-    if (region.height) spans.push(region.height - c.zMm - c.thicknessMm)
-    return spans
-  })
-  const scale = Math.min(
-    ...conductorSpans.map((span) => span / 2),
-    ...gaps.map((gap) => gap / 4),
-  )
-  const lowerWeight = Math.sqrt(copperConductivity / region.lowerConductivity)
-  const upperWeight = Math.sqrt(copperConductivity / region.upperConductivity)
-  const conductorWeights = region.conductors.map((c) => {
-    return Math.sqrt(
-      copperConductivity / (c.conductivitySm ?? copperConductivity),
-    )
-  })
-  const weight = Math.max(1, lowerWeight, upperWeight, ...conductorWeights)
-  return (fraction * scale) / weight
-}
-
-/** Wheeler resistance per sqrt(Hz) from inductances with walls receded by +step and -step. */
-function wheeler({
-  plus,
-  minus,
-  step,
-}: {
-  plus: number
-  minus: number
-  step: number
-}): number {
-  const gradient = (plus - minus) / ((2 * step) / MILLIMETERS_PER_METER)
-  return (
-    (gradient * Math.sqrt((Math.PI * sectionMu0) / copperConductivity)) /
-    sectionMu0
-  )
-}
-
-/** Compute external inductance after displacing the requested conducting walls. */
-function recededInductance({
-  mesh,
-  region,
-}: {
-  mesh: SectionMeshInput
-  region: SectionRegion
-}): Matrix {
-  return inductance(sectionField({ ...mesh, region, vacuum: true }).C)
 }
 
 /** Cheap quasi-TEM extraction with infinite solid references, layered dielectric/mask boundaries
@@ -250,7 +113,7 @@ export function solveCrossSection({
     fraction <= MAX_RECESSION_FRACTION
   if (!validMesh({ count, extent }) || !validRecession) {
     fail(
-      "mesh_convergence",
+      "cross_section_options",
       "Use >=6 panels per edge, interface extent >=4 and recession fraction in (0, .1]",
     )
   }
@@ -270,54 +133,26 @@ export function solveCrossSection({
     const vacuum = sectionField({ ...mesh, vacuum: true })
     const field = sectionField(mesh)
     const external = inductance(vacuum.C)
-    const step = recessionStep({ region, fraction })
-    const tighterRegion = recede({ region, distance: -step })
-    // Closing both reference gaps gives the highest horizontal panel count of the four perturbations.
-    const faceSteps = sectionConductorFaceSteps({
-      ...mesh,
-      region: tighterRegion,
-    })
-    const lossMesh = { ...mesh, faceSteps }
-    const plus = recededInductance({
-      mesh: lossMesh,
-      region: recede({ region, distance: step }),
-    })
-    const minus = recededInductance({ mesh: lossMesh, region: tighterRegion })
-    const stripPlus = recededInductance({
-      mesh: lossMesh,
-      region: recede({ region, distance: step, fixedPlanes: true }),
-    })
-    const stripMinus = recededInductance({
-      mesh: lossMesh,
-      region: recede({ region, distance: -step, fixedPlanes: true }),
-    })
+    const skin = calculateSkinCoefficients({ mesh, fraction })
     for (const [i, ii] of indices.entries()) {
       for (const [j, jj] of indices.entries()) {
         C[ii][jj] = field.C[i][j]
         C0[ii][jj] = vacuum.C[i][j]
         L[ii][jj] = external[i][j]
         dielectricLoss[ii][jj] = field.loss[i][j]
-        skinResistance[ii][jj] = wheeler({
-          plus: plus[i][j],
-          minus: minus[i][j],
-          step,
-        })
-        stripSkinResistance[ii][jj] = wheeler({
-          plus: stripPlus[i][j],
-          minus: stripMinus[i][j],
-          step,
-        })
+        skinResistance[ii][jj] = skin.skinResistance[i][j]
+        stripSkinResistance[ii][jj] = skin.stripSkinResistance[i][j]
       }
     }
     panels += field.panels
     residual = Math.max(residual, field.residual, vacuum.residual)
-    recessionMm = Math.min(recessionMm, step)
+    recessionMm = Math.min(recessionMm, skin.recessionMm)
   }
   for (const matrix of [C, C0, L]) sectionPassive({ matrix, strict: true })
   for (const matrix of [dielectricLoss, skinResistance, stripSkinResistance])
     sectionPassive({ matrix })
   for (const [i, c] of section.conductors.entries()) {
-    const conductivity = c.conductivitySm ?? copperConductivity
+    const conductivity = c.conductivitySm ?? defaultCopperConductivitySm
     dcResistance[i][i] =
       SQUARE_MILLIMETERS_PER_SQUARE_METER /
       (conductivity * c.widthMm * c.thicknessMm)

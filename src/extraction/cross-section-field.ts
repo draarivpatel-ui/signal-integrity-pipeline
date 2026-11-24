@@ -1,5 +1,9 @@
 import { sectionKernel } from "./cross-section-kernel"
-import { sectionFactor, sectionReciprocity } from "./cross-section-matrix"
+import {
+  sectionFactor,
+  sectionReciprocity,
+  solveBoundarySystem,
+} from "./cross-section-matrix"
 import { sectionPanels } from "./cross-section-mesh"
 import { type SectionMeshInput, sectionEpsilon0 } from "./cross-section-types"
 import { fail } from "./diagnostics"
@@ -20,10 +24,14 @@ interface SectionFieldResult {
  * for material loss. This is the electrostatic energy sensitivity, not an averaged loss tangent.
  */
 export function sectionField(mesh: SectionMeshInput): SectionFieldResult {
-  const { region, vacuum } = mesh
+  const { region, vacuum, includeDielectricLoss = true } = mesh
+  const hasLoss =
+    includeDielectricLoss &&
+    !vacuum &&
+    region.dielectrics.some((layer) => layer.lossTangent > 0)
   const panels = sectionPanels(mesh)
   const size = region.conductors.length
-  const rhs = panels.map((panel) =>
+  const rightHandSides = panels.map((panel) =>
     Array.from({ length: size }, (_, j) => Number(panel.group === j)),
   )
   const fields: Float64Array[] = []
@@ -32,32 +40,37 @@ export function sectionField(mesh: SectionMeshInput): SectionFieldResult {
       sectionKernel({ a, b, height: region.height }),
     )
     if (a.group >= 0) return row
-    fields[i] = row.slice()
+    if (hasLoss) fields[i] = row.slice()
     for (let j = 0; j < panels.length; j++)
       row[j] = Number(i === j) - a.contrast * a.length * row[j]
     return row
   })
-  const solve = sectionFactor(matrix)
-  const charge = solve(rhs)
-  const hasLoss =
-    !vacuum && region.dielectrics.some((layer) => layer.lossTangent > 0)
-  let lossCharge = panels.map((panel, i) => {
-    if (!hasLoss || panel.group >= 0) return Array<number>(size).fill(0)
-    return Array.from({ length: size }, (_, j) => {
-      const fieldCharge = charge.reduce(
-        (sum, row, k) => sum + fields[i][k] * row[j],
-        0,
-      )
-      return panel.derivative * panel.length * fieldCharge
+  const factors = sectionFactor(matrix)
+  const charge = solveBoundarySystem({ factors, rightHandSides })
+  let lossCharge: Matrix = []
+  if (hasLoss) {
+    const sensitivityRightHandSides = panels.map((panel, i) => {
+      if (panel.group >= 0) return Array<number>(size).fill(0)
+      return Array.from({ length: size }, (_, j) => {
+        const fieldCharge = charge.reduce(
+          (sum, row, k) => sum + fields[i][k] * row[j],
+          0,
+        )
+        return panel.derivative * panel.length * fieldCharge
+      })
     })
-  })
-  if (hasLoss) lossCharge = solve(lossCharge)
+    lossCharge = solveBoundarySystem({
+      factors,
+      rightHandSides: sensitivityRightHandSides,
+    })
+  }
   const C: Matrix = Array.from({ length: size }, () => Array(size).fill(0))
   const loss = C.map((row) => [...row])
   for (const [k, panel] of panels.entries()) {
     if (panel.group < 0) continue
     for (let j = 0; j < size; j++) {
       C[panel.group][j] += sectionEpsilon0 * panel.er * charge[k][j]
+      if (!hasLoss) continue
       loss[panel.group][j] +=
         sectionEpsilon0 *
         panel.er *
