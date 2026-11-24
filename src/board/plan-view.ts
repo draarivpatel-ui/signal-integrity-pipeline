@@ -12,7 +12,6 @@ import type { Line, Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId } from "./ids"
-import { getPadOutline } from "./plan-shapes"
 import type { PlanPolygon } from "./plan-visual-types"
 
 /** Bounds of points, or undefined when there are none. */
@@ -50,7 +49,7 @@ export function getBoardBounds(db: CircuitJsonUtilObjects): Viewbox {
       maxY: board.center.y + board.height / 2,
     }
   const points = [
-    ...db.pcb_trace.list().flatMap(tracePoints),
+    ...db.pcb_trace.list().flatMap(getTracePoints),
     ...db.pcb_port.list(),
     ...db.pcb_via.list(),
     ...db.pcb_smtpad.list().flatMap((pad) => {
@@ -138,7 +137,7 @@ export function getPinName({
 }
 
 /** Include a through-pad route's two endpoints in its planar bounds. */
-function tracePoints(trace: PcbTrace): Point[] {
+function getTracePoints(trace: PcbTrace): Point[] {
   return trace.route.flatMap((point) => {
     if (point.route_type === "through_pad") return [point.start, point.end]
     return [point]
@@ -147,7 +146,7 @@ function tracePoints(trace: PcbTrace): Point[] {
 
 /** Corners in winding order, without a duplicate closing vertex. */
 /** @internal */
-export function boxPoints({ minX, minY, maxX, maxY }: Viewbox): Point[] {
+export function getBoxPoints({ minX, minY, maxX, maxY }: Viewbox): Point[] {
   return [
     { x: minX, y: minY },
     { x: maxX, y: minY },
@@ -192,10 +191,10 @@ export function buildPlanFrame({
   focus?: Viewbox
 }): PlanFrame {
   let window = board
-  const boardSpan = Math.max(board.maxX - board.minX, board.maxY - board.minY)
+  const boardSpanMm = Math.max(board.maxX - board.minX, board.maxY - board.minY)
   if (
     focus &&
-    boardSpan >
+    boardSpanMm >
       BOARD_TO_FOCUS_RATIO *
         Math.max(focus.maxX - focus.minX, focus.maxY - focus.minY, 1)
   ) {
@@ -213,60 +212,22 @@ export function buildPlanFrame({
   return frame
 }
 
-/** The containing XY envelope of the selected copper, limited to the board. */
+/** Expand the scope's channel copper bounds by the search gap within the board. */
 /** @internal */
 export function getCopperSearchBox({
-  db,
   board,
   copperScope,
-  activeSourcePortIds: active,
-  ports,
 }: {
-  db: CircuitJsonUtilObjects
   board: Viewbox
   copperScope: Snapshot<CopperScope>
-  activeSourcePortIds: ReadonlySet<SourcePortId>
-  ports: ReadonlyMap<SourcePortId, PlanPort>
 }): Viewbox | undefined {
-  const channelPcbTraceIds = new Set(copperScope.channelPcbTraceIds)
-  const positions = [...ports.values()].filter((port) =>
-    active.has(port.sourcePortId),
-  )
-  const activePcbPortIds = new Set(
-    db.pcb_port
-      .list()
-      .filter((port) => active.has(port.source_port_id))
-      .map((port) => port.pcb_port_id),
-  )
-  const pads = [...db.pcb_smtpad.list(), ...db.pcb_plated_hole.list()].flatMap(
-    (pad) => {
-      if (
-        pad.pcb_port_id === undefined ||
-        !activePcbPortIds.has(pad.pcb_port_id)
-      )
-        return []
-      const { xmin, ymin, xmax, ymax } = getPadOutline({ db, pad }).box
-      return [
-        { x: xmin, y: ymin },
-        { x: xmax, y: ymax },
-      ]
-    },
-  )
-  const bounds = getPointBounds([
-    ...positions,
-    ...pads,
-    ...db.pcb_trace.list().flatMap((trace) => {
-      if (channelPcbTraceIds.has(trace.pcb_trace_id)) return tracePoints(trace)
-      return []
-    }),
-  ])
-  if (!bounds) return
-  const { nearbyGapMm } = copperScope
+  const { channelCopperBounds, nearbyGapMm } = copperScope
+  if (!channelCopperBounds) return
   return {
-    minX: Math.max(board.minX, bounds.minX - nearbyGapMm),
-    maxX: Math.min(board.maxX, bounds.maxX + nearbyGapMm),
-    minY: Math.max(board.minY, bounds.minY - nearbyGapMm),
-    maxY: Math.min(board.maxY, bounds.maxY + nearbyGapMm),
+    minX: Math.max(board.minX, channelCopperBounds.xmin - nearbyGapMm),
+    maxX: Math.min(board.maxX, channelCopperBounds.xmax + nearbyGapMm),
+    minY: Math.max(board.minY, channelCopperBounds.ymin - nearbyGapMm),
+    maxY: Math.min(board.maxY, channelCopperBounds.ymax + nearbyGapMm),
   }
 }
 
@@ -317,6 +278,15 @@ export function clipPlanLines<Mark extends Line>({
   )
 }
 
+/** Rebuild a copper polygon with the outside ring and all clearance holes. */
+/** @internal */
+export function getPlanPolygonOutline(polygon: PlanPolygon): CopperPolygon {
+  const outline = new CopperPolygon(polygon.points.map(({ x, y }) => [x, y]))
+  for (const hole of polygon.holes || [])
+    outline.addFace(hole.map(({ x, y }) => new CopperPoint(x, y)))
+  return outline
+}
+
 /** Clip board geometry to the window before converting it to graphics primitives. */
 /** @internal */
 export function clipPlanPolygons<Mark extends PlanPolygon>({
@@ -329,9 +299,7 @@ export function clipPlanPolygons<Mark extends PlanPolygon>({
   if (!crop) return polygons
   const window = new CopperPolygon(crop)
   return polygons.flatMap((polygon) => {
-    const shape = new CopperPolygon(polygon.points.map(({ x, y }) => [x, y]))
-    for (const hole of polygon.holes || [])
-      shape.addFace(hole.map(({ x, y }) => new CopperPoint(x, y)))
+    const shape = getPlanPolygonOutline(polygon)
     if (crop.not_intersect(shape.box)) return []
     if (crop.contains(shape.box)) return [polygon]
     return BooleanOperations.intersect(shape, window)

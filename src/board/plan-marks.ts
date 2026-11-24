@@ -324,12 +324,12 @@ export function buildOverlayShapes({
     ]
   if (kind === "missing") return [buildFaultCross({ point, unitMm, label })]
   if (kind !== "series" || axis.lengthMm === 0) return []
-  const half = axis.lengthMm / 2
+  const halfLengthMm = axis.lengthMm / 2
   const points = [
-    [-half, -unitMm],
-    [half, -unitMm],
-    [half, unitMm],
-    [-half, unitMm],
+    [-halfLengthMm, -unitMm],
+    [halfLengthMm, -unitMm],
+    [halfLengthMm, unitMm],
+    [-halfLengthMm, unitMm],
   ].map(([along, across]) => offsetPoint({ point, axis, along, across }))
   return [
     {

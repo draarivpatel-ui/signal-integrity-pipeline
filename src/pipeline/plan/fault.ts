@@ -1,7 +1,8 @@
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PlanOverlay, SourcePortId, SourceTraceId } from "../../board"
 import type { Diagnostic } from "../../kernel"
-import type { PlanPath, PlanTopology } from "./visual"
+import type { PlanPath } from "./visual"
+import type { PlanTopology } from "./visual-topology"
 
 /** Fault ports and traces are selected only from the current attempt's evidence. */
 export interface PlanFault {
@@ -49,7 +50,7 @@ export function resolvePlanFault({
     issue?.code === "channel_receiver_terminal_missing"
   ) {
     for (const path of paths) {
-      const { signalName, fromSourcePortId, toSourcePortId } = path
+      const { legLabel, fromSourcePortId, toSourcePortId } = path
       if (
         !sourcePortIds.has(fromSourcePortId) ||
         !sourcePortIds.has(toSourcePortId)
@@ -65,7 +66,7 @@ export function resolvePlanFault({
         fromSourcePortId,
         toSourcePortId,
         kind: "missing",
-        label: `${signalName} · No routed source path`,
+        label: `${legLabel} · No routed source path`,
       })
     }
   }
