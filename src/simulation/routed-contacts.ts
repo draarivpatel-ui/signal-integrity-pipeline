@@ -49,7 +49,7 @@ export function collectRequiredContacts({
 type PassiveModelSourcePortIds = ReadonlySet<SourcePortId>
 
 /** Find the physical ports of the passive models actually selected for the deck. */
-export function passiveModelContacts({
+export function collectPassiveModelContacts({
   db,
   modeling,
 }: {

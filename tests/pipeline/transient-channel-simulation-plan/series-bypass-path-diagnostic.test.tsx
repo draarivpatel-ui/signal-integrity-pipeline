@@ -30,7 +30,7 @@ test("names both contacts and every routed trace in a bypassed receiver path", a
     {
       domain: "simulation",
       code: "channel_short",
-      message: `channel_short: DATA: endpoints ${receiverPath.fromSourcePortId} and ${receiverPath.toSourcePortId} share an ideal node across routed path ${receiverPath.sourceTraceIds?.join(", ")}`,
+      message: `channel_short: DATA: endpoints ${receiverPath.fromSourcePortId} and ${receiverPath.toSourcePortId} share an ideal group across routed path ${receiverPath.sourceTraceIds?.join(", ")}`,
     },
   )
 })
