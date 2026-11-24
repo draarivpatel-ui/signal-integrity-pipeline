@@ -25,6 +25,12 @@ const PANEL_GRADING_POWER = 4
 /** Start increasing panel count at six plane distances of horizontal conductor face. */
 const FACE_LENGTH_IN_PLANE_DISTANCES = 6
 
+/** Bound each dense field matrix to fewer than ten million coefficients. */
+const MAX_REGION_PANELS = 3072
+
+/** Bound the dense conductor matrices assembled across all shielded regions. */
+const MAX_CONDUCTORS = 512
+
 /** Mesh a short vertical face at roughly one third of the horizontal panel count. */
 const VERTICAL_PANEL_DIVISOR = 3
 
@@ -129,13 +135,42 @@ interface SectionEdge {
   lossTangent: number
   contrast?: number
   derivative?: number
-  reach?: number
+  steps: number
 }
 
-/** Panels accumulated at the requested edge resolution. */
-interface PanelMesh {
+/** Number of graded panels on a horizontal edge at the requested resolution. */
+function horizontalSteps({
+  count,
+  lengthMm,
+  clearanceMm,
+}: {
   count: number
-  result: SectionPanel[]
+  lengthMm: number
+  clearanceMm: number
+}): number {
+  return Math.max(
+    count,
+    Math.ceil(
+      (count * lengthMm) / (FACE_LENGTH_IN_PLANE_DISTANCES * clearanceMm),
+    ),
+  )
+}
+
+/** Horizontal face counts in conductor order, reusable across vacuum wall displacements. */
+export function sectionConductorFaceSteps({
+  region,
+  count,
+}: SectionMeshInput): number[] {
+  return region.conductors.map((conductor) => {
+    let clearanceMm = conductor.zMm
+    if (region.height) {
+      clearanceMm = Math.min(
+        clearanceMm,
+        region.height - conductor.zMm - conductor.thicknessMm,
+      )
+    }
+    return horizontalSteps({ count, lengthMm: conductor.widthMm, clearanceMm })
+  })
 }
 
 /** Quartic grading resolves the integrable corner charge singularity. */
@@ -145,8 +180,8 @@ function panelFraction({ i, steps }: { i: number; steps: number }): number {
   return start / (start + end)
 }
 
-/** Append panels along a straight segment, with its outward metal normal. */
-function addSectionEdge({
+/** Build panels along a straight edge with its outward metal normal. */
+function buildEdgePanels({
   x1,
   z1,
   x2,
@@ -156,22 +191,12 @@ function addSectionEdge({
   lossTangent,
   contrast = 0,
   derivative = 0,
-  reach = Infinity,
-  mesh,
-}: SectionEdge & { mesh: PanelMesh }): void {
-  const { count, result } = mesh
+  steps,
+}: SectionEdge): SectionPanel[] {
+  const result: SectionPanel[] = []
   const dx = x2 - x1
   const dz = z2 - z1
   const length = hypotenuse(dx, dz)
-  let steps = Math.max(
-    count,
-    Math.ceil((count * length) / (FACE_LENGTH_IN_PLANE_DISTANCES * reach)),
-  )
-  if (dz)
-    steps = Math.max(
-      MIN_VERTICAL_PANELS,
-      Math.ceil(count / VERTICAL_PANEL_DIVISOR),
-    )
   for (let i = 0; i < steps; i++) {
     const lo = panelFraction({ i, steps })
     const hi = panelFraction({ i: i + 1, steps })
@@ -188,54 +213,53 @@ function addSectionEdge({
       derivative,
     })
   }
+  return result
 }
 
-/** Mesh one conductor's faces, splitting the sides wherever dielectric material changes. */
-function appendConductorPanels({
-  mesh,
+/** Plan one conductor's faces, splitting the sides wherever dielectric material changes. */
+function planConductorEdges({
+  verticalSteps,
+  faceSteps,
   conductor,
   group,
-  height,
   layers,
   probe,
   tolerance,
 }: {
-  mesh: PanelMesh
+  verticalSteps: number
+  faceSteps: number
   conductor: SectionConductor
   group: number
-  height: number
   layers: SectionDielectric[]
   probe: number
   tolerance: number
-}): void {
+}): SectionEdge[] {
   const bottom = conductor.zMm
   const top = bottom + conductor.thicknessMm
   const left = conductor.xMm - conductor.widthMm / 2
   const right = conductor.xMm + conductor.widthMm / 2
   const bottomMaterial = material({ layers, z: bottom - probe })
   const topMaterial = material({ layers, z: top + probe })
-  let reach = bottom
-  if (height) reach = Math.min(reach, height - top)
-  addSectionEdge({
-    x1: left,
-    z1: bottom,
-    x2: right,
-    z2: bottom,
-    group,
-    ...bottomMaterial,
-    reach,
-    mesh,
-  })
-  addSectionEdge({
-    x1: right,
-    z1: top,
-    x2: left,
-    z2: top,
-    group,
-    ...topMaterial,
-    reach,
-    mesh,
-  })
+  const edges: SectionEdge[] = [
+    {
+      x1: left,
+      z1: bottom,
+      x2: right,
+      z2: bottom,
+      group,
+      ...bottomMaterial,
+      steps: faceSteps,
+    },
+    {
+      x1: right,
+      z1: top,
+      x2: left,
+      z2: top,
+      group,
+      ...topMaterial,
+      steps: faceSteps,
+    },
+  ]
   const boundaries = layers.flatMap((layer) => [
     layer.zMm,
     layer.zMm + layer.thicknessMm,
@@ -246,39 +270,31 @@ function appendConductorPanels({
   const cuts = coordinates({ values: [bottom, top, ...interior], tolerance })
   for (let k = 1; k < cuts.length; k++) {
     const adjacent = material({ layers, z: (cuts[k - 1] + cuts[k]) / 2 })
-    addSectionEdge({
+    edges.push({
       x1: right,
       z1: cuts[k - 1],
       x2: right,
       z2: cuts[k],
       group,
       ...adjacent,
-      mesh,
+      steps: verticalSteps,
     })
-    addSectionEdge({
+    edges.push({
       x1: left,
       z1: cuts[k],
       x2: left,
       z2: cuts[k - 1],
       group,
       ...adjacent,
-      mesh,
+      steps: verticalSteps,
     })
   }
+  return edges
 }
 
-/** Quartically graded surface panels, split at all material and conductor projection boundaries.
- * Only dielectric interfaces are truncated horizontally; fields and solid planes remain infinite.
- * A conductor face longer than six plane distances gets proportionally more panels, so the middle panel
- * (about 4/count of the face) stays within about two plane distances of the charge it averages.
- */
-export function sectionPanels({
-  region,
-  count,
-  extent,
-  vacuum,
-}: SectionMeshInput): SectionPanel[] {
-  const result: SectionPanel[] = []
+/** Plan region edges before allocating any panels. */
+function* planRegionEdges(mesh: SectionMeshInput): Iterable<SectionEdge> {
+  const { region, count, extent, vacuum } = mesh
   const conductorSpans = region.conductors.map((c) =>
     Math.max(c.widthMm, c.zMm + c.thicknessMm),
   )
@@ -296,24 +312,36 @@ export function sectionPanels({
   const tolerance = probe / COORDINATE_TOLERANCE_DIVISOR
   let layers = region.dielectrics
   if (vacuum) layers = []
-  const mesh = { count, result }
+  const verticalSteps = Math.max(
+    MIN_VERTICAL_PANELS,
+    Math.ceil(count / VERTICAL_PANEL_DIVISOR),
+  )
+  const faceSteps = mesh.faceSteps ?? sectionConductorFaceSteps(mesh)
   for (const [group, conductor] of region.conductors.entries()) {
-    appendConductorPanels({
-      mesh,
+    yield* planConductorEdges({
+      verticalSteps,
+      faceSteps: faceSteps[group],
       conductor,
       group,
-      height: region.height,
       layers,
       probe,
       tolerance,
     })
   }
+  if (!layers.length) return
 
   const projections = region.conductors.flatMap((c) => [
     c.xMm - c.widthMm / 2,
     c.xMm + c.widthMm / 2,
   ])
-  const padding = extent * scale
+  // Between two grounded planes the first transverse mode decays by e per spacing / pi.
+  let padding = extent * scale
+  if (region.height) padding = extent * (region.height / Math.PI)
+  if (!Number.isFinite(padding))
+    fail(
+      "mesh_panel_limit",
+      "Nonfinite interface extent exceeds the mesh panel limit",
+    )
   const first = Math.min(...projections) - padding
   const last = Math.max(...projections) + padding
   const xs = coordinates({ values: [first, ...projections, last], tolerance })
@@ -348,7 +376,15 @@ export function sectionPanels({
         )
       })
       if (covered) continue
-      addSectionEdge({
+      let steps = count
+      if (region.height) {
+        steps = horizontalSteps({
+          count,
+          lengthMm: xs[k] - xs[k - 1],
+          clearanceMm: Math.min(z, region.height - z),
+        })
+      }
+      yield {
         x1: xs[k - 1],
         z1: z,
         x2: xs[k],
@@ -358,11 +394,27 @@ export function sectionPanels({
         lossTangent: 0,
         contrast,
         derivative,
-        mesh,
-      })
+        steps,
+      }
     }
   }
-  return result
+}
+
+/** Build quartically graded panels, or reject an oversized region before panel allocation. */
+export function sectionPanels(mesh: SectionMeshInput): SectionPanel[] {
+  const edges: SectionEdge[] = []
+  let panelCount = 0
+  for (const edge of planRegionEdges(mesh)) {
+    panelCount += edge.steps
+    if (!Number.isSafeInteger(panelCount) || panelCount > MAX_REGION_PANELS) {
+      fail(
+        "mesh_panel_limit",
+        `Cross-section region exceeds the panel limit of ${MAX_REGION_PANELS} (at least ${panelCount} requested). Reduce the resolution or interface extent.`,
+      )
+    }
+    edges.push(edge)
+  }
+  return edges.flatMap(buildEdgePanels)
 }
 
 /** Check conductor dimensions, clearance from planes and separation between rectangular signals. */
@@ -429,6 +481,12 @@ export function validateSection(section: CrossSection): void {
     fail(
       "native_geometry",
       "A cross-section needs signals and at least one solid reference plane",
+    )
+  }
+  if (section.conductors.length > MAX_CONDUCTORS) {
+    fail(
+      "mesh_panel_limit",
+      `Cross-section exceeds the conductor limit of ${MAX_CONDUCTORS}`,
     )
   }
   validateConductors(section)

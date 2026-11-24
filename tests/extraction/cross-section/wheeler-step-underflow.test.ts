@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { solveCrossSection } from "../../../src/extraction"
 import { sectionFixture } from "../../fixtures/cross-section"
 
-test.failing("rejects recession below representable wall displacement", () => {
+test("rejects recession below representable wall displacement", () => {
   assert.throws(
     () =>
       solveCrossSection({

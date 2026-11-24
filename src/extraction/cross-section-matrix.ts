@@ -80,7 +80,7 @@ export function sectionReciprocity(matrix: Matrix): number {
       largest = Math.max(largest, Math.abs(matrix[i][j]))
     }
   }
-  if (!largest) return 0
+  if (largest === 0) return 0
   return residual / largest
 }
 
@@ -96,14 +96,21 @@ export function sectionPassive({
   const largest = Math.max(...matrix.flat().map(Math.abs))
   if (!Number.isFinite(largest))
     fail("matrix_format", "Nonfinite cross-section coefficient")
-  const tolerance = largest * PASSIVITY_RELATIVE_TOLERANCE
+  if (sectionReciprocity(matrix) > PASSIVITY_RELATIVE_TOLERANCE)
+    fail("reciprocity", "Cross-section passivity requires a symmetric matrix")
+  if (largest === 0 && !strict) return
+  // Normalize before adding the diagonal shift so the tolerance remains representable.
+  // For loss matrices this tests A + tolerance * I, allowing eigenvalues within roundoff of zero.
+  const scale = largest || 1
+  const tolerance = PASSIVITY_RELATIVE_TOLERANCE
   const factor = matrix.map((row) => row.map(() => 0))
   for (let i = 0; i < size; i++) {
     for (let j = 0; j <= i; j++) {
-      let coefficient = matrix[i][j]
+      let coefficient = matrix[i][j] / scale
+      if (i === j && !strict) coefficient += tolerance
       for (let k = 0; k < j; k++) coefficient -= factor[i][k] * factor[j][k]
       if (i === j) {
-        if (coefficient < -tolerance || (strict && coefficient <= tolerance)) {
+        if (coefficient < 0 || (strict && coefficient <= tolerance)) {
           fail(
             "passivity",
             "Cross-section matrix has nonpositive field energy; refine the mesh",

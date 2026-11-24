@@ -42,6 +42,7 @@ const RAISED = [
   "matrix_format",
   "matrix_zero",
   "mesh_convergence",
+  "mesh_panel_limit",
   "native_declaration",
   "native_geometry",
   "native_output",

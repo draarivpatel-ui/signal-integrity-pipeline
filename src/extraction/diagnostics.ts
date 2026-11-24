@@ -7,6 +7,7 @@ const raise = diagnostics("extraction", [
   "reciprocity",
   "passivity",
   "mesh_convergence",
+  "mesh_panel_limit",
 ] as const)
 export type ExtractionCode = Parameters<typeof raise>[0]
 /** Declared as a function so `never` narrows control flow at call sites. */

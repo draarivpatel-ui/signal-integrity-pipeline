@@ -92,4 +92,5 @@ export interface SectionMeshInput {
   count: number
   extent: number
   vacuum?: boolean
+  faceSteps?: number[]
 }

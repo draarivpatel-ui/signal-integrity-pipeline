@@ -1,7 +1,11 @@
 import { hypotenuse } from "../kernel"
 import { sectionField } from "./cross-section-field"
 import { sectionInverse, sectionPassive } from "./cross-section-matrix"
-import { sectionRegions, validateSection } from "./cross-section-mesh"
+import {
+  sectionConductorFaceSteps,
+  sectionRegions,
+  validateSection,
+} from "./cross-section-mesh"
 import {
   type CrossSection,
   type CrossSectionOptions,
@@ -114,16 +118,33 @@ function recede({
   }
   let height = 0
   if (region.height) height = region.height + lower + upper
+  if (
+    !fixedPlanes &&
+    (lower === 0 || (region.height && height === region.height))
+  ) {
+    fail(
+      "mesh_convergence",
+      "Recession displacement is too small to move the reference planes",
+    )
+  }
   const conductors = region.conductors.map((c) => {
     const shift =
       distance *
       Math.sqrt(copperConductivity / (c.conductivitySm ?? copperConductivity))
-    return {
-      ...c,
-      widthMm: c.widthMm - 2 * shift,
-      thicknessMm: c.thicknessMm - 2 * shift,
-      zMm: c.zMm + shift + lower,
+    const widthMm = c.widthMm - 2 * shift
+    const thicknessMm = c.thicknessMm - 2 * shift
+    const zMm = c.zMm + shift + lower
+    if (
+      widthMm === c.widthMm ||
+      thicknessMm === c.thicknessMm ||
+      zMm === c.zMm
+    ) {
+      fail(
+        "mesh_convergence",
+        "Recession displacement is too small to move the conductor walls",
+      )
     }
+    return { ...c, widthMm, thicknessMm, zMm }
   })
   return {
     ...region,
@@ -200,14 +221,11 @@ function wheeler({
 /** Compute external inductance after displacing the requested conducting walls. */
 function recededInductance({
   mesh,
-  distance,
-  fixedPlanes,
+  region,
 }: {
   mesh: SectionMeshInput
-  distance: number
-  fixedPlanes?: boolean
+  region: SectionRegion
 }): Matrix {
-  const region = recede({ region: mesh.region, distance, fixedPlanes })
   return inductance(sectionField({ ...mesh, region, vacuum: true }).C)
 }
 
@@ -253,17 +271,25 @@ export function solveCrossSection({
     const field = sectionField(mesh)
     const external = inductance(vacuum.C)
     const step = recessionStep({ region, fraction })
-    const plus = recededInductance({ mesh, distance: step })
-    const minus = recededInductance({ mesh, distance: -step })
+    const tighterRegion = recede({ region, distance: -step })
+    // Closing both reference gaps gives the highest horizontal panel count of the four perturbations.
+    const faceSteps = sectionConductorFaceSteps({
+      ...mesh,
+      region: tighterRegion,
+    })
+    const lossMesh = { ...mesh, faceSteps }
+    const plus = recededInductance({
+      mesh: lossMesh,
+      region: recede({ region, distance: step }),
+    })
+    const minus = recededInductance({ mesh: lossMesh, region: tighterRegion })
     const stripPlus = recededInductance({
-      mesh,
-      distance: step,
-      fixedPlanes: true,
+      mesh: lossMesh,
+      region: recede({ region, distance: step, fixedPlanes: true }),
     })
     const stripMinus = recededInductance({
-      mesh,
-      distance: -step,
-      fixedPlanes: true,
+      mesh: lossMesh,
+      region: recede({ region, distance: -step, fixedPlanes: true }),
     })
     for (const [i, ii] of indices.entries()) {
       for (const [j, jj] of indices.entries()) {

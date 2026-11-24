@@ -201,30 +201,43 @@ export function sectionKernel({
   if (near) result = self
   for (const [ta, wa] of quadrature) {
     for (const [tb, wb] of quadrature) {
-      const dx =
-        a.x + (ta * a.tx * a.length) / 2 - b.x - (tb * b.tx * b.length) / 2
+      const dx = a.x - b.x + (ta * a.tx * a.length - tb * b.tx * b.length) / 2
       const za = a.z + (ta * a.tz * a.length) / 2
       const zb = b.z + (tb * b.tz * b.length) / 2
       const dz = za - zb
       const u = (Math.PI * dx) / height
       const v = (Math.PI * dz) / height
       const s = (Math.PI * (za + zb)) / height
+      // Double quadrature points can be much farther apart than the nearest panel edges.
+      const horizontalSeparation = Math.abs(dx) / height
+      if (horizontalSeparation > MAX_SEPARATION_IN_PLANE_HEIGHTS) {
+        if (near && normal)
+          result -= (wa * wb * dz) / (8 * Math.PI * (dx * dx + dz * dz))
+        if (near && !normal)
+          result += (wa * wb * log(hypotenuse(dx, dz))) / (8 * Math.PI)
+        continue
+      }
       const denominator = 2 * (sinh(u / 2) ** 2 + sin(v / 2) ** 2)
       const difference =
         2 * sin((Math.PI * za) / height) * sin((Math.PI * zb) / height)
       const numerator = denominator + difference
       const coincident = dx === 0 && dz === 0
+      if (coincident) {
+        if (normal) result -= (wa * wb * sin(s)) / (16 * height * numerator)
+        if (!normal)
+          result +=
+            (wa * wb * log(numerator * 2 * (height / Math.PI) ** 2)) /
+            (16 * Math.PI)
+        continue
+      }
       if (normal) {
         let field = (sin(v) / denominator - sin(s) / numerator) / (4 * height)
         if (near) field -= dz / (2 * Math.PI * (dx * dx + dz * dz))
-        if (coincident) field = -sin(s) / (4 * height * numerator)
         result += (wa * wb * field) / 4
         continue
       }
       let potential = log1p(difference / denominator) / (4 * Math.PI)
-      if (near) potential -= -log(hypotenuse(dx, dz)) / (2 * Math.PI)
-      if (coincident)
-        potential = log(numerator * 2 * (height / Math.PI) ** 2) / (4 * Math.PI)
+      if (near) potential += log(hypotenuse(dx, dz)) / (2 * Math.PI)
       result += (wa * wb * potential) / 4
     }
   }
