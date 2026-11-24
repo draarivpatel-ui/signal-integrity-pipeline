@@ -11,7 +11,7 @@ import {
   type RouteLadder,
   routeLadder,
 } from "../../src/simulation/route-ladder"
-import { routedCopper } from "../fixtures/routed-copper"
+import { renderRoutedCopper } from "../fixtures/routed-copper"
 
 setDefaultTimeout(150_000)
 
@@ -36,7 +36,7 @@ describe("large routed TSX ladder", () => {
   let result: RouteLadder
 
   beforeAll(async () => {
-    const { circuitJson, scope } = await routedCopper()
+    const { circuitJson, copperScope: scope } = await renderRoutedCopper()
     const fields = new RouteFieldsSolver({
       geometry: sectionRoutes({
         circuit: circuitJson,

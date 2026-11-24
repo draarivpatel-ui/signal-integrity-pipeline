@@ -388,7 +388,8 @@ export class RouteNetworkSolver extends BaseSolver {
         return {
           ...route,
           length_mm: wires.reduce(
-            (sum, wire) => sum + wire.endMm - wire.startMm,
+            (sum, wire) =>
+              sum + wire.longitudinalMaxMm - wire.longitudinalMinMm,
             0,
           ),
         }
