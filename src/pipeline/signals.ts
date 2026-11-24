@@ -102,7 +102,9 @@ export function validatedScopeDistanceMm(
   distanceMm: number = DEFAULT_COPPER_SCOPE_DISTANCE_MM,
 ): number {
   if (!Number.isFinite(distanceMm) || distanceMm <= 0) {
-    throw new Error("Copper scope distance must be finite and positive")
+    throw new Error("Copper scope distance must be finite and positive", {
+      cause: "scopeDistanceMm",
+    })
   }
   return distanceMm
 }

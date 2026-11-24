@@ -51,10 +51,12 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
     drawing.texts?.every((text) => text.anchorSide === "center" && text.y > 6),
   )
   assert.ok(
-    drawing.texts?.some(
-      (text) => text.text.includes("C2") && text.text.includes("LOAD"),
+    drawing.texts?.some((text) =>
+      text.text.includes("Extra trace to RX pin A (not a receiver)"),
     ),
   )
+  assert.equal(drawing.title, "DAISY — ready to simulate")
+  assert.equal(drawing.texts?.length, 5)
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
