@@ -87,14 +87,9 @@ export function passiveBridges({
     }
     pins.push(port.source_port_id)
   }
-  const passiveTypes = [
-    "simple_resistor",
-    "simple_capacitor",
-    "simple_inductor",
-  ]
   const connections: PassiveBridge[] = []
   for (const component of db.source_component.list()) {
-    if (!passiveTypes.includes(component.ftype)) continue
+    if (!hasBuiltInPassiveModel(component)) continue
     const pins = ports.get(component.source_component_id)
     if (pins?.length === 2 && pins.every((pin) => !excluded.has(pin)))
       connections.push(pins as PassiveBridge)
@@ -119,5 +114,12 @@ export function crossesDifferentialLegs<T>({
     ({ positive, negative }) =>
       (positive.has(from) && negative.has(to)) ||
       (positive.has(to) && negative.has(from)),
+  )
+}
+
+/** Identify components with a built-in resistor, capacitor or inductor model. */
+export function hasBuiltInPassiveModel(component: { ftype: string }): boolean {
+  return ["simple_resistor", "simple_capacitor", "simple_inductor"].includes(
+    component.ftype,
   )
 }

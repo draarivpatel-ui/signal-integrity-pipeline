@@ -16,9 +16,9 @@ test("dual terminations do not send the positive receiver path down the negative
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const [positive, negative] = bindings.mappings
+  const [positive, negative] = bindings.receiverPaths
   assert.ok(positive && negative)
-  assert.equal(bindings.routedTraceCuts.length, 6)
+  assert.equal(bindings.traceContacts.length, 6)
   assert.equal(positive.sourceTraceIds?.length, 5)
   assert.ok(!positive.sourceTraceIds?.includes(negative.sourceTraceId))
 })

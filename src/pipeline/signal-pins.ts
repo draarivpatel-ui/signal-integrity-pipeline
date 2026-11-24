@@ -201,7 +201,7 @@ export function inspectSignalPins({
   const rails = signalRailIds({
     db: cju([...circuit]),
     connectivity,
-    referenceIds: [...selectedPins.values()].flatMap((pin) =>
+    referenceSourcePortIds: [...selectedPins.values()].flatMap((pin) =>
       Object.values(pin.references),
     ),
   })

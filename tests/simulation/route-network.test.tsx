@@ -12,8 +12,8 @@ import {
   RouteNetworkSolver,
 } from "../../src/simulation"
 import { routedRequest } from "../../src/simulation/route-transient"
-import { channelPlanInput } from "../fixtures/routed-fixture"
 import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
+import { renderTwoTracePlanInput } from "../fixtures/two-trace-plan-input"
 import Single from "../fixtures/unit-single-ended"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
@@ -26,7 +26,7 @@ let testNetwork: NetworkStage | undefined
 /** Assemble the network from the rendered fixture and the local vendor model. */
 async function routedNetwork(): Promise<NetworkStage> {
   if (testNetwork) return testNetwork
-  const input = await channelPlanInput()
+  const input = await renderTwoTracePlanInput()
   const solverContext = {
     progress: (): void => undefined,
     runSolver: async (): Promise<never> => {
@@ -110,13 +110,13 @@ test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
 
 import { routeTones } from "../../src/board"
 import {
-  assertRouteVisual,
+  assertPlanDrawingSnapshot,
   routedVisualFixture,
 } from "../fixtures/routed-visual"
 
 test("two-trace TSX route-network visual SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing: root
       .getSolver<RouteNetworkSolver>("RouteNetworkSolver")!
       .visualize(),
@@ -143,7 +143,7 @@ test("rejected network drawing retains physical context and shows its red reason
       (text) => text.color === routeTones.failure && text.text.includes("1835"),
     ),
   )
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing,
     module: "simulation",
     name: "route-network-rejected",

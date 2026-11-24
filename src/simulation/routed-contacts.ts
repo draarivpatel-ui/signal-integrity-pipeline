@@ -1,13 +1,13 @@
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
-import type { LaneMapping, SourcePortId } from "../board"
-import type { Snapshot } from "../kernel"
-import { fail } from "./diagnostics"
 import {
   hasBuiltInPassiveModel,
-  passiveSelectionComponents,
-  placedSubcircuitPins,
-} from "./netlist"
-import type { RoutedTraceCut } from "./routed-types"
+  type ReceiverTracePath,
+  type SourcePortId,
+} from "../board"
+import type { Snapshot } from "../kernel"
+import { fail } from "./diagnostics"
+import { passiveSelectionComponents, placedSubcircuitPins } from "./netlist"
+import type { TraceContacts } from "./route-inputs"
 import type { PipelineIbisModel, SimulationModeling } from "./types"
 
 /** The source contact IDs and the paths or cuts that require each contact. */
@@ -15,16 +15,22 @@ type RequiredContacts = ReadonlyMap<SourcePortId, string>
 
 /** Keep the first path or cut associated with each required physical contact. */
 export function requiredContacts({
-  mappings,
+  receiverPaths,
   cuts,
 }: {
-  mappings: readonly LaneMapping[]
-  cuts: readonly RoutedTraceCut[]
+  receiverPaths: readonly ReceiverTracePath[]
+  cuts: readonly TraceContacts[]
 }): RequiredContacts {
   const endpoints = new Map<SourcePortId, string>()
-  for (const { from, to, port } of mappings) {
-    if (!endpoints.has(from)) endpoints.set(from, port)
-    if (!endpoints.has(to)) endpoints.set(to, port)
+  for (const {
+    fromSourcePortId,
+    toSourcePortId,
+    channelName,
+  } of receiverPaths) {
+    if (!endpoints.has(fromSourcePortId))
+      endpoints.set(fromSourcePortId, channelName)
+    if (!endpoints.has(toSourcePortId))
+      endpoints.set(toSourcePortId, channelName)
   }
   for (const { fromSourcePortId, toSourcePortId, sourceTraceId } of cuts) {
     if (!endpoints.has(fromSourcePortId))
@@ -35,6 +41,9 @@ export function requiredContacts({
   return endpoints
 }
 
+/** Ports of the selected passive models. */
+type PassiveModelSourcePortIds = ReadonlySet<SourcePortId>
+
 /** Find the physical ports of the passive models actually selected for the deck. */
 export function passiveModelContacts({
   db,
@@ -42,13 +51,16 @@ export function passiveModelContacts({
 }: {
   db: CircuitJsonUtilObjects
   modeling: Snapshot<SimulationModeling>
-}): ReadonlySet<SourcePortId> {
+}): PassiveModelSourcePortIds {
   const components = db.source_component.list()
   const contacts = new Set<SourcePortId>()
   for (const selection of modeling.passiveComponents ?? []) {
-    const selected = passiveSelectionComponents({ components, selection })
-    if (selected.length !== 1) continue
-    const [component] = selected
+    const matchingComponents = passiveSelectionComponents({
+      components,
+      selection,
+    })
+    if (matchingComponents.length !== 1) continue
+    const [component] = matchingComponents
     const sourceComponentId = component.source_component_id
     const placed = db.simulation_spice_subcircuit.list({
       source_component_id: sourceComponentId,
@@ -77,17 +89,17 @@ export function passiveModelContacts({
 export function validateRoutedContacts({
   db,
   experimentName,
-  endpoints,
+  requiredContactsBySourcePortId,
   scopedModels,
-  stateIds,
-  passiveContacts,
+  runStateSourcePortIds,
+  passiveModelSourcePortIds,
 }: {
   db: CircuitJsonUtilObjects
   experimentName: string
-  endpoints: RequiredContacts
+  requiredContactsBySourcePortId: RequiredContacts
   scopedModels: readonly PipelineIbisModel[]
-  stateIds: ReadonlySet<SourcePortId>
-  passiveContacts: ReadonlySet<SourcePortId>
+  runStateSourcePortIds: ReadonlySet<SourcePortId>
+  passiveModelSourcePortIds: ReadonlySet<SourcePortId>
 }): void {
   const modelsByPort = new Map<SourcePortId, number>()
   for (const model of scopedModels) {
@@ -96,10 +108,11 @@ export function validateRoutedContacts({
     ))
       modelsByPort.set(sourcePortId, (modelsByPort.get(sourcePortId) ?? 0) + 1)
   }
-  for (const [sourcePortId, label] of endpoints) {
+  for (const [sourcePortId, label] of requiredContactsBySourcePortId) {
     const bindingCount = modelsByPort.get(sourcePortId) ?? 0
-    if (bindingCount === 1 && stateIds.has(sourcePortId)) continue
-    if (bindingCount === 0 && passiveContacts.has(sourcePortId)) continue
+    if (bindingCount === 1 && runStateSourcePortIds.has(sourcePortId)) continue
+    if (bindingCount === 0 && passiveModelSourcePortIds.has(sourcePortId))
+      continue
     const sourcePort = db.source_port.get(sourcePortId)
     const component = db.source_component.getWhere({
       source_component_id: sourcePort?.source_component_id,

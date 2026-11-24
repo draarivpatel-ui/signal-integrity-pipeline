@@ -19,7 +19,7 @@ import {
 import type { IbisSources, TextRange } from "../buffers"
 import type { Snapshot } from "../kernel"
 import { sha256 } from "../kernel"
-import type { RouteBuffer, RoutedCapture } from "./routed-types"
+import type { RouteBuffer, RoutedCapture } from "./route-inputs"
 
 /** A board port and its transient waveform label. */
 export interface WaveformProbe {
