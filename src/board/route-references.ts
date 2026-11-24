@@ -4,23 +4,23 @@ import type { PcbCopperPour } from "circuit-json"
 import { hypotenuse, type Snapshot } from "../kernel"
 import { polygonContains } from "./geometry/polygon"
 import type { CopperPoint } from "./geometry/types"
+import {
+  coversReferenceInterval,
+  type LongitudinalInterval,
+  MAX_REFERENCE_EDGE_DISTANCE_MM,
+  measurePourGapMm,
+} from "./route-reference-range"
 import type {
   ReferencePour,
   RouteReference,
   RouteWire,
   SectionGeometry,
 } from "./route-section-types"
-import {
-  getRoutePoint,
-  MIN_WIRE_LENGTH_MM,
-  measureChordDistanceMm,
-} from "./route-wire"
+import { getRoutePoint, MIN_WIRE_LENGTH_MM } from "./route-wire"
 import type { CopperLayer } from "./stackup"
 
 /** One micrometre limits the polygonal approximation of curved pour boundaries. */
 const POUR_CHORD_TOLERANCE_MM = 0.001
-/** Limit the edge approximation to the local neighborhood of ordinary board thicknesses. */
-export const MAX_REFERENCE_EDGE_DISTANCE_MM = 2
 
 /** Tessellate a pour edge with bounded sagitta, preserving its start and axis extrema. */
 function samplePourEdge(edge: PolygonEdge): CopperPoint[] {
@@ -28,8 +28,11 @@ function samplePourEdge(edge: PolygonEdge): CopperPoint[] {
   if (!("r" in shape)) return [[shape.start.x, shape.start.y]]
   return shape.breakToFunctional().flatMap((arc) => {
     const maxAngle =
-      2 * Math.acos(Math.max(-1, 1 - POUR_CHORD_TOLERANCE_MM / arc.r))
+      4 *
+      Math.asin(Math.min(1, Math.sqrt(POUR_CHORD_TOLERANCE_MM / (2 * arc.r))))
     const steps = Math.max(1, Math.ceil(arc.sweep / maxAngle))
+    if (!Number.isFinite(steps))
+      throw new Error("Reference pour has an unusable arc")
     const points: CopperPoint[] = [[arc.start.x, arc.start.y]]
     for (let index = 1; index < steps; index++) {
       const point = arc.pointAtLength((index * arc.length) / steps)
@@ -39,18 +42,50 @@ function samplePourEdge(edge: PolygonEdge): CopperPoint[] {
   })
 }
 
+type BrepPour = Extract<PcbCopperPour, { shape: "brep" }>
+type BrepRing = BrepPour["brep_shape"]["outer_ring"]
+
+/** Keep shallow arcs as chords before converting bulges to ill-conditioned circle centers. */
+function flattenShallowArcs(ring: BrepRing): BrepRing {
+  return {
+    ...ring,
+    vertices: ring.vertices.map((start, index) => {
+      if (start.bulge === undefined) return start
+      const end = ring.vertices[(index + 1) % ring.vertices.length]
+      const chordMm = hypotenuse(end.x - start.x, end.y - start.y)
+      if ((Math.abs(start.bulge) * chordMm) / 2 > POUR_CHORD_TOLERANCE_MM)
+        return start
+      return { ...start, bulge: 0 }
+    }),
+  }
+}
+
 /** Normalize all Circuit JSON pour encodings using the same geometry as copper scope. */
 export function normalizeReferencePour(pour: PcbCopperPour): ReferencePour[] {
   if (pour.source_net_id === undefined) return []
-  const outline = getPourPolygon(pour)
+  let referencePour = pour
+  if (pour.shape === "brep") {
+    const { outer_ring, inner_rings } = pour.brep_shape
+    if (outer_ring.vertices.length < 2) return []
+    referencePour = {
+      ...pour,
+      brep_shape: {
+        outer_ring: flattenShallowArcs(outer_ring),
+        inner_rings: inner_rings?.map(flattenShallowArcs),
+      },
+    }
+  }
+  const outline = getPourPolygon(referencePour)
+  const polygon = [...outline.faces].map((face) =>
+    face.edges.flatMap(samplePourEdge),
+  )
+  if (!polygon[0]?.length) return []
   return [
     {
       pcbCopperPourId: pour.pcb_copper_pour_id,
       sourceNetId: pour.source_net_id,
       layer: pour.layer,
-      polygon: [...outline.faces].map((face) =>
-        face.edges.flatMap(samplePourEdge),
-      ),
+      polygon,
     },
   ]
 }
@@ -59,27 +94,6 @@ export function normalizeReferencePour(pour: PcbCopperPour): ReferencePour[] {
 interface ReferenceCandidate {
   reference: RouteReference
   distanceMm: number
-}
-
-/** The distance from the wire centerline to the copper outline, including holes. */
-function measurePourGapMm({
-  point,
-  pour,
-}: {
-  point: CopperPoint
-  pour: Snapshot<ReferencePour>
-}): number {
-  let gapMm = Infinity
-  for (const ring of pour.polygon) {
-    for (const [index, startPoint] of ring.entries()) {
-      const endPoint = ring[(index + 1) % ring.length]
-      gapMm = Math.min(
-        gapMm,
-        measureChordDistanceMm({ point, startPoint, endPoint }),
-      )
-    }
-  }
-  return gapMm
 }
 
 /** An eligible reference and its position relative to the signal copper. */
@@ -125,17 +139,27 @@ function findEdgeReference({
   point,
   surfaces,
   signal,
+  wire,
+  interval,
 }: {
   point: CopperPoint
   surfaces: ReferenceSurface[]
   signal: Snapshot<CopperLayer>
+  wire: Snapshot<RouteWire>
+  interval?: LongitudinalInterval
 }): RouteReference[] {
   let nearest: ReferenceCandidate | undefined
-  for (const { reference, pour, verticalGapMm, isAboveSignal } of surfaces) {
+  for (const surface of surfaces) {
+    const { reference, pour, verticalGapMm, isAboveSignal } = surface
     const lateralGapMm = measurePourGapMm({ point, pour })
     const distanceMm = hypotenuse(verticalGapMm, lateralGapMm)
     if (distanceMm >= MAX_REFERENCE_EDGE_DISTANCE_MM) continue
     if (nearest && nearest.distanceMm <= distanceMm) continue
+    if (
+      interval &&
+      !coversReferenceInterval({ interval, wire, pour, verticalGapMm })
+    )
+      continue
     let surfaceZMm = signal.zMinMm - distanceMm
     if (isAboveSignal) surfaceZMm = signal.zMaxMm + distanceMm
     nearest = {
@@ -152,10 +176,12 @@ export function findRouteReferences({
   geometry,
   wire,
   positionMm,
+  interval,
 }: {
   geometry: Snapshot<Pick<SectionGeometry, "stackup" | "pours">>
   wire: Snapshot<RouteWire>
   positionMm: number
+  interval?: LongitudinalInterval
 }): RouteReference[] {
   const point = getRoutePoint({ wire, positionMm })
   const signal = geometry.stackup.copperLayers.find(
@@ -188,7 +214,7 @@ export function findRouteReferences({
   if (below) occupied.push(below.reference)
   if (above) occupied.push(above.reference)
   if (occupied.length) return occupied
-  return findEdgeReference({ point, surfaces, signal })
+  return findEdgeReference({ point, surfaces, signal, wire, interval })
 }
 
 /** Include vertices and endpoints of collinear edges; the sweep deduplicates shared positions. */
@@ -228,7 +254,7 @@ export function findReferenceBoundariesMm({
   }
   return boundariesMm.filter(
     (positionMm) =>
-      positionMm > wire.startMm + MIN_WIRE_LENGTH_MM &&
-      positionMm < wire.endMm - MIN_WIRE_LENGTH_MM,
+      positionMm > wire.longitudinalMinMm + MIN_WIRE_LENGTH_MM &&
+      positionMm < wire.longitudinalMaxMm - MIN_WIRE_LENGTH_MM,
   )
 }

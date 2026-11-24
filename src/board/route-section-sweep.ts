@@ -31,18 +31,28 @@ type SectionProfile = Pick<RouteSection, "wires" | "references">
 function groupSectionReferences({
   geometry,
   wires,
-  positionMm,
+  interval,
   copperScope,
 }: {
   geometry: SectionSweepGeometry
   wires: RouteWire[]
-  positionMm: number
+  interval: Pick<RouteSection, "startMm" | "endMm">
   copperScope: Snapshot<CopperScope>
 }): Iterable<SectionProfile> {
   const profiles = new Map<ReferenceProfileKey, SectionProfile>()
+  const positionMm = (interval.startMm + interval.endMm) / 2
   for (const wire of wires) {
-    if (wire.startMm > positionMm || wire.endMm < positionMm) continue
-    const references = findRouteReferences({ geometry, wire, positionMm })
+    if (
+      wire.longitudinalMinMm > positionMm ||
+      wire.longitudinalMaxMm < positionMm
+    )
+      continue
+    const references = findRouteReferences({
+      geometry,
+      wire,
+      positionMm,
+      interval,
+    })
     if (!references.length) {
       if (copperScope.nearbyRailPcbTraceIds.includes(wire.pcbTraceId)) continue
       const point = getRoutePoint({ wire, positionMm })
@@ -69,8 +79,8 @@ function sweepDirection({
   copperScope: Snapshot<CopperScope>
 }): RouteSection[] {
   const positionsMm = wires.flatMap((wire) => [
-    wire.startMm,
-    wire.endMm,
+    wire.longitudinalMinMm,
+    wire.longitudinalMaxMm,
     ...findReferenceBoundariesMm({ wire, pours: geometry.pours }),
   ])
   const boundariesMm = [...new Set(positionsMm.map(roundRouteCoordinate))].sort(
@@ -81,11 +91,10 @@ function sweepDirection({
     const startMm = boundariesMm[index - 1]
     const endMm = boundariesMm[index]
     if (endMm - startMm < SECTION_TOLERANCE_MM) continue
-    const positionMm = (startMm + endMm) / 2
     for (const profile of groupSectionReferences({
       geometry,
       wires,
-      positionMm,
+      interval: { startMm, endMm },
       copperScope,
     })) {
       const groups = groupWiresByGap({

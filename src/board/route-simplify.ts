@@ -88,11 +88,11 @@ export function simplifyRouteWires({
         wire.widthMm !== firstWire.widthMm
       )
         break
-      const gap = hypotenuse(
+      const gapMm = hypotenuse(
         wire.startPoint[0] - previousEndPoint[0],
         wire.startPoint[1] - previousEndPoint[1],
       )
-      if (gap > WIRE_JOIN_TOLERANCE_MM) break
+      if (gapMm > WIRE_JOIN_TOLERANCE_MM) break
       points.push(wire.endPoint)
       index++
     }
@@ -107,11 +107,11 @@ export function simplifyRouteWires({
   return {
     wires: simplifiedWires,
     originalLengthMm: wires.reduce(
-      (sum, wire) => sum + wire.endMm - wire.startMm,
+      (sum, wire) => sum + wire.longitudinalMaxMm - wire.longitudinalMinMm,
       0,
     ),
     simplifiedLengthMm: simplifiedWires.reduce(
-      (sum, wire) => sum + wire.endMm - wire.startMm,
+      (sum, wire) => sum + wire.longitudinalMaxMm - wire.longitudinalMinMm,
       0,
     ),
   }
