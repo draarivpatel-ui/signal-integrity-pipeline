@@ -334,7 +334,7 @@ test("actual two-channel simulation TSX advances every flat stage and invokes tr
   assertPlanDrawingSnapshot({
     drawing: root.visualizeStage(3),
     module: "pipeline",
-    name: "routed-pipeline-fields",
+    name: "routed-pipeline-rlgc",
   })
   assert.ok(
     root.visualize().lines!.length > 0,

@@ -24,7 +24,6 @@ import {
   type TraceWire,
   withRouteDrawing,
 } from "../board"
-import { closestRoutePoints } from "../extraction"
 import {
   type Produced,
   rootScope,
@@ -46,6 +45,7 @@ import { routedRequest } from "./route-transient"
 import { routeTransitions } from "./route-transitions"
 import { routedControl } from "./routed-control"
 import { spiceSubcircuitHeader, spiceWords } from "./spice-header"
+import { findClosestWirePoints } from "./wire-proximity"
 
 /** Small series resistance joins aliases without creating an ideal-voltage loop (ohms). */
 const JOIN_RESISTANCE = "1e-6"
@@ -476,16 +476,24 @@ export class RouteNetworkSolver extends BaseSolver {
     let drawing = routeBoardDrawing({ circuit, scope: bindings.scope })
     let built: Set<number> | undefined
     if (!this.output) built = new Set(this.ladder?.wireNodes.keys() ?? [])
-    const bands = extracted.slices
+    const bands = extracted.solvedWireSections
       .flatMap((slice) =>
         slice.wires.flatMap((a, i) =>
           slice.wires.slice(i + 1).map((b, offset) => {
             const j = i + offset + 1
             const k = Math.max(
-              Math.abs(slice.line.C[i][j]) /
-                Math.sqrt(slice.line.C[i][i] * slice.line.C[j][j]),
-              Math.abs(slice.line.L[i][j]) /
-                Math.sqrt(slice.line.L[i][i] * slice.line.L[j][j]),
+              Math.abs(slice.rlgcMatrices.capacitanceFaradsPerMeter[i][j]) /
+                Math.sqrt(
+                  slice.rlgcMatrices.capacitanceFaradsPerMeter[i][i] *
+                    slice.rlgcMatrices.capacitanceFaradsPerMeter[j][j],
+                ),
+              Math.abs(
+                slice.rlgcMatrices.externalInductanceHenriesPerMeter[i][j],
+              ) /
+                Math.sqrt(
+                  slice.rlgcMatrices.externalInductanceHenriesPerMeter[i][i] *
+                    slice.rlgcMatrices.externalInductanceHenriesPerMeter[j][j],
+                ),
             )
             return {
               slice,
@@ -575,9 +583,12 @@ export class RouteNetworkSolver extends BaseSolver {
       if (!Array.isArray(record.wires) || record.wires.length !== 2) continue
       const pair = (record.wires as number[]).map((id) => wires.get(id))
       if (!pair[0] || !pair[1]) continue
-      const near = closestRoutePoints({ first: pair[0], second: pair[1] })
+      const near = findClosestWirePoints({
+        firstWire: pair[0],
+        secondWire: pair[1],
+      })
       drawing.lines!.push({
-        points: [near.first, near.second].map(([x, y]) => ({ x, y })),
+        points: [near.firstPoint, near.secondPoint].map(([x, y]) => ({ x, y })),
         strokeColor: routeTones.coupling,
         strokeWidth: view.unit * 0.3,
       })

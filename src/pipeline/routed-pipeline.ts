@@ -8,7 +8,6 @@ import type { GraphicsObject } from "graphics-debug"
 import {
   type CopperGeometry,
   CopperGeometryExtractionStage,
-  cloneCircuitJson,
   getBoardBounds,
   routeBoardDrawing,
   routeLengths,
@@ -18,7 +17,6 @@ import {
   routeView,
   withRouteDrawing,
 } from "../board"
-import { type TransmissionLineRlgc, TransmissionLineRlgcSolver } from "../rlgc"
 import {
   ArtifactLedger,
   type FileMap,
