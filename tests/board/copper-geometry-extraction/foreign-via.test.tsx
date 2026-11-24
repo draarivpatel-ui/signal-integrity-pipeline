@@ -2,10 +2,10 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperPad,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionPin,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("rejects a required pad that only reaches the wire through a ground via", async () => {
@@ -13,8 +13,8 @@ test("rejects a required pad that only reaches the wire through a ground via", a
     reference: <copperpour connectsTo="net.GND" layer="inner1" unbroken />,
     children: (
       <>
-        <SectionTrace name="Signal" />
-        <SectionPin name="Bottom" x={0} layer="bottom" />
+        <CopperTrace name="Signal" />
+        <CopperPad name="Bottom" x={0} layer="bottom" />
         <via
           connectsTo="net.GND"
           pcbX={0}
@@ -26,7 +26,7 @@ test("rejects a required pad that only reaches the wire through a ground via", a
     ),
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit, required: ["Bottom"] }),
+    getCopperGeometryExtractionInput({ circuit, required: ["Bottom"] }),
   )
   assert.throws(() => solver.solve(), /no physical wire or via contact/)
 })

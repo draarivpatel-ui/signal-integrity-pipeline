@@ -3,16 +3,16 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("sections the trace at a rounded antipad", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Crossing" startY={0.3} />
+        <CopperTrace name="Crossing" startY={0.3} />
         <cutout shape="circle" radius={0.5} />
       </>
     ),
@@ -23,7 +23,7 @@ test("sections the trace at a rounded antipad", async () => {
   assert(hole?.vertices.length)
   const { sections } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert.equal(sections.length, 3)
   assert.ok(sections[1].references[0].lateralGapMm)

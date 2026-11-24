@@ -6,18 +6,18 @@ import {
   findPadContactWire,
 } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperPad,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionPin,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("connects a required bottom pad through a scoped standalone via", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Signal" />
-        <SectionPin name="Bottom" x={0} layer="bottom" />
+        <CopperTrace name="Signal" />
+        <CopperPad name="Bottom" x={0} layer="bottom" />
         <via
           connectsTo="net.SIGNAL"
           pcbX={0}
@@ -32,12 +32,15 @@ test("connects a required bottom pad through a scoped standalone via", async () 
   })
   const [via] = cju(circuit).pcb_via.list()
   assert(via)
-  const input = getCopperExtractionInput({ circuit, required: ["Bottom"] })
+  const input = getCopperGeometryExtractionInput({
+    circuit,
+    required: ["Bottom"],
+  })
   assert(input.copperScope.extractedPcbViaIds.includes(via.pcb_via_id))
   const solver = new CopperGeometryExtractionSolver(input)
   solver.solve()
   const { geometry } = solver.getOutput().value
-  const contact = geometry.portContacts.find(({ layer }) => layer === "bottom")
+  const contact = geometry.padContacts.find(({ layer }) => layer === "bottom")
   assert(contact)
   const wire = findPadContactWire({ geometry, ...contact })
   assert.equal(wire?.layer, "top")

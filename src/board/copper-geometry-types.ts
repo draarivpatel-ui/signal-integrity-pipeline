@@ -36,8 +36,8 @@ export interface TraceWire {
   lateralOffsetMm: number
   contributingPcbTraceIds?: PcbTraceId[]
   joins?: WireJoin[]
-  startTouchesPort?: boolean
-  endTouchesPort?: boolean
+  startTouchesPad?: boolean
+  endTouchesPad?: boolean
 }
 
 /** A copper surface or nearby edge used as an electrical reference. */
@@ -92,6 +92,6 @@ export interface ExtractedCopper {
   sections: WireSection[]
   pours: ReferencePour[]
   vias: CopperVia[]
-  portContacts: PadContact[]
+  padContacts: PadContact[]
   warnings: string[]
 }
