@@ -21,7 +21,7 @@ export function measurePourGapMm({
   pour,
 }: {
   point: CopperPoint
-  pour: ReferencePour
+  pour: Snapshot<ReferencePour>
 }): number {
   let gapMm = Infinity
   for (const ring of pour.polygon) {
@@ -49,8 +49,8 @@ function getEdgeInterval({
 }: {
   line: Line
   direction: Snapshot<TraceWire["direction"]>
-  startPoint: CopperPoint
-  endPoint: CopperPoint
+  startPoint: Snapshot<CopperPoint>
+  endPoint: Snapshot<CopperPoint>
   lateralLimitMm: number
 }): LongitudinalInterval | undefined {
   const capsule = getTraceSegmentPolygon(
@@ -72,7 +72,7 @@ export function getEdgeCoverage({
   verticalGapMm,
 }: {
   wire: Snapshot<TraceWire>
-  pour: ReferencePour
+  pour: Snapshot<ReferencePour>
   verticalGapMm: number
 }): LongitudinalInterval[] {
   if (verticalGapMm >= MAX_REFERENCE_EDGE_DISTANCE_MM) return []
