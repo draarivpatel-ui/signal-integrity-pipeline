@@ -86,23 +86,22 @@ function drawSection({
   const center = getRoutePoint({ wire, positionMm: (startMm + endMm) / 2 })
   const wireLayers = [...new Set(wires.map(({ layer }) => layer))].join(" / ")
   const copperClearanceMm = wire.widthMm / 2 + unitMm * 0.9
+  const fontSize = unitMm * 1.65
   const text: Text = {
     x: center[0],
     y: center[1] + copperClearanceMm,
     text: `${wireLayers} · ${label}`,
-    fontSize: unitMm * 1.65,
+    fontSize,
     anchorSide: "bottom_center",
     color,
   }
   const hasNearbyReferenceEdge = references.some(
     ({ lateralGapMm }) =>
-      lateralGapMm !== undefined &&
-      lateralGapMm < copperClearanceMm + text.fontSize,
+      lateralGapMm !== undefined && lateralGapMm < copperClearanceMm + fontSize,
   )
   if (
     hasNearbyReferenceEdge ||
-    text.text.length * text.fontSize * SECTION_LABEL_ADVANCE_EM >
-      endMm - startMm
+    text.text.length * fontSize * SECTION_LABEL_ADVANCE_EM > endMm - startMm
   ) {
     text.y = center[1] - copperClearanceMm
     text.anchorSide = "top_center"
