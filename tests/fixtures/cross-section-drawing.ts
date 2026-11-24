@@ -19,7 +19,11 @@ export function drawCrossSection({
   title: string
 }): GraphicsObject {
   const [{ region }] = partitionCrossSection(crossSection)
-  const panels = buildRegionPanels({ region, count: 12, extent: 24 })
+  const panels = buildRegionPanels({
+    region,
+    panelsPerEdge: 12,
+    interfaceExtent: 24,
+  })
   const topMm = Math.max(
     region.planeSpacingMm,
     ...region.dielectricLayers.map((layer) => layer.zMm + layer.thicknessMm),
@@ -43,11 +47,13 @@ export function drawCrossSection({
       },
     ]
   })
-  for (const plane of crossSection.planes) {
+  const planeHeightsMm = [0]
+  if (region.planeSpacingMm > 0) planeHeightsMm.push(region.planeSpacingMm)
+  for (const planeZMm of planeHeightsMm) {
     lines.push({
       points: [
-        { x: -halfWidthMm, y: plane.zMm },
-        { x: halfWidthMm, y: plane.zMm },
+        { x: -halfWidthMm, y: planeZMm },
+        { x: halfWidthMm, y: planeZMm },
       ],
       strokeColor: PLANE_COLOR,
       strokeWidth: 0.025,
