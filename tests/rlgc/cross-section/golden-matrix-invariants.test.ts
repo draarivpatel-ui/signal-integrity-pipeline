@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { type CrossSection, calculateRlgc } from "../../../src/rlgc"
-import { sectionFixture } from "../../fixtures/cross-section"
+import { crossSectionFixture } from "../../fixtures/cross-section"
 import { centred } from "../../fixtures/rlgc-golden"
 import {
   energyFacts,
@@ -23,7 +23,7 @@ test("golden invariants: extracted L, C0, C are SPD with |k| < 1, C is Maxwell, 
     ...(["microstrip", "stripline", "mask"] as const).flatMap((kind) =>
       [1, 2, 12].map((count) => ({
         label: `${kind} ${count}`,
-        section: sectionFixture({ kind, count }),
+        section: crossSectionFixture({ kind, count }),
       })),
     ),
     {
