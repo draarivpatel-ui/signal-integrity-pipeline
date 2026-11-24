@@ -29,9 +29,9 @@ flowchart LR
   source["Circuit JSON SI records"] --> plan["pipeline: channel planning and declared aggressor states<br/>buffers: package admission, unlisted-pin hierarchy and passivity"]
   modelSources["IBIS sources"] --> plan
   plan --> manifest["Transient channel simulation plan manifest"]
-  plan --> cuts["pipeline: physical trace cuts"]
-  cuts --> sections["board: copper scope, straight sections and reference planes"]
-  cuts --> groups["simulation: ideal source groups"]
+  plan --> traceContacts["pipeline: trace contacts"]
+  traceContacts --> sections["board: copper scope, straight sections and reference planes"]
+  traceContacts --> groups["simulation: ideal source groups"]
   groups --> receiverPaths["pipeline: routed receiver paths"]
   sections --> fields["extraction: quasi-TEM cross-sections, pair screen and causal loss"]
   receiverPaths --> bindings["buffers + simulation: contact checks, vendor models, pin packages, ideal die rails, probes and sources"]
@@ -48,7 +48,7 @@ Node facilities. Domain modules return owned artifacts. The pipeline ledger
 rejects path collisions and seals files in sorted order. Channel simulations have separate
 artifact prefixes.
 
-`board` owns physical admission, the copper scope, route sections and board drawings;
+`board` owns board validation, the copper scope, route sections and board drawings;
 `buffers` owns vendor source bytes, pin/model selection and package assembly;
 `extraction` owns cross-section field solves, route lines, pair coupling and matrix
 checks; `simulation` owns declarations, electrical sources, node identity, the routed
@@ -269,7 +269,7 @@ qualification.
 Async stepping uses solver-utils PR #62 at `127f17012c7c391005254993864b26801f418249`
 through an integrity-locked pkg.pr.new URL. Switch to a release after #62 ships.
 
-The native solver uses its built-in timeout. The legacy caller-specified timeout and its dedicated diagnostic were removed. IBIS source validation continues to check paths and reject non-IBIS data. The previous byte-size limit was removed.
+The native adapter waits for the executable to exit. The legacy caller-specified timeout and its dedicated diagnostic were removed. IBIS source validation continues to check paths and reject non-IBIS data. The previous byte-size limit was removed.
 
 ### Cosmos development backend
 

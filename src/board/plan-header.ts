@@ -88,19 +88,19 @@ export function wrapPlanText({
 
 /** A wrapped header row with its font size and optional hover diagnostic. */
 interface SizedHeaderRow extends PlanHeaderRow {
-  size: number
+  fontSizeMm: number
   label?: string
 }
 
 /** Wrap the summary and append the legend at a size that fits one row. */
 function buildHeaderRows({
   scene,
-  size,
+  fontSizeMm,
   widthMm,
   legend,
 }: {
   scene: PlanHeaderScene
-  size: number
+  fontSizeMm: number
   widthMm: number
   legend: readonly string[]
 }): SizedHeaderRow[] {
@@ -110,21 +110,21 @@ function buildHeaderRows({
     {
       text: scene.title,
       color: titleColor,
-      size: size * 1.32,
+      fontSizeMm: fontSizeMm * 1.32,
     },
     {
       text: scene.diagnostic?.text,
       color: planColors.failure,
-      size,
+      fontSizeMm,
       label: scene.diagnostic?.label,
     },
-    ...scene.rows.map((row) => ({ ...row, size })),
+    ...scene.rows.map((row) => ({ ...row, fontSizeMm })),
   ]
   const wrapped = rows.flatMap((row) => {
     if (!row.text) return []
     return wrapPlanText({
       text: row.text,
-      maxWidthEms: widthMm / row.size,
+      maxWidthEms: widthMm / row.fontSizeMm,
     }).map((text) => ({
       ...row,
       text,
@@ -135,7 +135,10 @@ function buildHeaderRows({
     wrapped.push({
       text: legendText,
       color: planColors.quiet,
-      size: Math.min(size, widthMm / estimateTextWidthEms(legendText)),
+      fontSizeMm: Math.min(
+        fontSizeMm,
+        widthMm / estimateTextWidthEms(legendText),
+      ),
     })
   return wrapped
 }
@@ -154,21 +157,21 @@ export function buildPlanHeader({
 }): PlanHeader {
   const { widthMm, box } = frame
   const x = (box.minX + box.maxX) / 2
-  const size = getPlanTextSizeMm(widthMm)
-  const scale = getScaleLengthMm(widthMm)
-  const scaleY = boardTop + size * PLAN_BAND_GAP
-  const labelY = scaleY + size * 0.88
+  const fontSizeMm = getPlanTextSizeMm(widthMm)
+  const scaleLengthMm = getScaleLengthMm(widthMm)
+  const scaleY = boardTop + fontSizeMm * PLAN_BAND_GAP
+  const labelY = scaleY + fontSizeMm * 0.88
   const lines: Line[] = [
     {
       points: [
-        { x: x - scale / 2, y: scaleY + size * 0.23 },
-        { x: x - scale / 2, y: scaleY },
-        { x: x + scale / 2, y: scaleY },
-        { x: x + scale / 2, y: scaleY + size * 0.23 },
+        { x: x - scaleLengthMm / 2, y: scaleY + fontSizeMm * 0.23 },
+        { x: x - scaleLengthMm / 2, y: scaleY },
+        { x: x + scaleLengthMm / 2, y: scaleY },
+        { x: x + scaleLengthMm / 2, y: scaleY + fontSizeMm * 0.23 },
       ],
       strokeColor: planColors.quiet,
-      strokeWidth: size * 0.085,
-      label: `${scale} mm`,
+      strokeWidth: fontSizeMm * 0.085,
+      label: `${scaleLengthMm} mm`,
       layer: "header",
     },
   ]
@@ -176,43 +179,43 @@ export function buildPlanHeader({
     {
       x,
       y: labelY,
-      text: `${scale} mm`,
+      text: `${scaleLengthMm} mm`,
       anchorSide: "center",
-      fontSize: size,
+      fontSize: fontSizeMm,
       color: planColors.quiet,
       layer: "header",
     },
   ]
   const rects: Rect[] = []
-  let y = labelY + size * 1.66
-  const rows = buildHeaderRows({ scene, size, widthMm, legend })
+  let y = labelY + fontSizeMm * 1.66
+  const rows = buildHeaderRows({ scene, fontSizeMm, widthMm, legend })
   for (const row of rows.reverse()) {
     texts.push({
       x,
       y,
       text: row.text,
       color: row.color || planColors.ink,
-      fontSize: row.size,
+      fontSize: row.fontSizeMm,
       anchorSide: "center",
       layer: "header",
     })
     if ("label" in row && row.label)
       rects.push({
         center: { x, y },
-        width: estimateTextWidthEms(row.text) * row.size,
-        height: size * 1.25,
+        width: estimateTextWidthEms(row.text) * row.fontSizeMm,
+        height: fontSizeMm * 1.25,
         fill: "transparent",
         stroke: "none",
         label: row.label,
         layer: "header",
       })
-    y += row.size * PLAN_LINE_STEP
+    y += row.fontSizeMm * PLAN_LINE_STEP
   }
-  const top = y + size * 0.3
-  const bottom = box.minY - size * 0.9
+  const top = y + fontSizeMm * 0.3
+  const bottom = box.minY - fontSizeMm * 0.9
   rects.push({
     center: { x, y: (top + bottom) / 2 },
-    width: widthMm + size * 3.6,
+    width: widthMm + fontSizeMm * 3.6,
     height: top - bottom,
     fill: "none",
     stroke: "none",

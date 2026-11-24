@@ -7,8 +7,8 @@ import type { TraceProps } from "@tscircuit/props"
 import React from "react"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
 import { endpointPorts } from "../../src/board"
+import { compareNames } from "../../src/pipeline/signal-names"
 import {
-  compareNames,
   listChannelSimulations,
   type PreparedChannelSimulation,
   prepareChannelSimulationById,
@@ -234,7 +234,7 @@ test("full unrouted check reaches the segment after a series passive", async () 
   assert.equal(
     prepared.settings.channelTraces.length,
     1,
-    "only the routed segment before RS is a physical lane",
+    "only the routed trace before RS is a channel trace",
   )
 })
 
@@ -597,7 +597,7 @@ test("via plating comes from the preset and must be in the stackup", async () =>
 
 type DeclarationInput = Parameters<typeof generalDeclarations>[0]
 
-/** Map each prepared physical lane to its declaration endpoints. */
+/** Read each prepared trace’s declared endpoints. */
 function declarationInput(
   prepared: PreparedChannelSimulation,
 ): DeclarationInput {

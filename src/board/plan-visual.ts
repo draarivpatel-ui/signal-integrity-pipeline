@@ -3,14 +3,14 @@ import { drawCopper } from "./plan-copper"
 import { buildPlanHeader } from "./plan-header"
 import { placePlanLabels } from "./plan-labels"
 import {
-  endpointRadius,
-  endpointShape,
-  linkLine,
-  linkShapes,
-  ring,
-  viaShapes,
+  buildEndpointShape,
+  buildOverlayLine,
+  buildOverlayShapes,
+  buildRing,
+  buildViaShapes,
+  getEndpointRadiusMm,
 } from "./plan-marks"
-import { buildBoardShapes } from "./plan-shapes"
+import { buildBoardShapes, drawPlanPolygon } from "./plan-shapes"
 import {
   boxPoints,
   buildPlanFrame,
@@ -29,20 +29,20 @@ import {
 
 /** Scope envelope, separated from the board outline when fully in scope. */
 function buildSearchEnvelope({
-  scope,
+  searchBox,
   board,
   unitMm,
 }: {
-  scope: Viewbox
+  searchBox: Viewbox
   board: Viewbox
   unitMm: number
 }): PlanLine {
-  const inset = unitMm * 0.6
+  const insetMm = unitMm * 0.6
   const points = boxPoints({
-    minX: Math.max(board.minX + inset, scope.minX),
-    maxX: Math.min(board.maxX - inset, scope.maxX),
-    minY: Math.max(board.minY + inset, scope.minY),
-    maxY: Math.min(board.maxY - inset, scope.maxY),
+    minX: Math.max(board.minX + insetMm, searchBox.minX),
+    maxX: Math.min(board.maxX - insetMm, searchBox.maxX),
+    minY: Math.max(board.minY + insetMm, searchBox.minY),
+    maxY: Math.min(board.maxY - insetMm, searchBox.maxY),
   })
   return {
     points: [...points, points[0]],
@@ -71,10 +71,10 @@ function buildPlanLegend({
   if (kinds.has("driver")) labels.push("▶ driver")
   if (kinds.has("receiver")) labels.push("◉ receiver")
   if (kinds.has("ideal") && kinds.has("extraTraceEnd"))
-    labels.push("◇ direct receiver or extra trace end")
-  else if (kinds.has("ideal")) labels.push("◇ direct receiver")
+    labels.push("◇ ideal receiver or extra trace end")
+  else if (kinds.has("ideal")) labels.push("◇ ideal receiver")
   else if (kinds.has("extraTraceEnd")) labels.push("◇ extra trace end")
-  if (polygons.some(({ layer }) => layer === "mappings"))
+  if (polygons.some(({ layer }) => layer === "paths"))
     labels.push("› direction")
   if (polygons.some(({ layer }) => layer === "copper")) labels.push("◎ via")
   if (polygons.some(({ layer }) => layer === "topology"))
@@ -86,8 +86,8 @@ function buildPlanLegend({
   if (hasBypass) labels.push("-×- bypass")
   if (lineMarks.has("traceFault")) {
     if (hasBypass) labels.push("× bypassed trace")
-    else if (scene.faultCode === "channel_fanout")
-      labels.push("× trace in loop")
+    else if (scene.traceFaultKind === "loop") labels.push("× trace in loop")
+    else if (scene.traceFaultKind === "branch") labels.push("× branched trace")
     else labels.push("× shorted trace")
   }
   return labels
@@ -110,25 +110,26 @@ function renderOverlays({
   const { ports } = scene
   const lines: PlanLine[] = []
   const polygons: PlanPolygon[] = []
-  for (const link of scene.overlays) {
+  for (const overlay of scene.overlays) {
     if (
-      link.kind === "ideal" &&
+      overlay.kind === "ideal" &&
       scene.overlays.some(
         ({ kind, fromSourcePortId, toSourcePortId }) =>
           kind === "short" &&
-          fromSourcePortId === link.fromSourcePortId &&
-          toSourcePortId === link.toSourcePortId,
+          fromSourcePortId === overlay.fromSourcePortId &&
+          toSourcePortId === overlay.toSourcePortId,
       )
     )
       continue
-    const from = ports.get(link.fromSourcePortId)
-    const to = ports.get(link.toSourcePortId)
+    const from = ports.get(overlay.fromSourcePortId)
+    const to = ports.get(overlay.toSourcePortId)
     if (!from || !to) continue
-    const line: PlanLine = linkLine({ link, from, to, unitMm })
-    if (link.kind === "ideal" || link.kind === "missing") line.mark = link.kind
-    if (link.kind === "short") line.mark = "bypass"
+    const line: PlanLine = buildOverlayLine({ overlay, from, to, unitMm })
+    if (overlay.kind === "ideal" || overlay.kind === "missing")
+      line.mark = overlay.kind
+    if (overlay.kind === "short") line.mark = "bypass"
     lines.push(line)
-    polygons.push(...linkShapes({ link, from, to, unitMm }))
+    polygons.push(...buildOverlayShapes({ overlay, from, to, unitMm }))
   }
   return { lines, polygons }
 }
@@ -136,11 +137,11 @@ function renderOverlays({
 /** Draw declared endpoints and replace faulted endpoint glyphs with fault markers. */
 function renderContactMarks({
   scene,
-  radius,
+  radiusMm,
   traceFaults,
 }: {
   scene: PlanVisualScene
-  radius: number
+  radiusMm: number
   traceFaults: readonly PlanPolygon[]
 }): PlanPolygon[] {
   const { ports, faultSourcePortIds } = scene
@@ -149,28 +150,30 @@ function renderContactMarks({
     const point = ports.get(endpoint.sourcePortId)
     if (point && !faultSourcePortIds.has(endpoint.sourcePortId))
       polygons.push(
-        ...endpointShape({ point, endpoint, radius, ports }).map((shape) => ({
-          ...shape,
-          endpointKind: endpoint.kind,
-        })),
+        ...buildEndpointShape({ point, endpoint, radiusMm, ports }).map(
+          (shape) => ({
+            ...shape,
+            endpointKind: endpoint.kind,
+          }),
+        ),
       )
   }
   polygons.push(...traceFaults)
-  for (const id of faultSourcePortIds) {
-    const port = ports.get(id)
+  for (const sourcePortId of faultSourcePortIds) {
+    const port = ports.get(sourcePortId)
     if (!port) continue
-    const label = `Offending port · ${port.label} (${id})`
+    const label = `Fault port · ${port.label} (${sourcePortId})`
     polygons.push(
       {
-        points: ring({ center: port, radius: radius * 1.08 }),
+        points: buildRing({ center: port, radiusMm: radiusMm * 1.08 }),
         fill: "#fff",
         stroke: planColors.failure,
-        strokeWidth: radius * 0.34,
+        strokeWidth: radiusMm * 0.34,
         label,
         layer: "failure",
       },
       {
-        points: ring({ center: port, radius: radius * 0.36 }),
+        points: buildRing({ center: port, radiusMm: radiusMm * 0.36 }),
         fill: planColors.failure,
         stroke: "none",
         label,
@@ -196,31 +199,36 @@ export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
     active.add(fromSourcePortId)
     active.add(toSourcePortId)
   }
-  const scopeBox =
+  const searchBox =
     copperScope &&
-    getCopperSearchBox({ db, board, scope: copperScope, active, ports })
-  const frame = buildPlanFrame({ board, focus: scopeBox })
+    getCopperSearchBox({
+      db,
+      board,
+      copperScope,
+      activeSourcePortIds: active,
+      ports,
+    })
+  const frame = buildPlanFrame({ board, focus: searchBox })
   const { unitMm, crop } = frame
   const copper = drawCopper({ scene, ports, unitMm })
   const lines = [...copper.lines]
-  if (scopeBox)
-    lines.push(buildSearchEnvelope({ scope: scopeBox, board, unitMm }))
+  if (searchBox) lines.push(buildSearchEnvelope({ searchBox, board, unitMm }))
   const polygons: PlanPolygon[] = [
     ...buildBoardShapes({ db, board, active, ports, unitMm }),
-    ...viaShapes({ db, copperScope, unitMm }),
+    ...buildViaShapes({ db, copperScope, unitMm }),
     ...copper.chevrons,
   ]
   const overlays = renderOverlays({ scene, unitMm })
   lines.push(...overlays.lines)
   polygons.push(...overlays.polygons)
-  const radius = endpointRadius({
+  const radiusMm = getEndpointRadiusMm({
     unitMm,
     ports: [...ports.values()].filter(({ sourcePortId }) =>
       active.has(sourcePortId),
     ),
   })
   polygons.push(
-    ...renderContactMarks({ scene, radius, traceFaults: copper.faults }),
+    ...renderContactMarks({ scene, radiusMm, traceFaults: copper.faults }),
   )
   const boardPolygons = clipPlanPolygons({ polygons, crop })
   const boardLines = clipPlanLines({ lines, crop })
@@ -228,7 +236,7 @@ export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
     scene,
     frame,
     ports,
-    radius,
+    radiusMm,
     polygons: boardPolygons,
     lines: boardLines,
   })
@@ -245,11 +253,11 @@ export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
     let summary = text
     if (
       scopedText &&
-      scopeBox &&
-      (scopeBox.minX > board.minX ||
-        scopeBox.maxX < board.maxX ||
-        scopeBox.minY > board.minY ||
-        scopeBox.maxY < board.maxY)
+      searchBox &&
+      (searchBox.minX > board.minX ||
+        searchBox.maxX < board.maxX ||
+        searchBox.minY > board.minY ||
+        searchBox.maxY < board.maxY)
     )
       summary = scopedText
     rows.unshift({ text: summary, color: planColors.quiet })
@@ -269,7 +277,10 @@ export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
     title: scene.title,
     coordinateSystem: "cartesian",
     lines: [...boardLines, ...labels.leaders, ...header.lines],
-    polygons: [...boardPolygons, ...labels.backgrounds],
+    polygons: [
+      ...boardPolygons.flatMap(drawPlanPolygon),
+      ...labels.backgrounds,
+    ],
     texts: [...labels.texts, ...header.texts],
     rects: header.rects,
   }

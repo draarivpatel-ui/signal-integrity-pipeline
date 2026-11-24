@@ -23,6 +23,9 @@ const MILLISECONDS_PER_SECOND = 1000
 /** Round bit intervals with the same floating-point tolerance as the IBIS converter. */
 const INTERVAL_ROUNDING_ULPS = 8
 
+/** The bit-string boundary must fit in one string in the supported Node runtime. */
+const MAX_PATTERN_BITS = 2 ** 29 - 24
+
 /** Solver error tolerances for the routed transient (relative, current in amps, voltage in volts). */
 const SPICE_OPTIONS: NonNullable<SimulationExperiment["spice_options"]> = {
   reltol: 1e-5,
@@ -164,9 +167,9 @@ export function signalBits({
   }
   if (signal.driver_disabled) return "0"
   if (pattern === "clock") return "01"
-  if (!prbs) return pattern
+  if (!prbs || seed === undefined) return pattern
 
-  let state = seed!
+  let state = seed
   const captureSeconds =
     durationSeconds - signal.offset_ms / MILLISECONDS_PER_SECOND
   const bitSeconds =
@@ -181,6 +184,13 @@ export function signalBits({
   if (!Number.isFinite(count)) {
     throw new Error(
       `Signal "${signal.name}": ${pattern} pattern length must be finite`,
+    )
+  }
+  if (count > MAX_PATTERN_BITS) {
+    throw new Diagnostic(
+      "pipeline",
+      "simulation_timing",
+      `Signal "${signal.name}": ${pattern} pattern exceeds ${MAX_PATTERN_BITS} bits`,
     )
   }
   const { width, tap } = prbs
