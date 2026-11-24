@@ -8,6 +8,7 @@
  * Imports: kernel, solver, board, extraction, observation, buffers.
  */
 
+export { connectionGraph, connectionPath } from "./connection-paths"
 export {
   generalDeclarations,
   modelRunDefinition,

@@ -45,14 +45,14 @@ export function planTextSize(width: number): number {
   return width / 52
 }
 
-/** Bound the width in sans-serif ems, including wide glyphs and fallback fonts. */
-function textWidth(text: string): number {
+/** Estimate sans-serif glyph widths in ems for the header and board labels. */
+export function textWidth(text: string): number {
   let width = 0
   for (const char of text) {
-    if (" ilI.,:;'|".includes(char)) width += 0.4
-    else if ("mwMW@".includes(char)) width += 1.05
-    else if (char > "~") width += 1.25
-    else width += 0.8
+    if (" .,:;!'ijlI|·".includes(char)) width += 0.34
+    else if ("mwMW@".includes(char) || char > "~") width += 1
+    else if (char.toUpperCase() === char) width += 0.74
+    else width += 0.61
   }
   return width
 }
@@ -83,27 +83,6 @@ export function wrapPlanText({
   }
   if (line.trimEnd()) lines.push(line.trimEnd())
   return lines
-}
-
-/** Keep each legend entry together when the symbols need more than one row. */
-function legendRows({
-  entries,
-  width,
-}: {
-  entries: readonly string[]
-  width: number
-}): string[] {
-  const rows: string[] = []
-  let row = ""
-  for (const entry of entries) {
-    const next = [row, entry].filter(Boolean).join(" • ")
-    if (row && textWidth(next) > width) {
-      rows.push(row)
-      row = entry
-    } else row = next
-  }
-  if (row) rows.push(row)
-  return rows
 }
 
 /** Center each line above the board at its normal reading size. */
@@ -174,13 +153,13 @@ export function planHeader({
       }),
     )
   })
-  wrapped.push(
-    ...legendRows({ entries: legend, width: width / size }).map((text) => ({
-      text,
+  const legendText = legend.join(" · ")
+  if (legendText)
+    wrapped.push({
+      text: legendText,
       color: QUIET,
-      size,
-    })),
-  )
+      size: Math.min(size, width / textWidth(legendText)),
+    })
   for (const row of wrapped.reverse()) {
     texts.push({
       x,
