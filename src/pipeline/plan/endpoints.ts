@@ -5,7 +5,8 @@ import {
   type SourcePortId,
 } from "../../board"
 import type { CircuitNodes } from "../../simulation"
-import type { PlanPath, PlanTopology } from "./visual"
+import type { PlanPath } from "./visual"
+import type { PlanTopology } from "./visual-topology"
 
 /** Keep the binding node in geometry hover labels. */
 function formatEndpointLabel({
@@ -40,7 +41,7 @@ export function buildEndpoints({
   const resolved = new Map(
     topology?.paths.map((path) => [path.toSourcePortId, path.pathSegments]),
   )
-  for (const { signalName, fromSourcePortId, toSourcePortId } of paths) {
+  for (const { legLabel, fromSourcePortId, toSourcePortId } of paths) {
     const pathSegments = resolved.get(toSourcePortId)
     const firstTrace = pathSegments?.find((segment) => segment.kind === "trace")
     const lastTrace = pathSegments?.findLast(
@@ -58,7 +59,7 @@ export function buildEndpoints({
         kind: "driver",
         towardSourcePortId: firstTrace?.toSourcePortId || toSourcePortId,
         color: driverColor,
-        label: `${signalName} · Driver ${formatEndpointLabel({ sourcePortId: fromSourcePortId, labels, spiceNodeNamesBySourceContactId: topology?.spiceNodeNamesBySourceContactId })}`,
+        label: `${legLabel} · Driver ${formatEndpointLabel({ sourcePortId: fromSourcePortId, labels, spiceNodeNamesBySourceContactId: topology?.spiceNodeNamesBySourceContactId })}`,
       })
     if (!endpoints.has(toSourcePortId)) {
       const isIdeal =
@@ -75,7 +76,7 @@ export function buildEndpoints({
         sourcePortId: toSourcePortId,
         kind,
         color,
-        label: `${signalName} · Receiver ${formatEndpointLabel({ sourcePortId: toSourcePortId, labels, spiceNodeNamesBySourceContactId: topology?.spiceNodeNamesBySourceContactId })}`,
+        label: `${legLabel} · Receiver ${formatEndpointLabel({ sourcePortId: toSourcePortId, labels, spiceNodeNamesBySourceContactId: topology?.spiceNodeNamesBySourceContactId })}`,
       })
     }
   }

@@ -11,7 +11,7 @@ import { voltageSourceTerminals } from "./netlist"
 export type SignalRailIds = Set<SourcePortId | SourceNetId>
 
 /** Include flagged nets, explicit supplies, and all declared IBIS pin references. */
-export function signalRailIds({
+export function collectSignalRailIds({
   db,
   connectivity,
   referenceSourcePortIds,

@@ -21,7 +21,7 @@ import {
   pinCapabilities,
 } from "../buffers"
 import { safeId } from "../kernel"
-import { type SignalRailIds, signalRailIds } from "../simulation"
+import { collectSignalRailIds, type SignalRailIds } from "../simulation"
 import { signalTopology, validateSignalGraph } from "./topology"
 
 /** Driver pins, named nets and edge times from validated channel endpoints. */
@@ -198,7 +198,7 @@ export function inspectSignalPins({
   )
   const selectedPins = inspectPins({ circuit, sources, ports: endpointIds })
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const rails = signalRailIds({
+  const rails = collectSignalRailIds({
     db: cju([...circuit]),
     connectivity,
     referenceSourcePortIds: [...selectedPins.values()].flatMap((pin) =>
