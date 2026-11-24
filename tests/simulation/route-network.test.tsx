@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import React from "react"
 import { createNativeSolver } from "../../src/adapters"
-import { RouteSectionsSolver } from "../../src/board"
+import { cloneCircuitJson, RouteSectionsSolver } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
 import {
   type TransientChannelSimulationPlanInput,
@@ -27,11 +27,15 @@ function compileNetwork(
   const plan = planner.getOutput().value[0]
   const sections = new RouteSectionsSolver(plan.sections)
   sections.solve()
-  const { geometry, circuitJson, scope, maskThicknessMm } =
-    sections.getOutput().value
-  const fields = new RouteFieldsSolver({
+  const {
     geometry,
     circuitJson,
+    copperScope: scope,
+    maskThicknessMm,
+  } = sections.getOutput().value
+  const fields = new RouteFieldsSolver({
+    geometry,
+    circuitJson: cloneCircuitJson(circuitJson),
     scope,
     maskThicknessMm,
     materials: plan.bindings.options.materials,
@@ -160,7 +164,7 @@ async function assertConstantHighCapture({
   )
   const ibisSources = { "models/sn74lvc1g04.ibs": quietDriverIbis }
   const { value: compiled } = compileNetwork({
-    circuitJson,
+    circuitJson: cloneCircuitJson(circuitJson),
     ibisSources,
   }).getOutput()
   const driver = circuitJson.find(

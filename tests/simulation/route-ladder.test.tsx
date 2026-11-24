@@ -1,6 +1,10 @@
 import { beforeAll, describe, setDefaultTimeout, test } from "bun:test"
 import assert from "node:assert/strict"
-import { type RouteWire, type RouteXY, segmentRoutes } from "../../src/board"
+import {
+  type CopperPoint,
+  type RouteWire,
+  sectionRoutes,
+} from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
 import type { Snapshot } from "../../src/kernel"
 import {
@@ -20,7 +24,7 @@ function endpoint({
   point,
 }: {
   wire: Snapshot<RouteWire>
-  point: Snapshot<RouteXY>
+  point: Snapshot<CopperPoint>
 }): string {
   const coordinates = point
     .map((value) => value.toFixed(COORDINATE_PRECISION))
@@ -34,9 +38,9 @@ describe("large routed TSX ladder", () => {
   beforeAll(async () => {
     const { circuitJson, scope } = await routedCopper()
     const fields = new RouteFieldsSolver({
-      geometry: segmentRoutes({
+      geometry: sectionRoutes({
         circuit: circuitJson,
-        scope,
+        copperScope: scope,
       }),
       artifactPrefix: "test",
     })

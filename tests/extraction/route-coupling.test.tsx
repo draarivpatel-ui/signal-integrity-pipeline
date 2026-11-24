@@ -4,7 +4,7 @@ import React from "react"
 import {
   channelCopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
-  segmentRoutes,
+  sectionRoutes,
   sourceNetMembers,
 } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
@@ -49,7 +49,7 @@ test("screens pairs by electric and magnetic coupling", async () => {
       railSourceIds: new Set(),
       distanceMm: 32,
     })
-    const geometry = segmentRoutes({ circuit, scope })
+    const geometry = sectionRoutes({ circuit, copperScope: scope })
     const solver = new RouteFieldsSolver({
       geometry,
       materials,
