@@ -16,10 +16,10 @@ import { type CircuitJson, cloneCircuitJson } from "./schema"
 
 /** Completed route geometry and its outer soldermask thickness when declared. */
 export interface CopperGeometry {
-  circuitJson: Snapshot<CircuitJson>
-  copperScope: Snapshot<CopperScope>
-  geometry: Snapshot<ExtractedCopper>
-  maskThicknessMm: number | null
+  readonly circuitJson: Snapshot<CircuitJson>
+  readonly copperScope: Snapshot<CopperScope>
+  readonly geometry: Snapshot<ExtractedCopper>
+  readonly maskThicknessMm: number | null
 }
 
 /** Require every input endpoint to contact modeled copper. */
