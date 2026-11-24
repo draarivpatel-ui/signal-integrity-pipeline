@@ -1,11 +1,10 @@
+import { LIGHT_SPEED } from "./cross-section"
+
 /** Vacuum impedance in ohms, from the reference formulas. */
 const VACUUM_IMPEDANCE = 376.730313668
 
 /** Vacuum permittivity in farads per meter, CODATA 2018. */
 const VACUUM_PERMITTIVITY = 8.8541878128e-12
-
-/** Speed of light in vacuum in meters per second, exact in SI. */
-const LIGHT_SPEED = 299792458
 
 /** Number of image terms in the independent thin-sheet calculation. */
 const IMAGE_TERMS = 64
@@ -46,7 +45,6 @@ function fillingFactor({ u, er }: { u: number; er: number }): number {
 
 /** Independent Hammerstad–Jensen quasi-static oracle, Qucs technical manual eqs. 11.156–11.176.
  * https://qucs.sourceforge.net/tech/node77.html (Hammerstad & Jensen, MTT-S 1980).
- * These published empirical coefficients are specific to the analytic reference.
  */
 export function coupledMicrostrip({
   width: w,
