@@ -13,8 +13,8 @@ import type { ModelRunDefinition } from "../buffers"
 import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import {
+  collectRequiredContacts,
   passiveModelContacts,
-  requiredContacts,
   validateRoutedContacts,
 } from "./routed-contacts"
 import { type CircuitNodesInput, resolveRoutedNodes } from "./routed-nodes"
@@ -154,13 +154,16 @@ export function generalDeclarations({
   }))
   if (!models.length)
     fail("ibis_model", "At least one serialized native IBIS model required")
-  const { nodes, cuts } = resolveRoutedNodes({
+  const { nodes, traceContacts: resolvedTraceContacts } = resolveRoutedNodes({
     circuit,
     receiverPaths,
     traceContacts,
     modeling,
   })
-  const endpoints = requiredContacts({ receiverPaths, cuts })
+  const endpoints = collectRequiredContacts({
+    receiverPaths,
+    traceContacts: resolvedTraceContacts,
+  })
   const passiveContacts = passiveModelContacts({ db, modeling })
   const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
   const sourceNets = new Set(

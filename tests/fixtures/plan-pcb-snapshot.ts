@@ -16,19 +16,19 @@ const ROUTE_COLORS = ["#79edb8", "#ffcf7a", "#8bc9ff", "#efa7e7"]
 const LEGEND_FONT_MM = 0.48
 const LEGEND_MARGIN_MM = 0.7
 const LEGEND_LINE_MM = 0.68
-const CUT_WIDTH_MM = 0.22
+const TRACE_WIDTH_MM = 0.22
 
 /** A physical trace and its separated SPICE nodes. */
 interface ResolvedPlanTrace {
   pcbTrace: PcbTrace
   fromSourcePortId: string
   toSourcePortId: string
-  fromNode: string
-  toNode: string
+  fromSpiceNode: string
+  toSpiceNode: string
 }
 
-/** Check that each extracted trace has its own electrical cut. */
-export function resolvePlanTraceCuts({
+/** Check that each extracted trace separates two SPICE nodes. */
+export function resolvePlanTraces({
   db,
   plan,
   expectedTraceCount,
@@ -48,19 +48,25 @@ export function resolvePlanTraceCuts({
   return channelPcbTraceIds.map((pcbTraceId) => {
     const pcbTrace = db.pcb_trace.get(pcbTraceId)
     assert.ok(pcbTrace?.source_trace_id)
-    const cut = bindings.traceContacts.find(
+    const contacts = bindings.traceContacts.find(
       ({ sourceTraceId }) => sourceTraceId === pcbTrace.source_trace_id,
     )
-    assert.ok(cut)
-    const { fromSourcePortId, toSourcePortId } = cut
-    const fromNode = node(fromSourcePortId)
-    const toNode = node(toSourcePortId)
-    assert.notEqual(fromNode, toNode, cut.sourceTraceId)
-    return { pcbTrace, fromSourcePortId, toSourcePortId, fromNode, toNode }
+    assert.ok(contacts)
+    const { fromSourcePortId, toSourcePortId } = contacts
+    const fromSpiceNode = node(fromSourcePortId)
+    const toSpiceNode = node(toSourcePortId)
+    assert.notEqual(fromSpiceNode, toSpiceNode, contacts.sourceTraceId)
+    return {
+      pcbTrace,
+      fromSourcePortId,
+      toSourcePortId,
+      fromSpiceNode,
+      toSpiceNode,
+    }
   })
 }
 
-/** Verify every in-scope routed trace was cut and snapshot the resolved endpoint nodes. */
+/** Verify every in-scope routed trace separates two SPICE nodes and snapshot them. */
 export function expectPlanPcbSnapshot({
   circuitJson,
   plan,
@@ -77,12 +83,12 @@ export function expectPlanPcbSnapshot({
   const db = cju([...circuitJson])
   const [board] = db.pcb_board.list()
   assert.ok(board?.height)
-  const traces = resolvePlanTraceCuts({ db, plan, expectedTraceCount })
+  const traces = resolvePlanTraces({ db, plan, expectedTraceCount })
   const paths: PcbFabricationNotePath[] = []
   const captions: PcbFabricationNoteText[] = []
   for (const [
     index,
-    { pcbTrace, fromSourcePortId, toSourcePortId, fromNode, toNode },
+    { pcbTrace, fromSourcePortId, toSourcePortId, fromSpiceNode, toSpiceNode },
   ] of traces.entries()) {
     const pcbTraceId = pcbTrace.pcb_trace_id
     const labels = [fromSourcePortId, toSourcePortId].map((sourcePortId) => {
@@ -102,7 +108,7 @@ export function expectPlanPcbSnapshot({
         if (point.route_type === "through_pad") return []
         return [{ x: point.x, y: point.y }]
       }),
-      stroke_width: CUT_WIDTH_MM,
+      stroke_width: TRACE_WIDTH_MM,
     })
     captions.push({
       type: "pcb_fabrication_note_text",
@@ -110,7 +116,7 @@ export function expectPlanPcbSnapshot({
       layer: "top",
       font: "tscircuit2024",
       font_size: LEGEND_FONT_MM,
-      text: `${labels[0]} (${fromNode}) to ${labels[1]} (${toNode})`,
+      text: `${labels[0]} (${fromSpiceNode}) to ${labels[1]} (${toSpiceNode})`,
       color,
       anchor_alignment: "center",
       anchor_position: {

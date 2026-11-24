@@ -7,7 +7,7 @@ import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
-test("highlights an ideal connection that bypasses routed cuts", async () => {
+test("highlights an ideal connection that bypasses routed traces", async () => {
   const circuitJson = await renderSignals({
     tree: <ChannelFixture route="series" short="channel" />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
@@ -63,6 +63,6 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
     module: "pipeline/transient-channel-simulation-plan",
     name: "short-bypass-visual",
     caption:
-      "Two traces connect TX to RX through resistor RS, alongside a direct connection between them. This test checks that the plan stops when a shortcut skips RS.",
+      "Two traces connect TX to RX through resistor RS, alongside an ideal connection between them. This test checks that the plan stops when a bypass skips RS.",
   })
 })

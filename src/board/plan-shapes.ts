@@ -14,13 +14,13 @@ import type { PcbPlatedHole, PcbSmtPad } from "circuit-json"
 import type { Point, Polygon, Viewbox } from "graphics-debug"
 import type { SourcePortId } from "./ids"
 import { boxPoints, type PlanPort, type PlanPorts } from "./plan-view"
-import { planPourFills } from "./plan-visual-types"
+import { type PlanPolygon, planPourFills } from "./plan-visual-types"
 
 /** Board pad records of either technology. */
 type PlanPad = PcbSmtPad | PcbPlatedHole
 
 /** Reuse the native PCB outline and the owning rotation for footprint-local polygon pads. */
-export function padOutline({
+export function getPadOutline({
   db,
   pad,
 }: {
@@ -33,7 +33,7 @@ export function padOutline({
 }
 
 /** Sample arcs from geometry so circular and rounded shapes keep their outlines. */
-function facePoints(face: Face): Point[] {
+function sampleFacePoints(face: Face): Point[] {
   return face.edges.flatMap(({ shape }) => {
     if (shape instanceof Segment) return [shape.start]
     const steps = Math.max(4, Math.ceil(shape.sweep * 6))
@@ -47,11 +47,11 @@ function facePoints(face: Face): Point[] {
 type FacePolygons = Point[][]
 
 /** Use the outer copper loops, keeping separate islands in separate polygons. */
-function facePolygons(polygon: CopperPolygon): FacePolygons {
+function getFacePolygons(polygon: CopperPolygon): FacePolygons {
   return polygon.splitToIslands().flatMap((island) => {
     const [face] = island.faces as Iterable<Face>
     if (!face) return []
-    return [facePoints(face)]
+    return [sampleFacePoints(face)]
   })
 }
 
@@ -68,7 +68,7 @@ export function buildBoardShapes({
   active: ReadonlySet<SourcePortId>
   ports: ReadonlyMap<SourcePortId, PlanPort>
   unitMm: number
-}): Polygon[] {
+}): PlanPolygon[] {
   const outline = db.pcb_board.getWhere({})?.outline
   let boardPoints = boxPoints(board)
   if (outline?.length) boardPoints = [...outline]
@@ -97,8 +97,8 @@ function buildPourShapes({
 }: {
   db: CircuitJsonUtilObjects
   unitMm: number
-}): Polygon[] {
-  const shapes: Polygon[] = []
+}): PlanPolygon[] {
+  const shapes: PlanPolygon[] = []
   for (const pour of db.pcb_copper_pour.list()) {
     const net = db.source_net.get(pour.source_net_id || "")
     let label = `Copper (${pour.layer})`
@@ -106,15 +106,19 @@ function buildPourShapes({
     let fill: string = planPourFills.gray
     if (net?.is_power === true && net.is_ground !== true)
       fill = planPourFills.pink
-    for (const points of facePolygons(getPourPolygon(pour)))
+    for (const island of getPourPolygon(pour).splitToIslands()) {
+      const [outer, ...holes] = island.faces as Iterable<Face>
+      if (!outer) continue
       shapes.push({
-        points,
+        points: sampleFacePoints(outer),
+        holes: holes.map(sampleFacePoints),
         fill,
         stroke: "#cbd5e1",
         strokeWidth: unitMm * 0.26,
         layer: "pours",
         label,
       })
+    }
   }
   return shapes
 }
@@ -146,7 +150,7 @@ function buildComponentShapes({
     let layer = "bodies"
     if (name) layer = "parts"
     shapes.push({
-      points: facePolygons(shape).flat(),
+      points: getFacePolygons(shape).flat(),
       fill: "rgba(241,245,249,0.18)",
       stroke: "#94a3b8",
       strokeWidth: unitMm * 0.32,
@@ -184,12 +188,12 @@ function buildPadShapes({
     }
     let label: string = pad.type
     if (port) label = `${port.label} (${port.sourcePortId})`
-    const shape = padOutline({ db, pad })
+    const shape = getPadOutline({ db, pad })
     for (const island of shape.splitToIslands()) {
       const [outer, ...holes] = island.faces as Iterable<Face>
       if (!outer) continue
       shapes.push({
-        points: facePoints(outer),
+        points: sampleFacePoints(outer),
         fill,
         stroke,
         strokeWidth: unitMm * 0.22,
@@ -198,7 +202,7 @@ function buildPadShapes({
       })
       for (const hole of holes)
         shapes.push({
-          points: facePoints(hole),
+          points: sampleFacePoints(hole),
           fill: "#fff",
           stroke: "none",
           layer: "pads",
@@ -206,4 +210,18 @@ function buildPadShapes({
     }
   }
   return shapes
+}
+
+/** Flatten hole rings into a nonzero SVG fill. Retraced bridges have no fill area. */
+export function drawPlanPolygon(polygon: PlanPolygon): Polygon[] {
+  const { holes, ...outline } = polygon
+  if (!holes?.length) return [outline]
+  const anchor = outline.points[0]
+  const points = [...outline.points, anchor]
+  for (const hole of holes) points.push(...hole, hole[0], anchor)
+  return [
+    { ...outline, points, stroke: "none" },
+    { ...outline, fill: "none" },
+    ...holes.map((ring) => ({ ...outline, points: ring, fill: "none" })),
+  ]
 }

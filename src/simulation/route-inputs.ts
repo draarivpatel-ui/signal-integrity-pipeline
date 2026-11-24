@@ -24,7 +24,7 @@ export interface TraceContacts {
   readonly toSourcePortId: SourcePortId
 }
 
-/** Board, receiver paths and physical trace cuts for routed IBIS binding. */
+/** Board, receiver paths and trace contacts for routed IBIS binding. */
 export interface RouteBindingsInput {
   readonly circuitJson: Snapshot<CircuitJson>
   readonly receiverPaths: readonly ReceiverTracePath[]
