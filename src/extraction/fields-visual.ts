@@ -22,10 +22,10 @@ import {
   withRouteDrawing,
 } from "../board"
 import type { Snapshot } from "../kernel"
-import type { CrossSection } from "./cross-section-types"
 import type {
   ExtractedRouteSlice,
   RouteCoefficients,
+  RouteCrossSection,
   RouteMaterials,
 } from "./route-lines"
 
@@ -124,7 +124,7 @@ export interface FieldsState {
   solved: ExtractedRouteSlice[]
   /** The slice on screen and its cross-section; when solving has finished, the most informative selected slice. */
   slice?: Snapshot<WireSection>
-  section?: CrossSection
+  section?: RouteCrossSection
   line?: RouteCoefficients
   error?: string
 }
@@ -381,7 +381,7 @@ function stackPane({
   materials,
 }: {
   pane: Viewbox
-  section: CrossSection
+  section: RouteCrossSection
   conductorDisplay: {
     color: string
     label?: string
