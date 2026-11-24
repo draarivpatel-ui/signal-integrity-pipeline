@@ -1,8 +1,8 @@
 import type {
   CopperPoint,
-  RouteSection,
-  RouteWire,
-  SectionGeometry,
+  ExtractedCopper,
+  TraceWire,
+  WireSection,
 } from "../board"
 import { hypotenuse, type Snapshot } from "../kernel"
 import { sectionInverse } from "./cross-section-matrix"
@@ -24,7 +24,7 @@ export type SolvedRouteSection = {
 
 /** A route slice with its canonical field coefficients. */
 export interface ExtractedRouteSlice
-  extends Snapshot<RouteSection>,
+  extends Snapshot<WireSection>,
     SolvedRouteSection {}
 /** Solved slices, unique field sections, and extraction evidence. */
 export type ExtractedRoutes = Snapshot<{
@@ -46,8 +46,8 @@ export type RouteCoefficients = Snapshot<CrossSectionResult>
 
 /** Stackup, slice, and materials used to form one field section. */
 interface RouteCrossSectionInput {
-  geometry: Snapshot<SectionGeometry>
-  slice: Snapshot<RouteSection>
+  geometry: Snapshot<ExtractedCopper>
+  slice: Snapshot<WireSection>
   materials: RouteMaterials
 }
 
@@ -144,7 +144,7 @@ export function routeCrossSection(input: RouteCrossSectionInput): CrossSection {
 }
 
 /** The two board coordinates that bound a straight route wire. */
-type RouteEndpoints = Pick<RouteWire, "startPoint" | "endPoint">
+type RouteEndpoints = Pick<TraceWire, "startPoint" | "endPoint">
 
 /** Closest point on each centre-line and the distance between them. */
 interface ClosestRoutePoints {

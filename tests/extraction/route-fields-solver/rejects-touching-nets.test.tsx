@@ -1,15 +1,15 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { sectionRoutes } from "../../../src/board"
+import { extractCopperGeometry } from "../../../src/board"
 import { RouteFieldsSolver } from "../../../src/extraction"
 import {
-  getSectionInput,
-  renderSectionBoard,
+  getCopperExtractionInput,
+  renderCopperGeometryBoard,
   SectionTrace,
-} from "../../fixtures/route-section-board"
+} from "../../fixtures/copper-geometry-board"
 
 test("rejects touching nets", async () => {
-  const circuit = await renderSectionBoard({
+  const circuit = await renderCopperGeometryBoard({
     children: (
       <>
         <SectionTrace name="First" width={0.3} />
@@ -17,9 +17,9 @@ test("rejects touching nets", async () => {
       </>
     ),
   })
-  const geometry = sectionRoutes({
+  const geometry = extractCopperGeometry({
     circuit,
-    copperScope: getSectionInput({ circuit }).copperScope,
+    copperScope: getCopperExtractionInput({ circuit }).copperScope,
   })
   const solver = new RouteFieldsSolver({
     geometry,

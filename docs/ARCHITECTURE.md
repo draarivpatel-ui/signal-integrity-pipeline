@@ -17,7 +17,7 @@ RouteFieldsSolver screens nearby conductor pairs and extracts coupled coefficien
 
 ```mermaid
 flowchart LR
-  input["RouteSectionsSolver"] --> result["RouteFieldsSolver"]
+  input["CopperGeometryExtractionSolver"] --> result["RouteFieldsSolver"]
 ```
 
 ```mermaid

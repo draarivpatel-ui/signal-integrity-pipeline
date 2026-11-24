@@ -29,7 +29,7 @@ aggressor, measured at its declared bit rate after its offset.
 
 ```mermaid
 flowchart LR
-  input["RouteSectionsSolver"] --> result["RouteFieldsSolver"]
+  input["CopperGeometryExtractionSolver"] --> result["RouteFieldsSolver"]
 ```
 
 ```mermaid
