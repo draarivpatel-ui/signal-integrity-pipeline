@@ -36,7 +36,7 @@ domain:
   visual: a board drawing or data used to build it
   above: toward increasing solver z in a physical stackup
   actual: read directly from the physical source-board records
-  admit: the check that reads declared input (board records and IBIS bytes) before anything else uses it
+  admit: accept an IBIS asset after validating its content
   aggressor: an output-capable pin coupled to a selected channel outside its endpoints
   allow: an explicit caller-selected modelling permission
   antipad: clearance opening in a plane around a signal via
@@ -80,7 +80,7 @@ domain:
   coupling: mutual electrical or magnetic interaction between conductors
   crossover: the frequency band where conductor loss turns from its DC value into skin loss
   cursor: the current position while traversing an ordered route
-  cut: an intentional electrical disconnection at trace contacts, or a geometric split point between route sections
+  cut: an intentional electrical disconnection at trace contacts
   deck: an input file for a solver (the ngspice netlist)
   declare: plan experiments and probes from the board's simulation records before any solver runs
   delay: time needed for a signal edge to propagate through a line
@@ -115,9 +115,12 @@ domain:
   join: connect physically continuous copper pieces into one path
   kernel: Green function relating boundary charge to potential or field
   ladder: distributed line approximated by connected lumped electrical cells
-  lane: a signal path in board modeling settings
+  lane: an existing converter term for an extracted transmission line
   overlay: a drawing mark that depicts an electrical connection or a fault
-  segment: one ideal connection, extracted trace, or series component along a receiver path
+  segment: one trace, series component, or ideal connection along a receiver path
+  contact: a source port or source net used in electrical connectivity
+  group: contacts joined by ideal connections before SPICE node numbering
+  receiver: the declared destination of a channel path
   vertex: a point in a connection graph, represented by a source contact, ideal group or SPICE node
   lateral: distance transverse to a routed line in the board plane
   layer: one copper or insulating sheet in the stackup
@@ -157,7 +160,7 @@ domain:
   rail: a power or ground supply connection
   ramp: the loaded voltage change and duration between 20% and 80% of an IBIS edge
   recede: move a conducting wall away from the field region
-  receiver: the chip input that takes in a signal
+
   recession: displacement of conducting walls away from the field for Wheeler loss
   reciprocity: the check that a matrix is symmetric (the effect of A on B equals B on A)
   refinement: a finer spatial subdivision of a solve, used to check that the answer stops changing

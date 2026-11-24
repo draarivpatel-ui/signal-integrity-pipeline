@@ -13,23 +13,23 @@ import { findConnectionBridges } from "./connection-paths"
 import { fail } from "./diagnostics"
 import { differentialContacts } from "./differential-contacts"
 import {
+  type ConnectedGroups,
   failShortedTrace,
   getIdealGroupId,
+  groupConnectedVertices,
   type IdealConnectivity,
-  type NodeGroups,
-  nodeGroups,
   type SourceContactId,
 } from "./ideal-connectivity"
 import {
+  buildReceiverGraphs,
+  findReceiverPath,
   type ReceiverGraphs,
-  receiverGraphs,
-  receiverPath,
 } from "./receiver-paths"
 import type { TraceContacts } from "./route-inputs"
 import { connectTraces, validateChannelBridge } from "./trace-connections"
 import type { CircuitNodes, SimulationModeling, SpiceNodeName } from "./types"
 
-/** Board, physical cuts, and source selectors for SPICE node resolution. */
+/** Board, trace contacts, and source selectors for SPICE node resolution. */
 export interface CircuitNodesInput {
   circuit: CircuitJson
   receiverPaths: readonly ReceiverTracePath[]
@@ -37,18 +37,18 @@ export interface CircuitNodesInput {
   modeling: Snapshot<SimulationModeling>
 }
 
-/** Give mapping-only experiments their physical trace cuts. */
-function physicalCuts({
+/** Extract physical contacts from the traces in receiver paths. */
+function extractTraceContacts({
   db,
   receiverPaths,
 }: {
   db: CircuitJsonUtilObjects
   receiverPaths: readonly ReceiverTracePath[]
 }): TraceContacts[] {
-  const cuts = new Map<SourceTraceId, TraceContacts>()
+  const contactsBySourceTraceId = new Map<SourceTraceId, TraceContacts>()
   for (const { sourceTraceId, sourceTraceIds } of receiverPaths) {
     for (const pathSourceTraceId of sourceTraceIds ?? [sourceTraceId]) {
-      if (cuts.has(pathSourceTraceId)) continue
+      if (contactsBySourceTraceId.has(pathSourceTraceId)) continue
       const ports =
         db.source_trace.get(pathSourceTraceId)?.connected_source_port_ids
       if (ports?.length !== 2)
@@ -57,21 +57,21 @@ function physicalCuts({
           `${pathSourceTraceId}: expected two physical trace endpoints`,
         )
       const [fromSourcePortId, toSourcePortId] = ports
-      cuts.set(pathSourceTraceId, {
+      contactsBySourceTraceId.set(pathSourceTraceId, {
         sourceTraceId: pathSourceTraceId,
         fromSourcePortId,
         toSourcePortId,
       })
     }
   }
-  return [...cuts.values()]
+  return [...contactsBySourceTraceId.values()]
 }
 
 /** Source-port IDs along a differential leg. */
 type DifferentialLegSourcePortIds = SourcePortId[]
 
 /** Include the physical contacts of each graph path on one differential leg. */
-function differentialLegPorts({
+function getDifferentialLegPorts({
   sourcePortIds,
   graphs,
 }: {
@@ -84,7 +84,7 @@ function differentialLegPorts({
       ...sourcePortIds,
       ...receiverSourcePortIds.flatMap((toSourcePortId) =>
         (
-          receiverPath({
+          findReceiverPath({
             graphs,
             fromSourcePortId,
             toSourcePortId,
@@ -99,11 +99,11 @@ function differentialLegPorts({
   ]
 }
 
-/** SPICE nodes grouped by connectivity through physical cuts. */
-type SpiceNodeGroups = NodeGroups<SpiceNodeName>
+/** SPICE nodes grouped by connectivity through traces. */
+type SpiceNodeGroups = ConnectedGroups<SpiceNodeName>
 
 /** Attach physical evidence without changing the diagnostic's error message. */
-function recordSubjects(recordIds: readonly string[]): DiagnosticSubject[] {
+function getRecordSubjects(recordIds: readonly string[]): DiagnosticSubject[] {
   return [...new Set(recordIds)].map((id) => ({ kind: "record", id }))
 }
 
@@ -125,11 +125,11 @@ function validateDifferentialLegs({
     positiveSourcePortIds,
     negativeSourcePortIds,
   } of contacts) {
-    const positivePorts = differentialLegPorts({
+    const positivePorts = getDifferentialLegPorts({
       sourcePortIds: positiveSourcePortIds,
       graphs,
     })
-    const negativePorts = differentialLegPorts({
+    const negativePorts = getDifferentialLegPorts({
       sourcePortIds: negativeSourcePortIds,
       graphs,
     })
@@ -140,7 +140,7 @@ function validateDifferentialLegs({
       fail(
         "channel_short",
         `${name}: contact ${groundedSourcePortId} is shorted to ground`,
-        { subjects: recordSubjects([groundedSourcePortId]) },
+        { subjects: getRecordSubjects([groundedSourcePortId]) },
       )
     const positiveGroups = new Map<SpiceNodeName, SourcePortId>()
     const positiveNodes = new Map<SpiceNodeName, SourcePortId>()
@@ -160,7 +160,7 @@ function validateDifferentialLegs({
           "channel_short",
           `${name}: negative contact ${negativeSourcePortId} is shorted to ${positiveSourcePortId}`,
           {
-            subjects: recordSubjects([
+            subjects: getRecordSubjects([
               negativeSourcePortId,
               positiveSourcePortId,
             ]),
@@ -174,9 +174,9 @@ function validateDifferentialLegs({
       if (positiveSourcePortId !== undefined)
         fail(
           "channel_short",
-          `${name}: negative contact ${negativeSourcePortId} is shorted to ${positiveSourcePortId} through routed cuts`,
+          `${name}: negative contact ${negativeSourcePortId} is shorted to ${positiveSourcePortId} through routed traces`,
           {
-            subjects: recordSubjects([
+            subjects: getRecordSubjects([
               negativeSourcePortId,
               positiveSourcePortId,
             ]),
@@ -231,7 +231,7 @@ function validateReceiverPaths({
         "channel_short",
         `${channelName}: endpoints ${fromSourcePortId} and ${toSourcePortId} include a ground contact on routed path ${path}`,
         {
-          subjects: recordSubjects([
+          subjects: getRecordSubjects([
             fromSourcePortId,
             toSourcePortId,
             ...traces,
@@ -243,7 +243,7 @@ function validateReceiverPaths({
         "channel_short",
         `${channelName}: endpoints ${fromSourcePortId} and ${toSourcePortId} share an ideal node across routed path ${path}`,
         {
-          subjects: recordSubjects([
+          subjects: getRecordSubjects([
             fromSourcePortId,
             toSourcePortId,
             ...traces,
@@ -253,7 +253,7 @@ function validateReceiverPaths({
   }
 }
 
-/** Check declared signal contacts even when a channel has no routed cuts. */
+/** Check declared signal contacts even when a channel has no routed traces. */
 function validateSingleEndedGround({
   channels,
   node,
@@ -271,15 +271,15 @@ function validateSingleEndedGround({
       fail(
         "channel_short",
         `${name}: contact ${groundedSourcePortId} is shorted to ground`,
-        { subjects: recordSubjects([groundedSourcePortId]) },
+        { subjects: getRecordSubjects([groundedSourcePortId]) },
       )
   }
 }
 
-/** The physical cuts shared by node and model contact validation. */
+/** Trace contacts and SPICE nodes shared by validation. */
 interface ResolvedRoutedNodes {
   nodes: CircuitNodes
-  cuts: readonly TraceContacts[]
+  traceContacts: readonly TraceContacts[]
 }
 
 /** Number one SPICE node per ideal group in source port order. */
@@ -293,24 +293,24 @@ export function numberCircuitNodes({
   groundSourcePortId: SourcePortId
 }): CircuitNodes {
   const { groups, splitNets } = graphs
-  const spiceNodeNameBySourceNodeGroupId = new Map([
+  const spiceNodeNamesByIdealGroupId = new Map([
     [getIdealGroupId({ groups, sourcePortId: groundSourcePortId }), "0"],
   ])
-  const sourceNodeIds = new Set([
+  const sourceContactIds = new Set([
     ...db.source_port.list().map((port) => port.source_port_id),
     ...db.source_net.list().map((net) => net.source_net_id),
     ...groups.keys(),
   ])
   const spiceNodeNamesBySourceContactId = Object.freeze(
     Object.fromEntries(
-      [...sourceNodeIds].flatMap((sourceNodeId) => {
-        if (splitNets.has(sourceNodeId)) return []
-        const sourceNodeGroupId = groups.get(sourceNodeId) ?? sourceNodeId
+      [...sourceContactIds].flatMap((sourceContactId) => {
+        if (splitNets.has(sourceContactId)) return []
+        const idealGroupId = groups.get(sourceContactId) ?? sourceContactId
         const spiceNodeName =
-          spiceNodeNameBySourceNodeGroupId.get(sourceNodeGroupId) ??
-          `n${spiceNodeNameBySourceNodeGroupId.size}`
-        spiceNodeNameBySourceNodeGroupId.set(sourceNodeGroupId, spiceNodeName)
-        return [[sourceNodeId, spiceNodeName]]
+          spiceNodeNamesByIdealGroupId.get(idealGroupId) ??
+          `n${spiceNodeNamesByIdealGroupId.size}`
+        spiceNodeNamesByIdealGroupId.set(idealGroupId, spiceNodeName)
+        return [[sourceContactId, spiceNodeName]]
       }),
     ),
   )
@@ -324,90 +324,91 @@ export function numberCircuitNodes({
   }
 }
 
-/** Reject grounded cuts and preserve the diagnostic for directly collapsed endpoints. */
-function validateCutEndpoints({
-  cuts,
+/** Reject grounded traces and traces with shorted contacts. */
+function validateTraceContacts({
+  traceContacts,
   node,
-  isMappingOnly,
+  hasImplicitTraceContacts,
 }: {
-  cuts: readonly TraceContacts[]
+  traceContacts: readonly TraceContacts[]
   node: CircuitNodes["node"]
-  isMappingOnly: boolean
+  hasImplicitTraceContacts: boolean
 }): void {
-  for (const cut of cuts) {
-    const fromSpiceNode = node(cut.fromSourcePortId)
-    const toSpiceNode = node(cut.toSourcePortId)
+  for (const contacts of traceContacts) {
+    const fromSpiceNode = node(contacts.fromSourcePortId)
+    const toSpiceNode = node(contacts.toSourcePortId)
     if (
       fromSpiceNode === toSpiceNode ||
       fromSpiceNode === "0" ||
       toSpiceNode === "0"
     ) {
-      if (isMappingOnly)
+      if (hasImplicitTraceContacts)
         fail(
           "channel_short",
           "Extracted endpoints are shorted by another ideal source trace or reference",
         )
       failShortedTrace({
-        cut,
+        contacts,
         reason: "share an ideal node or are bound to ground",
       })
     }
   }
 }
 
-/** Resolve the physical cuts once for both node grouping and terminal validation. */
+/** Resolve trace contacts once for node numbering and terminal validation. */
 export function resolveRoutedNodes({
   circuit,
   receiverPaths,
-  traceContacts,
+  traceContacts: explicitTraceContacts,
   modeling,
 }: CircuitNodesInput): ResolvedRoutedNodes {
   const db = cju([...circuit])
-  const cuts = traceContacts ?? physicalCuts({ db, receiverPaths })
+  const traceContacts =
+    explicitTraceContacts || extractTraceContacts({ db, receiverPaths })
   const channels = db.simulation_pcb_driver_receiver_channel.list()
   const groundSourcePortId = selectPort({
     circuit,
     selector: modeling.channelReference,
   }).source_port_id
-  const graphs = receiverGraphs({
+  const graphs = buildReceiverGraphs({
     db,
     circuit,
-    cuts,
+    traceContacts,
     channels,
     groundSourcePortId,
     modeling,
   })
   const nodes = numberCircuitNodes({ db, graphs, groundSourcePortId })
   validateRoutedNodes({
-    cuts,
+    traceContacts,
     receiverPaths,
     graphs,
     channels,
     node: nodes.node,
-    isMappingOnly: traceContacts === undefined,
+    hasImplicitTraceContacts: explicitTraceContacts === undefined,
   })
-  return { nodes, cuts }
+  return { nodes, traceContacts }
 }
 
-/** Validate physical cuts, receiver paths and passive boundaries against the partition. */
+/** Validate trace contacts, receiver paths and passive boundaries. */
 export function validateRoutedNodes({
-  cuts,
+  traceContacts,
   receiverPaths,
   graphs,
   channels,
   node,
-  isMappingOnly,
+  hasImplicitTraceContacts,
 }: {
-  cuts: readonly TraceContacts[]
+  traceContacts: readonly TraceContacts[]
   receiverPaths: readonly ReceiverTracePath[]
   graphs: ReceiverGraphs
   channels: readonly SimulationPcbDriverReceiverChannel[]
   node: CircuitNodes["node"]
-  isMappingOnly: boolean
+  hasImplicitTraceContacts: boolean
 }): void {
-  validateCutEndpoints({ cuts, node, isMappingOnly })
-  const connections = connectTraces({ cuts, node })
-  const legGroups = nodeGroups(
+  validateTraceContacts({ traceContacts, node, hasImplicitTraceContacts })
+  const connections = connectTraces({ traceContacts, getVertexId: node })
+  const legGroups = groupConnectedVertices(
     connections.map(({ fromVertexId, toVertexId }) => [
       fromVertexId,
       toVertexId,

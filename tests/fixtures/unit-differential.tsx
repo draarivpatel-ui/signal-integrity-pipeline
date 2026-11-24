@@ -170,7 +170,7 @@ export default function ({
   )
 }
 
-/** Give P a longer physical path than the source shortcut through both terminations. */
+/** Give P a longer physical path than the ideal bypass through both terminations. */
 function DualTerminatedPositiveLeg(): JSX.Element {
   const footprints = [-3, -1, 1, 3]
   const names = footprints.map((_, index) => `RS${index + 1}`)

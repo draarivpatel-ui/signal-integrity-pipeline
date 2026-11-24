@@ -20,7 +20,7 @@ import { type PlanPolygon, planPourFills } from "./plan-visual-types"
 type PlanPad = PcbSmtPad | PcbPlatedHole
 
 /** Reuse the native PCB outline and the owning rotation for footprint-local polygon pads. */
-export function padOutline({
+export function getPadOutline({
   db,
   pad,
 }: {
@@ -33,7 +33,7 @@ export function padOutline({
 }
 
 /** Sample arcs from geometry so circular and rounded shapes keep their outlines. */
-function facePoints(face: Face): Point[] {
+function sampleFacePoints(face: Face): Point[] {
   return face.edges.flatMap(({ shape }) => {
     if (shape instanceof Segment) return [shape.start]
     const steps = Math.max(4, Math.ceil(shape.sweep * 6))
@@ -47,11 +47,11 @@ function facePoints(face: Face): Point[] {
 type FacePolygons = Point[][]
 
 /** Use the outer copper loops, keeping separate islands in separate polygons. */
-function facePolygons(polygon: CopperPolygon): FacePolygons {
+function getFacePolygons(polygon: CopperPolygon): FacePolygons {
   return polygon.splitToIslands().flatMap((island) => {
     const [face] = island.faces as Iterable<Face>
     if (!face) return []
-    return [facePoints(face)]
+    return [sampleFacePoints(face)]
   })
 }
 
@@ -110,8 +110,8 @@ function buildPourShapes({
       const [outer, ...holes] = island.faces as Iterable<Face>
       if (!outer) continue
       shapes.push({
-        points: facePoints(outer),
-        holes: holes.map(facePoints),
+        points: sampleFacePoints(outer),
+        holes: holes.map(sampleFacePoints),
         fill,
         stroke: "#cbd5e1",
         strokeWidth: unitMm * 0.26,
@@ -150,7 +150,7 @@ function buildComponentShapes({
     let layer = "bodies"
     if (name) layer = "parts"
     shapes.push({
-      points: facePolygons(shape).flat(),
+      points: getFacePolygons(shape).flat(),
       fill: "rgba(241,245,249,0.18)",
       stroke: "#94a3b8",
       strokeWidth: unitMm * 0.32,
@@ -188,12 +188,12 @@ function buildPadShapes({
     }
     let label: string = pad.type
     if (port) label = `${port.label} (${port.sourcePortId})`
-    const shape = padOutline({ db, pad })
+    const shape = getPadOutline({ db, pad })
     for (const island of shape.splitToIslands()) {
       const [outer, ...holes] = island.faces as Iterable<Face>
       if (!outer) continue
       shapes.push({
-        points: facePoints(outer),
+        points: sampleFacePoints(outer),
         fill,
         stroke,
         strokeWidth: unitMm * 0.22,
@@ -202,7 +202,7 @@ function buildPadShapes({
       })
       for (const hole of holes)
         shapes.push({
-          points: facePoints(hole),
+          points: sampleFacePoints(hole),
           fill: "#fff",
           stroke: "none",
           layer: "pads",

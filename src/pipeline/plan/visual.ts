@@ -9,22 +9,24 @@ import {
   type PlanVisualScene,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
+  type SourceNetId,
   type SourcePortId,
   type SourceTraceId,
 } from "../../board"
 import { Diagnostic } from "../../kernel"
 import {
+  buildReceiverGraphs,
   type CircuitNodes,
+  findReceiverPath,
   numberCircuitNodes,
   type ReceiverGraphs,
-  receiverGraphs,
-  receiverPath,
   validateRoutedNodes,
 } from "../../simulation"
 import type { TransientChannelSimulationPlan } from "../transient-channel-simulation-plan"
+import { buildEndpoints } from "./endpoints"
 import { resolvePlanFault } from "./fault"
-import { buildEndpoints, buildPathRows } from "./rows"
-import { describePlanFailure, summarizePlan } from "./summary"
+import { buildPathRows } from "./rows"
+import { buildSceneDiagnostic, summarizePlan } from "./summary"
 
 /** The declaration and original diagnostic captured before the solver reports a failure. */
 export interface FailedPlanAttempt {
@@ -35,7 +37,7 @@ export interface FailedPlanAttempt {
 /** A declared driver/receiver pair, keeping differential polarity. */
 export interface PlanPath {
   channelName: string
-  channelId: SimulationPcbDriverReceiverChannel["simulation_pcb_driver_receiver_channel_id"]
+  simulationPcbDriverReceiverChannelId: SimulationPcbDriverReceiverChannel["simulation_pcb_driver_receiver_channel_id"]
   signalName: string
   fromSourcePortId: SourcePortId
   toSourcePortId: SourcePortId
@@ -59,7 +61,8 @@ function listDeclaredPaths(
           if (drivers.length > 1) signal += ["+", "−"][leg]
           return {
             channelName: name,
-            channelId: simulation_pcb_driver_receiver_channel_id,
+            simulationPcbDriverReceiverChannelId:
+              simulation_pcb_driver_receiver_channel_id,
             signalName: signal,
             fromSourcePortId: drivers[leg],
             toSourcePortId,
@@ -75,11 +78,11 @@ export interface PlanTopology {
   traces: PlanTrace[]
   paths: ResolvedPlanPath[]
   overlays: PlanOverlay[]
-  nodes: CircuitNodes["mapping"]
+  spiceNodeNamesBySourceContactId: CircuitNodes["mapping"]
   issue?: Diagnostic
 }
 
-/** One ordered trace, series part, or direct connection between route contacts. */
+/** One ordered trace, series part, or ideal connection between route contacts. */
 export type PlanPathSegment = Pick<
   PlanPath,
   "fromSourcePortId" | "toSourcePortId"
@@ -89,7 +92,7 @@ export type PlanPathSegment = Pick<
     | { kind: "series" | "ideal" }
   )
 
-/** Ordered hops traversed by one driver-to-receiver connection. */
+/** Ordered segments traversed by one driver-to-receiver connection. */
 export interface ResolvedPlanPath extends PlanPath {
   pathSegments: PlanPathSegment[]
 }
@@ -98,13 +101,13 @@ export interface ResolvedPlanPath extends PlanPath {
 function resolvePath({
   path,
   graphs,
-  nodes,
+  spiceNodeNamesBySourceContactId,
 }: {
   path: PlanPath
   graphs: ReceiverGraphs
-  nodes: CircuitNodes["mapping"]
+  spiceNodeNamesBySourceContactId: CircuitNodes["mapping"]
 }): ResolvedPlanPath {
-  const edges = receiverPath({
+  const edges = findReceiverPath({
     graphs,
     fromSourcePortId: path.fromSourcePortId,
     toSourcePortId: path.toSourcePortId,
@@ -122,8 +125,10 @@ function resolvePath({
     if (
       current === toSourcePortId ||
       (current !== fromSourcePortId &&
-        nodes[current] !== nodes[fromSourcePortId] &&
-        nodes[current] === nodes[toSourcePortId])
+        spiceNodeNamesBySourceContactId[current] !==
+          spiceNodeNamesBySourceContactId[fromSourcePortId] &&
+        spiceNodeNamesBySourceContactId[current] ===
+          spiceNodeNamesBySourceContactId[toSourcePortId])
     ) {
       fromSourcePortId = secondSourcePortId
       toSourcePortId = firstSourcePortId
@@ -160,13 +165,13 @@ function buildTopologyOverlays({
   graphs,
   activeSourcePortIds,
   placedSourcePortIds,
-  nodes,
+  spiceNodeNamesBySourceContactId,
 }: {
   db: CircuitJsonUtilObjects
   graphs: ReceiverGraphs
   activeSourcePortIds: ReadonlySet<SourcePortId>
   placedSourcePortIds: ReadonlySet<SourcePortId>
-  nodes: CircuitNodes["mapping"]
+  spiceNodeNamesBySourceContactId: CircuitNodes["mapping"]
 }): PlanOverlay[] {
   const overlays: PlanOverlay[] = []
   for (const { evidence } of graphs.channelConnections) {
@@ -179,22 +184,28 @@ function buildTopologyOverlays({
       label: "Series passive",
     })
   }
-  const active = new Set([
+  const overlaySourcePortIds = new Set([
     ...activeSourcePortIds,
     ...overlays.flatMap(({ fromSourcePortId, toSourcePortId }) => [
       fromSourcePortId,
       toSourcePortId,
     ]),
   ])
-  const activeNodes = new Set([...active].map((id) => nodes[id]))
-  const netContacts = new Map<string, Set<SourcePortId>>()
+  const activeSpiceNodeNames = new Set(
+    [...overlaySourcePortIds].map(
+      (sourcePortId) => spiceNodeNamesBySourceContactId[sourcePortId],
+    ),
+  )
+  const sourcePortIdsBySourceNetId = new Map<SourceNetId, Set<SourcePortId>>()
   const seen = new Set<string>()
   for (const connection of graphs.wireConnections) {
     const pins = connection.filter(
-      (id) =>
-        placedSourcePortIds.has(id) &&
-        activeNodes.has(nodes[id]) &&
-        nodes[id] !== "0",
+      (sourcePortId) =>
+        placedSourcePortIds.has(sourcePortId) &&
+        activeSpiceNodeNames.has(
+          spiceNodeNamesBySourceContactId[sourcePortId],
+        ) &&
+        spiceNodeNamesBySourceContactId[sourcePortId] !== "0",
     )
     const [fromSourcePortId, ...targets] = pins
     for (const toSourcePortId of targets) {
@@ -208,14 +219,20 @@ function buildTopologyOverlays({
         label: "Ideal connection",
       })
     }
-    for (const id of connection) {
-      if (!db.source_net.get(id)) continue
-      const contacts = netContacts.get(id) || new Set()
-      for (const pin of pins) contacts.add(pin)
-      netContacts.set(id, contacts)
+    for (const sourceContactId of connection) {
+      const sourceNet = db.source_net.get(sourceContactId)
+      if (!sourceNet) continue
+      const sourceNetId = sourceNet.source_net_id
+      const sourcePortIds =
+        sourcePortIdsBySourceNetId.get(sourceNetId) || new Set()
+      for (const sourcePortId of pins) sourcePortIds.add(sourcePortId)
+      sourcePortIdsBySourceNetId.set(sourceNetId, sourcePortIds)
     }
   }
-  for (const [fromSourcePortId, ...targets] of netContacts.values()) {
+  for (const [
+    fromSourcePortId,
+    ...targets
+  ] of sourcePortIdsBySourceNetId.values()) {
     for (const toSourcePortId of targets) {
       const key = [fromSourcePortId, toSourcePortId].sort().join(" ")
       if (seen.has(key)) continue
@@ -251,20 +268,24 @@ function resolvePlanTopology({
   const db = cju(circuitJson)
   const channels = db.simulation_pcb_driver_receiver_channel.list()
   const groundSourcePortId = plan.sections.referenceSourcePortId
-  const graphs = receiverGraphs({
+  const graphs = buildReceiverGraphs({
     db,
     circuit: circuitJson,
-    cuts: traceContacts,
+    traceContacts,
     channels,
     groundSourcePortId,
     modeling,
   })
-  const { mapping: nodes, node } = numberCircuitNodes({
-    db,
-    graphs,
-    groundSourcePortId,
-  })
-  const resolved = paths.map((path) => resolvePath({ path, graphs, nodes }))
+  const { mapping: spiceNodeNamesBySourceContactId, node } = numberCircuitNodes(
+    {
+      db,
+      graphs,
+      groundSourcePortId,
+    },
+  )
+  const resolved = paths.map((path) =>
+    resolvePath({ path, graphs, spiceNodeNamesBySourceContactId }),
+  )
   const oriented = new Map<SourceTraceId, SourcePortId>()
   for (const { pathSegments } of resolved)
     for (const segment of pathSegments)
@@ -281,19 +302,19 @@ function resolvePlanTopology({
     (sourceTraceId, index): PlanTrace[] => {
       const contacts = traceContactsBySourceTraceId.get(sourceTraceId)
       if (!contacts) return []
-      const mappedFromSourcePortId = oriented.get(sourceTraceId)
-      const isMapped = mappedFromSourcePortId !== undefined
-      if (mappedFromSourcePortId === contacts.toSourcePortId)
+      const pathFromSourcePortId = oriented.get(sourceTraceId)
+      const isOnReceiverPath = pathFromSourcePortId !== undefined
+      if (pathFromSourcePortId === contacts.toSourcePortId)
         return [
           {
             ...contacts,
             fromSourcePortId: contacts.toSourcePortId,
             toSourcePortId: contacts.fromSourcePortId,
             index,
-            isMapped,
+            isOnReceiverPath,
           },
         ]
-      return [{ ...contacts, index, isMapped }]
+      return [{ ...contacts, index, isOnReceiverPath }]
     },
   )
   const activeSourcePortIds = new Set(
@@ -306,24 +327,24 @@ function resolvePlanTopology({
   )
   const topology: PlanTopology = {
     traces: visualTraces,
-    nodes,
+    spiceNodeNamesBySourceContactId,
     paths: resolved,
     overlays: buildTopologyOverlays({
       db,
       graphs,
       activeSourcePortIds,
       placedSourcePortIds,
-      nodes,
+      spiceNodeNamesBySourceContactId,
     }),
   }
   try {
     validateRoutedNodes({
-      cuts: traceContacts,
+      traceContacts,
       receiverPaths,
       graphs,
       channels,
       node,
-      isMappingOnly: false,
+      hasImplicitTraceContacts: false,
     })
   } catch (error) {
     if (!(error instanceof Diagnostic)) throw error
@@ -379,13 +400,13 @@ export function buildPlanVisualScene({
     })
   let issue = topology?.issue
   if (failed?.error instanceof Diagnostic) issue = failed.error
-  const routed = new Set(
+  const routedSourceTraceIds = new Set(
     db.pcb_trace.list().map(({ source_trace_id }) => source_trace_id),
   )
   const routedTraces = db.source_trace
     .list()
-    .filter(({ source_trace_id }) => routed.has(source_trace_id))
-  const partiallyRoutedPorts = new Set(
+    .filter(({ source_trace_id }) => routedSourceTraceIds.has(source_trace_id))
+  const partiallyRoutedSourcePortIds = new Set(
     routedTraces.flatMap(
       ({ connected_source_port_ids }) => connected_source_port_ids,
     ),
@@ -395,24 +416,18 @@ export function buildPlanVisualScene({
     issue,
     paths,
     topology,
-    partiallyRoutedPorts,
+    partiallyRoutedSourcePortIds,
   })
-  let message = issue?.message || error
-  if (failed?.error instanceof Error) message = failed.error.message
-  let diagnostic: PlanVisualScene["diagnostic"]
-  if (message)
-    diagnostic = {
-      text: describePlanFailure({
-        issue,
-        error: failed?.error,
-        paths,
-        topology,
-        fault,
-        db,
-      }),
-      label: message,
-    }
-  const pathPorts = new Set(
+  const diagnostic = buildSceneDiagnostic({
+    error,
+    failed,
+    issue,
+    paths,
+    topology,
+    fault,
+    db,
+  })
+  const pathSourcePortIds = new Set(
     paths.flatMap(({ fromSourcePortId, toSourcePortId }) => [
       fromSourcePortId,
       toSourcePortId,
@@ -421,7 +436,7 @@ export function buildPlanVisualScene({
   const existingSourceTraceIds = new Set(
     routedTraces
       .filter(({ connected_source_port_ids }) =>
-        connected_source_port_ids.some((port) => pathPorts.has(port)),
+        connected_source_port_ids.some((port) => pathSourcePortIds.has(port)),
       )
       .map(({ source_trace_id }) => source_trace_id),
   )
@@ -450,8 +465,8 @@ export function buildPlanVisualScene({
     overlays: [...(topology?.overlays || []), ...fault.overlays],
     rows: buildPathRows({ topology, paths, fault, db }),
     faultCode: issue?.code,
-    faultSourcePortIds: fault.ports,
-    faultSourceTraceIds: fault.traces,
+    faultSourcePortIds: fault.sourcePortIds,
+    faultSourceTraceIds: fault.sourceTraceIds,
     existingSourceTraceIds,
   }
 }

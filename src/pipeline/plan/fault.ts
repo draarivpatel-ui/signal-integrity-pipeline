@@ -3,10 +3,10 @@ import type { PlanOverlay, SourcePortId, SourceTraceId } from "../../board"
 import type { Diagnostic } from "../../kernel"
 import type { PlanPath, PlanTopology } from "./visual"
 
-/** Fault ports and routes are selected only from the current attempt's evidence. */
+/** Fault ports and traces are selected only from the current attempt's evidence. */
 export interface PlanFault {
-  ports: Set<SourcePortId>
-  traces: Set<SourceTraceId>
+  sourcePortIds: Set<SourcePortId>
+  sourceTraceIds: Set<SourceTraceId>
   overlays: PlanOverlay[]
   incompletePaths: PlanPath[]
 }
@@ -17,32 +17,32 @@ export function resolvePlanFault({
   issue,
   paths,
   topology,
-  partiallyRoutedPorts,
+  partiallyRoutedSourcePortIds,
 }: {
   db: CircuitJsonUtilObjects
-  partiallyRoutedPorts: ReadonlySet<SourcePortId>
+  partiallyRoutedSourcePortIds: ReadonlySet<SourcePortId>
   issue?: Diagnostic
   paths: readonly PlanPath[]
   topology?: PlanTopology
 }): PlanFault {
-  const ports = new Set<SourcePortId>()
-  const traces = new Set<SourceTraceId>()
+  const sourcePortIds = new Set<SourcePortId>()
+  const sourceTraceIds = new Set<SourceTraceId>()
   const overlays: PlanOverlay[] = []
-  for (const { id, kind } of issue?.subjects || []) {
+  for (const { id: recordId, kind } of issue?.subjects || []) {
     if (kind !== "record") continue
-    if (db.source_port.get(id)) ports.add(id)
-    if (db.source_trace.get(id)) traces.add(id)
+    if (db.source_port.get(recordId)) sourcePortIds.add(recordId)
+    if (db.source_trace.get(recordId)) sourceTraceIds.add(recordId)
   }
   const incompletePaths: PlanPath[] = []
   if (issue?.code === "channel_short") {
-    for (const link of topology?.overlays || []) {
+    for (const overlay of topology?.overlays || []) {
       if (
-        link.kind !== "ideal" ||
-        !ports.has(link.fromSourcePortId) ||
-        !ports.has(link.toSourcePortId)
+        overlay.kind !== "ideal" ||
+        !sourcePortIds.has(overlay.fromSourcePortId) ||
+        !sourcePortIds.has(overlay.toSourcePortId)
       )
         continue
-      overlays.push({ ...link, kind: "short", label: "Bypass" })
+      overlays.push({ ...overlay, kind: "short", label: "Bypass" })
     }
   } else if (
     issue?.code === "channel_net" ||
@@ -50,11 +50,15 @@ export function resolvePlanFault({
   ) {
     for (const path of paths) {
       const { signalName, fromSourcePortId, toSourcePortId } = path
-      if (!ports.has(fromSourcePortId) || !ports.has(toSourcePortId)) continue
+      if (
+        !sourcePortIds.has(fromSourcePortId) ||
+        !sourcePortIds.has(toSourcePortId)
+      )
+        continue
       incompletePaths.push(path)
       if (
-        partiallyRoutedPorts.has(fromSourcePortId) ||
-        partiallyRoutedPorts.has(toSourcePortId)
+        partiallyRoutedSourcePortIds.has(fromSourcePortId) ||
+        partiallyRoutedSourcePortIds.has(toSourcePortId)
       )
         continue
       overlays.push({
@@ -65,5 +69,5 @@ export function resolvePlanFault({
       })
     }
   }
-  return { ports, traces, overlays, incompletePaths }
+  return { sourcePortIds, sourceTraceIds, overlays, incompletePaths }
 }

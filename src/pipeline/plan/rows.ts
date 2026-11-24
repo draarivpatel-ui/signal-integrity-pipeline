@@ -4,16 +4,11 @@ import {
   getTraceColor,
   type PlanHeaderRow,
   type PlanTrace,
-  type PlanVisualEndpoint,
   planColors,
   type SourcePortId,
   type SourceTraceId,
 } from "../../board"
-import {
-  type CircuitNodes,
-  connectionGraph,
-  connectionPath,
-} from "../../simulation"
+import { buildConnectionGraph, findConnectionPath } from "../../simulation"
 import type { PlanFault } from "./fault"
 import {
   describeTrace,
@@ -27,97 +22,6 @@ import type {
   PlanTopology,
   ResolvedPlanPath,
 } from "./visual"
-
-/** Keep the binding node in geometry hover labels. */
-function formatEndpointLabel({
-  sourcePortId,
-  labels,
-  nodes,
-}: {
-  sourcePortId: SourcePortId
-  labels: ReadonlyMap<SourcePortId, string>
-  nodes?: CircuitNodes["mapping"]
-}): string {
-  const label = labels.get(sourcePortId) || sourcePortId
-  const node = nodes?.[sourcePortId]
-  if (node !== undefined) return `${label} (${node})`
-  return label
-}
-
-/** Keep one glyph per physical declaration, with drivers taking precedence. */
-export function buildEndpoints({
-  paths,
-  topology,
-  labels,
-}: {
-  paths: readonly PlanPath[]
-  topology?: PlanTopology
-  labels: ReadonlyMap<SourcePortId, string>
-}): PlanVisualEndpoint[] {
-  const endpoints = new Map<SourcePortId, PlanVisualEndpoint>()
-  const traceContacts = new Map(
-    topology?.traces.map((cut) => [cut.sourceTraceId, cut]),
-  )
-  const resolved = new Map(
-    topology?.paths.map((path) => [path.toSourcePortId, path.pathSegments]),
-  )
-  for (const { signalName, fromSourcePortId, toSourcePortId } of paths) {
-    const pathSegments = resolved.get(toSourcePortId)
-    const firstTrace = pathSegments?.find((segment) => segment.kind === "trace")
-    const lastTrace = pathSegments?.findLast(
-      (segment) => segment.kind === "trace",
-    )
-    const driverTrace =
-      firstTrace && traceContacts.get(firstTrace.sourceTraceId)
-    const receiverTrace =
-      lastTrace && traceContacts.get(lastTrace.sourceTraceId)
-    let driverColor: string = planColors.existing
-    if (driverTrace) driverColor = getTraceColor(driverTrace.index)
-    if (endpoints.get(fromSourcePortId)?.kind !== "driver")
-      endpoints.set(fromSourcePortId, {
-        sourcePortId: fromSourcePortId,
-        kind: "driver",
-        towardSourcePortId: firstTrace?.toSourcePortId || toSourcePortId,
-        color: driverColor,
-        label: `${signalName} · Driver ${formatEndpointLabel({ sourcePortId: fromSourcePortId, labels, nodes: topology?.nodes })}`,
-      })
-    if (!endpoints.has(toSourcePortId)) {
-      const isIdeal =
-        pathSegments !== undefined &&
-        (pathSegments.length === 0 || pathSegments.at(-1)?.kind === "ideal")
-      let kind: PlanVisualEndpoint["kind"] = "receiver"
-      let color: string = planColors.existing
-      if (receiverTrace) color = getTraceColor(receiverTrace.index)
-      if (isIdeal) {
-        kind = "ideal"
-        color = planColors.ideal
-      }
-      endpoints.set(toSourcePortId, {
-        sourcePortId: toSourcePortId,
-        kind,
-        color,
-        label: `${signalName} · Receiver ${formatEndpointLabel({ sourcePortId: toSourcePortId, labels, nodes: topology?.nodes })}`,
-      })
-    }
-  }
-  for (const {
-    fromSourcePortId,
-    toSourcePortId,
-    isMapped,
-    index,
-  } of topology?.traces || []) {
-    if (isMapped) continue
-    for (const sourcePortId of [fromSourcePortId, toSourcePortId])
-      if (!endpoints.has(sourcePortId))
-        endpoints.set(sourcePortId, {
-          sourcePortId,
-          kind: "extraTraceEnd",
-          color: getTraceColor(index),
-          label: `Extra trace end · ${formatEndpointLabel({ sourcePortId, labels, nodes: topology?.nodes })}`,
-        })
-  }
-  return [...endpoints.values()]
-}
 
 /** Group the words for a count by number. */
 export function formatCount({
@@ -160,7 +64,7 @@ export function describeSeriesPart({
   return `part ${part.name}`
 }
 
-/** An orientation-independent key for one physical or ideal hop. */
+/** An orientation-independent key for one path segment. */
 export function getSegmentKey(segment: PlanPathSegment): string {
   if (segment.kind === "trace") return segment.sourceTraceId
   return [
@@ -169,7 +73,7 @@ export function getSegmentKey(segment: PlanPathSegment): string {
   ].join(" ")
 }
 
-/** A single readable hop with its on-board endpoints. */
+/** A path segment with its on-board endpoints. */
 function buildPathRow({
   signalName,
   fromSourcePortId,
@@ -200,31 +104,40 @@ export function orderExtraTraces(topology: PlanTopology): readonly PlanTrace[] {
           segment.toSourcePortId,
         ]),
       ])
-      .map((sourcePortId) => topology.nodes[sourcePortId])
+      .map(
+        (sourcePortId) =>
+          topology.spiceNodeNamesBySourceContactId[sourcePortId],
+      )
       .filter((node) => node && node !== "0"),
   )
-  const extras = topology.traces.filter(({ isMapped }) => !isMapped)
+  const extras = topology.traces.filter(
+    ({ isOnReceiverPath }) => !isOnReceiverPath,
+  )
   const ordered: PlanTrace[] = []
   while (extras.length) {
     const attached = extras.findIndex(
       ({ fromSourcePortId, toSourcePortId }) =>
-        contacts.has(topology.nodes[fromSourcePortId]) ||
-        contacts.has(topology.nodes[toSourcePortId]),
+        contacts.has(
+          topology.spiceNodeNamesBySourceContactId[fromSourcePortId],
+        ) ||
+        contacts.has(topology.spiceNodeNamesBySourceContactId[toSourcePortId]),
     )
-    const [cut] = extras.splice(Math.max(0, attached), 1)
-    const { fromSourcePortId, toSourcePortId } = cut
+    const [trace] = extras.splice(Math.max(0, attached), 1)
+    const { fromSourcePortId, toSourcePortId } = trace
     if (
-      !contacts.has(topology.nodes[fromSourcePortId]) &&
-      contacts.has(topology.nodes[toSourcePortId])
+      !contacts.has(
+        topology.spiceNodeNamesBySourceContactId[fromSourcePortId],
+      ) &&
+      contacts.has(topology.spiceNodeNamesBySourceContactId[toSourcePortId])
     )
       ordered.push({
-        ...cut,
+        ...trace,
         fromSourcePortId: toSourcePortId,
         toSourcePortId: fromSourcePortId,
       })
-    else ordered.push(cut)
+    else ordered.push(trace)
     for (const sourcePortId of [fromSourcePortId, toSourcePortId]) {
-      const node = topology.nodes[sourcePortId]
+      const node = topology.spiceNodeNamesBySourceContactId[sourcePortId]
       if (node && node !== "0") contacts.add(node)
     }
   }
@@ -232,7 +145,7 @@ export function orderExtraTraces(topology: PlanTopology): readonly PlanTrace[] {
 }
 
 /** Descriptive lines for declared legs whose topology could not be built. */
-function partialRows({
+function buildPartialRows({
   paths,
   fault,
   measures,
@@ -243,7 +156,7 @@ function partialRows({
   measures: ReadonlyMap<SourceTraceId, TraceMeasure>
   db: CircuitJsonUtilObjects
 }): PlanHeaderRow[] {
-  const graph = connectionGraph(
+  const graph = buildConnectionGraph(
     db.source_trace
       .list()
       .flatMap(({ source_trace_id, connected_source_port_ids }) => {
@@ -258,7 +171,8 @@ function partialRows({
     if (
       fault.incompletePaths.some(
         (incomplete) =>
-          incomplete.channelId === path.channelId &&
+          incomplete.simulationPcbDriverReceiverChannelId ===
+            path.simulationPcbDriverReceiverChannelId &&
           incomplete.fromSourcePortId === fromSourcePortId &&
           incomplete.toSourcePortId === toSourcePortId,
       )
@@ -271,7 +185,7 @@ function partialRows({
           db,
         }),
       ]
-    const route = connectionPath({
+    const route = findConnectionPath({
       graph,
       fromVertexId: fromSourcePortId,
       toVertexId: toSourcePortId,
@@ -295,7 +209,7 @@ function partialRows({
   })
 }
 
-/** Render path hops in signal order, sharing common segments across receivers. */
+/** Render path segments in signal order, sharing common segments across receivers. */
 function buildDetailedRows({
   topology,
   extras,
@@ -307,8 +221,8 @@ function buildDetailedRows({
   measures: ReadonlyMap<SourceTraceId, TraceMeasure>
   db: CircuitJsonUtilObjects
 }): PlanHeaderRow[] {
-  const traceContacts = new Map(
-    topology.traces.map((cut) => [cut.sourceTraceId, cut]),
+  const tracesBySourceTraceId = new Map(
+    topology.traces.map((trace) => [trace.sourceTraceId, trace]),
   )
   const seen = new Set<string>()
   const rows: PlanHeaderRow[] = []
@@ -318,14 +232,14 @@ function buildDetailedRows({
       if (seen.has(key)) continue
       seen.add(key)
       if (segment.kind === "trace") {
-        const cut = traceContacts.get(segment.sourceTraceId)
-        if (cut)
+        const trace = tracesBySourceTraceId.get(segment.sourceTraceId)
+        if (trace)
           rows.push(
             buildPathRow({
               ...segment,
               signalName,
               detail: describeTrace(measures.get(segment.sourceTraceId)),
-              color: getTraceColor(cut.index),
+              color: getTraceColor(trace.index),
               db,
             }),
           )
@@ -353,13 +267,13 @@ function buildDetailedRows({
       }
     }
   }
-  for (const cut of extras)
+  for (const trace of extras)
     rows.push(
       buildPathRow({
-        ...cut,
+        ...trace,
         signalName: "Extra trace",
-        detail: describeTrace(measures.get(cut.sourceTraceId)),
-        color: getTraceColor(cut.index),
+        detail: describeTrace(measures.get(trace.sourceTraceId)),
+        color: getTraceColor(trace.index),
         db,
       }),
     )
@@ -382,7 +296,10 @@ function buildCompactRows({
 }): PlanHeaderRow[] {
   const groups = new Map<string, ResolvedPlanPath[]>()
   for (const path of topology.paths) {
-    const key = JSON.stringify([path.channelId, path.fromSourcePortId])
+    const key = JSON.stringify([
+      path.simulationPcbDriverReceiverChannelId,
+      path.fromSourcePortId,
+    ])
     const group = groups.get(key)
     if (group) group.push(path)
     else groups.set(key, [path])
@@ -391,12 +308,12 @@ function buildCompactRows({
     const signals = new Set(
       topology.paths.map(({ channelName }) => channelName),
     )
-    const traces = new Set(
+    const sourceTraceIds = new Set(
       topology.traces.map(({ sourceTraceId }) => sourceTraceId),
     )
     return [
       {
-        text: `${formatCount({ count: signals.size, noun: "signal" })} across ${formatCount({ count: traces.size, noun: "trace" })} (${formatTotalLengthMm({ traces, measures })} total).`,
+        text: `${formatCount({ count: signals.size, noun: "signal" })} across ${formatCount({ count: sourceTraceIds.size, noun: "trace" })} (${formatTotalLengthMm({ sourceTraceIds, measures })} total).`,
       },
     ]
   }
@@ -407,7 +324,7 @@ function buildCompactRows({
   )
   return [...groups.values()].map((paths, index) => {
     const [firstPath] = paths
-    const traces = new Set(
+    const sourceTraceIds = new Set(
       paths.flatMap(({ pathSegments }) =>
         pathSegments.flatMap((segment) => {
           if (segment.kind === "trace") return [segment.sourceTraceId]
@@ -415,7 +332,7 @@ function buildCompactRows({
         }),
       ),
     )
-    const first = indices.get([...traces][0])
+    const first = indices.get([...sourceTraceIds][0])
     let color: string = planColors.ideal
     if (first !== undefined) color = getTraceColor(first)
     const driver = getPinName({ sourcePortId: firstPath.fromSourcePortId, db })
@@ -424,7 +341,7 @@ function buildCompactRows({
         getPinName({ sourcePortId: toSourcePortId, db }),
       )
       .join(", ")
-    const detail = `${formatCount({ count: traces.size, noun: "trace" })}, ${formatTotalLengthMm({ traces, measures })}`
+    const detail = `${formatCount({ count: sourceTraceIds.size, noun: "trace" })}, ${formatTotalLengthMm({ sourceTraceIds, measures })}`
     let text = `${firstPath.signalName}: ${driver} → ${receivers} (${detail})`
     if (index === groups.size - 1) text += suffix
     return {
@@ -451,26 +368,26 @@ export function buildPathRows({
 }): PlanHeaderRow[] {
   if (!paths.length) return []
   const measures = measureTraces(db)
-  if (!topology) return partialRows({ paths, fault, measures, db })
+  if (!topology) return buildPartialRows({ paths, fault, measures, db })
   const bypassRows = fault.overlays
     .filter(({ kind }) => kind === "short")
-    .map((link) => {
+    .map((overlay) => {
       const isReversed = paths.some(
         ({ fromSourcePortId, toSourcePortId }) =>
-          link.toSourcePortId === fromSourcePortId &&
-          link.fromSourcePortId === toSourcePortId,
+          overlay.toSourcePortId === fromSourcePortId &&
+          overlay.fromSourcePortId === toSourcePortId,
       )
       if (isReversed)
         return buildPathRow({
-          fromSourcePortId: link.toSourcePortId,
-          toSourcePortId: link.fromSourcePortId,
+          fromSourcePortId: overlay.toSourcePortId,
+          toSourcePortId: overlay.fromSourcePortId,
           signalName: "Bypass",
           detail: "ideal connection",
           color: planColors.failure,
           db,
         })
       return buildPathRow({
-        ...link,
+        ...overlay,
         signalName: "Bypass",
         detail: "ideal connection",
         color: planColors.failure,

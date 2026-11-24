@@ -301,9 +301,9 @@ function voltageSourceExpression(source: SimulationVoltageSource): string {
       finite({ input: source.voltage, label: "source offset" }) - amplitude / 2
   }
   const high = low + amplitude
-  const fastestEdgeSeconds = (source.rise_time ?? 0) / MILLISECONDS_PER_SECOND
+  const riseSeconds = (source.rise_time ?? 0) / MILLISECONDS_PER_SECOND
   const fallSeconds = (source.fall_time ?? 0) / MILLISECONDS_PER_SECOND
-  if (fastestEdgeSeconds <= 0 || fallSeconds <= 0)
+  if (riseSeconds <= 0 || fallSeconds <= 0)
     fail(
       "source_edge",
       "Square voltage sources require explicit positive rise/fall times",
@@ -313,7 +313,7 @@ function voltageSourceExpression(source: SimulationVoltageSource): string {
   const delaySeconds = (source.pulse_delay ?? 0) / MILLISECONDS_PER_SECOND
   const delay = value({ input: delaySeconds, label: "source delay" })
   const riseValue = value({
-    input: fastestEdgeSeconds,
+    input: riseSeconds,
     label: "source rise",
     positive: true,
   })

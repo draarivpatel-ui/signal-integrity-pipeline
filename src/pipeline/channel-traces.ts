@@ -38,17 +38,17 @@ function orientChannelTrace({
     compareNames({ a, b }),
   )
   if (driven.has(ordered[1]) && !driven.has(ordered[0])) ordered.reverse()
-  const [from, to] = ordered
-  const name = topology.get(from) || "passive"
+  const [fromSourcePortId, toSourcePortId] = ordered
+  const name = topology.get(fromSourcePortId) || "passive"
   return {
     port: `${name}_${trace.source_trace_id}`,
-    from: { sourcePortId: from },
-    to: { sourcePortId: to },
+    from: { sourcePortId: fromSourcePortId },
+    to: { sourcePortId: toSourcePortId },
     sourceTraceId: trace.source_trace_id,
   }
 }
 
-/** Build lanes and report unsupported routed traces on the channel. */
+/** Build channel traces and report unsupported routed traces on the channel. */
 export function auditChannelTraces({
   circuit,
   channelPcbTraceIds,
@@ -80,7 +80,7 @@ export function auditChannelTraces({
       compareNames({ a: a.source_trace_id, b: b.source_trace_id }),
     )
   for (const trace of sourceTraces) {
-    const ports = trace.connected_source_port_ids
+    const sourcePortIds = trace.connected_source_port_ids
     const pcbTraces = pcbTracesBySourceTraceId.get(trace.source_trace_id)
     if (
       !pcbTraces?.some(({ pcb_trace_id }) =>
@@ -88,11 +88,14 @@ export function auditChannelTraces({
       )
     )
       continue
-    const members = [...ports, ...(trace.connected_source_net_ids ?? [])]
+    const members = [
+      ...sourcePortIds,
+      ...(trace.connected_source_net_ids ?? []),
+    ]
     if (members.some((port) => rails.has(port))) continue
-    if (ports.length !== 2 || pcbTraces.length !== 1) {
+    if (sourcePortIds.length !== 2 || pcbTraces.length !== 1) {
       const name =
-        topology.get(ports[0]) ??
+        topology.get(sourcePortIds[0]) ??
         trace.name ??
         trace.display_name ??
         trace.source_trace_id
@@ -107,7 +110,7 @@ export function auditChannelTraces({
   return { channelTraces, rejections }
 }
 
-/** Require routed lanes for all drivers when unrouted traces are disallowed. */
+/** Require routed traces for all drivers when unrouted traces are disallowed. */
 function validateRoutedDrivers({
   channelSimulation,
   driverReceiverChannels,
@@ -137,7 +140,7 @@ function validateRoutedDrivers({
     )
 }
 
-/** Validate scoped lanes and order them by stable physical endpoint identity. */
+/** Validate scoped traces and order them by stable physical endpoint identity. */
 export function prepareChannelTraces({
   circuit,
   copperScope,

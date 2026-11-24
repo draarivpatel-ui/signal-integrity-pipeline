@@ -41,13 +41,13 @@ export function getTraceColor(index: number): string {
   return TRACE_COLORS[index % TRACE_COLORS.length]
 }
 
-/** A physical conductor partition, oriented for its first mapped path. */
+/** A trace oriented for its first receiver path. */
 export interface PlanTrace {
   sourceTraceId: SourceTraceId
   fromSourcePortId: SourcePortId
   toSourcePortId: SourcePortId
   index: number
-  isMapped: boolean
+  isOnReceiverPath: boolean
 }
 
 /** A point-to-point topology overlay independent of the physical copper. */

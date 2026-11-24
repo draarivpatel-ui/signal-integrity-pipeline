@@ -5,6 +5,7 @@ import {
   type SourcePortId,
 } from "../../board"
 import type { Diagnostic } from "../../kernel"
+import { INVALID_NEARBY_GAP_MESSAGE } from "../signals"
 import type { PlanFault } from "./fault"
 import { formatMillimeters } from "./measure"
 import {
@@ -14,7 +15,7 @@ import {
   getSegmentKey,
   orderExtraTraces,
 } from "./rows"
-import type { PlanPath, PlanTopology } from "./visual"
+import type { FailedPlanAttempt, PlanPath, PlanTopology } from "./visual"
 
 /** Join names or quantities as they would appear in a sentence. */
 function joinParts(parts: readonly string[]): string {
@@ -111,7 +112,7 @@ export function summarizePlan({
 }
 
 /** Use a reference designator for the summary, with the pin as its fallback. */
-function partOrPin({
+function describePartOrPin({
   sourcePortId,
   db,
 }: {
@@ -123,7 +124,7 @@ function partOrPin({
   )
 }
 
-/** Describe the traces and series parts the shortcut crosses. */
+/** Describe the traces and series parts the bypass skips. */
 function describeBypass({
   fromSourcePortId,
   toSourcePortId,
@@ -162,7 +163,7 @@ function describeBypass({
     route
   const contacts = new Set(
     topology?.traces
-      .filter(({ sourceTraceId }) => fault.traces.has(sourceTraceId))
+      .filter(({ sourceTraceId }) => fault.sourceTraceIds.has(sourceTraceId))
       .flatMap(({ fromSourcePortId, toSourcePortId }) => [
         fromSourcePortId,
         toSourcePortId,
@@ -170,26 +171,27 @@ function describeBypass({
   )
   const series =
     topology?.overlays.filter(
-      (link) =>
-        link.kind === "series" &&
-        [link.fromSourcePortId, link.toSourcePortId].every(
+      (overlay) =>
+        overlay.kind === "series" &&
+        [overlay.fromSourcePortId, overlay.toSourcePortId].every(
           (sourcePortId) =>
-            contacts.has(sourcePortId) || fault.ports.has(sourcePortId),
+            contacts.has(sourcePortId) || fault.sourcePortIds.has(sourcePortId),
         ),
     ) || []
   const skipped = series.map(({ fromSourcePortId }) => {
-    if (fault.traces.size)
-      return partOrPin({ sourcePortId: fromSourcePortId, db })
+    if (fault.sourceTraceIds.size)
+      return describePartOrPin({ sourcePortId: fromSourcePortId, db })
     return describeSeriesPart({ fromSourcePortId, db })
   })
-  if (fault.traces.size === 1) skipped.push("the trace")
-  else if (fault.traces.size === 2) skipped.push("both traces")
-  else if (fault.traces.size > 2) skipped.push(`${fault.traces.size} traces`)
+  if (fault.sourceTraceIds.size === 1) skipped.push("the trace")
+  else if (fault.sourceTraceIds.size === 2) skipped.push("both traces")
+  else if (fault.sourceTraceIds.size > 2)
+    skipped.push(`${fault.sourceTraceIds.size} traces`)
   let start = fromSourcePortId
   let end = toSourcePortId
   if (path?.fromSourcePortId === toSourcePortId)
     [start, end] = [toSourcePortId, fromSourcePortId]
-  const text = `${path?.signalName || "The signal"} has a bypass from ${partOrPin({ sourcePortId: start, db })} to ${partOrPin({ sourcePortId: end, db })}`
+  const text = `${path?.signalName || "The signal"} has a bypass from ${describePartOrPin({ sourcePortId: start, db })} to ${describePartOrPin({ sourcePortId: end, db })}`
   if (!skipped.length) return `${text}.`
   return `${text}, skipping ${joinParts(skipped)}.`
 }
@@ -210,8 +212,8 @@ export function describePlanFailure({
   fault: PlanFault
   db: CircuitJsonUtilObjects
 }): string {
-  if (error instanceof Error && error.cause === "scopeDistanceMm")
-    return "Copper search distance must be greater than 0 mm."
+  if (error instanceof Error && error.cause === "nearbyGapMm")
+    return INVALID_NEARBY_GAP_MESSAGE
   const path = fault.incompletePaths[0]
   if (issue?.code === "circuit_schema" || issue?.code === "ibis_asset")
     return issue.message
@@ -220,24 +222,24 @@ export function describePlanFailure({
     const fromPart = findPinPart({ sourcePortId: fromSourcePortId, db })?.name
     const toPart = findPinPart({ sourcePortId: toSourcePortId, db })?.name
     if (issue?.code === "channel_receiver_terminal_missing")
-      return `${getPinName({ sourcePortId: toSourcePortId, db })} has no board pad to receive ${signalName} from ${partOrPin({ sourcePortId: fromSourcePortId, db })}.`
+      return `${getPinName({ sourcePortId: toSourcePortId, db })} has no board pad to receive ${signalName} from ${describePartOrPin({ sourcePortId: fromSourcePortId, db })}.`
     if (fromPart && toPart && fromPart !== toPart)
       return `${signalName} has an incomplete route between ${fromPart} and ${toPart}.`
     return `${signalName} has an incomplete route from ${getPinName({ sourcePortId: fromSourcePortId, db })} to ${getPinName({ sourcePortId: toSourcePortId, db })}.`
   }
-  const pins = [...fault.ports]
+  const pins = [...fault.sourcePortIds]
   const names = pins.map((sourcePortId) => getPinName({ sourcePortId, db }))
   if (issue?.code === "channel_driver_terminal_missing" && names.length) {
     const driver = paths.find(({ fromSourcePortId }) =>
-      fault.ports.has(fromSourcePortId),
+      fault.sourcePortIds.has(fromSourcePortId),
     )
     return `${names[0]} has no board pad to drive ${driver?.signalName || "the signal"}.`
   }
   if (issue?.code === "channel_fanout" && !topology)
     return issue.message.slice(issue.code.length + 2)
-  if (issue?.code === "channel_fanout" && fault.traces.size) {
+  if (issue?.code === "channel_fanout" && fault.sourceTraceIds.size) {
     const parts = new Set(
-      pins.map((sourcePortId) => partOrPin({ sourcePortId, db })),
+      pins.map((sourcePortId) => describePartOrPin({ sourcePortId, db })),
     )
     return `Traces through ${[...parts].join(", ")} form a loop.`
   }
@@ -245,7 +247,8 @@ export function describePlanFailure({
     return `Route from ${names[0]} branches; only a single path is supported.`
   if (issue?.code === "channel_short") {
     const grounded = pins.find(
-      (sourcePortId) => topology?.nodes[sourcePortId] === "0",
+      (sourcePortId) =>
+        topology?.spiceNodeNamesBySourceContactId[sourcePortId] === "0",
     )
     if (grounded)
       return `${getPinName({ sourcePortId: grounded, db })} is shorted to ground.`
@@ -256,4 +259,38 @@ export function describePlanFailure({
     if (names.length) return `Short found at ${names.join(", ")}.`
   }
   return "Simulation setup could not be planned; check the board and settings."
+}
+
+/** Build visible failure text and keep the original diagnostic for hover. */
+export function buildSceneDiagnostic({
+  error,
+  failed,
+  issue,
+  paths,
+  topology,
+  fault,
+  db,
+}: {
+  error: string | null
+  failed?: FailedPlanAttempt
+  issue?: Diagnostic
+  paths: readonly PlanPath[]
+  topology?: PlanTopology
+  fault: PlanFault
+  db: CircuitJsonUtilObjects
+}): PlanVisualScene["diagnostic"] {
+  let message = issue?.message || error
+  if (failed?.error instanceof Error) message = failed.error.message
+  if (message)
+    return {
+      text: describePlanFailure({
+        issue,
+        error: failed?.error,
+        paths,
+        topology,
+        fault,
+        db,
+      }),
+      label: message,
+    }
 }
