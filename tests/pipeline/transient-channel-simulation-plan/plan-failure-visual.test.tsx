@@ -30,15 +30,14 @@ test("draws the whole board with the open differential leg diagnostic in red", a
     message: /BUS: no source path/,
   })
   const drawing = solver.visualize()
+  const header = drawing.texts?.filter((text) => text.layer === "header")
   assert.ok(drawing.lines?.length)
   assert.ok(drawing.texts?.length)
   const fault = drawing.texts.find((text) =>
     text.text.includes("no copper connects"),
   )
   assert.equal(fault?.color, "#b91c1c")
-  assert.ok(
-    drawing.texts.every((text) => text.anchorSide === "center" && text.y > 6),
-  )
+  assert.ok(header?.every((text) => text.anchorSide === "center" && text.y > 6))
   assert.ok(
     drawing.lines.some(
       (line) =>
@@ -57,6 +56,21 @@ test("draws the whole board with the open differential leg diagnostic in red", a
     ),
   )
   assert.ok(drawing.texts.every((text) => !text.text.includes("source_port_")))
+  const pins = drawing.texts.filter((text) => text.layer === "pin labels")
+  assert.deepEqual(
+    pins
+      .filter(({ color }) => color === "#b91c1c")
+      .map(({ text }) => text)
+      .sort(),
+    ["RX pin A", "TX pin A"],
+  )
+  assert.deepEqual(
+    pins
+      .filter(({ color }) => color === "#39789a")
+      .map(({ text }) => text)
+      .sort(),
+    ["RX pin B", "TX pin B"],
+  )
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
