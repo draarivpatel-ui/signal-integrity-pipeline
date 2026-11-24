@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { AdmissionDaisyChain } from "../../fixtures/admission-daisy-chain"
@@ -22,7 +22,7 @@ test("a cut cycle diagnostic excludes the attached load tail", async () => {
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const db = circuitJsonDb(circuitJson)
+  const db = cju([...circuitJson])
   const load = db.source_component.getWhere({ name: "LOAD" })
   assert.ok(load)
   const port = db.source_port.getWhere({

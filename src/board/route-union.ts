@@ -1,6 +1,5 @@
-import type { Snapshot } from "../kernel"
+import { cju } from "@tscircuit/circuit-json-util"
 import { hypotenuse } from "../kernel"
-import { circuitJsonDb } from "./circuit-json-db"
 
 import {
   type ConnectivityMap,
@@ -9,7 +8,7 @@ import {
 } from "./connectivity"
 import type { SourceTraceId } from "./ids"
 import { type RouteWire, routePosition } from "./route-sections"
-import type { CircuitJsonSnapshot, SourceTrace } from "./schema"
+import type { CircuitJson, SourceTrace } from "./schema"
 
 /** Require more than this shared length before merging parallel copper. */
 const MIN_OVERLAP_LENGTH_MM = 1e-6
@@ -53,7 +52,7 @@ function wireNet({
   source,
   connectivity,
 }: {
-  source: Snapshot<SourceTrace>
+  source: SourceTrace
   connectivity: ConnectivityMap
 }): string {
   const port =
@@ -191,9 +190,9 @@ export function unionRouteWires({
   circuit,
 }: {
   wires: RouteWire[]
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
 }): RouteWire[] {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(db.toArray())
   const nets = new Map<SourceTraceId, string>()
   const sources = db.source_trace.list()

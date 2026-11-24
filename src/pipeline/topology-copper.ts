@@ -6,6 +6,7 @@ import {
 } from "@flatten-js/core"
 import {
   circlePolygon,
+  cju,
   getPlatedHolePolygon,
   getSmtPadPolygon,
   getTraceSegmentPolygon,
@@ -23,9 +24,7 @@ import type {
   SourceTrace,
 } from "circuit-json"
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
-import type { CircuitJsonSnapshot, SourceNetId, SourcePortId } from "../board"
-import { circuitJsonDb } from "../board"
-import type { Snapshot } from "../kernel"
+import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
 
 /** A quantized point or the key of a copper feature that acts as one junction. */
 export type CopperPointKey = string
@@ -95,9 +94,9 @@ type WireEnd = PcbTraceRoutePointWire | PcbTraceRoutePointVia
 
 /** Source ports and routes admitted to physical topology validation. */
 interface CopperSelection {
-  circuit: CircuitJsonSnapshot
-  ports: readonly Snapshot<PcbPort>[]
-  traces: readonly Snapshot<PcbTrace>[]
+  circuit: CircuitJson
+  ports: readonly PcbPort[]
+  traces: readonly PcbTrace[]
   selected: ReadonlySet<SourceNetId | SourcePortId>
   rails: ReadonlySet<SourceNetId | SourcePortId>
   traceIds: ReadonlySet<SourceTrace["source_trace_id"]>
@@ -260,7 +259,7 @@ function routeWire({
 }
 
 /** Build the wires and barrel connections encoded directly in each selected route. */
-function traceCopper(traces: readonly Snapshot<PcbTrace>[]): TraceCopper {
+function traceCopper(traces: readonly PcbTrace[]): TraceCopper {
   const wires: CopperWire[] = []
   const regions: CopperRegion[] = []
   const groups: CopperGroup[] = []
@@ -300,7 +299,7 @@ function copperRegions({
 }: CopperSelection): RegionCopper {
   const selectedPorts = new Map(ports.map((port) => [port.pcb_port_id, port]))
   const selectedTraces = new Set(traces.map((trace) => trace.pcb_trace_id))
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const rotations = new Map<PcbComponent["pcb_component_id"], number>(
     db.pcb_component
       .list()
