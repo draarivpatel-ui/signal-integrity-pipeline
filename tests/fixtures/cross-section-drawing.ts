@@ -47,11 +47,13 @@ export function drawCrossSection({
       },
     ]
   })
-  for (const plane of crossSection.planes) {
+  const planeHeightsMm = [0]
+  if (region.planeSpacingMm > 0) planeHeightsMm.push(region.planeSpacingMm)
+  for (const planeZMm of planeHeightsMm) {
     lines.push({
       points: [
-        { x: -halfWidthMm, y: plane.zMm },
-        { x: halfWidthMm, y: plane.zMm },
+        { x: -halfWidthMm, y: planeZMm },
+        { x: halfWidthMm, y: planeZMm },
       ],
       strokeColor: PLANE_COLOR,
       strokeWidth: 0.025,

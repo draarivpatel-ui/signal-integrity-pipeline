@@ -7,7 +7,12 @@ import {
   mergeCoordinates,
   planConductorEdges,
 } from "./cross-section-edges"
-import type { BoundaryPanel, RegionMeshInput } from "./cross-section-types"
+import { DIELECTRIC_BOUNDARY_TOLERANCE_MM } from "./cross-section-regions"
+import type {
+  BoundaryPanel,
+  CrossSectionDielectricLayer,
+  RegionMeshInput,
+} from "./cross-section-types"
 import { fail } from "./diagnostics"
 
 /** Sample just inside each material relative to the smallest feature in the cross-section. */
@@ -28,13 +33,42 @@ const MIN_VERTICAL_PANELS = 4
 /** A negative conductor index marks a dielectric interface row instead of a conductor excitation. */
 const DIELECTRIC_INTERFACE = -1
 
+/** Collapse interfaces that have no real permittivity contrast for capacitance-only calculations. */
+function mergeRealDielectricLayers(
+  dielectricLayers: CrossSectionDielectricLayer[],
+): CrossSectionDielectricLayer[] {
+  const mergedLayers: CrossSectionDielectricLayer[] = []
+  for (const layer of [...dielectricLayers].sort((a, b) => a.zMm - b.zMm)) {
+    if (layer.relativePermittivity === 1) continue
+    const previous = mergedLayers.at(-1)
+    if (
+      previous &&
+      previous.relativePermittivity === layer.relativePermittivity &&
+      Math.abs(layer.zMm - (previous.zMm + previous.thicknessMm)) <=
+        DIELECTRIC_BOUNDARY_TOLERANCE_MM
+    ) {
+      mergedLayers[mergedLayers.length - 1] = {
+        ...previous,
+        thicknessMm: layer.zMm + layer.thicknessMm - previous.zMm,
+      }
+      continue
+    }
+    mergedLayers.push(layer)
+  }
+  return mergedLayers
+}
+
 /** Plan region edges before allocating any panels. */
 function* planRegionEdges(mesh: RegionMeshInput): Iterable<BoundaryEdge> {
   const { region, panelsPerEdge, interfaceExtent, isVacuum } = mesh
+  let dielectricLayers = region.dielectricLayers
+  if (isVacuum) dielectricLayers = []
+  if (mesh.includeDielectricLoss === false)
+    dielectricLayers = mergeRealDielectricLayers(dielectricLayers)
   const conductorSpansMm = region.conductors.map((c) =>
     Math.max(c.widthMm, c.zMm + c.thicknessMm),
   )
-  const dielectricTopsMm = region.dielectricLayers.map(
+  const dielectricTopsMm = dielectricLayers.map(
     (layer) => layer.zMm + layer.thicknessMm,
   )
   const scaleMm = Math.max(...conductorSpansMm, ...dielectricTopsMm)
@@ -42,15 +76,13 @@ function* planRegionEdges(mesh: RegionMeshInput): Iterable<BoundaryEdge> {
     c.widthMm,
     c.thicknessMm,
   ])
-  const dielectricThicknessesMm = region.dielectricLayers.map(
+  const dielectricThicknessesMm = dielectricLayers.map(
     (layer) => layer.thicknessMm,
   )
   const materialProbeMm =
     Math.min(...conductorSizesMm, ...dielectricThicknessesMm) *
     MATERIAL_PROBE_FRACTION
   const coordinateToleranceMm = materialProbeMm / COORDINATE_TOLERANCE_DIVISOR
-  let dielectricLayers = region.dielectricLayers
-  if (isVacuum) dielectricLayers = []
   const verticalSteps = Math.max(
     MIN_VERTICAL_PANELS,
     Math.ceil(panelsPerEdge / VERTICAL_PANEL_DIVISOR),
@@ -93,19 +125,36 @@ function* planRegionEdges(mesh: RegionMeshInput): Iterable<BoundaryEdge> {
     layer.zMm,
     layer.zMm + layer.thicknessMm,
   ])
-  const boundaries = mergeCoordinates({
+  const boundaryHeightsMm = mergeCoordinates({
     coordinatesMm: dielectricBoundaryHeightsMm,
-    coordinateToleranceMm,
-  }).filter((zMm) => {
-    return (
-      zMm > coordinateToleranceMm &&
-      (!region.planeSpacingMm ||
-        zMm < region.planeSpacingMm - coordinateToleranceMm)
-    )
+    coordinateToleranceMm: Math.min(
+      coordinateToleranceMm,
+      DIELECTRIC_BOUNDARY_TOLERANCE_MM,
+    ),
   })
-  for (const zMm of boundaries) {
-    const below = getMaterial({ dielectricLayers, zMm: zMm - materialProbeMm })
-    const above = getMaterial({ dielectricLayers, zMm: zMm + materialProbeMm })
+  for (const [index, zMm] of boundaryHeightsMm.entries()) {
+    if (zMm <= coordinateToleranceMm) continue
+    if (
+      region.planeSpacingMm &&
+      zMm >= region.planeSpacingMm - coordinateToleranceMm
+    )
+      continue
+
+    // Stay in the neighboring height interval even when an air gap is thinner than the probe.
+    let lowerProbeMm = materialProbeMm
+    let upperProbeMm = materialProbeMm
+    if (index > 0)
+      lowerProbeMm = Math.min(
+        lowerProbeMm,
+        (zMm - boundaryHeightsMm[index - 1]) / 2,
+      )
+    if (index + 1 < boundaryHeightsMm.length)
+      upperProbeMm = Math.min(
+        upperProbeMm,
+        (boundaryHeightsMm[index + 1] - zMm) / 2,
+      )
+    const below = getMaterial({ dielectricLayers, zMm: zMm - lowerProbeMm })
+    const above = getMaterial({ dielectricLayers, zMm: zMm + upperProbeMm })
     if (
       below.relativePermittivity === above.relativePermittivity &&
       below.lossTangent === above.lossTangent
