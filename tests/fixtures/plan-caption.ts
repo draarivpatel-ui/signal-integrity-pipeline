@@ -2,9 +2,38 @@ import type { GraphicsObject, Text } from "graphics-debug"
 import {
   PLAN_BAND_GAP,
   PLAN_LINE_STEP,
+  textWidth,
   wrapPlanText,
 } from "../../src/board/plan-header"
 import { routeBounds } from "../../src/board/plan-view"
+
+/** Balance a two-line caption around its midpoint without breaking words. */
+function captionLines({
+  text,
+  width,
+}: {
+  text: string
+  width: number
+}): string[] {
+  const wrapped = wrapPlanText({ text, width })
+  if (wrapped.length !== 2) return wrapped
+  const words = text.split(" ")
+  let best = wrapped[0].length
+  let difference = Math.abs(textWidth(wrapped[0]) - textWidth(wrapped[1]))
+  let end = 0
+  for (const word of words.slice(0, -1)) {
+    end += word.length
+    const left = textWidth(text.slice(0, end))
+    const right = textWidth(text.slice(end + 1))
+    const gap = Math.abs(left - right)
+    if (Math.max(left, right) <= width && gap < difference) {
+      best = end
+      difference = gap
+    }
+    end++
+  }
+  return [text.slice(0, best), text.slice(best + 1)]
+}
 
 /** Add the fixture's explanation and extend the plan picture below the board. */
 export function withPlanCaption({
@@ -31,7 +60,7 @@ export function withPlanCaption({
 
   const x = frame.center.x
   const firstY = board.minY - size * (PLAN_BAND_GAP + 0.5)
-  const texts = wrapPlanText({ text: caption, width: frame.width / size }).map(
+  const texts = captionLines({ text: caption, width: frame.width / size }).map(
     (text, i): Text => ({
       x,
       y: firstY - size * PLAN_LINE_STEP * i,

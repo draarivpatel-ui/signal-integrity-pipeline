@@ -6,7 +6,7 @@ import {
 } from "@flatten-js/core"
 import type { Line, Point, Polygon, Text } from "graphics-debug"
 import type { SourcePortId } from "./ids"
-import { planTextSize } from "./plan-header"
+import { planTextSize, textWidth } from "./plan-header"
 import {
   boxPoints,
   type PlanFrame,
@@ -70,18 +70,6 @@ function markBox(polygon: Polygon): Box | undefined {
   )
 }
 
-/** Estimate sans-serif glyph widths so the white backing stays close to the text. */
-function labelWidth(text: string): number {
-  let width = 0.45
-  for (const char of text) {
-    if (" .,:;!'ijlI|".includes(char)) width += 0.34
-    else if ("mwMW@".includes(char) || char > "~") width += 1
-    else if (char.toUpperCase() === char) width += 0.74
-    else width += 0.61
-  }
-  return width
-}
-
 /** The center of a label box supplies both its text and backing positions. */
 function labelBox({
   x,
@@ -105,7 +93,7 @@ function placeLabel({
   clear: (box: Box) => boolean
 }): Box | undefined {
   const { anchor, text } = label
-  const width = labelWidth(text) * size
+  const width = (textWidth(text) + 0.45) * size
   const height = size * 1.27
   const center = anchor.center
   if (label.kind === "pour") {
@@ -273,7 +261,8 @@ export function planLabels({
   const pours = polygons.flatMap((polygon): PlanLabel[] => {
     if (polygon.layer !== "pours" || !polygon.label) return []
     const outline = new BoardPolygon(polygon.points.map(({ x, y }) => [x, y]))
-    const hue = polygon.fill === planPourFills.pink ? "pink" : "gray"
+    let glyph = "□"
+    if (polygon.fill === planPourFills.pink) glyph = "■"
     return [
       {
         kind: "pour",
@@ -281,7 +270,7 @@ export function planLabels({
         color: planColors.quiet,
         anchor: outline.box,
         outline,
-        legend: `${hue} ${polygon.label}`,
+        legend: `${glyph} ${polygon.label}`,
       },
     ]
   })
