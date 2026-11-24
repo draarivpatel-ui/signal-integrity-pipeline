@@ -6,9 +6,9 @@ import {
 } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
+  getBoardBounds,
   type RoutedSections,
   RouteSectionsSolver,
-  routeBoardBox,
   routeBoardDrawing,
   routeLengths,
   routeStrip,
@@ -36,15 +36,15 @@ import {
   receiverThreshold,
 } from "../simulation"
 import type { SolverContext } from "../solver"
+import {
+  capturePlanInput,
+  type TransientChannelSimulationPlanInput,
+} from "./plan/input"
 import { type RoutedStageOutput, routedStage } from "./routed-stage"
 import {
   type TransientChannelSimulationPlan,
   TransientChannelSimulationPlanSolver,
 } from "./transient-channel-simulation-plan"
-import {
-  captureTransientChannelSimulationPlanInput,
-  type TransientChannelSimulationPlanInput,
-} from "./transient-channel-simulation-plan-input"
 
 /** All six rows exist before the first step; every stage drains all planned channel simulations in order. */
 export const routedStages = [
@@ -127,7 +127,9 @@ export const routedStages = [
           receivers: new Set(
             p
               .stageOutput("RouteBindingsSolver")
-              .value[i].mappings.map((mapping) => mapping.to),
+              .value[i].receiverPaths.map(
+                ({ toSourcePortId }) => toSourcePortId,
+              ),
           ),
         }),
       })),
@@ -178,7 +180,7 @@ export class RoutedPipelineSolver extends BasePipelineSolver<TransientChannelSim
   readonly context: SolverContext
   /** Preserve exact model bytes while keeping runtime capabilities outside immutable input. */
   constructor({ input, context }: RoutedPipelineInput) {
-    super(captureTransientChannelSimulationPlanInput(input))
+    super(capturePlanInput(input))
     this.context = context
   }
   /** Each completed row exposes its domain array in planning order. */
@@ -241,7 +243,7 @@ export class RoutedPipelineSolver extends BasePipelineSolver<TransientChannelSim
     if (plans && !plans.length) {
       // No channels were planned: the whole board with one quiet line, the same in every stage.
       const drawing = routeBoardDrawing({ circuit, scope: undefined })
-      const board = routeBoardBox(circuit)
+      const board = getBoardBounds(circuit)
       drawing.texts!.push(
         routeText({
           x: (board.minX + board.maxX) / 2,

@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -19,7 +20,10 @@ test("a named net reports its bypassed cuts as a short", async () => {
       })
       solver.solve()
       const [{ bindings }] = solver.getOutput().value
-      circuitNodes({ ...bindings, circuit: bindings.circuitJson })
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      })
     },
     { code: "channel_short" },
   )

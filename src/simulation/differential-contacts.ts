@@ -1,9 +1,9 @@
 import type { SimulationPcbDriverReceiverChannel, SourcePortId } from "../board"
 import {
-  type SourceNodeGroups,
-  type SourceNodeId,
-  sourceGroupId,
-} from "./source-node-groups"
+  getIdealGroupId,
+  type IdealGroups,
+  type SourceContactId,
+} from "./ideal-connectivity"
 
 /** Driver-first contacts of one differential channel, in declaration order. */
 export interface DifferentialContacts {
@@ -38,8 +38,8 @@ export function differentialContacts(
 
 /** Groups reached by the declared contacts on the two differential legs. */
 interface DifferentialGroups {
-  positive: ReadonlySet<SourceNodeId>
-  negative: ReadonlySet<SourceNodeId>
+  positive: ReadonlySet<SourceContactId>
+  negative: ReadonlySet<SourceContactId>
 }
 
 /** Find the differential leg groups before introducing passive bridges. */
@@ -48,17 +48,17 @@ export function differentialGroups({
   groups,
 }: {
   contacts: readonly DifferentialContacts[]
-  groups: SourceNodeGroups
+  groups: IdealGroups
 }): DifferentialGroups[] {
   return contacts.map(({ positiveSourcePortIds, negativeSourcePortIds }) => ({
     positive: new Set(
       positiveSourcePortIds.map((sourcePortId) =>
-        sourceGroupId({ groups, sourcePortId }),
+        getIdealGroupId({ groups, sourcePortId }),
       ),
     ),
     negative: new Set(
       negativeSourcePortIds.map((sourcePortId) =>
-        sourceGroupId({ groups, sourcePortId }),
+        getIdealGroupId({ groups, sourcePortId }),
       ),
     ),
   }))

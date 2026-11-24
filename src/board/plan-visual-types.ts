@@ -1,10 +1,12 @@
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
+import type { Line, Polygon } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId, SourceTraceId } from "./ids"
 import type { PlanHeaderRow } from "./plan-header"
+import type { PlanPorts } from "./plan-view"
 
-/** Colours distinguish secondary copper and topology on a light canvas. */
+/** Colors distinguish secondary copper and topology on a light canvas. */
 export const planColors = {
   ink: "#0f172a",
   quiet: "#475569",
@@ -24,8 +26,8 @@ export const planPourFills = {
   gray: "rgba(100,116,139,0.08)",
 } as const
 
-/** Distinct strokes for adjacent cuts, with the same colours in the ledger. */
-const CUT_COLORS = [
+/** Distinct strokes for adjacent traces and their path rows. */
+const TRACE_COLORS = [
   "#0369a1",
   "#b45309",
   "#047857",
@@ -34,50 +36,73 @@ const CUT_COLORS = [
   "#0e7490",
 ]
 
-/** Assign the same colour to a cut, its terminals and its ledger row. */
-export function planCutColor(index: number): string {
-  return CUT_COLORS[index % CUT_COLORS.length]
+/** Match each trace to its endpoint markers and path row. */
+export function getTraceColor(index: number): string {
+  return TRACE_COLORS[index % TRACE_COLORS.length]
 }
 
 /** A physical conductor partition, oriented for its first mapped path. */
-export interface PlanVisualCut {
-  trace: SourceTraceId
-  from: SourcePortId
-  to: SourcePortId
+export interface PlanTrace {
+  sourceTraceId: SourceTraceId
+  fromSourcePortId: SourcePortId
+  toSourcePortId: SourcePortId
   index: number
-  mapped: boolean
+  isMapped: boolean
 }
 
 /** A point-to-point topology overlay independent of the physical copper. */
-export interface PlanVisualLink {
-  from: SourcePortId
-  to: SourcePortId
+export interface PlanOverlay {
+  fromSourcePortId: SourcePortId
+  toSourcePortId: SourcePortId
   kind: "series" | "ideal" | "missing" | "short"
   label: string
 }
 
-/** A pin's role and the cut or path colour to use for its marker. */
+/** A pin's role and the trace or path color to use for its marker. */
 export interface PlanVisualEndpoint {
-  id: SourcePortId
-  kind: "driver" | "receiver" | "ideal" | "load"
+  sourcePortId: SourcePortId
+  kind: "driver" | "receiver" | "ideal" | "extraTraceEnd"
   color: string
   label: string
-  toward?: SourcePortId
+  towardSourcePortId?: SourcePortId
+}
+
+/** A drawing's visible explanation and the original diagnostic on hover. */
+export interface PlanVisualDiagnostic {
+  text: string
+  label: string
+}
+
+/** The summary in a full-board or cropped view. */
+export interface PlanVisualSummary {
+  text: string
+  scopedText?: string
+}
+
+/** Electrical mark carried through line clipping for the legend. */
+export interface PlanLine extends Line {
+  mark?: "envelope" | "ideal" | "missing" | "bypass" | "traceFault"
+}
+
+/** Endpoint symbol carried through polygon clipping for the legend. */
+export interface PlanPolygon extends Polygon {
+  endpointKind?: PlanVisualEndpoint["kind"]
 }
 
 /** Board geometry and resolved decisions from a single planning attempt. */
 export interface PlanVisualScene {
   db: CircuitJsonUtilObjects
+  ports: PlanPorts
   title: string
-  diagnostic?: { text: string; label: string }
-  scope?: Snapshot<CopperScope>
-  cuts: readonly PlanVisualCut[]
+  diagnostic?: PlanVisualDiagnostic
+  copperScope?: Snapshot<CopperScope>
+  traces: readonly PlanTrace[]
   endpoints: readonly PlanVisualEndpoint[]
-  links: readonly PlanVisualLink[]
-  summary?: { text: string; scopedText?: string }
+  overlays: readonly PlanOverlay[]
+  summary?: PlanVisualSummary
   rows: readonly PlanHeaderRow[]
   faultCode?: string
-  faultPorts: ReadonlySet<SourcePortId>
-  faultTraces: ReadonlySet<SourceTraceId>
-  existingTraces: ReadonlySet<SourceTraceId>
+  faultSourcePortIds: ReadonlySet<SourcePortId>
+  faultSourceTraceIds: ReadonlySet<SourceTraceId>
+  existingSourceTraceIds: ReadonlySet<SourceTraceId>
 }

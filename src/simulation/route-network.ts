@@ -3,6 +3,7 @@ import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
+  cloneCircuitJson,
   getSourcePortConnectivityMapFromCircuitJson,
   type Point,
   type RouteStripRow,
@@ -33,6 +34,7 @@ import {
 } from "../kernel"
 import { branchSaves } from "./branch-saves"
 import { namespaceSpice } from "./netlist"
+import type { RoutedDeck, RouteNetworkInput } from "./route-inputs"
 import {
   type RouteContactKey,
   type RouteLadder,
@@ -43,7 +45,6 @@ import { routeOblique } from "./route-oblique"
 import { routedRequest } from "./route-transient"
 import { routeTransitions } from "./route-transitions"
 import { routedControl } from "./routed-control"
-import type { RoutedDeck, RouteNetworkInput } from "./routed-types"
 import { spiceSubcircuitHeader, spiceWords } from "./spice-header"
 
 /** Small series resistance joins aliases without creating an ideal-voltage loop (ohms). */
@@ -91,9 +92,9 @@ export class RouteNetworkSolver extends BaseSolver {
   /** Preserve the original compiler's exact node and SPICE ordering. */
   private *build(): Generator<void, Produced<RoutedDeck>> {
     const { geometry, extracted, bindings, options, materials } = this.input
-    const { scope, models, mappings } = bindings
+    const { scope, models, receiverPaths } = bindings
     const probes = [...bindings.plan.probes]
-    const db = cju([...bindings.circuitJson])
+    const db = cju(cloneCircuitJson(bindings.circuitJson))
     const stackup = db.pcb_stackup.list()[0]
     const maskLayers = stackup.layers.filter(
       (layer) => layer.layer_type === "soldermask",
@@ -142,7 +143,7 @@ export class RouteNetworkSolver extends BaseSolver {
     const steps = routeLadderSteps({
       extracted,
       endpoint,
-      riseSeconds: options.riseSeconds,
+      riseSeconds: options.fastestEdgeSeconds,
       refinement: options.refinement,
       cellsPerRise: options.cellsPerRise,
     })
@@ -341,18 +342,25 @@ export class RouteNetworkSolver extends BaseSolver {
       ].join(" "),
     ]
     const endpointNodes = Object.fromEntries(
-      mappings.flatMap(({ from, to }) => [
-        [from, routedNode({ nodeMap: bindings.nodeMap, id: from })],
-        [to, routedNode({ nodeMap: bindings.nodeMap, id: to })],
+      receiverPaths.flatMap(({ fromSourcePortId, toSourcePortId }) => [
+        [
+          fromSourcePortId,
+          routedNode({ nodeMap: bindings.nodeMap, id: fromSourcePortId }),
+        ],
+        [
+          toSourcePortId,
+          routedNode({ nodeMap: bindings.nodeMap, id: toSourcePortId }),
+        ],
       ]),
     )
+    const { fastestEdgeSeconds, ...networkOptions } = options
     const evidence = {
       endpoint_nodes: endpointNodes,
       probes,
       label: "JLC standard stackup (assumed)",
       materials,
       mask_thickness_source: maskThicknessSource,
-      options,
+      options: { riseSeconds: fastestEdgeSeconds, ...networkOptions },
       scope,
       warnings,
       cells: ladder.cells,
@@ -378,12 +386,26 @@ export class RouteNetworkSolver extends BaseSolver {
         warnings: model.warnings,
         sourceEvidence: model.sourceEvidence,
       })),
-      routes: mappings.map((mapping) => {
+      routes: receiverPaths.map((receiverPath) => {
         const wires = geometry.wires.filter(
-          (wire) => wire.source === mapping.sourceTraceId,
+          (wire) => wire.source === receiverPath.sourceTraceId,
         )
+        const {
+          channelName,
+          fromSourcePortId,
+          toSourcePortId,
+          sourceTraceId,
+          sourceTraceIds,
+        } = receiverPath
+        const route = {
+          port: channelName,
+          from: fromSourcePortId,
+          to: toSourcePortId,
+          sourceTraceId,
+          sourceTraceIds,
+        }
         return {
-          ...mapping,
+          ...route,
           length_mm: wires.reduce(
             (sum, wire) => sum + wire.end - wire.start,
             0,

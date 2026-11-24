@@ -6,7 +6,7 @@ import type {
   PcbFabricationNoteText,
   PcbTrace,
 } from "circuit-json"
-import type { CircuitJson } from "../../src/board"
+import { type CircuitJson, cloneCircuitJson } from "../../src/board"
 import type { TransientChannelSimulationPlan } from "../../src/pipeline"
 import { circuitNodes } from "../../src/simulation"
 import "./extend-expect-circuit-snapshot"
@@ -38,14 +38,17 @@ export function resolvePlanTraceCuts({
   expectedTraceCount: number
 }): ResolvedPlanTrace[] {
   const { bindings, sections } = plan
-  const { node } = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
+  const { node } = circuitNodes({
+    ...bindings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+  })
   const { channelPcbTraceIds } = sections.copperScope
   assert.equal(channelPcbTraceIds.length, expectedTraceCount)
-  assert.equal(bindings.routedTraceCuts.length, expectedTraceCount)
+  assert.equal(bindings.traceContacts.length, expectedTraceCount)
   return channelPcbTraceIds.map((pcbTraceId) => {
     const pcbTrace = db.pcb_trace.get(pcbTraceId)
     assert.ok(pcbTrace?.source_trace_id)
-    const cut = bindings.routedTraceCuts.find(
+    const cut = bindings.traceContacts.find(
       ({ sourceTraceId }) => sourceTraceId === pcbTrace.source_trace_id,
     )
     assert.ok(cut)
@@ -123,7 +126,7 @@ export function expectPlanPcbSnapshot({
   if (caption) {
     captions.push({
       ...captions[0],
-      pcb_fabrication_note_text_id: "ideal_connection",
+      pcb_fabrication_note_text_id: "plan_caption",
       text: caption,
       color: "#ffffff",
       anchor_position: {
