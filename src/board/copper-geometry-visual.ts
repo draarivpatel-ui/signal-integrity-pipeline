@@ -1,9 +1,11 @@
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { GraphicsObject, Line, Text, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
+import { drawSectionLabel } from "./copper-geometry-label"
 import { drawContacts, drawJoin, toBoardPoint } from "./copper-geometry-marks"
 import type {
   ExtractedCopper,
+  ReferencePour,
   TraceWire,
   WireSection,
 } from "./copper-geometry-types"
@@ -14,9 +16,6 @@ import { getTraceColor, planColors, planPourFills } from "./plan-visual-types"
 
 /** Fit annotation and marker sizes to the physical board width. */
 const BOARD_UNITS = 80
-/** Estimate the average advance of a character in the section annotation. */
-const SECTION_LABEL_ADVANCE_EM = 0.5
-
 /** Boundary and reference annotation for one section interval. */
 interface SectionMarks {
   lines: Line[]
@@ -50,11 +49,13 @@ function drawSectionBoundary({
 /** Draw one section with the layer and net of its reference. */
 function drawSection({
   section,
+  pours,
   index,
   db,
   unitMm,
 }: {
   section: Snapshot<WireSection>
+  pours: Snapshot<ReferencePour[]>
   index: number
   db: CircuitJsonUtilObjects
   unitMm: number
@@ -81,32 +82,10 @@ function drawSection({
       drawSectionBoundary({ wire, positionMm, unitMm }),
     ),
   ])
-  const wire = wires.at(-1)
-  if (!wire) return { lines }
-  const center = getWirePoint({ wire, positionMm: (startMm + endMm) / 2 })
-  const wireLayers = [...new Set(wires.map(({ layer }) => layer))].join(" / ")
-  const copperClearanceMm = wire.widthMm / 2 + unitMm * 0.9
-  const fontSize = unitMm * 1.65
-  const text: Text = {
-    x: center[0],
-    y: center[1] + copperClearanceMm,
-    text: `${wireLayers} · ${label}`,
-    fontSize,
-    anchorSide: "bottom_center",
-    color,
+  return {
+    lines,
+    text: drawSectionLabel({ section, pours, label, color, unitMm }),
   }
-  const hasNearbyReferenceEdge = references.some(
-    ({ lateralGapMm }) =>
-      lateralGapMm !== undefined && lateralGapMm < copperClearanceMm + fontSize,
-  )
-  if (
-    hasNearbyReferenceEdge ||
-    text.text.length * fontSize * SECTION_LABEL_ADVANCE_EM > endMm - startMm
-  ) {
-    text.y = center[1] - copperClearanceMm
-    text.anchorSide = "top_center"
-  }
-  return { lines, text }
 }
 
 /** Draw the original trace as a light outline behind the modeled wire. */
@@ -188,7 +167,7 @@ function drawBoard({
         anchorSide: "bottom_left",
         text:
           error ||
-          "Ticks mark section boundaries. Circles mark ports and vias. Dashes mark ideal joins.",
+          "Ticks mark section boundaries. Circles mark pad contacts and vias. Dashes mark ideal joins.",
         fontSize: unitMm * 1.45,
         color: statusColor,
       },
@@ -212,7 +191,7 @@ export function drawCopperGeometry({
   if (!geometry) return drawing
 
   const sections = geometry.sections.map((section, index) =>
-    drawSection({ section, index, db, unitMm }),
+    drawSection({ section, pours: geometry.pours, index, db, unitMm }),
   )
   const joins = geometry.wires.flatMap((wire) => wire.joins || [])
   const pcbTraceIds = new Set(

@@ -2,23 +2,23 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { stepCopperGeometryExtraction } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
-test("earlier sectioning progress does not change after the next trace", async () => {
+test("earlier extraction progress does not change after the next trace", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="First" />
-        <SectionTrace name="Second" startY={0.6} />
+        <CopperTrace name="First" />
+        <CopperTrace name="Second" startY={0.6} />
       </>
     ),
   })
   const steps = stepCopperGeometryExtraction({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   const first = steps.next()
   assert.equal(first.done, false)

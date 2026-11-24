@@ -2,18 +2,18 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperPad,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionPin,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("rejects a required pad entirely within a via drill bore", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Signal" />
-        <SectionPin name="Bore" x={0} layer="bottom" />
+        <CopperTrace name="Signal" />
+        <CopperPad name="Bore" x={0} layer="bottom" />
         <via
           connectsTo="net.SIGNAL"
           pcbX={0}
@@ -27,7 +27,7 @@ test("rejects a required pad entirely within a via drill bore", async () => {
     ),
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit, required: ["Bore"] }),
+    getCopperGeometryExtractionInput({ circuit, required: ["Bore"] }),
   )
   assert.throws(
     () => solver.solve(),
