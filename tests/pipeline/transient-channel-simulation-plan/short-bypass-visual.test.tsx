@@ -18,7 +18,7 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
   })
   solver.solve()
   const drawing = solver.visualize()
-  assert.equal(drawing.title, "SERIES — can't simulate")
+  assert.equal(drawing.title, "SERIES: can't simulate")
   const diagnosticRows = new Set(
     drawing.rects
       ?.filter(
@@ -30,10 +30,10 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
   const explanation = drawing.texts
     ?.filter((text) => text.layer === "header" && diagnosticRows.has(text.y))
     .sort((a, b) => b.y - a.y)
-  assert.equal(explanation?.length, 2)
+  assert.equal(explanation?.length, 1)
   assert.equal(
     explanation.map(({ text }) => text).join(" "),
-    "DATA is shorted: TX pin Y connects directly to RX pin A, skipping the traces and resistor RS (red dashes).",
+    "DATA has a direct shortcut from TX to RX, skipping RS and both traces.",
   )
   const scaleText = drawing.texts?.find(
     (text) => text.layer === "header" && text.text === "2 mm",
@@ -51,15 +51,18 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
     ),
   )
   assert.ok(drawing.texts)
-  const legend = drawing.texts.map(({ text }) => text).join(" ")
-  assert.ok(legend.includes("red dashed arc = shortcut"))
-  assert.ok(legend.includes("red dashes on trace = short or loop"))
-  assert.ok(!legend.includes("purple dashes"))
+  const legend = drawing.texts.find(({ text }) =>
+    text.includes("-×- shortcut"),
+  )?.text
+  assert.ok(legend)
+  assert.ok(legend.includes("-×- shortcut"))
+  assert.ok(legend.includes("× bypassed trace"))
+  assert.ok(!legend.includes("-- direct connection"))
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "short-bypass-visual",
     caption:
-      "Two traces connect TX to RX through resistor RS. The plan stops because the board design also has a direct shortcut past RS and both traces.",
+      "Two traces connect TX to RX through resistor RS, alongside a direct connection between them. This test checks that the plan stops when a shortcut skips RS.",
   })
 })
