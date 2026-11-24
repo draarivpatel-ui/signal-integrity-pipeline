@@ -1,10 +1,10 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { calculateRlgc } from "../../../src/rlgc"
-import { sectionFixture } from "../../fixtures/cross-section"
+import { crossSectionFixture } from "../../fixtures/cross-section"
 
 test("lower plane conductivity scales only the plane contribution", () => {
-  const crossSection = sectionFixture({ kind: "microstrip" })
+  const crossSection = crossSectionFixture({ kind: "microstrip" })
   const base = calculateRlgc({ crossSection })
   const mixed = calculateRlgc({
     crossSection: {
