@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -17,10 +18,14 @@ test("a collapsed receiver reports cycle evidence without fabricating a lane pat
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const [cut] = bindings.routedTraceCuts
-  assert.equal(bindings.mappings.length, 0)
+  const [cut] = bindings.traceContacts
+  assert.equal(bindings.receiverPaths.length, 0)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     {
       code: "channel_short",
       message: new RegExp(

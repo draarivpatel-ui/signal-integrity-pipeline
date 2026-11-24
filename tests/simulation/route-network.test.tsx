@@ -12,8 +12,8 @@ import {
   RouteNetworkSolver,
 } from "../../src/simulation"
 import { routedRequest } from "../../src/simulation/route-transient"
-import { channelPlanInput } from "../fixtures/routed-fixture"
 import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
+import { renderTwoTracePlanInput } from "../fixtures/two-trace-plan-input"
 import Single from "../fixtures/unit-single-ended"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
@@ -26,7 +26,7 @@ let testNetwork: NetworkStage | undefined
 /** Assemble the network from the rendered fixture and the local vendor model. */
 async function routedNetwork(): Promise<NetworkStage> {
   if (testNetwork) return testNetwork
-  const input = await channelPlanInput()
+  const input = await renderTwoTracePlanInput()
   const solverContext = {
     progress: (): void => undefined,
     runSolver: async (): Promise<never> => {

@@ -1,5 +1,6 @@
 import type { Line, Rect, Text } from "graphics-debug"
 import type { PlanFrame } from "./plan-view"
+import { type PlanVisualDiagnostic, planColors } from "./plan-visual-types"
 
 /** One centered line of the plan header. */
 export interface PlanHeaderRow {
@@ -10,7 +11,7 @@ export interface PlanHeaderRow {
 /** Data needed to frame the header, independent of the copper drawing. */
 interface PlanHeaderScene {
   title: string
-  diagnostic?: { text: string; label: string }
+  diagnostic?: PlanVisualDiagnostic
   rows: readonly PlanHeaderRow[]
 }
 
@@ -21,19 +22,19 @@ interface PlanHeader {
   texts: Text[]
 }
 
-const INK = "#0f172a"
-const QUIET = "#475569"
-const RED = "#b91c1c"
+/** Keep secondary text proportional to the physical board width. */
+const BOARD_WIDTH_IN_TEXT_UNITS = 52
 /** Gap between the board and its surrounding text bands, in text-size units. */
 export const PLAN_BAND_GAP = 1.54
 /** Vertical spacing of consecutive text rows, in text-size units. */
 export const PLAN_LINE_STEP = 1.31
-const SCALE_LENGTHS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
+/** Readable scale-bar lengths in millimetres. */
+const SCALE_LENGTHS_MM = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
 
 /** Pick a standard length near one eighth of the drawn width. */
-function scaleLength(width: number): number {
-  const target = width / 8
-  return SCALE_LENGTHS.reduce((best, length) => {
+function getScaleLengthMm(widthMm: number): number {
+  const target = widthMm / 8
+  return SCALE_LENGTHS_MM.reduce((best, length) => {
     if (Math.abs(Math.log(length / target)) < Math.abs(Math.log(best / target)))
       return length
     return best
@@ -41,41 +42,41 @@ function scaleLength(width: number): number {
 }
 
 /** Use the same secondary text size for header lines and board labels. */
-export function planTextSize(width: number): number {
-  return width / 52
+export function getPlanTextSizeMm(widthMm: number): number {
+  return widthMm / BOARD_WIDTH_IN_TEXT_UNITS
 }
 
 /** Estimate sans-serif glyph widths in ems for the header and board labels. */
-export function textWidth(text: string): number {
-  let width = 0
+export function estimateTextWidthEms(text: string): number {
+  let widthEms = 0
   for (const char of text) {
-    if (" .,:;!'ijlI|·".includes(char)) width += 0.34
-    else if ("mwMW@".includes(char) || char > "~") width += 1
-    else if (char.toUpperCase() === char) width += 0.74
-    else width += 0.61
+    if (" .,:;!'ijlI|·".includes(char)) widthEms += 0.34
+    else if ("mwMW@".includes(char) || char > "~") widthEms += 1
+    else if (char.toUpperCase() === char) widthEms += 0.74
+    else widthEms += 0.61
   }
-  return width
+  return widthEms
 }
 
 /** Wrap at spaces and split individual words only when they exceed the frame. */
 export function wrapPlanText({
   text,
-  width,
+  maxWidthEms,
 }: {
   text: string
-  width: number
+  maxWidthEms: number
 }): string[] {
   const lines: string[] = []
   let line = ""
   for (let word of text.split(" ")) {
-    if (textWidth(line + word) <= width) {
+    if (estimateTextWidthEms(line + word) <= maxWidthEms) {
       line += `${word} `
       continue
     }
     if (line) lines.push(line.trimEnd())
-    while (textWidth(word) > width) {
+    while (estimateTextWidthEms(word) > maxWidthEms) {
       let end = 1
-      while (textWidth(word.slice(0, end + 1)) <= width) end++
+      while (estimateTextWidthEms(word.slice(0, end + 1)) <= maxWidthEms) end++
       lines.push(word.slice(0, end))
       word = word.slice(end)
     }
@@ -85,8 +86,62 @@ export function wrapPlanText({
   return lines
 }
 
+/** A wrapped header row with its font size and optional hover diagnostic. */
+interface SizedHeaderRow extends PlanHeaderRow {
+  size: number
+  label?: string
+}
+
+/** Wrap the summary and append the legend at a size that fits one row. */
+function buildHeaderRows({
+  scene,
+  size,
+  widthMm,
+  legend,
+}: {
+  scene: PlanHeaderScene
+  size: number
+  widthMm: number
+  legend: readonly string[]
+}): SizedHeaderRow[] {
+  let titleColor: string = planColors.ink
+  if (scene.diagnostic) titleColor = planColors.failure
+  const rows = [
+    {
+      text: scene.title,
+      color: titleColor,
+      size: size * 1.32,
+    },
+    {
+      text: scene.diagnostic?.text,
+      color: planColors.failure,
+      size,
+      label: scene.diagnostic?.label,
+    },
+    ...scene.rows.map((row) => ({ ...row, size })),
+  ]
+  const wrapped = rows.flatMap((row) => {
+    if (!row.text) return []
+    return wrapPlanText({
+      text: row.text,
+      maxWidthEms: widthMm / row.size,
+    }).map((text) => ({
+      ...row,
+      text,
+    }))
+  })
+  const legendText = legend.join(" · ")
+  if (legendText)
+    wrapped.push({
+      text: legendText,
+      color: planColors.quiet,
+      size: Math.min(size, widthMm / estimateTextWidthEms(legendText)),
+    })
+  return wrapped
+}
+
 /** Center each line above the board at its normal reading size. */
-export function planHeader({
+export function buildPlanHeader({
   scene,
   frame,
   boardTop,
@@ -97,10 +152,10 @@ export function planHeader({
   boardTop: number
   legend: readonly string[]
 }): PlanHeader {
-  const { width, box } = frame
+  const { widthMm, box } = frame
   const x = (box.minX + box.maxX) / 2
-  const size = planTextSize(width)
-  const scale = scaleLength(width)
+  const size = getPlanTextSizeMm(widthMm)
+  const scale = getScaleLengthMm(widthMm)
   const scaleY = boardTop + size * PLAN_BAND_GAP
   const labelY = scaleY + size * 0.88
   const lines: Line[] = [
@@ -111,7 +166,7 @@ export function planHeader({
         { x: x + scale / 2, y: scaleY },
         { x: x + scale / 2, y: scaleY + size * 0.23 },
       ],
-      strokeColor: QUIET,
+      strokeColor: planColors.quiet,
       strokeWidth: size * 0.085,
       label: `${scale} mm`,
       layer: "header",
@@ -124,48 +179,19 @@ export function planHeader({
       text: `${scale} mm`,
       anchorSide: "center",
       fontSize: size,
-      color: QUIET,
+      color: planColors.quiet,
       layer: "header",
     },
   ]
-  const rows = [
-    {
-      text: scene.title,
-      color: scene.diagnostic ? RED : INK,
-      size: size * 1.32,
-    },
-    {
-      text: scene.diagnostic?.text,
-      color: RED,
-      size,
-      label: scene.diagnostic?.label,
-    },
-    ...scene.rows.map((row) => ({ ...row, size })),
-  ]
   const rects: Rect[] = []
   let y = labelY + size * 1.66
-  const wrapped = rows.flatMap((row) => {
-    if (!row.text) return []
-    return wrapPlanText({ text: row.text, width: width / row.size }).map(
-      (text) => ({
-        ...row,
-        text,
-      }),
-    )
-  })
-  const legendText = legend.join(" · ")
-  if (legendText)
-    wrapped.push({
-      text: legendText,
-      color: QUIET,
-      size: Math.min(size, width / textWidth(legendText)),
-    })
-  for (const row of wrapped.reverse()) {
+  const rows = buildHeaderRows({ scene, size, widthMm, legend })
+  for (const row of rows.reverse()) {
     texts.push({
       x,
       y,
       text: row.text,
-      color: row.color || INK,
+      color: row.color || planColors.ink,
       fontSize: row.size,
       anchorSide: "center",
       layer: "header",
@@ -173,7 +199,7 @@ export function planHeader({
     if ("label" in row && row.label)
       rects.push({
         center: { x, y },
-        width: textWidth(row.text) * row.size,
+        width: estimateTextWidthEms(row.text) * row.size,
         height: size * 1.25,
         fill: "transparent",
         stroke: "none",
@@ -186,7 +212,7 @@ export function planHeader({
   const bottom = box.minY - size * 0.9
   rects.push({
     center: { x, y: (top + bottom) / 2 },
-    width: width + size * 3.6,
+    width: widthMm + size * 3.6,
     height: top - bottom,
     fill: "none",
     stroke: "none",

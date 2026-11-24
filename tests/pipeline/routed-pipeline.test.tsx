@@ -25,8 +25,8 @@ import {
   transientDurationSeconds,
   voltageNames,
 } from "../fixtures/routed-deck"
-import { channelPlanInput } from "../fixtures/routed-fixture"
 import { routedVisualFixture } from "../fixtures/routed-visual"
+import { renderTwoTracePlanInput } from "../fixtures/two-trace-plan-input"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 
@@ -54,13 +54,13 @@ test.skipIf(Boolean(vendorModelSkip))(
       input: {
         circuitJson: circuit,
         ibisSources: { "models/sn74lvc1g04.ibs": bytes.toString("utf8") },
-        scopeDistanceMm: 1,
+        nearbyGapMm: 1,
       },
       context: synthetic,
     })
     solver.solveUntilStage("RouteTransientSolver")
     const options = {
-      riseSeconds: 1e-9,
+      fastestEdgeSeconds: 1e-9,
       refinement: 1,
       durationSeconds: 4e-9,
       stepSeconds: 1e-11,
@@ -116,7 +116,7 @@ const synthetic: SolverContext = {
 test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
   "six flat stages visit every channelSimulation and produce deterministic artifacts",
   async () => {
-    const input = await channelPlanInput()
+    const input = await renderTwoTracePlanInput()
     const solver = new RoutedPipelineSolver({ input, context: synthetic })
     assert.throws(() => solver.getOutput(), /incomplete/)
     await solver.solveAsync()
@@ -190,7 +190,7 @@ type DriverWeight = [timeSeconds: number, weight: number]
 test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
   "driver lead-in fits the default capture",
   async () => {
-    const input = await channelPlanInput()
+    const input = await renderTwoTracePlanInput()
     const solver = new RoutedPipelineSolver({ input, context: synthetic })
     solver.solveUntilStage("RouteTransientSolver")
     assert.equal(

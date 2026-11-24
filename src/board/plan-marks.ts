@@ -2,8 +2,8 @@ import type { Line, Point, Polygon } from "graphics-debug"
 import type { SourcePortId } from "./ids"
 import type { PlanPort } from "./plan-view"
 import {
+  type PlanOverlay,
   type PlanVisualEndpoint,
-  type PlanVisualLink,
   type PlanVisualScene,
   planColors,
 } from "./plan-visual-types"
@@ -69,17 +69,19 @@ export function ring({
 /** Draw both explicit vias and inline route vias without duplicate holes. */
 export function viaShapes({
   db,
-  scope,
-  unit,
-}: Pick<PlanVisualScene, "db" | "scope"> & { unit: number }): Polygon[] {
-  const selected = new Set(scope?.extractedPcbViaIds)
+  copperScope,
+  unitMm,
+}: Pick<PlanVisualScene, "db" | "copperScope"> & {
+  unitMm: number
+}): Polygon[] {
+  const extractedPcbViaIds = new Set(copperScope?.extractedPcbViaIds)
   const boardVias = db.pcb_via.list().map((via) => ({
     ...via,
     label: `Via ${via.pcb_via_id} · ${via.layers.join("–")}`,
-    active: selected.has(via.pcb_via_id),
+    isInScope: extractedPcbViaIds.has(via.pcb_via_id),
   }))
   const positions = new Set(boardVias.map(({ x, y }) => `${x},${y}`))
-  const nearby = new Set(scope?.extractedPcbTraceIds)
+  const nearby = new Set(copperScope?.extractedPcbTraceIds)
   const routeVias = db.pcb_trace.list().flatMap((trace) =>
     trace.route.flatMap((point) => {
       if (point.route_type !== "via") return []
@@ -89,22 +91,23 @@ export function viaShapes({
       return [
         {
           ...point,
-          outer_diameter: point.outer_diameter || unit * 2,
-          hole_diameter: point.hole_diameter || unit,
-          active: nearby.has(trace.pcb_trace_id),
+          outer_diameter: point.outer_diameter || unitMm * 2,
+          hole_diameter: point.hole_diameter || unitMm,
+          isInScope: nearby.has(trace.pcb_trace_id),
           label: `Route via · ${point.from_layer}–${point.to_layer}`,
         },
       ]
     }),
   )
   return [...boardVias, ...routeVias].flatMap((via) => {
-    const fill = via.active ? planColors.scope : "#64748b"
+    let fill = "#64748b"
+    if (via.isInScope) fill = planColors.scope
     return [
       {
         points: ring({ center: via, radius: via.outer_diameter / 2 }),
         fill,
         stroke: "#334155",
-        strokeWidth: unit * 0.18,
+        strokeWidth: unitMm * 0.18,
         label: via.label,
         layer: "copper",
       },
@@ -122,12 +125,12 @@ export function viaShapes({
 /** A glyph radius that fits the two closest distinct active contacts. */
 export function endpointRadius({
   ports,
-  unit,
+  unitMm,
 }: {
   ports: readonly Point[]
-  unit: number
+  unitMm: number
 }): number {
-  let radius = unit * 1.42
+  let radius = unitMm * 1.42
   for (const [index, from] of ports.entries())
     for (const to of ports.slice(index + 1)) {
       const { length } = direction({ from, to })
@@ -148,10 +151,13 @@ export function endpointShape({
   radius: number
   ports: ReadonlyMap<SourcePortId, PlanPort>
 }): Polygon[] {
-  const { kind, label, color, toward } = endpoint
+  const { kind, label, color, towardSourcePortId } = endpoint
   const layer = "endpoints"
   if (kind === "driver") {
-    const axis = direction({ from: point, to: ports.get(toward || "") })
+    const axis = direction({
+      from: point,
+      to: ports.get(towardSourcePortId || ""),
+    })
     const points = [
       [1, 0],
       [-0.78, 0.88],
@@ -203,7 +209,8 @@ export function endpointShape({
         label,
       },
     ]
-  const size = kind === "load" ? radius * 0.8 : radius
+  let size = radius
+  if (kind === "extraTraceEnd") size *= 0.8
   return [
     {
       points: [
@@ -224,11 +231,11 @@ export function endpointShape({
 /** A contrasting cross marks the middle of a gap or implicated connection. */
 export function faultCross({
   point,
-  unit,
+  unitMm,
   label,
 }: {
   point: Point
-  unit: number
+  unitMm: number
   label: string
 }): Polygon {
   const ends = [
@@ -247,12 +254,12 @@ export function faultCross({
   ]
   return {
     points: ends.map(([x, y]) => ({
-      x: point.x + x * unit,
-      y: point.y + y * unit,
+      x: point.x + x * unitMm,
+      y: point.y + y * unitMm,
     })),
     fill: planColors.failure,
     stroke: "#fff",
-    strokeWidth: unit * 0.22,
+    strokeWidth: unitMm * 0.22,
     label,
     layer: "failure",
   }
@@ -262,15 +269,16 @@ export function faultCross({
 function bypassPoints({
   from,
   to,
-  unit,
+  unitMm,
 }: {
   from: Point
   to: Point
-  unit: number
+  unitMm: number
 }): Point[] {
   const axis = direction({ from, to })
-  const rise = Math.min(axis.length / 4, unit * 5)
-  const side = axis.x < 0 ? -1 : 1
+  const rise = Math.min(axis.length / 4, unitMm * 5)
+  let side = 1
+  if (axis.x < 0) side = -1
   return [
     from,
     offset({ point: from, axis, along: axis.length / 2, across: rise * side }),
@@ -283,35 +291,39 @@ export function linkShapes({
   link,
   from,
   to,
-  unit,
+  unitMm,
 }: {
-  link: PlanVisualLink
+  link: PlanOverlay
   from: Point
   to: Point
-  unit: number
+  unitMm: number
 }): Polygon[] {
   const { kind, label } = link
   const axis = direction({ from, to })
   const point = offset({ point: from, axis, along: axis.length / 2 })
   if (kind === "short")
     return [
-      faultCross({ point: bypassPoints({ from, to, unit })[1], unit, label }),
+      faultCross({
+        point: bypassPoints({ from, to, unitMm })[1],
+        unitMm,
+        label,
+      }),
     ]
-  if (kind === "missing") return [faultCross({ point, unit, label })]
+  if (kind === "missing") return [faultCross({ point, unitMm, label })]
   if (kind !== "series" || axis.length === 0) return []
   const half = axis.length / 2
   const points = [
-    [-half, -unit],
-    [half, -unit],
-    [half, unit],
-    [-half, unit],
+    [-half, -unitMm],
+    [half, -unitMm],
+    [half, unitMm],
+    [-half, unitMm],
   ].map(([along, across]) => offset({ point, axis, along, across }))
   return [
     {
       points,
       fill: "rgba(254,243,199,0.24)",
       stroke: planColors.series,
-      strokeWidth: unit * 0.32,
+      strokeWidth: unitMm * 0.32,
       label,
       layer: "topology",
     },
@@ -323,12 +335,12 @@ export function linkLine({
   link,
   from,
   to,
-  unit,
+  unitMm,
 }: {
-  link: PlanVisualLink
+  link: PlanOverlay
   from: Point
   to: Point
-  unit: number
+  unitMm: number
 }): Line {
   const { kind, label } = link
   if (kind === "series") {
@@ -338,7 +350,7 @@ export function linkLine({
         point: from,
         axis,
         along: fraction * axis.length,
-        across: [0, 0, 0.52, -0.52, 0.52, 0, 0][i] * unit,
+        across: [0, 0, 0.52, -0.52, 0.52, 0, 0][i] * unitMm,
       }),
     )
     return {
@@ -346,7 +358,7 @@ export function linkLine({
       label,
       layer: "topology",
       strokeColor: planColors.series,
-      strokeWidth: unit * 0.55,
+      strokeWidth: unitMm * 0.55,
       zIndex: 3,
     }
   }
@@ -356,18 +368,18 @@ export function linkLine({
       label,
       layer: "topology",
       strokeColor: planColors.ideal,
-      strokeWidth: unit * 0.68,
+      strokeWidth: unitMm * 0.68,
       strokeDash: "7,4",
       zIndex: 3,
     }
   let points = [from, to]
-  if (kind === "short") points = bypassPoints({ from, to, unit })
+  if (kind === "short") points = bypassPoints({ from, to, unitMm })
   return {
     points,
     label,
     layer: "failure",
     strokeColor: planColors.failure,
-    strokeWidth: unit * 0.63,
+    strokeWidth: unitMm * 0.63,
     strokeDash: "6,4",
     zIndex: 4,
   }
