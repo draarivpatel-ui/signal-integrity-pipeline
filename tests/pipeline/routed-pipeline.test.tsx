@@ -329,7 +329,7 @@ test("actual two-channel simulation TSX advances every flat stage and invokes tr
     root.stageOutput("CopperGeometryExtractionSolver").value.length,
     2,
   )
-  assert.equal(root.stageOutput("RouteFieldsSolver").value.length, 2)
+  assert.equal(root.stageOutput("TransmissionLineRlgcSolver").value.length, 2)
   const sections = root.getSolver("CopperGeometryExtractionSolver")!.visualize()
   assertPlanDrawingSnapshot({
     drawing: root.visualizeStage(3),

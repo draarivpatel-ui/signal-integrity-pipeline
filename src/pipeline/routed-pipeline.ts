@@ -18,7 +18,7 @@ import {
   routeView,
   withRouteDrawing,
 } from "../board"
-import { type ExtractedRoutes, RouteFieldsSolver } from "../extraction"
+import { type TransmissionLineRlgc, TransmissionLineRlgcSolver } from "../rlgc"
 import {
   ArtifactLedger,
   type FileMap,
@@ -27,6 +27,7 @@ import {
   type Snapshot,
   snapshot,
 } from "../kernel"
+import { type TransmissionLineRlgc, TransmissionLineRlgcSolver } from "../rlgc"
 import {
   RouteBindingsSolver,
   type RoutedBindings,
@@ -64,16 +65,13 @@ export const routedStages = [
     ],
   ),
   definePipelineStep(
-    "RouteFieldsSolver",
-    routedStage(RouteFieldsSolver),
+    "TransmissionLineRlgcSolver",
+    routedStage(TransmissionLineRlgcSolver),
     (p: RoutedPipelineSolver) => [
       p
         .stageOutput("CopperGeometryExtractionSolver")
-        .value.map((sections, i) => ({
-          geometry: sections.geometry,
-          circuitJson: cloneCircuitJson(sections.circuitJson),
-          scope: sections.copperScope,
-          maskThicknessMm: sections.maskThicknessMm,
+        .value.map((copperGeometry, i) => ({
+          copperGeometry,
           materials: p.stageOutput("TransientChannelSimulationPlanSolver")
             .value[i].bindings.options.materials,
           artifactPrefix: p.stageOutput("TransientChannelSimulationPlanSolver")
@@ -106,9 +104,10 @@ export const routedStages = [
           name: plan.name,
           geometry: p.stageOutput("CopperGeometryExtractionSolver").value[i]
             .geometry,
-          extracted: p.stageOutput("RouteFieldsSolver").value[i],
+          extracted: p.stageOutput("TransmissionLineRlgcSolver").value[i],
           bindings: p.stageOutput("RouteBindingsSolver").value[i],
-          materials: p.stageOutput("RouteFieldsSolver").value[i].materials,
+          materials: p.stageOutput("TransmissionLineRlgcSolver").value[i]
+            .materials,
           options: plan.bindings.options,
           warnings: plan.warnings,
           artifactPrefix: plan.sections.artifactPrefix,
@@ -147,7 +146,7 @@ interface RoutedStageOutputs {
     readonly TransientChannelSimulationPlan[]
   >
   CopperGeometryExtractionSolver: RoutedStageOutput<CopperGeometry>
-  RouteFieldsSolver: RoutedStageOutput<ExtractedRoutes>
+  TransmissionLineRlgcSolver: RoutedStageOutput<TransmissionLineRlgc>
   RouteBindingsSolver: RoutedStageOutput<RoutedBindings>
   RouteNetworkSolver: RoutedStageOutput<RoutedDeck>
   RouteTransientSolver: RoutedStageOutput<RoutedCapture>
