@@ -3,17 +3,17 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("touching wires on separate nets remain separate conductors", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Signal" width={0.3} />
-        <SectionTrace name="Other" startY={0.3} width={0.3} net="net.OTHER" />
+        <CopperTrace name="Signal" width={0.3} />
+        <CopperTrace name="Other" startY={0.3} width={0.3} net="net.OTHER" />
       </>
     ),
   })
@@ -22,7 +22,7 @@ test("touching wires on separate nets remain separate conductors", async () => {
   assert.equal(db.pcb_trace.list().length, 2)
   const { wires } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert.deepEqual(
     wires.map(({ pcbTraceId, widthMm }) => [pcbTraceId, widthMm]),

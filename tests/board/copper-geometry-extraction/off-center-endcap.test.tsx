@@ -2,27 +2,30 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperPad,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionPin,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("marks an endcap overlapping an off-center same-net pad", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace
+        <CopperTrace
           name="Signal"
           width={0.5}
           endY={-2}
           points={[{ x: 4, y: 0 }]}
         />
-        <SectionPin name="Offset" x={0} y={0.4} />
+        <CopperPad name="Offset" x={0} y={0.4} />
       </>
     ),
   })
-  const input = getCopperExtractionInput({ circuit, required: ["Offset"] })
+  const input = getCopperGeometryExtractionInput({
+    circuit,
+    required: ["Offset"],
+  })
   const solver = new CopperGeometryExtractionSolver(input)
   solver.solve()
   const { geometry } = solver.getOutput().value
@@ -30,5 +33,5 @@ test("marks an endcap overlapping an off-center same-net pad", async () => {
     ({ endPoint }) => endPoint[0] === 0 && endPoint[1] === 0,
   )
   assert(wire)
-  assert.equal(wire.endTouchesPort, true)
+  assert.equal(wire.endTouchesPad, true)
 })
