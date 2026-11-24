@@ -71,16 +71,37 @@ function validateRequiredPorts({
   }
 }
 
+/** Check whether a planning value can be reused as an immutable input. */
+function isDeeplyFrozen(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return true
+  return Object.isFrozen(value) && Object.values(value).every(isDeeplyFrozen)
+}
+
+/** Read mutable caller inputs once without duplicating already frozen planning values. */
+function captureInput(input: RouteSectionsInput): RouteSectionsInput {
+  const captured = {
+    ...input,
+    requiredSourcePortIds: snapshot(input.requiredSourcePortIds),
+  }
+  if (!isDeeplyFrozen(input.circuitJson))
+    captured.circuitJson = snapshot(input.circuitJson)
+  if (!isDeeplyFrozen(input.copperScope))
+    captured.copperScope = snapshot(input.copperScope)
+  return Object.freeze(captured)
+}
+
 /** Extract one trace per step, then verify the required endpoint contacts. */
 export class RouteSectionsSolver extends BaseSolver {
   override MAX_ITERATIONS = Infinity
   private steps?: Generator<RouteSectionProgress, SectionGeometry>
   private circuit?: CircuitJson
   private output?: Produced<RouteSectionsOutput>
+  private readonly input: RouteSectionsInput
 
   /** Capture the board and its prepared copper scope. */
-  constructor(private readonly input: RouteSectionsInput) {
+  constructor(input: RouteSectionsInput) {
     super()
+    this.input = captureInput(input)
   }
 
   /** Report trace extraction counts, then publish the completed sections. */

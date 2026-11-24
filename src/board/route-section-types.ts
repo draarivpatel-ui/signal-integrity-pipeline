@@ -31,9 +31,10 @@ export interface RouteWire {
   startPoint: CopperPoint
   endPoint: CopperPoint
   direction: UnitDirection
-  startMm: number
-  endMm: number
+  longitudinalMinMm: number
+  longitudinalMaxMm: number
   lateralOffsetMm: number
+  contributingPcbTraceIds?: PcbTraceId[]
   joins?: RouteJoin[]
   startTouchesPort?: boolean
   endTouchesPort?: boolean
