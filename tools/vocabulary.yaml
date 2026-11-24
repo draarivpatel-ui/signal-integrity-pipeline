@@ -138,7 +138,6 @@ domain:
   lateral: across a wire within the board plane
   layer: one copper or insulating sheet in the stackup
   ledger: the single record of every artifact path the pipeline writes; a second write to a path fails
-  longitudinal: along a route or trace
   loss: energy dissipated in conductors or dielectrics
   mask: insulating soldermask on the outer copper layers
   mesh: the set of boundary panels used to approximate the field in a cross-section
