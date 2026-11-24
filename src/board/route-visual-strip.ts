@@ -1,6 +1,5 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { Viewbox } from "graphics-debug"
-import { type RouteDrawing, routeCanvas, routeText } from "./admission-visual"
 import type { RouteWire } from "./route-sections"
 import {
   type RouteBuffer,
@@ -11,6 +10,11 @@ import {
   routeTones,
   withRouteDrawing,
 } from "./route-visual"
+import {
+  type RouteDrawing,
+  routeCanvas,
+  routeText,
+} from "./route-visual-primitives"
 import type { CircuitJson } from "./schema"
 
 /** One unrolled net with its colored sections, node ticks and coupling bands. */

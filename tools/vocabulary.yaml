@@ -18,6 +18,19 @@
 threshold: 85
 
 domain:
+  attempt: one evaluation of a declared channel simulation
+  bypass: an alternate path around a routed cut or series passive
+  chevron: a mark indicating the direction of a mapped path
+  dash: one mark in a dashed line
+  fault: a diagnostic tied to specific contacts or copper
+  header: the text band above the board in an admission drawing
+  ideal: an electrical connection with no extracted impedance
+  legend: the explanation of a drawing's symbols and colors
+  scene: the records and annotations used to draw one view
+  short: an unintended electrical connection
+  stroke: the line or outline of a drawing primitive
+  topology: the connections between electrical nodes
+  visual: a board drawing or data used to build it
   above: toward increasing solver z in a physical stackup
   actual: read directly from the physical source-board records
   admission: validation and derivation of one declared transient channel simulation
