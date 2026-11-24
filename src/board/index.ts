@@ -16,7 +16,6 @@ export {
   sourceNetMembers,
   sourcePinTies,
 } from "./connectivity"
-export { findPadContactWire } from "./copper-geometry-contacts"
 export {
   type CopperGeometry,
   CopperGeometryExtractionSolver,
@@ -26,6 +25,7 @@ export {
   extractCopperGeometry,
   stepCopperGeometryExtraction,
 } from "./copper-geometry-extraction-steps"
+export { findPadContactWire } from "./copper-geometry-pad-contact"
 export { findWireReferences } from "./copper-geometry-references"
 export type {
   ExtractedCopper,
