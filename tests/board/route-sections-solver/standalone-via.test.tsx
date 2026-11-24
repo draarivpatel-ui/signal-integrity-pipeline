@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
-import { RouteSectionsSolver } from "../../../src/board"
+import { findContactWire, RouteSectionsSolver } from "../../../src/board"
 import {
   getSectionInput,
   renderSectionBoard,
@@ -32,5 +32,10 @@ test("connects a required bottom pad through a scoped standalone via", async () 
   const input = getSectionInput({ circuit, required: ["Bottom"] })
   assert(input.copperScope.extractedPcbViaIds.includes(via.pcb_via_id))
   const solver = new RouteSectionsSolver(input)
-  assert.doesNotThrow(() => solver.solve())
+  solver.solve()
+  const { geometry } = solver.getOutput().value
+  const contact = geometry.portContacts.find(({ layer }) => layer === "bottom")
+  assert(contact)
+  const wire = findContactWire({ geometry, ...contact })
+  assert.equal(wire?.layer, "top")
 })

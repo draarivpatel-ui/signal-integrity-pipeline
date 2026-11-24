@@ -14,7 +14,7 @@ import {
   routeStroke,
   routeView,
 } from "../../src/board"
-import { routedCopper } from "../fixtures/routed-copper"
+import { renderRoutedCopper } from "../fixtures/routed-copper"
 import {
   assertPlanDrawingSnapshot,
   routedVisualFixture,
@@ -54,12 +54,12 @@ test("one camera frames connected copper, its endpoint parts and a pane", async 
     drawing.lines!.every((line) => line.strokeWidth === 0.1 && line.label),
     "real copper width, labelled with its net for hover",
   )
-  const copper = await routedCopper()
+  const copper = await renderRoutedCopper()
   assert.equal(
     new Set(
       routeView({
         circuit: copper.circuitJson,
-        scope: copper.scope,
+        scope: copper.copperScope,
       }).sources.values(),
     ).size,
     1,

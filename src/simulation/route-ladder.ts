@@ -147,8 +147,8 @@ function wirePosition({
   entry: ArcWire
   distance: number
 }): number {
-  if (entry.sign > 0) return wire.startMm + distance - entry.offset
-  return wire.endMm - distance + entry.offset
+  if (entry.sign > 0) return wire.longitudinalMinMm + distance - entry.offset
+  return wire.longitudinalMaxMm - distance + entry.offset
 }
 
 /** A copper layer and its rounded board coordinates. */
@@ -266,11 +266,11 @@ export function* routeLadderSteps({
         sign = 1
       arc.set(wire.wireIndex, {
         offset: length,
-        length: wire.endMm - wire.startMm,
+        length: wire.longitudinalMaxMm - wire.longitudinalMinMm,
         cells: [],
         sign,
       })
-      length += wire.endMm - wire.startMm
+      length += wire.longitudinalMaxMm - wire.longitudinalMinMm
     }
     // Ladder dispersion accumulates along a run: phase error ~ delay x cell delay^2. Runs longer than two rise times
     // shrink their cells by sqrt(two rise times / run delay), which keeps the edge ripple independent of length.
@@ -311,8 +311,8 @@ export function* routeLadderSteps({
         const middle = entry.offset + entry.length / 2
         const cell = cells[indices.find((index) => cells[index].end >= middle)!]
         records.push(
-          { position: wire.startMm, node: cell.before },
-          { position: wire.endMm, node: cell.after },
+          { position: wire.longitudinalMinMm, node: cell.before },
+          { position: wire.longitudinalMaxMm, node: cell.after },
         )
       }
       wireNodes.set(wire.wireIndex, records)
@@ -368,8 +368,8 @@ export function* routeLadderSteps({
       const entries = slice.wires.map((wire) => {
         const entry = arc.get(wire.wireIndex)
         if (!entry) return undefined
-        let local = wire.endMm - middle
-        if (entry.sign > 0) local = middle - wire.startMm
+        let local = wire.longitudinalMaxMm - middle
+        if (entry.sign > 0) local = middle - wire.longitudinalMinMm
         const distance = entry.offset + local
         const index = entry.cells.find((index) => {
           const { start, end } = cells[index]
