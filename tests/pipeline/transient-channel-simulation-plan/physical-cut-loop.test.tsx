@@ -97,7 +97,7 @@ test("a pre-existing routed loop has a routed topology diagnostic", async () => 
   const drawing = solver.visualize()
   assert.ok(
     drawing.texts?.some((text) =>
-      text.text.includes("Routed cuts form a loop"),
+      text.text.includes("form a loop (red dashed traces)"),
     ),
   )
   assert.equal(
