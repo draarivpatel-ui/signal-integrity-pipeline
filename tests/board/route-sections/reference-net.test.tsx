@@ -1,0 +1,34 @@
+import { test } from "bun:test"
+import assert from "node:assert/strict"
+import { cju } from "@tscircuit/circuit-json-util"
+import { segmentRoutes } from "../../../src/board"
+import {
+  getSectionInput,
+  renderSectionBoard,
+  SectionTrace,
+} from "../../fixtures/route-section-board"
+
+test.failing(
+  "uses the reference net instead of nearer signal copper",
+  async () => {
+    const circuit = await renderSectionBoard({
+      children: <SectionTrace name="Signal" />,
+      reference: (
+        <>
+          <copperpour connectsTo="net.GND" layer="bottom" unbroken />
+          <copperpour connectsTo="net.OTHER" layer="inner1" unbroken />
+        </>
+      ),
+    })
+    const db = cju(circuit)
+    assert.equal(db.pcb_copper_pour.list().length, 2)
+    const { slices } = segmentRoutes({
+      circuit,
+      scope: getSectionInput({ circuit }).copperScope,
+    })
+    assert.deepEqual(
+      slices.flatMap(({ references }) => references.map(({ layer }) => layer)),
+      ["bottom"],
+    )
+  },
+)
