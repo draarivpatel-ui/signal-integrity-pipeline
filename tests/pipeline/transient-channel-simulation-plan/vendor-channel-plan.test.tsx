@@ -63,7 +63,11 @@ test.skipIf(!vendorAvailable(vendorModels.cmos.file))(
       "each receiver has one white-centered ring",
     )
     assert.throws(
-      () => new RoutedAdmissionSolver({ ...input, scopeDistanceMm: 0 }).solve(),
+      () =>
+        new TransientChannelSimulationPlanSolver({
+          ...input,
+          scopeDistanceMm: 0,
+        }).solve(),
       /scope distance/,
     )
   },

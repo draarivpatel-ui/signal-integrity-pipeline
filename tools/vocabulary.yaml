@@ -32,7 +32,6 @@ domain:
   visual: a board drawing or data used to build it
   above: toward increasing solver z in a physical stackup
   actual: read directly from the physical source-board records
-  admission: validation and derivation of one declared transient channel simulation
   admit: the check that reads declared input (board records, IBIS bytes, transient channel simulations) before anything else uses it
   aggressor: an output-capable pin coupled to a selected channel outside its endpoints
   allow: an explicit caller-selected modelling permission
@@ -210,7 +209,7 @@ domain:
   span: the range of layers a via crosses
   sparse: a matrix or realization with mostly zero couplings
   stackup: the order and thickness of the board's copper and insulating layers
-  stage: one fixed step of the routed pipeline (admission, sections, fields, bindings, network, transient)
+  stage: one fixed step of the routed pipeline (planning, sections, fields, bindings, network, transient)
   startup: the time a switching channel needs to settle after its stimulus starts
   stimulus: the bit pattern a driver sends during an experiment
   strip: a pane showing each selected net unrolled into a to-scale bar
