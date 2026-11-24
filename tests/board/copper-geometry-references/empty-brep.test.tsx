@@ -3,13 +3,13 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { normalizeReferencePour } from "../../../src/board/copper-geometry-references"
 import {
+  CopperTrace,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("omits a BRep pour with no surviving edges", async () => {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
   })
   const [pour] = cju(circuit).pcb_copper_pour.list()
   assert(pour?.shape === "brep")

@@ -2,16 +2,16 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("publishes the immutable circuit and copper scope supplied by planning", async () => {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
   })
-  const input = getCopperExtractionInput({ circuit })
+  const input = getCopperGeometryExtractionInput({ circuit })
   const solver = new CopperGeometryExtractionSolver(input)
   solver.solve()
   const produced = solver.getOutput()
