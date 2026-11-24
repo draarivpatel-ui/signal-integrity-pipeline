@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { Box } from "@flatten-js/core"
+import { cju } from "@tscircuit/circuit-json-util"
 import { TwoTraceBoard } from "../../../examples/routed/two-trace-board"
 import { clipPlanLines } from "../../../src/board/plan-view"
 import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
@@ -8,7 +9,7 @@ import { renderSignals } from "../../fixtures/signal-render"
 
 test("keeps copper from a crop boundary to an interior trace point", async () => {
   const circuitJson = await renderSignals({ tree: <TwoTraceBoard /> })
-  const trace = circuitJson.find((record) => record.type === "pcb_trace")
+  const [trace] = cju([...circuitJson]).pcb_trace.list()
   assert.ok(trace)
   const points = trace.route.flatMap((point) => {
     if (point.route_type === "through_pad") return []

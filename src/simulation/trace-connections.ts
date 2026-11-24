@@ -1,10 +1,10 @@
 import type { SourcePortId, SourceTraceId } from "../board"
 import type { DiagnosticSubject } from "../kernel"
 import {
+  buildConnectionGraph,
   type Connection,
   type ConnectionGraph,
-  connectionGraph,
-  connectionPath,
+  findConnectionPath,
 } from "./connection-paths"
 import { fail } from "./diagnostics"
 import type { TraceContacts } from "./route-inputs"
@@ -16,35 +16,38 @@ export interface ChannelSegment {
   sourceTraceId?: SourceTraceId
 }
 
-/** The physical cut paired with the nodes it now separates. */
-export type TraceConnection<NodeId> = Connection<NodeId, TraceContacts>
+/** Trace contacts with their corresponding graph vertices. */
+export type TraceConnection<VertexId> = Connection<VertexId, TraceContacts>
 
-/** Project physical cuts onto source groups or SPICE nodes for traversal. */
-export function connectTraces<NodeId>({
-  cuts,
-  node,
+/** Project trace contacts onto graph vertices. */
+export function connectTraces<VertexId>({
+  traceContacts,
+  getVertexId,
 }: {
-  cuts: readonly TraceContacts[]
-  node: (sourcePortId: SourcePortId) => NodeId
-}): TraceConnection<NodeId>[] {
-  return cuts.map((cut) => ({
-    fromVertexId: node(cut.fromSourcePortId),
-    toVertexId: node(cut.toSourcePortId),
-    evidence: cut,
+  traceContacts: readonly TraceContacts[]
+  getVertexId: (sourcePortId: SourcePortId) => VertexId
+}): TraceConnection<VertexId>[] {
+  return traceContacts.map((contacts) => ({
+    fromVertexId: getVertexId(contacts.fromSourcePortId),
+    toVertexId: getVertexId(contacts.toSourcePortId),
+    evidence: contacts,
   }))
 }
 
-/** Index physical cuts without projecting them onto ideal groups. */
+/** Index trace contacts by source port. */
 export function buildPhysicalTraceGraph(
-  cuts: readonly TraceContacts[],
+  traceContacts: readonly TraceContacts[],
 ): ConnectionGraph<SourcePortId, TraceContacts> {
-  return connectionGraph(
-    connectTraces({ cuts, node: (sourcePortId) => sourcePortId }),
+  return buildConnectionGraph(
+    connectTraces({
+      traceContacts,
+      getVertexId: (sourcePortId) => sourcePortId,
+    }),
   )
 }
 
 /** List the physical contacts that identify a closed path. */
-function segmentPathDescription(segments: readonly ChannelSegment[]): string {
+function describeSegmentPath(segments: readonly ChannelSegment[]): string {
   return segments
     .map(
       ({ sourceTraceId, fromSourcePortId, toSourcePortId }) =>
@@ -53,32 +56,32 @@ function segmentPathDescription(segments: readonly ChannelSegment[]): string {
     .join(", ")
 }
 
-/** Link the path's real contacts and cuts to its diagnostic. */
-function segmentSubjects(
+/** Attach the path’s trace and port IDs to its diagnostic. */
+function getSegmentSubjects(
   segments: readonly ChannelSegment[],
 ): DiagnosticSubject[] {
-  const ids = new Set(
+  const recordIds = new Set(
     segments.flatMap(({ fromSourcePortId, toSourcePortId, sourceTraceId }) =>
       [fromSourcePortId, toSourcePortId, sourceTraceId].filter(
         (id) => id !== undefined,
       ),
     ),
   )
-  return [...ids].map((id) => ({ kind: "record", id }))
+  return [...recordIds].map((id) => ({ kind: "record", id }))
 }
 
 /** Require a connection to be a bridge and report its concrete cycle otherwise. */
-export function validateChannelBridge<NodeId>({
+export function validateChannelBridge<VertexId>({
   graph,
   connection,
   physicalGraph,
 }: {
-  graph: ConnectionGraph<NodeId, ChannelSegment>
+  graph: ConnectionGraph<VertexId, ChannelSegment>
   physicalGraph: ConnectionGraph<SourcePortId, ChannelSegment>
-  connection: Connection<NodeId, ChannelSegment>
+  connection: Connection<VertexId, ChannelSegment>
 }): void {
   const { fromVertexId, toVertexId, evidence } = connection
-  const alternate = connectionPath({
+  const alternate = findConnectionPath({
     graph,
     fromVertexId,
     toVertexId,
@@ -91,9 +94,9 @@ export function validateChannelBridge<NodeId>({
     fail(
       "channel_short",
       `Series passive contacts ${fromSourcePortId} and ${toSourcePortId} are bypassed`,
-      { subjects: segmentSubjects(projectedPath) },
+      { subjects: getSegmentSubjects(projectedPath) },
     )
-  const physicalAlternate = connectionPath({
+  const physicalAlternate = findConnectionPath({
     graph: physicalGraph,
     fromVertexId: fromSourcePortId,
     toVertexId: toSourcePortId,
@@ -105,13 +108,13 @@ export function validateChannelBridge<NodeId>({
     const path = [...physicalAlternate.map((edge) => edge.evidence), evidence]
     fail(
       "channel_fanout",
-      `Routed cuts form a loop: ${segmentPathDescription(path)}`,
-      { subjects: segmentSubjects(path) },
+      `Routed traces form a loop: ${describeSegmentPath(path)}`,
+      { subjects: getSegmentSubjects(path) },
     )
   }
   fail(
     "channel_short",
-    `Ideal connections close a path across routed cuts: ${segmentPathDescription(projectedPath)}`,
-    { subjects: segmentSubjects(projectedPath) },
+    `Ideal connections close a path across routed traces: ${describeSegmentPath(projectedPath)}`,
+    { subjects: getSegmentSubjects(projectedPath) },
   )
 }

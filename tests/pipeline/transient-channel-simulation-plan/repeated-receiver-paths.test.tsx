@@ -3,25 +3,23 @@ import assert from "node:assert/strict"
 import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
-import { differentialIbis } from "../../fixtures/routed-visual-fixture"
-import { renderSignals } from "../../fixtures/signal-render"
-import Differential from "../../fixtures/unit-differential"
+import {
+  ReceiverModels,
+  receiverModelSources,
+} from "../../fixtures/receiver-models"
+import { renderCoreSignals } from "../../support/core-render"
 
-test("keeps four physical cuts and maps only the two declared differential receivers", async () => {
-  const circuitJson = await renderSignals({
-    tree: <Differential routedTermination />,
-    expectedErrors: ["pcb_port_not_connected_error"],
-  })
+test("maps both declarations of the same receiver to one routed trace and SPICE node", async () => {
+  const circuitJson = await renderCoreSignals(
+    <ReceiverModels secondModel="LVC1G04_IN_33" />,
+  )
   const solver = new TransientChannelSimulationPlanSolver({
     circuitJson,
-    ibisSources: { "models/sn65hvd72.ibs": differentialIbis },
+    ibisSources: receiverModelSources,
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  assert.deepEqual(
-    bindings.traceContacts.map((cut) => cut.sourceTraceId),
-    ["source_trace_6", "source_trace_8", "source_trace_9", "source_trace_7"],
-  )
+  assert.equal(bindings.traceContacts.length, 1)
   const nodes = circuitNodes({
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),
@@ -35,8 +33,8 @@ test("keeps four physical cuts and maps only the two declared differential recei
       ],
     ),
     [
-      ["source_trace_6", "n1", "n6"],
-      ["source_trace_7", "n2", "n7"],
+      ["source_trace_6", "n2", "n6"],
+      ["source_trace_6", "n2", "n6"],
     ],
   )
 })

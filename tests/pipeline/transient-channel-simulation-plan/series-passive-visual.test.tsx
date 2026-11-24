@@ -7,7 +7,7 @@ import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 import { renderCoreSignals } from "../../support/core-render"
 
-test("draws the series passive between its two distinct routed cuts", async () => {
+test("draws the series passive between its two distinct routed traces", async () => {
   const circuitJson = await renderCoreSignals(<ChannelFixture route="series" />)
   const solver = new TransientChannelSimulationPlanSolver({
     circuitJson,
