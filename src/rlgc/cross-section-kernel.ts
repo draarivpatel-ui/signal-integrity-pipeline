@@ -1,8 +1,9 @@
-import atan from "@stdlib/math-base-special-atan"
-import log from "@stdlib/math-base-special-ln"
-import log1p from "@stdlib/math-base-special-log1p"
-import sin from "@stdlib/math-base-special-sin"
-import sinh from "@stdlib/math-base-special-sinh"
+/// <reference path="./stdlib-math.d.ts" />
+import atan from "@stdlib/math/base/special/atan/lib/index.js"
+import log from "@stdlib/math/base/special/ln/lib/index.js"
+import log1p from "@stdlib/math/base/special/log1p/lib/index.js"
+import sin from "@stdlib/math/base/special/sin/lib/index.js"
+import sinh from "@stdlib/math/base/special/sinh/lib/index.js"
 import { hypotenuse } from "../kernel"
 import type { BoundaryPanel } from "./cross-section-types"
 
