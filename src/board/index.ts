@@ -37,7 +37,7 @@ export type {
   SourceTraceId,
 } from "./ids"
 export type { PlanHeaderRow } from "./plan-header"
-export { planPorts } from "./plan-view"
+export { pinName, planPorts } from "./plan-view"
 export { planDrawing } from "./plan-visual"
 export {
   type PlanVisualCut,
