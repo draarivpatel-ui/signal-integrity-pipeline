@@ -40,5 +40,7 @@ test("shows the ideal join and ordered cuts through the two receiver paths", asy
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "ideal-join-visual",
+    caption:
+      "Copper runs from TX to MID and from JOIN to RX. The test lets MID and JOIN connect without a trace, so the signal can reach both receivers.",
   })
 })
