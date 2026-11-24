@@ -164,7 +164,12 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
   }
   /** Prepare the next channel simulation and finalize once all plans are ready. */
   override _step(): void {
-    this.validatedBoard ??= validatePlanningBoard(this.input)
+    try {
+      this.validatedBoard ??= validatePlanningBoard(this.input)
+    } catch (error) {
+      this.failedAttempt = { error }
+      throw error
+    }
     const { channelSimulations, scopeDistanceMm } = this.validatedBoard
     const validatedChannelSimulation =
       channelSimulations[this.channelSimulationPlans.length]
@@ -222,11 +227,7 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
         circuit: this.input.circuitJson,
         plan: this.channelSimulationPlans.at(-1),
         failed: this.failedAttempt,
-        error:
-          this.error?.replace(
-            `${this.getSolverName()} error:`,
-            "Transient channel plan error:",
-          ) ?? null,
+        error: this.error || null,
       }),
     )
   }

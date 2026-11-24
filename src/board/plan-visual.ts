@@ -1,4 +1,4 @@
-import type { GraphicsObject, Line, Viewbox } from "graphics-debug"
+import type { GraphicsObject, Line, Polygon, Viewbox } from "graphics-debug"
 import { drawCopper } from "./plan-copper"
 import { planHeader } from "./plan-header"
 import {
@@ -20,7 +20,11 @@ import {
   routeBoardBox,
   routeBounds,
 } from "./plan-view"
-import { type PlanVisualScene, planColors } from "./plan-visual-types"
+import {
+  type PlanVisualEndpoint,
+  type PlanVisualScene,
+  planColors,
+} from "./plan-visual-types"
 
 /** Scope envelope, separated from the board outline when fully in scope. */
 function scopeLine({
@@ -47,6 +51,35 @@ function scopeLine({
     layer: "scope",
     label: "Copper scope envelope",
   }
+}
+
+/** Explain only the symbols that were drawn inside the board window. */
+function planLegend({
+  endpoints,
+  polygons,
+}: {
+  endpoints: readonly PlanVisualEndpoint[]
+  polygons: readonly Polygon[]
+}): string {
+  const kinds = new Set(
+    endpoints
+      .filter(({ label }) =>
+        polygons.some(
+          (shape) => shape.layer === "endpoints" && shape.label === label,
+        ),
+      )
+      .map(({ kind }) => kind),
+  )
+  const labels: string[] = []
+  if (kinds.has("driver")) labels.push("▶ driver")
+  if (kinds.has("receiver")) labels.push("◎ receiver")
+  if (kinds.has("ideal") && kinds.has("load"))
+    labels.push("◇ direct receiver or end of extra trace")
+  else if (kinds.has("ideal")) labels.push("◇ direct receiver")
+  else if (kinds.has("load")) labels.push("◇ end of extra trace")
+  if (polygons.some(({ layer }) => layer === "mappings"))
+    labels.push("› signal direction")
+  return labels.join("   •   ")
 }
 
 /** Draw one attempted simulation with a separate centered text band. */
@@ -122,9 +155,8 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
   const header = planHeader({
     scene,
     frame,
-    board,
     boardTop: extent?.maxY === undefined ? frame.box.maxY : extent.maxY,
-    scopeBox,
+    legend: planLegend({ endpoints: scene.endpoints, polygons: boardPolygons }),
   })
   return {
     title: scene.title,
