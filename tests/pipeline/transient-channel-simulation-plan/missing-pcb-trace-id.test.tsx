@@ -6,7 +6,7 @@ import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test.failing("rejects a PCB trace missing its own record ID", async () => {
+test("rejects a PCB trace missing its own record ID", async () => {
   const circuitJson = await renderSignals({ tree: <TwoTraceBoard /> })
   const trace = circuitJson.find((record) => record.type === "pcb_trace")
   assert.ok(trace)

@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TwoTraceBoard } from "../../../examples/routed/two-trace-board"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
@@ -19,7 +20,10 @@ test("keeps both receiver paths and their SPICE nodes on the two-trace example",
     "pcb_trace_0",
     "pcb_trace_1",
   ])
-  const nodes = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
+  const nodes = circuitNodes({
+    ...bindings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+  })
   assert.deepEqual(
     bindings.mappings.map(({ port, sourceTraceId, from, to }) => ({
       port,

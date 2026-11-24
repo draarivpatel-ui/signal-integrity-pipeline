@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -21,7 +22,11 @@ test("names both contacts and every routed trace in a bypassed receiver path", a
   const [mapping] = bindings.mappings
   assert.equal(mapping.sourceTraceIds?.length, 2)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     {
       domain: "simulation",
       code: "channel_short",

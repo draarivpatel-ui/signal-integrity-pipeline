@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -20,7 +21,7 @@ test("successive routed branches share one transitive ideal junction", async () 
   const { bindings } = plan
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   const [driverCut, ...branchCuts] = bindings.routedTraceCuts
   assert.equal(branchCuts.length, 2)

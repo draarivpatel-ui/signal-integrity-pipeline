@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -25,7 +26,7 @@ test("rejects a grounded driver beyond the first physical cut", async () => {
     () =>
       circuitNodes({
         ...bindings,
-        circuit: bindings.circuitJson,
+        circuit: cloneCircuitJson(bindings.circuitJson),
         modeling: {
           ...bindings.modeling,
           channelReference: { sourcePortId: mapping.from },

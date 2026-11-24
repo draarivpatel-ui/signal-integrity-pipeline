@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
-import { selectPort } from "../../../src/board"
+import { cloneCircuitJson, selectPort } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -53,7 +53,7 @@ test("a multipoint ideal trace can label the junction between routed cuts", asyn
   const [{ bindings, sections }] = solver.getOutput().value
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   assert.equal(bindings.routedTraceCuts.length, 2)
   assert.equal(bindings.mappings[1]?.sourceTraceIds?.length, 2)

@@ -53,7 +53,11 @@ export type {
   SimulationExperiment,
   SimulationIbisModel,
 } from "./schema"
-export { recordSchema, validateCircuitRecords } from "./schema"
+export {
+  cloneCircuitJson,
+  recordSchema,
+  validateCircuitRecords,
+} from "./schema"
 export {
   type DriverPattern,
   endpointPorts,

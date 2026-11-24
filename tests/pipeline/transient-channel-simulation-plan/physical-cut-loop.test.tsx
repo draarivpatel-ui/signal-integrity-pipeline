@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -87,7 +88,11 @@ test("a pre-existing routed loop has a routed topology diagnostic", async () => 
   const [{ bindings }] = solver.getOutput().value
   assert.equal(bindings.routedTraceCuts.length, 3)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     {
       domain: "simulation",
       code: "channel_fanout",

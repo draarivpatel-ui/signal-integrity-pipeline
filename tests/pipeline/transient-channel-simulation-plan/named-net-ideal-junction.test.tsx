@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -21,7 +22,7 @@ test("a redundant named net preserves the ideal junction between two cuts", asyn
   const { bindings } = plan
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   const [driverCut, receiverCut] = bindings.routedTraceCuts
   const middleNode = node(driverCut.toSourcePortId)

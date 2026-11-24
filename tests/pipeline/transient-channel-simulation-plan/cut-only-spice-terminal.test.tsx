@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { generalDeclarations } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -20,7 +21,11 @@ test("a cut-only contact must be mapped by its placed SPICE model", async () => 
   const { bindings } = plan
   assert.equal(bindings.routedTraceCuts.length, 3)
   assert.throws(
-    () => generalDeclarations({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      generalDeclarations({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     { domain: "simulation", code: "channel_model" },
   )
 })

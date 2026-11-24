@@ -93,7 +93,7 @@ export function planSummary({
   if (gap === undefined) return summary
   return {
     ...summary,
-    scopedText: `${headline}; nearby copper within ${planMillimeters(gap)} is included.`,
+    scopedText: `${headline}; copper search gap: ${planMillimeters(gap)}.`,
   }
 }
 
@@ -179,10 +179,9 @@ export function planFailure({
 }): string {
   if (error instanceof Error && error.cause === "scopeDistanceMm")
     return "Copper search distance must be greater than 0 mm."
-  const missing = fault.links.find(({ kind }) => kind === "missing")
-  const path = paths.find(
-    ({ from, to }) => missing?.from === from && missing?.to === to,
-  )
+  const path = fault.incompletePaths[0]
+  if (issue?.code === "circuit_schema" || issue?.code === "ibis_asset")
+    return issue.message
   if (path) {
     const { from, to, name } = path
     const fromPart = pinPart({ id: from, db })?.name
@@ -190,8 +189,8 @@ export function planFailure({
     if (issue?.code === "channel_receiver_terminal_missing")
       return `${pinName({ id: to, db })} has no board pad to receive ${name} from ${partOrPin({ id: from, db })}.`
     if (fromPart && toPart && fromPart !== toPart)
-      return `${name} has no copper trace between ${fromPart} and ${toPart}.`
-    return `${name} has no copper trace from ${pinName({ id: from, db })} to ${pinName({ id: to, db })}.`
+      return `${name} has an incomplete route between ${fromPart} and ${toPart}.`
+    return `${name} has an incomplete route from ${pinName({ id: from, db })} to ${pinName({ id: to, db })}.`
   }
   const pins = [...fault.ports]
   const names = pins.map((id) => pinName({ id, db }))

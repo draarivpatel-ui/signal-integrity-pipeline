@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -30,7 +31,7 @@ test("allowed unrouted channels retain ideal source connectivity", async () => {
   )
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   assert.equal(
     node(signal.driver.source_port_id),

@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { generalDeclarations } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -31,7 +32,7 @@ test("a modeled endpoint beyond the receiver needs its own run state", async () 
     () =>
       generalDeclarations({
         ...bindings,
-        circuit: bindings.circuitJson,
+        circuit: cloneCircuitJson(bindings.circuitJson),
         controls: {
           [simulationPcbTransientChannelSimulationId]: {
             states: states.filter(

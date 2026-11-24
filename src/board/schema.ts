@@ -1,7 +1,9 @@
 // Circuit JSON record admission (was schema.ts + circuit-schema.mjs). Validation never edits input.
 
+import type { CircuitJson } from "circuit-json"
 import * as base from "circuit-json"
 import type { z } from "zod"
+import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 
 export type {
@@ -9,6 +11,13 @@ export type {
   SimulationExperiment,
   SimulationIbisModel,
 } from "circuit-json"
+
+/** Copy a stage board for Circuit JSON libraries that require writable records. */
+export function cloneCircuitJson(
+  circuitJson: Snapshot<CircuitJson>,
+): CircuitJson {
+  return structuredClone([...circuitJson]) as CircuitJson
+}
 
 /** Picks the circuit-json schema by record type, or by ftype for source components. */
 export function recordSchema(record: {
@@ -114,6 +123,15 @@ export function validateCircuitRecords(records: unknown): void {
       )
     const parsed = schema.safeParse(record)
     if (parsed.success) {
+      const recordIdKey = `${type}_id`
+      if (
+        typeof parsed.data[recordIdKey] === "string" &&
+        typeof record?.[recordIdKey] !== "string"
+      )
+        fail(
+          "circuit_schema",
+          `${type} ${id}: ${recordIdKey}: expected a Circuit JSON record ID`,
+        )
       const name = record?.name
       validateCanonicalRecord({
         record,

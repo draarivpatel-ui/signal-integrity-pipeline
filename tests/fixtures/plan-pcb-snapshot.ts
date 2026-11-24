@@ -6,7 +6,7 @@ import type {
   PcbFabricationNoteText,
   PcbTrace,
 } from "circuit-json"
-import type { CircuitJson } from "../../src/board"
+import { type CircuitJson, cloneCircuitJson } from "../../src/board"
 import type { TransientChannelSimulationPlan } from "../../src/pipeline"
 import { circuitNodes } from "../../src/simulation"
 import "./extend-expect-circuit-snapshot"
@@ -38,7 +38,10 @@ export function resolvePlanTraceCuts({
   expectedTraceCount: number
 }): ResolvedPlanTrace[] {
   const { bindings, sections } = plan
-  const { node } = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
+  const { node } = circuitNodes({
+    ...bindings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+  })
   const { channelPcbTraceIds } = sections.copperScope
   assert.equal(channelPcbTraceIds.length, expectedTraceCount)
   assert.equal(bindings.routedTraceCuts.length, expectedTraceCount)

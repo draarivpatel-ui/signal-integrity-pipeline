@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -21,7 +22,7 @@ test("mapping-only multi-receiver paths cut each routed trace once", async () =>
   assert.equal(bindings.mappings.length, 2)
   assert.equal(bindings.mappings[1].sourceTraceIds?.length, 2)
   const { node } = circuitNodes({
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
     modeling: bindings.modeling,
     mappings: bindings.mappings,
   })

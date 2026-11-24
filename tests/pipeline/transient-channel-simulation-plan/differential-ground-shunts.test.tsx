@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ShuntFixture } from "../../fixtures/shunt-fixture"
@@ -33,9 +34,9 @@ test("ground shunts load the partial differential path without joining it", asyn
   assert.equal(bindings.mappings[0].sourceTraceIds?.length, 2)
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  const db = cju([...bindings.circuitJson])
+  const db = cju(cloneCircuitJson(bindings.circuitJson))
   for (const name of ["RSHUNT_TX_A", "RSHUNT_RX_A"]) {
     const component = db.source_component.getWhere({ name })
     assert.ok(component)

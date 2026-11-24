@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
@@ -35,7 +36,11 @@ test("an interior short cannot divert the partial positive leg through the far t
   assert.equal(positive.sourceTraceIds?.length, 2)
   assert.ok(!positive.sourceTraceIds?.includes(negative.sourceTraceId))
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     { code: "channel_short", message: new RegExp(contact.source_port_id) },
   )
 })

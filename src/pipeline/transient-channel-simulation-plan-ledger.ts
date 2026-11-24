@@ -50,29 +50,38 @@ export function planEndpoints({
 }): PlanVisualEndpoint[] {
   const endpoints = new Map<SourcePortId, PlanVisualEndpoint>()
   const cuts = new Map(topology?.cuts.map((cut) => [cut.trace, cut]))
-  const mapped = new Map(
-    topology?.paths.map(({ to, hops }) => [
-      to,
-      hops.find((hop) => hop.kind === "trace")?.trace,
-    ]),
-  )
+  const resolved = new Map(topology?.paths.map((path) => [path.to, path.hops]))
   for (const { name, from, to } of paths) {
-    const cut = cuts.get(mapped.get(to) || "")
-    const color = cut ? planCutColor(cut.index) : planColors.existing
+    const hops = resolved.get(to)
+    const firstTrace = hops?.find((hop) => hop.kind === "trace")
+    const lastTrace = hops?.findLast((hop) => hop.kind === "trace")
+    const driverTrace = firstTrace && cuts.get(firstTrace.trace)
+    const receiverTrace = lastTrace && cuts.get(lastTrace.trace)
+    let driverColor: string = planColors.existing
+    if (driverTrace) driverColor = planCutColor(driverTrace.index)
     if (endpoints.get(from)?.kind !== "driver")
       endpoints.set(from, {
         id: from,
         kind: "driver",
-        toward: cut?.to || to,
-        color,
+        toward: firstTrace?.to || to,
+        color: driverColor,
         label: `${name} · Driver ${endpointLabel({ id: from, labels, nodes: topology?.nodes })}`,
       })
     if (!endpoints.has(to)) {
-      const ideal = topology !== undefined && !cut
+      const isIdeal =
+        hops !== undefined &&
+        (hops.length === 0 || hops.at(-1)?.kind === "ideal")
+      let kind: PlanVisualEndpoint["kind"] = "receiver"
+      let color: string = planColors.existing
+      if (receiverTrace) color = planCutColor(receiverTrace.index)
+      if (isIdeal) {
+        kind = "ideal"
+        color = planColors.ideal
+      }
       endpoints.set(to, {
         id: to,
-        kind: ideal ? "ideal" : "receiver",
-        color: ideal ? planColors.ideal : color,
+        kind,
+        color,
         label: `${name} · Receiver ${endpointLabel({ id: to, labels, nodes: topology?.nodes })}`,
       })
     }
@@ -83,9 +92,9 @@ export function planEndpoints({
       if (!endpoints.has(id))
         endpoints.set(id, {
           id,
-          kind: "load",
+          kind: "extraTraceEnd",
           color: planCutColor(index),
-          label: `Load ${endpointLabel({ id, labels, nodes: topology?.nodes })}`,
+          label: `Extra trace end · ${endpointLabel({ id, labels, nodes: topology?.nodes })}`,
         })
   }
   return [...endpoints.values()]

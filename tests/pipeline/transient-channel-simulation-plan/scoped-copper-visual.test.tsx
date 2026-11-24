@@ -45,7 +45,9 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
     2,
   )
   assert.ok(
-    drawing.polygons?.some((shape) => shape.label?.includes("Load RX.A")),
+    drawing.polygons?.some((shape) =>
+      shape.label?.includes("Extra trace end · RX.A"),
+    ),
   )
   assert.ok(drawing.lines?.some((line) => line.layer === "scope"))
   assert.ok(header?.every((text) => text.anchorSide === "center" && text.y > 6))

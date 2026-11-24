@@ -86,3 +86,69 @@ function orderedPath<NodeId, Evidence>({
   }
   return path.reverse()
 }
+
+/** An unfinished depth-first visit and its lowest reachable discovery index. */
+interface BridgeVisit<NodeId, Evidence> {
+  vertexId: NodeId
+  discoveryIndex: number
+  lowIndex: number
+  incident: Iterator<Connection<NodeId, Evidence>>
+  parentConnection?: Connection<NodeId, Evidence>
+}
+
+/** The links whose removal disconnects their endpoints in an undirected graph. */
+export type ConnectionBridges<NodeId, Evidence> = ReadonlySet<
+  Connection<NodeId, Evidence>
+>
+
+/** Find every bridge in one traversal, treating parallel links as separate edges. */
+export function findConnectionBridges<NodeId, Evidence>(
+  graph: ConnectionGraph<NodeId, Evidence>,
+): ConnectionBridges<NodeId, Evidence> {
+  const discovery = new Map<NodeId, number>()
+  const bridges = new Set<Connection<NodeId, Evidence>>()
+  for (const [rootVertexId, incident] of graph) {
+    if (discovery.has(rootVertexId)) continue
+    discovery.set(rootVertexId, discovery.size)
+    const rootIndex = discovery.size - 1
+    const visits: BridgeVisit<NodeId, Evidence>[] = [
+      {
+        vertexId: rootVertexId,
+        discoveryIndex: rootIndex,
+        lowIndex: rootIndex,
+        incident: incident.values(),
+      },
+    ]
+    for (let visit = visits.at(-1); visit; visit = visits.at(-1)) {
+      const { value: connection, done } = visit.incident.next()
+      if (done) {
+        visits.pop()
+        const parent = visits.at(-1)
+        if (!parent || !visit.parentConnection) continue
+        if (visit.lowIndex > parent.discoveryIndex)
+          bridges.add(visit.parentConnection)
+        parent.lowIndex = Math.min(parent.lowIndex, visit.lowIndex)
+        continue
+      }
+      if (connection === visit.parentConnection) continue
+      const vertexId = oppositeNodeId({ connection, nodeId: visit.vertexId })
+      const discoveryIndex = discovery.get(vertexId)
+      if (discoveryIndex !== undefined) {
+        visit.lowIndex = Math.min(visit.lowIndex, discoveryIndex)
+        continue
+      }
+      const nextIncident = graph.get(vertexId)
+      if (!nextIncident) continue
+      const nextIndex = discovery.size
+      discovery.set(vertexId, nextIndex)
+      visits.push({
+        vertexId,
+        discoveryIndex: nextIndex,
+        lowIndex: nextIndex,
+        incident: nextIncident.values(),
+        parentConnection: connection,
+      })
+    }
+  }
+  return bridges
+}

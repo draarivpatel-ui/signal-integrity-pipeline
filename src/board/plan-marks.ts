@@ -203,7 +203,7 @@ export function endpointShape({
         label,
       },
     ]
-  const size = kind === "load" ? radius * 0.8 : radius
+  const size = kind === "extraTraceEnd" ? radius * 0.8 : radius
   return [
     {
       points: [

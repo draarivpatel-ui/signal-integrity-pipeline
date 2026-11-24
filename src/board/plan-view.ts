@@ -251,21 +251,22 @@ function clippedSegment({
   end: Point
   crop: Box
 }): Point[] {
-  const s = new Segment(
+  const segment = new Segment(
     new CopperPoint(start.x, start.y),
     new CopperPoint(end.x, end.y),
   )
-  const points: Point[] = s.intersect(crop)
-  if (crop.contains(s.start)) points.push(start)
-  if (crop.contains(s.end)) points.push(end)
-  if (points.length < 2) return []
-  return points
-    .sort(
-      (a, b) =>
-        Math.hypot(a.x - start.x, a.y - start.y) -
-        Math.hypot(b.x - start.x, b.y - start.y),
-    )
-    .slice(0, 2)
+  const points: Point[] = segment.intersect(crop)
+  if (crop.contains(segment.start)) points.push(start)
+  if (crop.contains(segment.end)) points.push(end)
+  points.sort(
+    (a, b) =>
+      Math.hypot(a.x - start.x, a.y - start.y) -
+      Math.hypot(b.x - start.x, b.y - start.y),
+  )
+  const first = points[0]
+  const last = points.at(-1)
+  if (!first || !last || (first.x === last.x && first.y === last.y)) return []
+  return [first, last]
 }
 
 /** Clip strokes to the window using their actual segments. */

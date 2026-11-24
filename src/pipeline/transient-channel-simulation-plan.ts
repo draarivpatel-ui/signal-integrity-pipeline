@@ -6,7 +6,13 @@ import {
   type SimulationPcbTransientChannelSimulationId,
 } from "../board"
 import type { IbisSources } from "../buffers"
-import { type Produced, rootScope, sha256, snapshot } from "../kernel"
+import {
+  Diagnostic,
+  type Produced,
+  rootScope,
+  sha256,
+  snapshot,
+} from "../kernel"
 import type { RouteBindingsInput, RoutedTraceCut } from "../simulation"
 import type { RoutedLane } from "./modeling"
 import { routedReceiverMappings } from "./routed-receiver-paths"
@@ -71,7 +77,7 @@ function planTransientChannelSimulation({
     distanceMm: scopeDistanceMm,
   })
   const artifactPrefix = `channelSimulations/${simulationPcbTransientChannelSimulationId}`
-  const circuitJson = structuredClone(prepared.circuit)
+  const circuitJson = snapshot(prepared.circuit)
   const modeling = snapshot(prepared.settings)
   const routedTraceCuts = snapshot(modeling.lanes.map(routedTraceCut))
   const requiredSourcePortIds = Object.freeze([
@@ -197,10 +203,15 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
       channelPcbTraceCount: this.channelPcbTraceCount,
     }
     if (channelSimulationCount !== channelSimulations.length) return
-    this.output = finalizePlans({
-      channelSimulationPlans: this.channelSimulationPlans,
-      ibisSources: this.input.ibisSources,
-    })
+    try {
+      this.output = finalizePlans({
+        channelSimulationPlans: this.channelSimulationPlans,
+        ibisSources: this.input.ibisSources,
+      })
+    } catch (error) {
+      this.failedAttempt = { error }
+      throw error
+    }
     this.solved = true
   }
   /** No partially planned channel simulation list escapes. */
@@ -222,9 +233,13 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
   }
   /** Inspect the most recent attempted channel simulation and its board. */
   override visualize(): GraphicsObject {
+    const error = this.failedAttempt?.error
+    let circuitJson = this.input.circuitJson
+    if (error instanceof Diagnostic && error.code === "circuit_schema")
+      circuitJson = []
     return planDrawing(
       buildPlanVisualScene({
-        circuit: this.input.circuitJson,
+        circuit: circuitJson,
         plan: this.channelSimulationPlans.at(-1),
         failed: this.failedAttempt,
         error: this.error || null,

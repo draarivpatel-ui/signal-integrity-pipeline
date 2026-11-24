@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { generalDeclarations } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -20,7 +21,9 @@ test("a cut-only contact needs a passive selected for the deck", async () => {
   const [plan] = solver.getOutput().value
   const { bindings } = plan
   assert.equal(bindings.routedTraceCuts.length, 3)
-  const load = cju([...bindings.circuitJson]).source_component.getWhere({
+  const load = cju(
+    cloneCircuitJson(bindings.circuitJson),
+  ).source_component.getWhere({
     name: "LOAD",
   })
   assert.ok(load)
@@ -30,7 +33,11 @@ test("a cut-only contact needs a passive selected for the deck", async () => {
     ),
   )
   assert.throws(
-    () => generalDeclarations({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      generalDeclarations({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     { domain: "simulation", code: "channel_model", message: /LOAD/ },
   )
 })

@@ -1,6 +1,7 @@
-import { cju } from "@tscircuit/circuit-json-util"
+import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import {
   type CircuitJson,
+  cloneCircuitJson,
   endpointPorts,
   type PlanVisualCut,
   type PlanVisualLink,
@@ -121,11 +122,13 @@ function resolvePath({
 
 /** Draw only relevant series passives and ideal wires, keeping distinct explicit joins. */
 function topologyLinks({
+  db,
   graphs,
   touched,
   placed,
   nodes,
 }: {
+  db: CircuitJsonUtilObjects
   graphs: ReceiverGraphs
   touched: ReadonlySet<SourcePortId>
   placed: ReadonlySet<SourcePortId>
@@ -156,7 +159,7 @@ function topologyLinks({
       links.push({ from, to, kind: "ideal", label: "Ideal join" })
     }
     for (const id of connection) {
-      if (!id.startsWith("source_net_")) continue
+      if (!db.source_net.get(id)) continue
       const contacts = netContacts.get(id) || new Set()
       for (const pin of pins) contacts.add(pin)
       netContacts.set(id, contacts)
@@ -184,12 +187,13 @@ function planTopology({
   placed: ReadonlySet<SourcePortId>
 }): PlanTopology {
   const {
-    circuitJson: circuit,
+    circuitJson,
     mappings,
     routedTraceCuts: cuts,
     modeling,
   } = plan.bindings
-  const db = cju([...circuit])
+  const circuit = cloneCircuitJson(circuitJson)
+  const db = cju(circuit)
   const channels = db.simulation_pcb_driver_receiver_channel.list()
   const groundSourcePortId = plan.sections.referenceSourcePortId
   const graphs = receiverGraphs({
@@ -251,7 +255,7 @@ function planTopology({
     cuts: visualCuts.sort((a, b) => a.index - b.index),
     nodes,
     paths: resolved,
-    segments: topologyLinks({ graphs, touched, placed, nodes }),
+    segments: topologyLinks({ db, graphs, touched, placed, nodes }),
   }
   try {
     validateRoutedNodes({
@@ -274,14 +278,19 @@ export interface PlanFault {
   ports: Set<SourcePortId>
   traces: Set<SourceTraceId>
   links: PlanVisualLink[]
+  incompletePaths: PlanPath[]
 }
 
 /** Diagnose open legs and collapsed or bypassed connections from the evidence. */
 function faultGeometry({
+  db,
   issue,
   paths,
   topology,
+  partiallyRoutedPorts,
 }: {
+  db: CircuitJsonUtilObjects
+  partiallyRoutedPorts: ReadonlySet<SourcePortId>
   issue?: Diagnostic
   paths: readonly PlanPath[]
   topology?: PlanTopology
@@ -291,9 +300,10 @@ function faultGeometry({
   const links: PlanVisualLink[] = []
   for (const { id, kind } of issue?.subjects || []) {
     if (kind !== "record") continue
-    if (id.startsWith("source_port_")) ports.add(id)
-    if (id.startsWith("source_trace_")) traces.add(id)
+    if (db.source_port.get(id)) ports.add(id)
+    if (db.source_trace.get(id)) traces.add(id)
   }
+  const incompletePaths: PlanPath[] = []
   if (issue?.code === "channel_short") {
     for (const link of topology?.segments || []) {
       if (link.kind !== "ideal" || !ports.has(link.from) || !ports.has(link.to))
@@ -304,16 +314,21 @@ function faultGeometry({
     issue?.code === "channel_net" ||
     issue?.code === "channel_receiver_terminal_missing"
   ) {
-    for (const { name, from, to } of paths)
-      if (ports.has(from) && ports.has(to))
-        links.push({
-          from,
-          to,
-          kind: "missing",
-          label: `${name} · No routed source path`,
-        })
+    for (const path of paths) {
+      const { name, from, to } = path
+      if (!ports.has(from) || !ports.has(to)) continue
+      incompletePaths.push(path)
+      if (partiallyRoutedPorts.has(from) || partiallyRoutedPorts.has(to))
+        continue
+      links.push({
+        from,
+        to,
+        kind: "missing",
+        label: `${name} · No routed source path`,
+      })
+    }
   }
-  return { ports, traces, links }
+  return { ports, traces, links, incompletePaths }
 }
 
 /** Select the latest attempted simulation before looking up its own channel declarations. */
@@ -331,10 +346,13 @@ export function buildPlanVisualScene({
   solved: boolean
 }): PlanVisualScene {
   const db = cju([...circuit])
-  const simulationId =
-    failed?.simulation?.simulation_pcb_transient_channel_simulation_id ||
-    plan?.simulationPcbTransientChannelSimulationId
-  const name = failed?.simulation?.name || plan?.name
+  let simulationId = plan?.simulationPcbTransientChannelSimulationId
+  let name = plan?.name
+  if (failed) {
+    simulationId =
+      failed.simulation?.simulation_pcb_transient_channel_simulation_id
+    name = failed.simulation?.name
+  }
   const simulationName = name === simulationId ? undefined : name
   const channels = db.simulation_pcb_driver_receiver_channel
     .list()
@@ -351,7 +369,24 @@ export function buildPlanVisualScene({
       : undefined
   const issue =
     failed?.error instanceof Diagnostic ? failed.error : topology?.issue
-  const fault = faultGeometry({ issue, paths, topology })
+  const routed = new Set(
+    db.pcb_trace.list().map(({ source_trace_id }) => source_trace_id),
+  )
+  const routedTraces = db.source_trace
+    .list()
+    .filter(({ source_trace_id }) => routed.has(source_trace_id))
+  const partiallyRoutedPorts = new Set(
+    routedTraces.flatMap(
+      ({ connected_source_port_ids }) => connected_source_port_ids,
+    ),
+  )
+  const fault = faultGeometry({
+    db,
+    issue,
+    paths,
+    topology,
+    partiallyRoutedPorts,
+  })
   const message =
     failed?.error instanceof Error
       ? failed.error.message
@@ -369,20 +404,13 @@ export function buildPlanVisualScene({
       }),
       label: message,
     }
-  const traces = new Map(
-    db.source_trace.list().map((trace) => [trace.source_trace_id, trace]),
-  )
-  const routed = new Set(
-    db.pcb_trace.list().map((trace) => trace.source_trace_id),
-  )
+  const pathPorts = new Set(paths.flatMap(({ from, to }) => [from, to]))
   const existingTraces = new Set(
-    paths.flatMap(({ from, to }) =>
-      [...routed].filter((id): id is SourceTraceId => {
-        if (id === undefined) return false
-        const pins = traces.get(id)?.connected_source_port_ids
-        return pins?.includes(from) === true || pins?.includes(to) === true
-      }),
-    ),
+    routedTraces
+      .filter(({ connected_source_port_ids }) =>
+        connected_source_port_ids.some((port) => pathPorts.has(port)),
+      )
+      .map(({ source_trace_id }) => source_trace_id),
   )
   const endpoints = planEndpoints({ paths, topology, labels })
   const scope = topology && plan?.sections.copperScope

@@ -6,6 +6,7 @@ import {
   type ConnectionGraph,
   connectionGraph,
   connectionPath,
+  findConnectionBridges,
 } from "./connection-paths"
 import {
   type CutConnection,
@@ -89,6 +90,7 @@ function splitNamedNets({
       sourceGroupId({ groups: explicitGroups, sourcePortId }),
   })
   const cutGraph = connectionGraph(cutConnectionsByGroup)
+  const bridges = findConnectionBridges(cutGraph)
   const cutNetworks = nodeGroups(
     cutConnectionsByGroup.map(({ fromNodeId, toNodeId }) => [
       fromNodeId,
@@ -117,7 +119,8 @@ function splitNamedNets({
   const splitNets = new Set<SourceNetId>()
   for (const [net, contacts] of portsByNet) {
     const namedCuts = connectingCuts({ cutGraph, cutNetworks, contacts })
-    for (const connection of namedCuts)
+    const connection = namedCuts.find((edge) => !bridges.has(edge))
+    if (connection)
       validateChannelBridge({ graph: cutGraph, connection, physicalGraph })
     if (!namedCuts.length) continue
     const ids = new Set([

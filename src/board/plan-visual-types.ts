@@ -59,7 +59,7 @@ export interface PlanVisualLink {
 /** A pin's role and the cut or path colour to use for its marker. */
 export interface PlanVisualEndpoint {
   id: SourcePortId
-  kind: "driver" | "receiver" | "ideal" | "load"
+  kind: "driver" | "receiver" | "ideal" | "extraTraceEnd"
   color: string
   label: string
   toward?: SourcePortId

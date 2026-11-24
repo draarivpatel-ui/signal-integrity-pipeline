@@ -24,7 +24,7 @@ export interface RoutedTraceCut {
 
 /** Board, receiver paths and physical trace cuts for routed IBIS binding. */
 export interface RouteBindingsInput {
-  readonly circuitJson: CircuitJson
+  readonly circuitJson: Snapshot<CircuitJson>
   readonly mappings: readonly LaneMapping[]
   readonly routedTraceCuts: readonly RoutedTraceCut[]
   readonly modeling: Snapshot<SimulationModeling>

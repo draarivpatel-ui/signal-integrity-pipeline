@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
@@ -28,7 +29,11 @@ test("permissive routing retains the routed differential path to the short", asy
   const [{ bindings }] = solver.getOutput().value
   assert.equal(bindings.mappings[0].sourceTraceIds?.length, 5)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     { code: "channel_short", message: new RegExp(contact.source_port_id) },
   )
 })

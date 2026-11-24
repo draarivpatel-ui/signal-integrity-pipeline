@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -21,7 +22,7 @@ test("a named path leaves a separate unlabeled branch cut intact", async () => {
   const { bindings } = plan
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   assert.equal(bindings.routedTraceCuts.length, 3)
   assert.equal(new Set(plan.sections.requiredSourcePortIds.map(node)).size, 4)

@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -31,7 +32,7 @@ test("a one-trace receiver mapping preserves both physical cut contacts", async 
     caption: "Only the receiver segment is routed",
   })
   const { node } = circuitNodes({
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
     mappings: bindings.mappings,
     modeling: bindings.modeling,
   })

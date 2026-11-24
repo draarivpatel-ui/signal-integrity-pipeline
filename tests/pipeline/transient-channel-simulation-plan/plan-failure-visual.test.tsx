@@ -34,7 +34,7 @@ test("draws the whole board with the open differential leg diagnostic in red", a
   assert.ok(drawing.lines?.length)
   assert.ok(drawing.texts?.length)
   const fault = drawing.texts.find((text) =>
-    text.text.includes("has no copper trace"),
+    text.text.includes("has an incomplete route"),
   )
   assert.equal(fault?.color, "#b91c1c")
   assert.ok(header?.every((text) => text.anchorSide === "center" && text.y > 6))
@@ -45,7 +45,7 @@ test("draws the whole board with the open differential leg diagnostic in red", a
         line.label?.includes("No routed source path"),
     ),
   )
-  assert.equal(fault?.text, "BUS+ has no copper trace between TX and RX.")
+  assert.equal(fault?.text, "BUS+ has an incomplete route between TX and RX.")
   assert.ok(
     drawing.rects?.some(
       (rect) =>

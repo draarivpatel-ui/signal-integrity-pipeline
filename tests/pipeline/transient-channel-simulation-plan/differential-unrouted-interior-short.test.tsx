@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import "../../fixtures/extend-expect-circuit-snapshot"
@@ -38,7 +39,11 @@ test("binding rejects an ideal short between unrouted differential interiors", a
     [2, 2],
   )
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     {
       code: "channel_short",
       message: new RegExp(`${negative}.*${positive}`),

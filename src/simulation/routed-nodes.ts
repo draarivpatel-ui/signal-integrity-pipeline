@@ -9,6 +9,7 @@ import {
   selectPort,
 } from "../board"
 import type { DiagnosticSubject, Snapshot } from "../kernel"
+import { findConnectionBridges } from "./connection-paths"
 import { cutConnections, validateChannelBridge } from "./cut-connections"
 import { fail } from "./diagnostics"
 import { differentialContacts } from "./differential-contacts"
@@ -385,7 +386,11 @@ export function validateRoutedNodes({
   validateDifferentialLegs({ channels, node, legGroups, graphs })
   validateReceiverPaths({ mappings, node })
   validateSingleEndedGround({ channels, node })
-  for (const connection of graphs.channelConnections)
+  const bridges = findConnectionBridges(graphs.ideal)
+  const connection = graphs.channelConnections.find(
+    (edge) => !bridges.has(edge),
+  )
+  if (connection)
     validateChannelBridge({
       graph: graphs.ideal,
       physicalGraph: graphs.physical,

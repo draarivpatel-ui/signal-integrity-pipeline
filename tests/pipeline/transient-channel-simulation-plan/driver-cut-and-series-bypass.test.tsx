@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
-import { selectPort } from "../../../src/board"
+import { cloneCircuitJson, selectPort } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -47,7 +47,11 @@ test("rejects an ideal bypass across a driver-side cut and series resistor", asy
   assert.ok(cut)
   assert.equal(routedTraceCuts.length, 2)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     {
       code: "channel_short",
       message: new RegExp(

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -22,7 +23,11 @@ test("rejects an ideal bypass past the declared receiver", async () => {
   assert.equal(bindings.routedTraceCuts.length, 2)
   expect(circuitJson).toMatchPcbSnapshot(import.meta.path)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     { domain: "simulation", code: "channel_short" },
   )
 })

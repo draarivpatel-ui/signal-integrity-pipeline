@@ -46,7 +46,7 @@ function scopeLine({
     strokeWidth: unit * 0.37,
     strokeDash: "4,4",
     layer: "scope",
-    label: "Copper scope envelope",
+    label: "Copper search envelope",
   }
 }
 
@@ -72,10 +72,10 @@ function planLegend({
   const labels: string[] = []
   if (kinds.has("driver")) labels.push("▶ driver")
   if (kinds.has("receiver")) labels.push("◉ receiver")
-  if (kinds.has("ideal") && kinds.has("load"))
+  if (kinds.has("ideal") && kinds.has("extraTraceEnd"))
     labels.push("◇ direct receiver or extra trace end")
   else if (kinds.has("ideal")) labels.push("◇ direct receiver")
-  else if (kinds.has("load")) labels.push("◇ extra trace end")
+  else if (kinds.has("extraTraceEnd")) labels.push("◇ extra trace end")
   if (polygons.some(({ layer }) => layer === "mappings"))
     labels.push("› direction")
   if (polygons.some(({ layer }) => layer === "copper")) labels.push("◎ via")
@@ -83,8 +83,8 @@ function planLegend({
     labels.push("~ series part")
   if (lines.some(({ layer, strokeDash }) => layer === "topology" && strokeDash))
     labels.push("-- direct connection")
-  if (lines.some(({ label }) => label === "Copper scope envelope"))
-    labels.push("▪▪ included copper")
+  if (lines.some(({ label }) => label === "Copper search envelope"))
+    labels.push("▪▪ copper search envelope")
   const faults = new Set(
     lines.filter(({ layer }) => layer === "failure").map(({ label }) => label),
   )
