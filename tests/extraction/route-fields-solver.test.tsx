@@ -7,11 +7,11 @@ import {
   routeCrossSection,
   solveCrossSection,
 } from "../../src/extraction"
-import { routedCopper } from "../fixtures/routed-copper"
+import { renderRoutedCopper } from "../fixtures/routed-copper"
 
 /** Input shared by the field solver tests. */
 async function fieldsInput(): Promise<RouteFieldsInput> {
-  const { circuitJson, scope } = await routedCopper()
+  const { circuitJson, copperScope: scope } = await renderRoutedCopper()
   const geometry = sectionRoutes({ circuit: circuitJson, copperScope: scope })
   const materials = {
     maskMm: 0.02,
