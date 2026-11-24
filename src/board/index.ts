@@ -16,6 +16,7 @@ export {
   sourceNetMembers,
   sourcePinTies,
 } from "./connectivity"
+export type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
 export { polygonContains } from "./geometry/polygon"
 export { resolveRouteVias, selectPort } from "./geometry/ports"
 export { type CopperScope, channelCopperScope } from "./geometry/scope"
@@ -57,7 +58,6 @@ export type {
   SectionGeometry,
 } from "./route-section-types"
 export { sectionRoutes, stepRouteSections } from "./route-sections"
-export type { RouteSectionsInput } from "./route-sections-input"
 export {
   type RouteSectionsOutput,
   RouteSectionsSolver,

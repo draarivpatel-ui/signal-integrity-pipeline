@@ -2,12 +2,12 @@ import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
+import type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
 import type { CopperScope } from "./geometry/scope"
 import { findContactWire } from "./route-contacts"
 import type { SectionGeometry } from "./route-section-types"
 import { drawRouteSections } from "./route-section-visual"
 import { type RouteSectionProgress, stepRouteSections } from "./route-sections"
-import type { RouteSectionsInput } from "./route-sections-input"
 import { getSoldermaskThicknessMm } from "./route-soldermask"
 import { type CircuitJson, cloneCircuitJson } from "./schema"
 
@@ -26,7 +26,7 @@ function validateRequiredPorts({
   geometry,
 }: {
   db: ReturnType<typeof cju>
-  input: RouteSectionsInput
+  input: CopperGeometryExtractionInput
   geometry: SectionGeometry
 }): void {
   for (const sourcePortId of input.requiredSourcePortIds) {
@@ -55,7 +55,9 @@ function isDeeplyFrozen(input: unknown): boolean {
 }
 
 /** Read mutable caller inputs once without duplicating already frozen planning values. */
-function captureInput(input: RouteSectionsInput): RouteSectionsInput {
+function captureInput(
+  input: CopperGeometryExtractionInput,
+): CopperGeometryExtractionInput {
   const captured = {
     ...input,
     requiredSourcePortIds: snapshot(input.requiredSourcePortIds),
@@ -73,10 +75,10 @@ export class RouteSectionsSolver extends BaseSolver {
   private steps?: Generator<RouteSectionProgress, SectionGeometry>
   private circuit?: CircuitJson
   private output?: Produced<RouteSectionsOutput>
-  private readonly input: RouteSectionsInput
+  private readonly input: CopperGeometryExtractionInput
 
   /** Capture the board and its prepared copper scope. */
-  constructor(input: RouteSectionsInput) {
+  constructor(input: CopperGeometryExtractionInput) {
     super()
     this.input = captureInput(input)
   }

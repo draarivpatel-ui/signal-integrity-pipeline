@@ -4,9 +4,9 @@ import type { LayerRef } from "circuit-json"
 import type { JSX, ReactElement, ReactNode } from "react"
 import {
   type CircuitJson,
+  type CopperGeometryExtractionInput,
   channelCopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
-  type RouteSectionsInput,
   sourceNetMembers,
 } from "../../src/board"
 import { snapshot } from "../../src/kernel"
@@ -154,7 +154,7 @@ export function getSectionInput({
   required?: readonly string[]
   distanceMm?: number
   railNetName?: string
-}): RouteSectionsInput {
+}): CopperGeometryExtractionInput {
   const db = cju([...circuit])
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const channel = db.source_net.getWhere({ name: "SIGNAL" })

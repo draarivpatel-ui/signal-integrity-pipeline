@@ -4,7 +4,7 @@ import type { SourcePortId } from "./ids"
 import type { CircuitJson } from "./schema"
 
 /** The board, copper scope and required ports passed to route sectioning. */
-export interface RouteSectionsInput {
+export interface CopperGeometryExtractionInput {
   readonly circuitJson: Snapshot<CircuitJson>
   readonly copperScope: Snapshot<CopperScope>
   readonly requiredSourcePortIds: readonly SourcePortId[]
