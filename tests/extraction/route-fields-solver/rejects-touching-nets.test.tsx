@@ -3,23 +3,23 @@ import assert from "node:assert/strict"
 import { extractCopperGeometry } from "../../../src/board"
 import { RouteFieldsSolver } from "../../../src/extraction"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("rejects touching nets", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="First" width={0.3} />
-        <SectionTrace name="Other" startY={0.3} width={0.3} net="net.OTHER" />
+        <CopperTrace name="First" width={0.3} />
+        <CopperTrace name="Other" startY={0.3} width={0.3} net="net.OTHER" />
       </>
     ),
   })
   const geometry = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   const solver = new RouteFieldsSolver({
     geometry,

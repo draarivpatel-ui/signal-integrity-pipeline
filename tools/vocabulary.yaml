@@ -83,7 +83,7 @@ domain:
   coupling: mutual electrical or magnetic interaction between conductors
   crossover: the frequency band where conductor loss turns from its DC value into skin loss
   cursor: the current position while traversing an ordered route
-  cut: a deliberate break in physical copper, as in a pour cutout
+  cutout: an opening in a copper pour
   deck: an input file for a solver (the ngspice netlist)
   declare: plan experiments and probes from the board's simulation records before any solver runs
   delay: time needed for a signal edge to propagate through a line
@@ -127,7 +127,7 @@ domain:
   lane: an existing converter term for an extracted transmission line
   overlay: a drawing mark that depicts an electrical connection or a fault
   segment: one trace, series component, or ideal connection along a receiver path
-  contact: an electrical connection at a source port or net, or where a physical pad touches wire or via copper
+  contact: an electrical connection at a source port or net, or physical contact between a pad and wire or via copper
   group: contacts joined by ideal connections before SPICE node numbering
   receiver: the declared destination of a channel path
   path: the ordered connections from a driver to a receiver

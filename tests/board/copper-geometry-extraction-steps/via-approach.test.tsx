@@ -2,15 +2,15 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("keeps the wire approaching a via on the entry layer", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
-      <SectionTrace
+      <CopperTrace
         name="Via"
         endLayer="inner1"
         points={[
@@ -20,7 +20,7 @@ test("keeps the wire approaching a via on the entry layer", async () => {
     ),
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit }),
+    getCopperGeometryExtractionInput({ circuit }),
   )
   solver.solve()
   assert.deepEqual(
