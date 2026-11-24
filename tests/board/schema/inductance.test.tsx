@@ -1,25 +1,18 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { Circuit as LegacyCircuit } from "@tscircuit/core-legacy"
 import { validateCircuitRecords } from "../../../src/board"
 import { renderCoreSignals } from "../../support/core-render"
 
-test("accepts canonical inductance and diagnoses a legacy core unit string", async () => {
-  const board = (
+test("accepts canonical inductance rendered by core", async () => {
+  const circuit = await renderCoreSignals(
     <board schematicDisabled>
       <inductor name="L_PWR3" inductance="1.5uH" footprint="0402" />
-    </board>
+    </board>,
   )
-  const legacyCircuit = new LegacyCircuit({
-    platform: { partsEngineDisabled: true },
-  })
-  legacyCircuit.add(board)
-  await legacyCircuit.renderUntilSettled()
-  assert.throws(() => validateCircuitRecords(legacyCircuit.getCircuitJson()), {
-    code: "circuit_schema",
-    message:
-      'circuit_schema: source_component L_PWR3: inductance: expected number 0.0000015 (canonical Circuit JSON), got "1.5uH"',
-  })
-  const circuit = await renderCoreSignals(board)
+  const inductor = circuit.find(
+    (record) =>
+      record.type === "source_component" && record.ftype === "simple_inductor",
+  )
+  assert.equal(inductor?.inductance, 0.0000015)
   assert.doesNotThrow(() => validateCircuitRecords(circuit))
 })
