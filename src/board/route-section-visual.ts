@@ -14,6 +14,8 @@ import { getRoutePoint } from "./route-wire"
 
 /** Fit annotation and marker sizes to the physical board width. */
 const BOARD_UNITS = 80
+/** Estimate the average advance of a character in the section annotation. */
+const SECTION_LABEL_ADVANCE_EM = 0.5
 
 /** Boundary and reference annotation for one section interval. */
 interface SectionMarks {
@@ -83,17 +85,29 @@ function drawSection({
   if (!wire) return { lines }
   const center = getRoutePoint({ wire, positionMm: (startMm + endMm) / 2 })
   const wireLayers = [...new Set(wires.map(({ layer }) => layer))].join(" / ")
-  return {
-    lines,
-    text: {
-      x: center[0],
-      y: center[1] + wire.widthMm / 2 + unitMm * 0.9,
-      text: `${wireLayers} · ${label}`,
-      fontSize: unitMm * 1.65,
-      anchorSide: "bottom_center",
-      color,
-    },
+  const copperClearanceMm = wire.widthMm / 2 + unitMm * 0.9
+  const text: Text = {
+    x: center[0],
+    y: center[1] + copperClearanceMm,
+    text: `${wireLayers} · ${label}`,
+    fontSize: unitMm * 1.65,
+    anchorSide: "bottom_center",
+    color,
   }
+  const hasNearbyReferenceEdge = references.some(
+    ({ lateralGapMm }) =>
+      lateralGapMm !== undefined &&
+      lateralGapMm < copperClearanceMm + text.fontSize,
+  )
+  if (
+    hasNearbyReferenceEdge ||
+    text.text.length * text.fontSize * SECTION_LABEL_ADVANCE_EM >
+      endMm - startMm
+  ) {
+    text.y = center[1] - copperClearanceMm
+    text.anchorSide = "top_center"
+  }
+  return { lines, text }
 }
 
 /** Draw the original trace as a light outline behind the modeled wire. */

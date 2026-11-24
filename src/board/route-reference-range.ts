@@ -7,11 +7,7 @@ import type {
   RouteSection,
   RouteWire,
 } from "./route-section-types"
-import {
-  getRoutePoint,
-  MIN_WIRE_LENGTH_MM,
-  measureChordDistanceMm,
-} from "./route-wire"
+import { MIN_WIRE_LENGTH_MM, measureChordDistanceMm } from "./route-wire"
 
 /** Limit edge references to the local neighborhood of ordinary board thicknesses. */
 export const MAX_REFERENCE_EDGE_DISTANCE_MM = 2
