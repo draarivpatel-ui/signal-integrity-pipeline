@@ -212,12 +212,12 @@ stages 1–6, matching table rows 01–06. Entering a number
 selects that retained stage until the next pipeline advance. Each flat stage
 retains its last completed channel simulation's domain solver and final drawing; selecting
 an earlier stage never recomputes it. Each domain solver draws its physical input
-before its first step. Stage wrappers construct that domain solver when admitted,
+before its first step. Stage wrappers construct that domain solver when the inputs are ready,
 and root transitions preview the incoming immutable input before the next step.
 Fields preview the first physical cross-section without solving coefficients.
 Pending transients show the board with probe marks and empty plot axes; curves
 appear only after complete samples arrive. Future stages whose inputs are
-incomplete draw the selected copper in neutral grey, and a problem with no admitted
+incomplete draw the selected copper in neutral grey, and a problem with no planned
 channel simulations shows the whole board with one quiet line. Values outside 0–6 are clamped silently; clicking
 a table row also selects that stage. Selection lives in fixture component state.
 The page starts with this input and the debugger; local asset loading remains,
