@@ -2,14 +2,14 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("rejects a wire tail beyond the reference edge distance", async () => {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
     reference: (
       <copperpour
         connectsTo="net.GND"
@@ -28,7 +28,7 @@ test("rejects a wire tail beyond the reference edge distance", async () => {
     () =>
       extractCopperGeometry({
         circuit,
-        copperScope: getCopperExtractionInput({ circuit }).copperScope,
+        copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
       }),
     /no actual reference pour/,
   )

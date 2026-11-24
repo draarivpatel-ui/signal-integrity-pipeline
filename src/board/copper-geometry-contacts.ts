@@ -32,18 +32,18 @@ import type { CopperScope } from "./geometry/scope"
 import type { LayerRef } from "./schema"
 
 /** A pad outline in contact with zero or more planar conductors. */
-interface PortOutline {
+interface PadOutline {
   pcbPort: PcbPort
   layer: LayerRef
   outline: Polygon
 }
 
-/** Resolved contacts on real PCB ports and tagged wire endpoints. */
-type PadContacts = Pick<ExtractedCopper, "wires" | "portContacts">
+/** Physical pad contacts and modeled wires with their endpoint flags. */
+type PadContacts = Pick<ExtractedCopper, "wires" | "padContacts">
 
 /** Read physical pads and plated holes connected to PCB ports. */
-function getPortOutlines(db: ReturnType<typeof cju>): PortOutline[] {
-  const smtPads = db.pcb_smtpad.list().flatMap((pad): PortOutline[] => {
+function getPadOutlines(db: ReturnType<typeof cju>): PadOutline[] {
+  const smtPads = db.pcb_smtpad.list().flatMap((pad): PadOutline[] => {
     if (pad.pcb_port_id === undefined) return []
     const pcbPort = db.pcb_port.get(pad.pcb_port_id)
     if (!pcbPort) return []
@@ -51,7 +51,7 @@ function getPortOutlines(db: ReturnType<typeof cju>): PortOutline[] {
   })
   const platedHoles = db.pcb_plated_hole
     .list()
-    .flatMap((hole): PortOutline[] => {
+    .flatMap((hole): PadOutline[] => {
       if (hole.pcb_port_id === undefined) return []
       const pcbPort = db.pcb_port.get(hole.pcb_port_id)
       if (!pcbPort) return []
@@ -101,7 +101,7 @@ function outlinesTouch({
 }
 
 /** A via with its declared electrical associations resolved through the source circuit. */
-interface ViaOutline {
+interface AssociatedVia {
   via: CopperVia
   members: SourceConnectionGroup
 }
@@ -113,17 +113,17 @@ function findPadWire({
   vias,
   netMembers,
 }: {
-  pad: PortOutline
+  pad: PadOutline
   wireOutlines: WireOutline[]
-  vias: ViaOutline[]
+  vias: AssociatedVia[]
   netMembers: ReadonlySet<SourceConnectionGroup[number]>
 }): TraceWire | undefined {
   const direct = wireOutlines.find(
-    ({ wire, outline }) =>
-      wire.layer === pad.layer &&
+    ({ modeledWire, outline }) =>
+      modeledWire.layer === pad.layer &&
       outlinesTouch({ first: pad.outline, second: outline }),
   )
-  if (direct) return direct.wire
+  if (direct) return direct.modeledWire
   for (const { via, members } of vias) {
     if (
       !members.length ||
@@ -133,10 +133,10 @@ function findPadWire({
     )
       continue
     const connected = wireOutlines.find(
-      ({ wire, outline }) =>
-        via.layers.includes(wire.layer) && touchesVia({ outline, via }),
+      ({ modeledWire, outline }) =>
+        via.layers.includes(modeledWire.layer) && touchesVia({ outline, via }),
     )
-    if (connected) return connected.wire
+    if (connected) return connected.modeledWire
   }
   return undefined
 }
@@ -157,18 +157,18 @@ export function resolvePadContacts({
   vias: CopperVia[]
   copperScope: Snapshot<CopperScope>
 }): PadContacts {
-  const pads = getPortOutlines(db)
+  const pads = getPadOutlines(db)
   const wireOutlines = getWireOutlines({ mergedWires, chords, copperScope })
   const traceMembers = new Map(
     db.source_trace
       .list()
       .map((trace) => [trace.source_trace_id, getTraceMembers(trace)]),
   )
-  const viaOutlines = vias.map((via) => ({
+  const associatedVias = vias.map((via) => ({
     via,
     members: getViaMembers({ db, via, traceMembers }),
   }))
-  const portContacts: PadContact[] = []
+  const padContacts: PadContact[] = []
   const startContactWireIndices = new Set<number>()
   const endContactWireIndices = new Set<number>()
   for (const pad of pads) {
@@ -181,21 +181,21 @@ export function resolvePadContacts({
         .get(physicalWire.sourceTraceId)
         ?.some((memberId) => netMembers.has(memberId)),
     )
-    for (const { wire, startCap, endCap } of compatibleWires) {
-      if (pad.layer !== wire.layer) continue
+    for (const { modeledWire, startCap, endCap } of compatibleWires) {
+      if (pad.layer !== modeledWire.layer) continue
       if (startCap && outlinesTouch({ first: startCap, second: pad.outline }))
-        startContactWireIndices.add(wire.wireIndex)
+        startContactWireIndices.add(modeledWire.wireIndex)
       if (endCap && outlinesTouch({ first: endCap, second: pad.outline }))
-        endContactWireIndices.add(wire.wireIndex)
+        endContactWireIndices.add(modeledWire.wireIndex)
     }
     const wire = findPadWire({
       pad,
       wireOutlines: compatibleWires,
-      vias: viaOutlines,
+      vias: associatedVias,
       netMembers,
     })
     if (wire)
-      portContacts.push({
+      padContacts.push({
         pcbPortId: pad.pcbPort.pcb_port_id,
         point: [pad.pcbPort.x, pad.pcbPort.y],
         layer: pad.layer,
@@ -203,11 +203,11 @@ export function resolvePadContacts({
       })
   }
   return {
-    portContacts,
+    padContacts,
     wires: mergedWires.map(({ wire }) => ({
       ...wire,
-      startTouchesPort: startContactWireIndices.has(wire.wireIndex),
-      endTouchesPort: endContactWireIndices.has(wire.wireIndex),
+      startTouchesPad: startContactWireIndices.has(wire.wireIndex),
+      endTouchesPad: endContactWireIndices.has(wire.wireIndex),
     })),
   }
 }

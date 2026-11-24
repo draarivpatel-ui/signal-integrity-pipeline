@@ -2,17 +2,17 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("declares the frozen copper geometry fields readonly", async () => {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit }),
+    getCopperGeometryExtractionInput({ circuit }),
   )
   solver.solve()
   const { value: copperGeometry } = solver.getOutput()

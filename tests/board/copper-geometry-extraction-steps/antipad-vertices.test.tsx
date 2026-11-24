@@ -3,16 +3,16 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
-test("cuts a section at both antipad vertices on the wire", async () => {
+test("splits the wire section at both antipad vertices on the wire", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Crossing" />
+        <CopperTrace name="Crossing" />
         <cutout
           shape="polygon"
           points={[
@@ -33,7 +33,7 @@ test("cuts a section at both antipad vertices on the wire", async () => {
   const rightMm = Math.max(...hole.vertices.map(({ x }) => x))
   const { sections } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert.deepEqual(
     sections.map(({ startMm, endMm }) => [startMm, endMm]),

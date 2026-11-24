@@ -48,18 +48,18 @@ function getViaLayers({
 /** Resolve the canonical barrel span and keep one entry for each physical via. */
 export function collectCopperVias({
   scopedVias,
-  routeVias,
+  embeddedVias,
   boardLayers,
   allowsBlindVias,
 }: {
   scopedVias: CopperVia[]
-  routeVias: CopperVia[]
+  embeddedVias: CopperVia[]
   boardLayers: readonly LayerRef[]
   allowsBlindVias: boolean
 }): CopperVia[] {
   const seenPcbViaIds = new Set<PcbViaId>()
   const vias: CopperVia[] = []
-  for (const via of [...scopedVias, ...routeVias]) {
+  for (const via of [...scopedVias, ...embeddedVias]) {
     if (via.pcbViaId !== undefined) {
       if (seenPcbViaIds.has(via.pcbViaId)) continue
       seenPcbViaIds.add(via.pcbViaId)

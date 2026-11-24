@@ -3,14 +3,14 @@ import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("uses continuous edge references from two separate pours", async () => {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
     reference: (
       <>
         <copperpour
@@ -39,7 +39,7 @@ test("uses continuous edge references from two separate pours", async () => {
     ),
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit }),
+    getCopperGeometryExtractionInput({ circuit }),
   )
   solver.solve()
   const { sections } = solver.getOutput().value.geometry

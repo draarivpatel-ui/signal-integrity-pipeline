@@ -2,16 +2,16 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("captures mutable board, scope and required ports when constructed", async () => {
   const circuitJson = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
   })
-  const input = getCopperExtractionInput({
+  const input = getCopperGeometryExtractionInput({
     circuit: circuitJson,
     required: ["SignalStart"],
   })
@@ -32,5 +32,5 @@ test("captures mutable board, scope and required ports when constructed", async 
   const { value } = solver.getOutput()
   assert.equal(value.circuitJson.length, recordCount)
   assert.equal(value.copperScope.extractedPcbTraceIds.length, 1)
-  assert.equal(value.geometry.portContacts.length, 2)
+  assert.equal(value.geometry.padContacts.length, 2)
 })

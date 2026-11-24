@@ -12,7 +12,7 @@ import {
 import { snapshot } from "../../src/kernel"
 import { renderCoreBoard } from "../support/core-render"
 
-interface SectionPinProps {
+interface CopperPadProps {
   name: string
   x: number
   y?: number
@@ -21,13 +21,13 @@ interface SectionPinProps {
 }
 
 /** A physical pad and optional shared source net. */
-export function SectionPin({
+export function CopperPad({
   name,
   x,
   y = 0,
   layer = "top",
   net = "net.SIGNAL",
-}: SectionPinProps): ReactElement {
+}: CopperPadProps): ReactElement {
   return (
     <chip
       name={name}
@@ -52,7 +52,7 @@ export function SectionPin({
   )
 }
 
-interface SectionTraceProps {
+interface CopperTraceProps {
   name: string
   startX?: number
   endX?: number
@@ -67,7 +67,7 @@ interface SectionTraceProps {
 }
 
 /** A manual trace with a physical pad at each end. */
-export function SectionTrace({
+export function CopperTrace({
   name,
   startX = -4,
   endX = 4,
@@ -79,19 +79,19 @@ export function SectionTrace({
   net = "net.SIGNAL",
   points = [],
   hasStartTeardrop,
-}: SectionTraceProps): ReactElement {
+}: CopperTraceProps): ReactElement {
   const from = `.${name}Start > .P`
   const to = `.${name}End > .P`
   return (
     <>
-      <SectionPin
+      <CopperPad
         name={`${name}Start`}
         x={startX}
         y={startY}
         net={net}
         layer={startLayer}
       />
-      <SectionPin
+      <CopperPad
         name={`${name}End`}
         x={endX}
         y={endY}
@@ -110,7 +110,7 @@ export function SectionTrace({
   )
 }
 
-/** Render the test geometry through core. Overlaps and open ports are deliberate. */
+/** Render the test geometry through core. The fixtures deliberately include overlaps and open pads. */
 export async function renderCopperGeometryBoard({
   children,
   allowBlindAndBuriedVias = true,
@@ -143,8 +143,8 @@ export async function renderCopperGeometryBoard({
   })
 }
 
-/** Select the real traces and ports generated for a section fixture. */
-export function getCopperExtractionInput({
+/** Build extraction input from the board and its required pad endpoints. */
+export function getCopperGeometryExtractionInput({
   circuit,
   required = [],
   distanceMm = 1,

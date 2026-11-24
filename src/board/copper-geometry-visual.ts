@@ -188,7 +188,7 @@ function drawBoard({
         anchorSide: "bottom_left",
         text:
           error ||
-          "Ticks mark section boundaries. Circles mark ports and vias. Dashes mark ideal joins.",
+          "Ticks mark section boundaries. Circles mark pad contacts and vias. Dashes mark ideal joins.",
         fontSize: unitMm * 1.45,
         color: statusColor,
       },

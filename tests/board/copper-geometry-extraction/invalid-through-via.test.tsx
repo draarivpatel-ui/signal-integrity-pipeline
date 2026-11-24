@@ -2,10 +2,10 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperPad,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionPin,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("rejects a through via with a layer outside the board stack", async () => {
@@ -13,8 +13,8 @@ test("rejects a through via with a layer outside the board stack", async () => {
     allowBlindAndBuriedVias: false,
     children: (
       <>
-        <SectionTrace name="Signal" startLayer="inner2" />
-        <SectionPin name="Contact" x={0} />
+        <CopperTrace name="Signal" startLayer="inner2" />
+        <CopperPad name="Contact" x={0} />
         <via
           connectsTo="net.SIGNAL"
           pcbX={0}
@@ -26,7 +26,7 @@ test("rejects a through via with a layer outside the board stack", async () => {
     ),
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit, required: ["Contact"] }),
+    getCopperGeometryExtractionInput({ circuit, required: ["Contact"] }),
   )
   assert.throws(() => solver.solve(), /via .* unknown copper layer inner3/)
 })

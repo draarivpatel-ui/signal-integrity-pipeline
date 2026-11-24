@@ -4,7 +4,7 @@ import type { GraphicsObject } from "graphics-debug"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
 import type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
 import {
-  type CopperExtractionProgress,
+  type CopperGeometryExtractionProgress,
   stepCopperGeometryExtraction,
 } from "./copper-geometry-extraction-steps"
 import { findPadContactWire } from "./copper-geometry-pad-contact"
@@ -14,7 +14,7 @@ import { drawCopperGeometry } from "./copper-geometry-visual"
 import type { CopperScope } from "./geometry/scope"
 import { type CircuitJson, cloneCircuitJson } from "./schema"
 
-/** Completed route geometry and its outer soldermask thickness when declared. */
+/** Extracted copper geometry and its outer soldermask thickness when declared. */
 export interface CopperGeometry {
   readonly circuitJson: Snapshot<CircuitJson>
   readonly copperScope: Snapshot<CopperScope>
@@ -75,7 +75,7 @@ function captureInput(
 /** Extract one trace per step, then verify the required endpoint contacts. */
 export class CopperGeometryExtractionSolver extends BaseSolver {
   override MAX_ITERATIONS = Infinity
-  private steps?: Generator<CopperExtractionProgress, ExtractedCopper>
+  private steps?: Generator<CopperGeometryExtractionProgress, ExtractedCopper>
   private circuit?: CircuitJson
   private output?: Produced<CopperGeometry>
   private readonly input: CopperGeometryExtractionInput
@@ -86,7 +86,7 @@ export class CopperGeometryExtractionSolver extends BaseSolver {
     this.input = captureInput(input)
   }
 
-  /** Report trace extraction counts, then publish the completed sections. */
+  /** Report trace extraction counts, then publish the extracted copper geometry. */
   override _step(): void {
     this.circuit ??= cloneCircuitJson(this.input.circuitJson)
     this.steps ??= stepCopperGeometryExtraction({
@@ -98,11 +98,11 @@ export class CopperGeometryExtractionSolver extends BaseSolver {
       this.stats = { ...step.value, sections: 0 }
       return
     }
-    this.publishSections({ circuit: this.circuit, geometry: step.value })
+    this.publishCopperGeometry({ circuit: this.circuit, geometry: step.value })
   }
 
   /** Validate final geometry and publish the immutable stage artifacts. */
-  private publishSections({
+  private publishCopperGeometry({
     circuit,
     geometry,
   }: {
@@ -146,7 +146,7 @@ export class CopperGeometryExtractionSolver extends BaseSolver {
     return this.output
   }
 
-  /** Draw the board and the geometry published by the section solver. */
+  /** Draw the board and the extracted copper geometry. */
   override visualize(): GraphicsObject {
     return drawCopperGeometry({
       db: cju(cloneCircuitJson(this.input.circuitJson)),

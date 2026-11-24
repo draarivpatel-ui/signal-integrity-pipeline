@@ -2,23 +2,17 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("groups near-vertical wires whose rounded directions coincide", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace
-          name="Straight"
-          startX={0}
-          endX={0}
-          startY={-3}
-          endY={3}
-        />
-        <SectionTrace
+        <CopperTrace name="Straight" startX={0} endX={0} startY={-3} endY={3} />
+        <CopperTrace
           name="Skew"
           startX={0.3}
           endX={0.3 - 1e-7}
@@ -31,7 +25,7 @@ test("groups near-vertical wires whose rounded directions coincide", async () =>
   })
   const { sections } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert.deepEqual(
     sections.map(({ wires }) => wires.length),

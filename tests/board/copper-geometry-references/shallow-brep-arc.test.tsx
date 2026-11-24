@@ -3,14 +3,14 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { normalizeReferencePour } from "../../../src/board/copper-geometry-references"
 import {
+  CopperTrace,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 /** Core emits polygonized boundaries. Encode a shallow arc on one emitted edge. */
 async function normalizeShallowArc(): Promise<void> {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
   })
   const [pour] = cju(circuit).pcb_copper_pour.list()
   assert(pour?.shape === "brep")

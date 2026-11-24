@@ -3,8 +3,8 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
-  SectionPin,
+  CopperPad,
+  getCopperGeometryExtractionInput,
 } from "../../fixtures/copper-geometry-board"
 import { renderCoreBoard } from "../../support/core-render"
 
@@ -47,8 +47,8 @@ test("rejects a required pad within the bore of a route-only via", async () => {
       >
         <net name="GND" />
         <net name="SIGNAL" />
-        <SectionPin name="SignalStart" x={-4} />
-        <SectionPin name="Bore" x={0} layer="bottom" />
+        <CopperPad name="SignalStart" x={-4} />
+        <CopperPad name="Bore" x={0} layer="bottom" />
         <trace from=".SignalStart > .P" to=".Bore > .P" />
         <copperpour connectsTo="net.GND" layer="inner1" unbroken />
       </board>
@@ -62,7 +62,7 @@ test("rejects a required pad within the bore of a route-only via", async () => {
   assert.equal(via?.outer_diameter, undefined)
 
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit, required: ["Bore"] }),
+    getCopperGeometryExtractionInput({ circuit, required: ["Bore"] }),
   )
   assert.throws(
     () => solver.solve(),

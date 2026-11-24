@@ -4,13 +4,13 @@ import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbCopperPour } from "circuit-json"
 import { normalizeReferencePour } from "../../../src/board/copper-geometry-references"
 import {
+  CopperTrace,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("normalizes equivalent rectangular, polygon and BRep reference pours", async () => {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
   })
   const [pour] = cju(circuit).pcb_copper_pour.list()
   assert(pour?.shape === "brep")

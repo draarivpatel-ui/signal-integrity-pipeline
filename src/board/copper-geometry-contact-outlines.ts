@@ -12,7 +12,7 @@ import type { CopperScope } from "./geometry/scope"
 
 /** Actual copper contributing to a modeled wire interval. */
 export interface WireOutline {
-  wire: TraceWire
+  modeledWire: TraceWire
   physicalWire: TraceWire
   outline: Polygon
   startCap?: Polygon
@@ -26,15 +26,15 @@ function clampFraction(fraction: number): number {
 
 /** Split physical copper at union boundaries while keeping overhang at the chord ends. */
 function getWireOutline({
-  wire,
+  modeledWire,
   physicalWire,
   chord,
 }: {
-  wire: TraceWire
+  modeledWire: TraceWire
   chord: TraceWire
   physicalWire: TraceWire
 }): WireOutline | undefined {
-  const [axisX, axisY] = wire.direction
+  const [axisX, axisY] = modeledWire.direction
   const [startX, startY] = physicalWire.startPoint
   const [endX, endY] = physicalWire.endPoint
   const dx = endX - startX
@@ -43,7 +43,7 @@ function getWireOutline({
   const endMm = endX * axisX + endY * axisY
   const physicalMinMm = Math.min(startMm, endMm)
   const physicalMaxMm = Math.max(startMm, endMm)
-  const { longitudinalMinMm, longitudinalMaxMm } = wire
+  const { longitudinalMinMm, longitudinalMaxMm } = modeledWire
   let contactMinMm = longitudinalMinMm
   let contactMaxMm = longitudinalMaxMm
   if (longitudinalMinMm <= chord.longitudinalMinMm + CONTACT_TOLERANCE_MM)
@@ -57,8 +57,8 @@ function getWireOutline({
     return undefined
 
   const isForward =
-    wire.startPoint[0] * axisX + wire.startPoint[1] * axisY <
-    wire.endPoint[0] * axisX + wire.endPoint[1] * axisY
+    modeledWire.startPoint[0] * axisX + modeledWire.startPoint[1] * axisY <
+    modeledWire.endPoint[0] * axisX + modeledWire.endPoint[1] * axisY
   let intervalStartMm = longitudinalMinMm
   let intervalEndMm = longitudinalMaxMm
   let contactStartMm = contactMinMm
@@ -83,7 +83,7 @@ function getWireOutline({
   }
   const end = { x: startX + dx * endFraction, y: startY + dy * endFraction }
   const outline: WireOutline = {
-    wire,
+    modeledWire,
     physicalWire,
     outline: getTraceSegmentPolygon(start, end, physicalWire.widthMm),
   }
@@ -114,11 +114,11 @@ export function getWireOutlines({
   copperScope: Snapshot<CopperScope>
 }): WireOutline[] {
   const outlines: WireOutline[] = []
-  for (const { wire, contributingWires } of mergedWires) {
+  for (const { wire: modeledWire, contributingWires } of mergedWires) {
     for (const chord of contributingWires) {
       if (copperScope.nearbyRailPcbTraceIds.includes(chord.pcbTraceId)) continue
       for (const physicalWire of chords[chord.wireIndex].physicalWires) {
-        const outline = getWireOutline({ wire, physicalWire, chord })
+        const outline = getWireOutline({ modeledWire, physicalWire, chord })
         if (outline) outlines.push(outline)
       }
     }

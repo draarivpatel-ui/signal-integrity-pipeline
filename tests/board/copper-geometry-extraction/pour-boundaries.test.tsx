@@ -3,16 +3,16 @@ import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("draws the three reference intervals across a copper cutout", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Crossing" startX={-6} endX={6} width={0.35} />
+        <CopperTrace name="Crossing" startX={-6} endX={6} width={0.35} />
         <cutout
           shape="polygon"
           points={[
@@ -26,7 +26,7 @@ test("draws the three reference intervals across a copper cutout", async () => {
     ),
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({
+    getCopperGeometryExtractionInput({
       circuit,
       required: ["CrossingStart", "CrossingEnd"],
     }),
