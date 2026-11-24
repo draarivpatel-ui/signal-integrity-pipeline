@@ -2,10 +2,10 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
-import { assertRouteVisual } from "../../fixtures/route-visual-snapshot"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
+import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
 test("highlights an ideal connection that bypasses routed cuts", async () => {
   const circuitJson = await renderSignals({
@@ -33,7 +33,7 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
   assert.equal(explanation?.length, 1)
   assert.equal(
     explanation.map(({ text }) => text).join(" "),
-    "DATA has a direct shortcut from TX to RX, skipping RS and both traces.",
+    "DATA has a bypass from TX to RX, skipping RS and both traces.",
   )
   const scaleText = drawing.texts?.find(
     (text) => text.layer === "header" && text.text === "2 mm",
@@ -42,7 +42,7 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
   assert.ok(explanation.every((text) => text.fontSize === scaleText.fontSize))
   assert.ok(
     drawing.lines?.some(
-      (line) => line.layer === "failure" && line.label === "Ideal bypass",
+      (line) => line.layer === "failure" && line.label === "Bypass",
     ),
   )
   assert.ok(
@@ -52,13 +52,13 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
   )
   assert.ok(drawing.texts)
   const legend = drawing.texts.find(({ text }) =>
-    text.includes("-×- shortcut"),
+    text.includes("-×- bypass"),
   )?.text
   assert.ok(legend)
-  assert.ok(legend.includes("-×- shortcut"))
+  assert.ok(legend.includes("-×- bypass"))
   assert.ok(legend.includes("× bypassed trace"))
-  assert.ok(!legend.includes("-- direct connection"))
-  assertRouteVisual({
+  assert.ok(!legend.includes("-- ideal connection"))
+  assertPlanDrawingSnapshot({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "short-bypass-visual",

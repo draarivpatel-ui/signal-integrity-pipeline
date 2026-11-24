@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import {
@@ -18,14 +19,19 @@ test("maps both declarations of the same receiver to one routed cut and SPICE no
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  assert.equal(bindings.routedTraceCuts.length, 1)
-  const nodes = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
+  assert.equal(bindings.traceContacts.length, 1)
+  const nodes = circuitNodes({
+    ...bindings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+  })
   assert.deepEqual(
-    bindings.mappings.map(({ sourceTraceId, from, to }) => [
-      sourceTraceId,
-      nodes.node(from),
-      nodes.node(to),
-    ]),
+    bindings.receiverPaths.map(
+      ({ sourceTraceId, fromSourcePortId: from, toSourcePortId: to }) => [
+        sourceTraceId,
+        nodes.node(from),
+        nodes.node(to),
+      ],
+    ),
     [
       ["source_trace_6", "n2", "n6"],
       ["source_trace_6", "n2", "n6"],

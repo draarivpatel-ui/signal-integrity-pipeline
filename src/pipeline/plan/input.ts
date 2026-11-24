@@ -2,16 +2,16 @@ import {
   type CircuitJson,
   type SimulationPcbTransientChannelSimulation,
   validateCircuitRecords,
-} from "../board"
-import { type IbisSources, invalidIbisSource } from "../buffers"
-import { Diagnostic, type SafeId, safeId } from "../kernel"
-import { listChannelSimulations, validatedScopeDistanceMm } from "./signals"
+} from "../../board"
+import { failInvalidIbisSource, type IbisSources } from "../../buffers"
+import { Diagnostic, type SafeId, safeId } from "../../kernel"
+import { listChannelSimulations, validateNearbyGapMm } from "../signals"
 
 /** Board and model sources supplied to channel simulation planning. */
 export interface TransientChannelSimulationPlanInput {
   readonly circuitJson: CircuitJson
   readonly ibisSources: Readonly<IbisSources>
-  readonly scopeDistanceMm?: number
+  readonly nearbyGapMm?: number
 }
 
 /** Capture original bytes without decoding and give readers copies of byte views. */
@@ -39,7 +39,7 @@ function captureIbisSources(
       Object.defineProperty(ibisSources, assetPath, {
         enumerable: true,
         get() {
-          return invalidIbisSource(assetPath)
+          return failInvalidIbisSource(assetPath)
         },
       })
       continue
@@ -63,14 +63,14 @@ export interface ValidatedChannelSimulation {
 
 /** Validated search radius and ordered declarations after board validation. */
 export interface ValidatedBoard {
-  scopeDistanceMm: number
+  nearbyGapMm: number
   channelSimulations: ValidatedChannelSimulation[]
 }
 
 /** Check the board and radius once for all channel simulations, including empty boards. */
 export function validatePlanningBoard({
   circuitJson,
-  scopeDistanceMm,
+  nearbyGapMm,
 }: TransientChannelSimulationPlanInput): ValidatedBoard {
   validateCircuitRecords(circuitJson)
   const channelSimulations = listChannelSimulations(circuitJson).map(
@@ -84,17 +84,17 @@ export function validatePlanningBoard({
   )
   return {
     channelSimulations,
-    scopeDistanceMm: validatedScopeDistanceMm(scopeDistanceMm),
+    nearbyGapMm: validateNearbyGapMm(nearbyGapMm),
   }
 }
 
 /** Isolate the board while leaving IBIS validation to the referenced model loader. */
-export function captureTransientChannelSimulationPlanInput(
+export function capturePlanInput(
   input: TransientChannelSimulationPlanInput,
 ): TransientChannelSimulationPlanInput {
   return Object.freeze({
     circuitJson: structuredClone(input.circuitJson),
-    scopeDistanceMm: input.scopeDistanceMm,
+    nearbyGapMm: input.nearbyGapMm,
     ibisSources: captureIbisSources(input.ibisSources),
   })
 }

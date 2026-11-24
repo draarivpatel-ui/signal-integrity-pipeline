@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -18,14 +19,18 @@ test("names both contacts and every routed trace in a bypassed receiver path", a
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [mapping] = bindings.mappings
+  const [mapping] = bindings.receiverPaths
   assert.equal(mapping.sourceTraceIds?.length, 2)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     {
       domain: "simulation",
       code: "channel_short",
-      message: `channel_short: DATA: endpoints ${mapping.from} and ${mapping.to} share an ideal node across routed path ${mapping.sourceTraceIds?.join(", ")}`,
+      message: `channel_short: DATA: endpoints ${mapping.fromSourcePortId} and ${mapping.toSourcePortId} share an ideal node across routed path ${mapping.sourceTraceIds?.join(", ")}`,
     },
   )
 })

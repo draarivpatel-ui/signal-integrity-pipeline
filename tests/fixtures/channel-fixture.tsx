@@ -3,7 +3,7 @@ import type { TraceProps } from "@tscircuit/props"
 import type React from "react"
 import { Inverter, Reference } from "./signal-parts"
 
-type Route =
+type ChannelRouteScenario =
   | "series"
   | "unrouted"
   | "receiver-only"
@@ -17,7 +17,7 @@ export function ChannelFixture({
   short,
   children,
 }: {
-  route: Route
+  route: ChannelRouteScenario
   namedNets?: boolean
   children?: React.ReactNode
   short?: "resistor" | "channel" | "junction"

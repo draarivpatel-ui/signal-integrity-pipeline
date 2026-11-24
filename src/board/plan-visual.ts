@@ -1,7 +1,7 @@
-import type { GraphicsObject, Line, Polygon, Viewbox } from "graphics-debug"
+import type { GraphicsObject, Viewbox } from "graphics-debug"
 import { drawCopper } from "./plan-copper"
-import { planHeader } from "./plan-header"
-import { planLabels } from "./plan-labels"
+import { buildPlanHeader } from "./plan-header"
+import { placePlanLabels } from "./plan-labels"
 import {
   endpointRadius,
   endpointShape,
@@ -10,30 +10,34 @@ import {
   ring,
   viaShapes,
 } from "./plan-marks"
+import { buildBoardShapes } from "./plan-shapes"
 import {
   boxPoints,
+  buildPlanFrame,
   clipPlanLines,
   clipPlanPolygons,
-  planBoardShapes,
-  planFrame,
-  planPorts,
-  planScopeBox,
-  routeBoardBox,
-  routeBounds,
+  getBoardBounds,
+  getCopperSearchBox,
+  getPointBounds,
 } from "./plan-view"
-import { type PlanVisualScene, planColors } from "./plan-visual-types"
+import {
+  type PlanLine,
+  type PlanPolygon,
+  type PlanVisualScene,
+  planColors,
+} from "./plan-visual-types"
 
 /** Scope envelope, separated from the board outline when fully in scope. */
-function scopeLine({
+function buildSearchEnvelope({
   scope,
   board,
-  unit,
+  unitMm,
 }: {
   scope: Viewbox
   board: Viewbox
-  unit: number
-}): Line {
-  const inset = unit * 0.6
+  unitMm: number
+}): PlanLine {
+  const inset = unitMm * 0.6
   const points = boxPoints({
     minX: Math.max(board.minX + inset, scope.minX),
     maxX: Math.min(board.maxX - inset, scope.maxX),
@@ -43,63 +47,45 @@ function scopeLine({
   return {
     points: [...points, points[0]],
     strokeColor: planColors.scope,
-    strokeWidth: unit * 0.37,
+    strokeWidth: unitMm * 0.37,
     strokeDash: "4,4",
+    mark: "envelope",
     layer: "scope",
-    label: "Copper scope envelope",
+    label: "Copper search envelope",
   }
 }
 
 /** Explain only the symbols that were drawn inside the board window. */
-function planLegend({
+function buildPlanLegend({
   scene,
   polygons,
   lines,
 }: {
   scene: PlanVisualScene
-  polygons: readonly Polygon[]
-  lines: readonly Line[]
+  polygons: readonly PlanPolygon[]
+  lines: readonly PlanLine[]
 }): string[] {
-  const kinds = new Set(
-    scene.endpoints
-      .filter(({ label }) =>
-        polygons.some(
-          (shape) => shape.layer === "endpoints" && shape.label === label,
-        ),
-      )
-      .map(({ kind }) => kind),
-  )
+  const kinds = new Set(polygons.map(({ endpointKind }) => endpointKind))
+  const lineMarks = new Set(lines.map(({ mark }) => mark))
   const labels: string[] = []
   if (kinds.has("driver")) labels.push("▶ driver")
   if (kinds.has("receiver")) labels.push("◉ receiver")
-  if (kinds.has("ideal") && kinds.has("load"))
+  if (kinds.has("ideal") && kinds.has("extraTraceEnd"))
     labels.push("◇ direct receiver or extra trace end")
   else if (kinds.has("ideal")) labels.push("◇ direct receiver")
-  else if (kinds.has("load")) labels.push("◇ extra trace end")
+  else if (kinds.has("extraTraceEnd")) labels.push("◇ extra trace end")
   if (polygons.some(({ layer }) => layer === "mappings"))
     labels.push("› direction")
   if (polygons.some(({ layer }) => layer === "copper")) labels.push("◎ via")
   if (polygons.some(({ layer }) => layer === "topology"))
     labels.push("~ series part")
-  if (lines.some(({ layer, strokeDash }) => layer === "topology" && strokeDash))
-    labels.push("-- direct connection")
-  if (lines.some(({ label }) => label === "Copper scope envelope"))
-    labels.push("▪▪ included copper")
-  const faults = new Set(
-    lines.filter(({ layer }) => layer === "failure").map(({ label }) => label),
-  )
-  if (
-    scene.links.some(
-      ({ kind, label }) => kind === "missing" && faults.has(label),
-    )
-  )
-    labels.push("-×- missing trace")
-  const shortcut = scene.links.some(
-    ({ kind, label }) => kind === "short" && faults.has(label),
-  )
-  if (shortcut) labels.push("-×- shortcut")
-  if ([...faults].some((label) => label?.startsWith("Short or loop ·"))) {
-    if (shortcut) labels.push("× bypassed trace")
+  if (lineMarks.has("ideal")) labels.push("-- ideal connection")
+  if (lineMarks.has("envelope")) labels.push("▪▪ copper search envelope")
+  if (lineMarks.has("missing")) labels.push("-×- incomplete route")
+  const hasBypass = lineMarks.has("bypass")
+  if (hasBypass) labels.push("-×- bypass")
+  if (lineMarks.has("traceFault")) {
+    if (hasBypass) labels.push("× bypassed trace")
     else if (scene.faultCode === "channel_fanout")
       labels.push("× trace in loop")
     else labels.push("× shorted trace")
@@ -107,56 +93,70 @@ function planLegend({
   return labels
 }
 
-/** Draw one attempted simulation with a separate centered text band. */
-export function planDrawing(scene: PlanVisualScene): GraphicsObject {
-  const { db, scope, faultPorts } = scene
-  const board = routeBoardBox(db)
-  const ports = planPorts(db)
-  const active = new Set([
-    ...scene.endpoints.map((end) => end.id),
-    ...faultPorts,
-  ])
-  for (const { from, to } of [...scene.cuts, ...scene.links]) {
-    active.add(from)
-    active.add(to)
-  }
-  const scopeBox = scope && planScopeBox({ db, board, scope, active, ports })
-  const frame = planFrame({ board, focus: scopeBox })
-  const { unit, crop } = frame
-  const copper = drawCopper({ scene, ports, unit })
-  const lines = [...copper.lines]
-  if (scopeBox) lines.push(scopeLine({ scope: scopeBox, board, unit }))
-  const polygons = [
-    ...planBoardShapes({ db, board, active, ports, unit }),
-    ...viaShapes({ db, scope, unit }),
-    ...copper.chevrons,
-  ]
-  for (const link of scene.links) {
+/** The lines and symbols for ideal, series and fault connections. */
+interface PlanOverlays {
+  lines: PlanLine[]
+  polygons: PlanPolygon[]
+}
+
+/** Resolve overlay endpoints and keep bypasses above the corresponding ideal connection. */
+function renderOverlays({
+  scene,
+  unitMm,
+}: {
+  scene: PlanVisualScene
+  unitMm: number
+}): PlanOverlays {
+  const { ports } = scene
+  const lines: PlanLine[] = []
+  const polygons: PlanPolygon[] = []
+  for (const link of scene.overlays) {
     if (
       link.kind === "ideal" &&
-      scene.links.some(
-        ({ kind, from, to }) =>
-          kind === "short" && from === link.from && to === link.to,
+      scene.overlays.some(
+        ({ kind, fromSourcePortId, toSourcePortId }) =>
+          kind === "short" &&
+          fromSourcePortId === link.fromSourcePortId &&
+          toSourcePortId === link.toSourcePortId,
       )
     )
       continue
-    const from = ports.get(link.from)
-    const to = ports.get(link.to)
+    const from = ports.get(link.fromSourcePortId)
+    const to = ports.get(link.toSourcePortId)
     if (!from || !to) continue
-    lines.push(linkLine({ link, from, to, unit }))
-    polygons.push(...linkShapes({ link, from, to, unit }))
+    const line: PlanLine = linkLine({ link, from, to, unitMm })
+    if (link.kind === "ideal" || link.kind === "missing") line.mark = link.kind
+    if (link.kind === "short") line.mark = "bypass"
+    lines.push(line)
+    polygons.push(...linkShapes({ link, from, to, unitMm }))
   }
-  const radius = endpointRadius({
-    unit,
-    ports: [...ports.values()].filter((port) => active.has(port.id)),
-  })
+  return { lines, polygons }
+}
+
+/** Draw declared endpoints and replace faulted endpoint glyphs with fault markers. */
+function renderContactMarks({
+  scene,
+  radius,
+  traceFaults,
+}: {
+  scene: PlanVisualScene
+  radius: number
+  traceFaults: readonly PlanPolygon[]
+}): PlanPolygon[] {
+  const { ports, faultSourcePortIds } = scene
+  const polygons: PlanPolygon[] = []
   for (const endpoint of scene.endpoints) {
-    const point = ports.get(endpoint.id)
-    if (point && !faultPorts.has(endpoint.id))
-      polygons.push(...endpointShape({ point, endpoint, radius, ports }))
+    const point = ports.get(endpoint.sourcePortId)
+    if (point && !faultSourcePortIds.has(endpoint.sourcePortId))
+      polygons.push(
+        ...endpointShape({ point, endpoint, radius, ports }).map((shape) => ({
+          ...shape,
+          endpointKind: endpoint.kind,
+        })),
+      )
   }
-  polygons.push(...copper.faults)
-  for (const id of faultPorts) {
+  polygons.push(...traceFaults)
+  for (const id of faultSourcePortIds) {
     const port = ports.get(id)
     if (!port) continue
     const label = `Offending port · ${port.label} (${id})`
@@ -178,9 +178,53 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
       },
     )
   }
+  return polygons
+}
+
+/** Draw one attempted simulation with a separate centered text band. */
+export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
+  const { db, copperScope, faultSourcePortIds, ports } = scene
+  const board = getBoardBounds(db)
+  const active = new Set([
+    ...scene.endpoints.map((end) => end.sourcePortId),
+    ...faultSourcePortIds,
+  ])
+  for (const { fromSourcePortId, toSourcePortId } of [
+    ...scene.traces,
+    ...scene.overlays,
+  ]) {
+    active.add(fromSourcePortId)
+    active.add(toSourcePortId)
+  }
+  const scopeBox =
+    copperScope &&
+    getCopperSearchBox({ db, board, scope: copperScope, active, ports })
+  const frame = buildPlanFrame({ board, focus: scopeBox })
+  const { unitMm, crop } = frame
+  const copper = drawCopper({ scene, ports, unitMm })
+  const lines = [...copper.lines]
+  if (scopeBox)
+    lines.push(buildSearchEnvelope({ scope: scopeBox, board, unitMm }))
+  const polygons: PlanPolygon[] = [
+    ...buildBoardShapes({ db, board, active, ports, unitMm }),
+    ...viaShapes({ db, copperScope, unitMm }),
+    ...copper.chevrons,
+  ]
+  const overlays = renderOverlays({ scene, unitMm })
+  lines.push(...overlays.lines)
+  polygons.push(...overlays.polygons)
+  const radius = endpointRadius({
+    unitMm,
+    ports: [...ports.values()].filter(({ sourcePortId }) =>
+      active.has(sourcePortId),
+    ),
+  })
+  polygons.push(
+    ...renderContactMarks({ scene, radius, traceFaults: copper.faults }),
+  )
   const boardPolygons = clipPlanPolygons({ polygons, crop })
   const boardLines = clipPlanLines({ lines, crop })
-  const labels = planLabels({
+  const labels = placePlanLabels({
     scene,
     frame,
     ports,
@@ -188,7 +232,7 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
     polygons: boardPolygons,
     lines: boardLines,
   })
-  const extent = routeBounds([
+  const extent = getPointBounds([
     ...labels.backgrounds.flatMap(({ points }) => points),
     ...labels.texts,
     ...boardPolygons.flatMap(({ points }) => points),
@@ -210,13 +254,15 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
       summary = scopedText
     rows.unshift({ text: summary, color: planColors.quiet })
   }
-  const header = planHeader({
+  let boardTop = frame.box.maxY
+  if (extent) boardTop = extent.maxY
+  const header = buildPlanHeader({
     scene: { ...scene, rows },
     frame,
-    boardTop: extent?.maxY === undefined ? frame.box.maxY : extent.maxY,
+    boardTop,
     legend: [
-      ...planLegend({ scene, polygons: boardPolygons, lines: boardLines }),
-      ...labels.pourLegend,
+      ...buildPlanLegend({ scene, polygons: boardPolygons, lines: boardLines }),
+      ...labels.pourLegendEntries,
     ],
   })
   return {

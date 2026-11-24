@@ -6,21 +6,22 @@ import {
   type ConnectionGraph,
   connectionGraph,
   connectionPath,
+  findConnectionBridges,
 } from "./connection-paths"
-import {
-  type CutConnection,
-  cutConnections,
-  physicalCutGraph,
-  validateChannelBridge,
-} from "./cut-connections"
 import { fail } from "./diagnostics"
-import type { RoutedTraceCut } from "./routed-types"
+import type { TraceContacts } from "./route-inputs"
+import {
+  buildPhysicalTraceGraph,
+  connectTraces,
+  type TraceConnection,
+  validateChannelBridge,
+} from "./trace-connections"
 
 /** Source IDs which may resolve to a SPICE node. */
-export type SourceNodeId = SourcePortId | SourceNetId
+export type SourceContactId = SourcePortId | SourceNetId
 
 /** Each source port or net's representative under ideal connectivity. */
-export type SourceNodeGroups = ReadonlyMap<SourceNodeId, SourceNodeId>
+export type IdealGroups = ReadonlyMap<SourceContactId, SourceContactId>
 
 /** Each given node's representative under the specified connections. */
 export type NodeGroups<NodeId> = ReadonlyMap<NodeId, NodeId>
@@ -40,22 +41,22 @@ export function nodeGroups<NodeId extends string>(
 }
 
 /** Resolve a source contact to its group, retaining the contact when it is isolated. */
-export function sourceGroupId({
+export function getIdealGroupId({
   groups,
   sourcePortId,
 }: {
-  groups: SourceNodeGroups
+  groups: IdealGroups
   sourcePortId: SourcePortId
-}): SourceNodeId {
+}): SourceContactId {
   return groups.get(sourcePortId) ?? sourcePortId
 }
 
 /** Report a cut whose contacts connect without the extracted trace. */
-export function shortedCut({
+export function failShortedTrace({
   cut,
   reason,
 }: {
-  cut: RoutedTraceCut
+  cut: TraceContacts
   reason: string
 }): never {
   return fail(
@@ -71,6 +72,9 @@ export function shortedCut({
   )
 }
 
+/** Net identifiers spanning distinct extracted trace contacts. */
+type SplitSourceNetIds = ReadonlySet<SourceNetId>
+
 /** Identify the redundant net labels on a linear routed path. */
 function splitNamedNets({
   db,
@@ -80,36 +84,37 @@ function splitNamedNets({
 }: {
   db: CircuitJsonUtilObjects
   ideal: readonly SourceTrace[]
-  explicitGroups: SourceNodeGroups
-  cuts: readonly RoutedTraceCut[]
-}): ReadonlySet<SourceNetId> {
-  const cutConnectionsByGroup = cutConnections({
+  explicitGroups: IdealGroups
+  cuts: readonly TraceContacts[]
+}): SplitSourceNetIds {
+  const cutConnectionsByGroup = connectTraces({
     cuts,
     node: (sourcePortId) =>
-      sourceGroupId({ groups: explicitGroups, sourcePortId }),
+      getIdealGroupId({ groups: explicitGroups, sourcePortId }),
   })
   const cutGraph = connectionGraph(cutConnectionsByGroup)
+  const bridges = findConnectionBridges(cutGraph)
   const cutNetworks = nodeGroups(
-    cutConnectionsByGroup.map(({ fromNodeId, toNodeId }) => [
-      fromNodeId,
-      toNodeId,
+    cutConnectionsByGroup.map(({ fromVertexId, toVertexId }) => [
+      fromVertexId,
+      toVertexId,
     ]),
   )
-  const physicalGraph = physicalCutGraph(cuts)
+  const physicalGraph = buildPhysicalTraceGraph(cuts)
   const netGroups = nodeGroups(
     ideal
       .filter((trace) => !trace.connected_source_port_ids.length)
       .map((trace) => [...(trace.connected_source_net_ids ?? [])]),
   )
-  const portsByNet = new Map<SourceNetId, Set<SourceNodeId>>()
+  const portsByNet = new Map<SourceNetId, Set<SourceContactId>>()
   for (const trace of ideal) {
     const [sourcePortId] = trace.connected_source_port_ids
     if (sourcePortId === undefined) continue
-    const contact = sourceGroupId({ groups: explicitGroups, sourcePortId })
+    const contact = getIdealGroupId({ groups: explicitGroups, sourcePortId })
     if (!cutNetworks.has(contact)) continue
     for (const sourceNetId of trace.connected_source_net_ids ?? []) {
       const net = netGroups.get(sourceNetId) ?? sourceNetId
-      const contacts = portsByNet.get(net) ?? new Set<SourceNodeId>()
+      const contacts = portsByNet.get(net) ?? new Set<SourceContactId>()
       contacts.add(contact)
       portsByNet.set(net, contacts)
     }
@@ -117,18 +122,19 @@ function splitNamedNets({
   const splitNets = new Set<SourceNetId>()
   for (const [net, contacts] of portsByNet) {
     const namedCuts = connectingCuts({ cutGraph, cutNetworks, contacts })
-    for (const connection of namedCuts)
+    const connection = namedCuts.find((edge) => !bridges.has(edge))
+    if (connection)
       validateChannelBridge({ graph: cutGraph, connection, physicalGraph })
     if (!namedCuts.length) continue
-    const ids = new Set([
+    const sourceNetIds = new Set([
       net,
       ...[...netGroups].flatMap(([id, group]) => {
         if (group === net) return [id]
         return []
       }),
     ])
-    validateSplitNet({ db, ids, cuts: namedCuts, explicitGroups })
-    for (const id of ids) splitNets.add(id)
+    validateSplitNet({ db, sourceNetIds, cuts: namedCuts, explicitGroups })
+    for (const id of sourceNetIds) splitNets.add(id)
   }
   return splitNets
 }
@@ -139,23 +145,23 @@ function connectingCuts({
   contacts,
   cutNetworks,
 }: {
-  cutNetworks: SourceNodeGroups
-  cutGraph: ConnectionGraph<SourceNodeId, RoutedTraceCut>
-  contacts: ReadonlySet<SourceNodeId>
-}): CutConnection<SourceNodeId>[] {
-  const contactsByCutNetwork = new Map<SourceNodeId, SourceNodeId>()
-  const cuts = new Set<CutConnection<SourceNodeId>>()
-  for (const toNodeId of contacts) {
-    const cutNetworkId = cutNetworks.get(toNodeId)!
-    const fromNodeId = contactsByCutNetwork.get(cutNetworkId)
-    if (fromNodeId === undefined) {
-      contactsByCutNetwork.set(cutNetworkId, toNodeId)
+  cutNetworks: IdealGroups
+  cutGraph: ConnectionGraph<SourceContactId, TraceContacts>
+  contacts: ReadonlySet<SourceContactId>
+}): TraceConnection<SourceContactId>[] {
+  const contactsByCutNetwork = new Map<SourceContactId, SourceContactId>()
+  const cuts = new Set<TraceConnection<SourceContactId>>()
+  for (const toVertexId of contacts) {
+    const cutNetworkId = cutNetworks.get(toVertexId)!
+    const fromVertexId = contactsByCutNetwork.get(cutNetworkId)
+    if (fromVertexId === undefined) {
+      contactsByCutNetwork.set(cutNetworkId, toVertexId)
       continue
     }
     for (const connection of connectionPath({
       graph: cutGraph,
-      fromNodeId,
-      toNodeId,
+      fromVertexId,
+      toVertexId,
     })!)
       cuts.add(connection)
   }
@@ -165,35 +171,38 @@ function connectingCuts({
 /** Require every binding of a split net to refer to the same linear routed path. */
 function validateSplitNet({
   db,
-  ids,
+  sourceNetIds,
   cuts,
   explicitGroups,
 }: {
   db: CircuitJsonUtilObjects
-  ids: ReadonlySet<SourceNetId>
-  cuts: readonly CutConnection<SourceNodeId>[]
-  explicitGroups: SourceNodeGroups
+  sourceNetIds: SplitSourceNetIds
+  cuts: readonly TraceConnection<SourceContactId>[]
+  explicitGroups: IdealGroups
 }): void {
   const [{ evidence: cut }] = cuts
   if (
     db.source_net
       .list()
-      .some((net) => ids.has(net.source_net_id) && net.is_ground)
+      .some((net) => sourceNetIds.has(net.source_net_id) && net.is_ground)
   )
-    shortedCut({ cut, reason: "are bound to ground" })
-  const degrees = new Map<SourceNodeId, number>()
-  const pairs = cuts.map(({ fromNodeId, toNodeId }) => [fromNodeId, toNodeId])
+    failShortedTrace({ cut, reason: "are bound to ground" })
+  const degrees = new Map<SourceContactId, number>()
+  const pairs = cuts.map(({ fromVertexId, toVertexId }) => [
+    fromVertexId,
+    toVertexId,
+  ])
   for (const sourceNodeId of pairs.flat())
     degrees.set(sourceNodeId, (degrees.get(sourceNodeId) ?? 0) + 1)
   const attached = db.source_trace
     .list()
     .filter((trace) =>
-      trace.connected_source_net_ids?.some((id) => ids.has(id)),
+      trace.connected_source_net_ids?.some((id) => sourceNetIds.has(id)),
     )
   for (const trace of attached) {
     const nets = trace.connected_source_net_ids ?? []
     if (
-      nets.some((id) => !ids.has(id)) ||
+      nets.some((id) => !sourceNetIds.has(id)) ||
       (trace.connected_source_port_ids.length > 0 && nets.length !== 1)
     )
       fail(
@@ -218,20 +227,20 @@ function validateSplitNet({
 }
 
 /** The ideal partition and the named nets which now span multiple nodes. */
-export interface IdealSourceNodes {
-  groups: SourceNodeGroups
+export interface IdealConnectivity {
+  groups: IdealGroups
   splitNets: ReadonlySet<SourceNetId>
-  wireConnections: SourceNodeId[][]
+  wireConnections: SourceContactId[][]
 }
 
 /** Join source traces and internal pin ties, with routed copper removed. */
-export function idealSourceNodes({
+export function resolveIdealConnectivity({
   db,
   cuts,
 }: {
   db: CircuitJsonUtilObjects
-  cuts: readonly RoutedTraceCut[]
-}): IdealSourceNodes {
+  cuts: readonly TraceContacts[]
+}): IdealConnectivity {
   const extracted = new Set(cuts.map((cut) => cut.sourceTraceId))
   const ideal = db.source_trace
     .list()
