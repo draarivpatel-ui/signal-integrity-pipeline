@@ -4,9 +4,10 @@ import { extractCopperGeometry } from "../../src/board"
 import {
   type RouteFieldsInput,
   RouteFieldsSolver,
+  rlgcCrossSection,
   routeCrossSection,
-  solveCrossSection,
 } from "../../src/extraction"
+import { calculateRlgc } from "../../src/rlgc"
 import { renderRoutedCopper } from "../fixtures/routed-copper"
 
 /** Input shared by the field solver tests. */
@@ -47,8 +48,14 @@ test("publishes frozen coefficients matching direct extraction", async () => {
     slice: geometry.sections[0],
     materials: solver.materials,
   })
-  const direct = solveCrossSection({ section, options: { panelsPerEdge: 12 } })
-  assert.deepEqual(result.value.slices[0].line.C, direct.C)
+  const direct = calculateRlgc({
+    crossSection: rlgcCrossSection(section),
+    options: { panelsPerEdge: 12 },
+  })
+  assert.deepEqual(
+    result.value.slices[0].line.C,
+    direct.capacitanceFaradsPerMeter,
+  )
   assert.ok(Object.isFrozen(result.value.slices[0].line.C))
 })
 
