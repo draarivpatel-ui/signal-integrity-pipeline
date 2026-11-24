@@ -62,13 +62,13 @@ export function routeBoardBox(db: CircuitJsonUtilObjects): Viewbox {
   })
   const positioned = routeBounds(points)
   if (positioned !== undefined) return positioned
-  // Keep the empty PCB coordinate system visible for admission errors.
+  // Keep the empty PCB coordinate system visible for planning errors.
   return { minX: -1, maxX: 1, minY: -1, maxY: 1 }
 }
 
 /** The board window and its geometric scale before reserving header space. */
 /** @internal */
-export interface AdmissionFrame {
+export interface PlanFrame {
   box: Viewbox
   crop?: Box
   width: number
@@ -77,17 +77,17 @@ export interface AdmissionFrame {
 
 /** Pad, via and through-pad contacts use the same board coordinates. */
 /** @internal */
-export interface AdmissionPort extends Point {
+export interface PlanPort extends Point {
   id: SourcePortId
   label: string
 }
 
 /** Index placed signal ports and prefer a stable human-readable pin name. */
 /** @internal */
-export function admissionPorts(
+export function planPorts(
   db: CircuitJsonUtilObjects,
-): Map<SourcePortId, AdmissionPort> {
-  const ports = new Map<SourcePortId, AdmissionPort>()
+): Map<SourcePortId, PlanPort> {
+  const ports = new Map<SourcePortId, PlanPort>()
   const sources = new Map(
     db.source_port.list().map((port) => [port.source_port_id, port]),
   )
@@ -147,13 +147,13 @@ function fitBox(box: Viewbox): Viewbox {
 
 /** Use full board context on small boards and crop large boards around scoped copper. */
 /** @internal */
-export function admissionFrame({
+export function planFrame({
   board,
   focus,
 }: {
   board: Viewbox
   focus?: Viewbox
-}): AdmissionFrame {
+}): PlanFrame {
   let window = board
   const boardSpan = Math.max(board.maxX - board.minX, board.maxY - board.minY)
   if (
@@ -165,7 +165,7 @@ export function admissionFrame({
   }
   const box = fitBox(window)
   const width = box.maxX - box.minX
-  const frame: AdmissionFrame = { box, width, unit: width / 92 }
+  const frame: PlanFrame = { box, width, unit: width / 92 }
   if (window !== board)
     frame.crop = new Box(box.minX, box.minY, box.maxX, box.maxY)
   return frame
@@ -173,7 +173,7 @@ export function admissionFrame({
 
 /** The containing XY envelope of the selected copper, limited to the board. */
 /** @internal */
-export function admissionScopeBox({
+export function planScopeBox({
   db,
   board,
   scope,
@@ -184,7 +184,7 @@ export function admissionScopeBox({
   board: Viewbox
   scope: Snapshot<CopperScope>
   active: ReadonlySet<SourcePortId>
-  ports: ReadonlyMap<SourcePortId, AdmissionPort>
+  ports: ReadonlyMap<SourcePortId, PlanPort>
 }): Viewbox | undefined {
   const traces = new Set(scope.channelPcbTraceIds)
   const positions = [...ports.values()].filter((port) => active.has(port.id))
@@ -252,7 +252,7 @@ function clippedSegment({
 
 /** Clip strokes to the window using their actual segments. */
 /** @internal */
-export function clipAdmissionLines({
+export function clipPlanLines({
   lines,
   crop,
 }: {
@@ -271,7 +271,7 @@ export function clipAdmissionLines({
 
 /** Clip board geometry to the window before converting it to graphics primitives. */
 /** @internal */
-export function clipAdmissionPolygons({
+export function clipPlanPolygons({
   polygons,
   crop,
 }: {
@@ -291,7 +291,7 @@ export function clipAdmissionPolygons({
 }
 
 /** Board pad records of either technology. */
-type AdmissionPad = PcbSmtPad | PcbPlatedHole
+type PlanPad = PcbSmtPad | PcbPlatedHole
 
 /** Reuse the native PCB outline and the owning rotation for footprint-local polygon pads. */
 function padOutline({
@@ -299,7 +299,7 @@ function padOutline({
   pad,
 }: {
   db: CircuitJsonUtilObjects
-  pad: AdmissionPad
+  pad: PlanPad
 }): CopperPolygon {
   if (pad.type === "pcb_smtpad") return getSmtPadPolygon(pad)
   const component = db.pcb_component.get(pad.pcb_component_id || "")
@@ -328,7 +328,7 @@ function facePolygons(polygon: CopperPolygon): Point[][] {
 
 /** Keep fills subtle since the SVG renderer draws all polygons above trace lines. */
 /** @internal */
-export function admissionBoardShapes({
+export function planBoardShapes({
   db,
   board,
   active,
@@ -338,7 +338,7 @@ export function admissionBoardShapes({
   db: CircuitJsonUtilObjects
   board: Viewbox
   active: ReadonlySet<SourcePortId>
-  ports: ReadonlyMap<SourcePortId, AdmissionPort>
+  ports: ReadonlyMap<SourcePortId, PlanPort>
   unit: number
 }): Polygon[] {
   const outline = db.pcb_board.getWhere({})?.outline

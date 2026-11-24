@@ -6,21 +6,6 @@
  */
 
 /** @internal */
-export type { AdmissionHeaderRow } from "./admission-header"
-/** @internal */
-export { admissionPorts } from "./admission-view"
-/** @internal */
-export { admissionDrawing } from "./admission-visual"
-/** @internal */
-export {
-  type AdmissionVisualCut,
-  type AdmissionVisualEndpoint,
-  type AdmissionVisualLink,
-  type AdmissionVisualScene,
-  admissionColors,
-  admissionCutColor,
-} from "./admission-visual-types"
-/** @internal */
 export {
   type ConnectivityMap,
   crossesDifferentialLegs,
@@ -52,6 +37,21 @@ export type {
   SourcePortId,
   SourceTraceId,
 } from "./ids"
+/** @internal */
+export type { PlanHeaderRow } from "./plan-header"
+/** @internal */
+export { planPorts } from "./plan-view"
+/** @internal */
+export { planDrawing } from "./plan-visual"
+/** @internal */
+export {
+  type PlanVisualCut,
+  type PlanVisualEndpoint,
+  type PlanVisualLink,
+  type PlanVisualScene,
+  planColors,
+  planCutColor,
+} from "./plan-visual-types"
 export {
   type RouteReference,
   type RouteSlice,
