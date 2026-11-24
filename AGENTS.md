@@ -96,7 +96,7 @@ Clarity beats brevity. More lines are fine when they are easier to read.
 
 ## Pull requests
 
-- **Small and focused, stacked.** One concept per PR, e.g. "add RouteSectionsSolver", not "pipeline changes". Dependency or package bumps get their own PR at the bottom of the stack. Use GitHub native stacks (`gh stack link`).
+- **Small and focused, stacked.** One concept per PR, e.g. "add CopperGeometryExtractionSolver", not "pipeline changes". Dependency or package bumps get their own PR at the bottom of the stack. Use GitHub native stacks (`gh stack link`).
 - **Specific titles.** Say what is added and where: `feat: check IBIS pin roles and references for channel endpoints`. Not `feat: read signals`. If a PR also updates packages, the title says so.
 - **Descriptions are short and plain:**
   - what the PR adds and why;
