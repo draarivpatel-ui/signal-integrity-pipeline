@@ -30,19 +30,16 @@ async function normalizeShallowArc(): Promise<void> {
 if (process.argv.includes("--normalize-shallow-arc")) {
   await normalizeShallowArc()
 } else {
-  test.failing(
-    "normalizes a shallow BRep arc without unbounded sampling",
-    async () => {
-      const child = Bun.spawn(
-        [process.execPath, import.meta.path, "--normalize-shallow-arc"],
-        {
-          timeout: 2000,
-          killSignal: "SIGKILL",
-          stderr: "pipe",
-        },
-      )
-      const error = await new Response(child.stderr).text()
-      assert.equal(await child.exited, 0, error)
-    },
-  )
+  test("normalizes a shallow BRep arc without unbounded sampling", async () => {
+    const child = Bun.spawn(
+      [process.execPath, import.meta.path, "--normalize-shallow-arc"],
+      {
+        timeout: 2000,
+        killSignal: "SIGKILL",
+        stderr: "pipe",
+      },
+    )
+    const error = await new Response(child.stderr).text()
+    assert.equal(await child.exited, 0, error)
+  })
 }

@@ -7,7 +7,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing("omits a BRep pour with no surviving edges", async () => {
+test("omits a BRep pour with no surviving edges", async () => {
   const circuit = await renderSectionBoard({
     children: <SectionTrace name="Signal" />,
   })
@@ -17,7 +17,10 @@ test.failing("omits a BRep pour with no surviving edges", async () => {
   assert.deepEqual(
     normalizeReferencePour({
       ...pour,
-      brep_shape: { outer_ring: { vertices: outer_ring.vertices.slice(0, 1) } },
+      brep_shape: {
+        inner_rings: [],
+        outer_ring: { vertices: outer_ring.vertices.slice(0, 1) },
+      },
     }),
     [],
   )

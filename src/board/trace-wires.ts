@@ -1,8 +1,9 @@
 import type { PcbTrace } from "circuit-json"
 import { hypotenuse } from "../kernel"
-import { resolveRouteVias } from "./geometry/ports"
+import { resolveTraceRoute } from "./geometry/ports"
 import type { CopperPoint, RoutedPoint } from "./geometry/types"
 import type { RouteVia, RouteWire } from "./route-section-types"
+import { readRouteVia } from "./route-vias"
 import { MIN_WIRE_LENGTH_MM, projectRouteWire } from "./route-wire"
 import type { CircuitJson } from "./schema"
 
@@ -84,17 +85,21 @@ export function extractTraceWires({
 
   const wires: RouteWire[] = []
   const vias: RouteVia[] = []
-  const route = resolveRouteVias({ circuit, trace })
+  const { route, pcbViasByRouteIndex } = resolveTraceRoute({ circuit, trace })
   for (const [index, end] of route.entries()) {
     if (end.route_type === "via") {
-      const { outer_diameter = 0 } = end
-      vias.push({
-        pcbTraceId,
-        sourceTraceId,
-        point: [end.x, end.y],
-        layers: [end.from_layer, end.to_layer],
-        outerDiameterMm: outer_diameter,
-      })
+      const physicalVia = pcbViasByRouteIndex.get(index)
+      if (physicalVia) vias.push(readRouteVia(physicalVia))
+      else {
+        const { outer_diameter = 0 } = end
+        vias.push({
+          pcbTraceId,
+          sourceTraceId,
+          point: [end.x, end.y],
+          layers: [end.from_layer, end.to_layer],
+          outerDiameterMm: outer_diameter,
+        })
+      }
     }
     if (index === 0) continue
     const wire = extractWire({

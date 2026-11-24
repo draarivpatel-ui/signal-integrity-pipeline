@@ -1,7 +1,7 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
-import { readRouteVia, resolveRouteContacts } from "./route-contacts"
+import { resolveRouteContacts } from "./route-contacts"
 import {
   MAX_REFERENCE_EDGE_DISTANCE_MM,
   normalizeReferencePour,
@@ -14,6 +14,7 @@ import type {
 } from "./route-section-types"
 import { simplifyRouteWires } from "./route-simplify"
 import { unionRouteWires } from "./route-union"
+import { collectRouteVias, readRouteVia } from "./route-vias"
 import type { CircuitJson } from "./schema"
 import { stackupFromCircuitJson } from "./stackup"
 import { extractTraceWires } from "./trace-wires"
@@ -56,18 +57,13 @@ function finalizeGeometry({
     .list()
     .filter((via) => copperScope.extractedPcbViaIds.includes(via.pcb_via_id))
     .map(readRouteVia)
-  const vias = [
-    ...scopedVias,
-    ...embeddedVias.filter(
-      (embedded) =>
-        !scopedVias.some(
-          (via) =>
-            via.pcbTraceId === embedded.pcbTraceId &&
-            via.point[0] === embedded.point[0] &&
-            via.point[1] === embedded.point[1],
-        ),
-    ),
-  ]
+  const board = db.pcb_board.get(stackup.pcbBoardId)
+  const vias = collectRouteVias({
+    scopedVias,
+    routeVias: embeddedVias,
+    boardLayers: stackup.copperLayers.map(({ name }) => name).reverse(),
+    allowsBlindVias: board?.allow_blind_and_buried_vias === true,
+  })
   const simplified = simplifyRouteWires({
     wires,
     toleranceMm: CHORD_TOLERANCE_MM,

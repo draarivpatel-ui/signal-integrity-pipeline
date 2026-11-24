@@ -9,38 +9,33 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing(
-  "connects a required bottom pad through a scoped standalone via",
-  async () => {
-    const circuit = await renderSectionBoard({
-      children: (
-        <>
-          <SectionTrace name="Signal" />
-          <SectionPin name="Bottom" x={0} layer="bottom" />
-          <via
-            connectsTo="net.SIGNAL"
-            pcbX={0}
-            pcbY={0}
-            fromLayer="top"
-            toLayer="bottom"
-            outerDiameter={0.6}
-            holeDiameter={0.25}
-          />
-        </>
-      ),
-    })
-    const [via] = cju(circuit).pcb_via.list()
-    assert(via)
-    const input = getSectionInput({ circuit, required: ["Bottom"] })
-    assert(input.copperScope.extractedPcbViaIds.includes(via.pcb_via_id))
-    const solver = new RouteSectionsSolver(input)
-    solver.solve()
-    const { geometry } = solver.getOutput().value
-    const contact = geometry.portContacts.find(
-      ({ layer }) => layer === "bottom",
-    )
-    assert(contact)
-    const wire = findContactWire({ geometry, ...contact })
-    assert.equal(wire?.layer, "top")
-  },
-)
+test("connects a required bottom pad through a scoped standalone via", async () => {
+  const circuit = await renderSectionBoard({
+    children: (
+      <>
+        <SectionTrace name="Signal" />
+        <SectionPin name="Bottom" x={0} layer="bottom" />
+        <via
+          connectsTo="net.SIGNAL"
+          pcbX={0}
+          pcbY={0}
+          fromLayer="top"
+          toLayer="bottom"
+          outerDiameter={0.6}
+          holeDiameter={0.25}
+        />
+      </>
+    ),
+  })
+  const [via] = cju(circuit).pcb_via.list()
+  assert(via)
+  const input = getSectionInput({ circuit, required: ["Bottom"] })
+  assert(input.copperScope.extractedPcbViaIds.includes(via.pcb_via_id))
+  const solver = new RouteSectionsSolver(input)
+  solver.solve()
+  const { geometry } = solver.getOutput().value
+  const contact = geometry.portContacts.find(({ layer }) => layer === "bottom")
+  assert(contact)
+  const wire = findContactWire({ geometry, ...contact })
+  assert.equal(wire?.layer, "top")
+})

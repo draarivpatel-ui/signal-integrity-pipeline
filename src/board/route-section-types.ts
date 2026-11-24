@@ -34,6 +34,7 @@ export interface RouteWire {
   startMm: number
   endMm: number
   lateralOffsetMm: number
+  contributingPcbTraceIds?: PcbTraceId[]
   joins?: RouteJoin[]
   startTouchesPort?: boolean
   endTouchesPort?: boolean

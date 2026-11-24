@@ -99,7 +99,8 @@ function mergeWires({
 }: Pick<RouteWire, "startMm" | "endMm"> & {
   wires: WireGroup
 }): RouteWire {
-  const firstWire = wires.toSorted((a, b) => a.wireIndex - b.wireIndex)[0]
+  const orderedWires = wires.toSorted((a, b) => a.wireIndex - b.wireIndex)
+  const [firstWire] = orderedWires
   const minMm = Math.min(
     ...wires.map((wire) => wire.lateralOffsetMm - wire.widthMm / 2),
   )
@@ -118,8 +119,7 @@ function mergeWires({
   const [startPoint, endPoint] = positionsMm.map((positionMm) =>
     getRoutePoint({ wire: mergedWire, positionMm }),
   )
-  const joins = wires
-    .toSorted((a, b) => a.wireIndex - b.wireIndex)
+  const joins = orderedWires
     .filter(
       (wire) =>
         Math.abs(wire.lateralOffsetMm - mergedWire.lateralOffsetMm) >
@@ -133,7 +133,13 @@ function mergeWires({
         toPoint: getRoutePoint({ wire: mergedWire, positionMm }),
       })),
     )
-  return { ...mergedWire, startPoint, endPoint, joins }
+  const merged: RouteWire = { ...mergedWire, startPoint, endPoint, joins }
+  const contributingPcbTraceIds = [
+    ...new Set(orderedWires.map(({ pcbTraceId }) => pcbTraceId)),
+  ]
+  if (contributingPcbTraceIds.length > 1)
+    merged.contributingPcbTraceIds = contributingPcbTraceIds
+  return merged
 }
 
 /** Partition connected wires at the ends of each copper overlap. */
