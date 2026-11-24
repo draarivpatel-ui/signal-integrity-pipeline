@@ -11,6 +11,7 @@ import {
   type SimulationPcbTransientChannelSimulation,
   type SourcePortId,
   type SourceTraceId,
+  selectPort,
 } from "../board"
 import { Diagnostic } from "../kernel"
 import {
@@ -180,7 +181,10 @@ function admissionTopology({
   } = plan.bindings
   const db = cju([...circuit])
   const channels = db.simulation_pcb_driver_receiver_channel.list()
-  const groundSourcePortId = plan.sections.referenceSourcePortId
+  const groundSourcePortId = selectPort({
+    circuit,
+    selector: modeling.channelReference,
+  }).source_port_id
   const graphs = receiverGraphs({
     db,
     circuit,
