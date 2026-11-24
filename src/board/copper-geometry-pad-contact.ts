@@ -33,7 +33,7 @@ export function findPadContactWire({
   point: Snapshot<CopperPoint>
   pcbPortId?: PcbPortId
 }): Snapshot<TraceWire> | undefined {
-  const contact = geometry.portContacts.find(
+  const contact = geometry.padContacts.find(
     (contact) =>
       contact.layer === layer &&
       (pcbPortId === undefined || pcbPortId === contact.pcbPortId) &&

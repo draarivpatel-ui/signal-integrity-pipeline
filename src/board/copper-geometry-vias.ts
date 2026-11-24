@@ -19,42 +19,52 @@ export function readCopperVia(via: PcbVia): CopperVia {
   }
 }
 
+/** Validate declared copper layers before applying the board's via policy. */
+function getViaLayers({
+  via,
+  boardLayers,
+  allowsBlindVias,
+}: {
+  via: CopperVia
+  boardLayers: readonly LayerRef[]
+  allowsBlindVias: boolean
+}): LayerRef[] {
+  const viaId = via.pcbViaId || via.pcbTraceId
+  if (!via.layers.length) throw new Error(`via ${viaId}: missing copper layers`)
+  const layerIndices = via.layers.map((layer) => {
+    const layerIndex = boardLayers.indexOf(layer)
+    if (layerIndex < 0)
+      throw new Error(`via ${viaId}: unknown copper layer ${layer}`)
+    return layerIndex
+  })
+  if (!allowsBlindVias) return [...boardLayers]
+  const firstLayerIndex = Math.min(...layerIndices)
+  const lastLayerIndex = Math.max(...layerIndices)
+  const layers = boardLayers.slice(firstLayerIndex, lastLayerIndex + 1)
+  if (layerIndices[0] > layerIndices[layerIndices.length - 1]) layers.reverse()
+  return layers
+}
+
 /** Resolve the canonical barrel span and keep one entry for each physical via. */
 export function collectCopperVias({
   scopedVias,
-  routeVias,
+  embeddedVias,
   boardLayers,
   allowsBlindVias,
 }: {
   scopedVias: CopperVia[]
-  routeVias: CopperVia[]
+  embeddedVias: CopperVia[]
   boardLayers: readonly LayerRef[]
   allowsBlindVias: boolean
 }): CopperVia[] {
   const seenPcbViaIds = new Set<PcbViaId>()
   const vias: CopperVia[] = []
-  for (const via of [...scopedVias, ...routeVias]) {
+  for (const via of [...scopedVias, ...embeddedVias]) {
     if (via.pcbViaId !== undefined) {
       if (seenPcbViaIds.has(via.pcbViaId)) continue
       seenPcbViaIds.add(via.pcbViaId)
     }
-    let layers = [...boardLayers]
-    if (allowsBlindVias) {
-      const viaId = via.pcbViaId || via.pcbTraceId
-      if (!via.layers.length)
-        throw new Error(`via ${viaId}: missing copper layers`)
-      const layerIndices = via.layers.map((layer) => {
-        const layerIndex = boardLayers.indexOf(layer)
-        if (layerIndex < 0)
-          throw new Error(`via ${viaId}: unknown copper layer ${layer}`)
-        return layerIndex
-      })
-      const firstLayerIndex = Math.min(...layerIndices)
-      const lastLayerIndex = Math.max(...layerIndices)
-      layers = boardLayers.slice(firstLayerIndex, lastLayerIndex + 1)
-      if (layerIndices[0] > layerIndices[layerIndices.length - 1])
-        layers.reverse()
-    }
+    const layers = getViaLayers({ via, boardLayers, allowsBlindVias })
     vias.push({ ...via, layers })
   }
   return vias

@@ -2,26 +2,29 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
-test("marks port contacts on a shifted union centerline", async () => {
+test("marks pad contacts on a shifted union centerline", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Low" />
-        <SectionTrace name="High" startY={0.3} width={0.4} />
+        <CopperTrace name="Low" />
+        <CopperTrace name="High" startY={0.3} width={0.4} />
       </>
     ),
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit, required: ["LowStart", "HighEnd"] }),
+    getCopperGeometryExtractionInput({
+      circuit,
+      required: ["LowStart", "HighEnd"],
+    }),
   )
   solver.solve()
   const { wires } = solver.getOutput().value.geometry
   assert.equal(wires.length, 1)
-  assert.equal(wires[0].startTouchesPort, true)
-  assert.equal(wires[0].endTouchesPort, true)
+  assert.equal(wires[0].startTouchesPad, true)
+  assert.equal(wires[0].endTouchesPad, true)
 })

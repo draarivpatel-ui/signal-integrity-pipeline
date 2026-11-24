@@ -3,23 +3,23 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("keeps both contributors to a collinear same-net union", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Long" />
-        <SectionTrace name="Short" startX={-2} endX={2} />
+        <CopperTrace name="Long" />
+        <CopperTrace name="Short" startX={-2} endX={2} />
       </>
     ),
   })
   const { wires } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   const mergedWire = wires.find(
     ({ startPoint, endPoint }) => startPoint[0] === -2 && endPoint[0] === 2,

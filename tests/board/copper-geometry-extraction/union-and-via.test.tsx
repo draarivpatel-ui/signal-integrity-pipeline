@@ -3,24 +3,24 @@ import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("draws a partial union and the wire approaching a via", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Main" width={0.3} startY={1} />
-        <SectionTrace
+        <CopperTrace name="Main" width={0.3} startY={1} />
+        <CopperTrace
           name="Overlap"
           width={0.4}
           startY={1.3}
           startX={-2}
           endX={2}
         />
-        <SectionTrace
+        <CopperTrace
           name="Via"
           startY={-2}
           endLayer="inner1"
@@ -32,7 +32,7 @@ test("draws a partial union and the wire approaching a via", async () => {
     ),
   })
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({
+    getCopperGeometryExtractionInput({
       circuit,
       required: ["MainStart", "ViaStart", "ViaEnd"],
     }),
