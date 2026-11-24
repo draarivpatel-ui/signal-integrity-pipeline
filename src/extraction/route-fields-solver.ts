@@ -1,230 +1,252 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
-import type {
-  CircuitJson,
-  CopperScope,
-  ExtractedCopper,
-  WireSection,
-} from "../board"
+import type { CopperGeometry, WireSection } from "../board"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
-import { calculateRlgc } from "../rlgc"
-import { type RouteCoupling, routeCoupling } from "./route-coupling"
+import { calculateRlgc, type RlgcMatrices } from "../rlgc"
+import { resolvePanelsPerEdge } from "../rlgc/cross-section"
 import {
-  type ExtractedRouteSlice,
-  type ExtractedRoutes,
-  type RouteCoefficients,
-  type RouteMaterials,
-  rlgcCrossSection,
-  routeCrossSection,
-  type SolvedRouteSection,
-  snapshotRouteCoefficients,
+  groupCoupledWires,
+  type PairCoupling,
+  screenWirePair,
+} from "./route-coupling"
+import type {
+  CrossSectionKey,
+  CrossSectionSolution,
+  ExtractedRoutes,
+  SolvedWireSection,
 } from "./route-lines"
-
-/** Standard edge resolution and lower bound accepted by the routed field stage. */
-const DEFAULT_FIELD_PANELS = 12
-/** Reject requests below the routed field stage’s minimum panel count. */
-const MIN_FIELD_PANELS = 2
+import { buildCrossSection } from "./section-cross-section"
+import {
+  type DielectricMaterials,
+  type MaskThicknessSource,
+  resolveMaterials,
+} from "./section-materials"
 
 const PARALLEL_COUPLING_WARNING = [
-  "Parallel coupling retains connected pairs until both abs(Cij)/sqrt(Cii*Cjj) and abs(Lij)/sqrt(Lii*Ljj)",
-  "are below 0.005 (0.5%). Pair screening is not an aggregate waveform error bound.",
-  "Geometry admission follows the recorded copper scope;",
-  "fields outside that scope and on nonadjacent layers are unbounded omissions.",
+  "Wires are coupled when normalized mutual capacitance or inductance reaches 0.5%.",
+  "Pair screening does not bound aggregate waveform error.",
+  "The copper scope and adjacent-layer model limit which interactions are considered.",
 ].join(" ")
 
-/** Routed geometry, extraction options, and the artifact location. */
+/** Copper geometry, material overrides, and the artifact location. */
 export interface RouteFieldsInput {
-  geometry: Snapshot<ExtractedCopper>
-  circuitJson?: CircuitJson
-  scope?: Snapshot<CopperScope>
-  materials?: RouteMaterials
-  maskThicknessMm?: number | null
-  panels?: number
-  artifactPrefix: string
-}
-/** Explicit unmeasured material assumptions; provenance accompanies every output. */
-export const assumedRouteMaterials: RouteMaterials = {
-  maskMm: 0.02,
-  maskEr: 3.3,
-  maskLoss: 0.025,
-  substrateLoss: 0.02,
+  readonly copperGeometry: Snapshot<CopperGeometry>
+  readonly materials?: DielectricMaterials
+  readonly panelsPerEdge?: number
+  readonly artifactPrefix: string
 }
 
-/** Provenance of the mask thickness recorded with the extraction. */
-function maskThicknessSource(
-  input: RouteFieldsInput,
-): "explicit" | "preset" | "assumed" {
-  if (input.materials) return "explicit"
-  if (input.maskThicknessMm != null) return "preset"
-  return "assumed"
+/** A wire pair or coupled wire group tied to its input section. */
+interface IndexedWireSection {
+  wireSectionIndex: number
+  wireSection: Snapshot<WireSection>
 }
 
-/** Queue each conductor pair in slice order so cache population precedes coupling decisions. */
-function couplingPairs(
-  slices: readonly Snapshot<WireSection>[],
-): Snapshot<WireSection>[] {
-  const pairs: Snapshot<WireSection>[] = []
-  for (const slice of slices) {
-    const count = slice.wires.length
-    for (let i = 0; i < count; i++) {
-      for (let j = i + 1; j < count; j++) {
-        pairs.push({ ...slice, wires: [slice.wires[i], slice.wires[j]] })
+/** Enumerate pairs incrementally without allocating an entire work queue. */
+function* enumerateWirePairs(
+  wireSections: readonly Snapshot<WireSection>[],
+): IterableIterator<IndexedWireSection> {
+  for (const [wireSectionIndex, wireSection] of wireSections.entries()) {
+    for (const [firstWireIndex, firstWire] of wireSection.wires.entries()) {
+      for (
+        let secondWireIndex = firstWireIndex + 1;
+        secondWireIndex < wireSection.wires.length;
+        secondWireIndex++
+      ) {
+        yield {
+          wireSectionIndex,
+          wireSection: {
+            ...wireSection,
+            wires: [firstWire, wireSection.wires[secondWireIndex]],
+          },
+        }
       }
     }
   }
-  return pairs
 }
 
-/** One pair screen or one unique multiconductor BEM solve per synchronous step. */
+/** One pair screen or coupled-group calculation per step. */
 export class RouteFieldsSolver extends BaseSolver {
   override MAX_ITERATIONS = Infinity
-  private readonly cache = new Map<
-    SolvedRouteSection["key"],
-    RouteCoefficients
-  >()
-  private pairs?: Snapshot<WireSection>[]
-  private groups?: Snapshot<WireSection>[]
-  private readonly slices: ExtractedRouteSlice[] = []
-  private readonly coupling: RouteCoupling[] = []
-  private pairIndex = 0
-  private groupIndex = 0
+  readonly materials: DielectricMaterials
+  private readonly input: RouteFieldsInput
+  private readonly panelsPerEdge: number
+  private readonly maskThicknessSource: MaskThicknessSource
+  private readonly cache = new Map<CrossSectionKey, Snapshot<RlgcMatrices>>()
+  private readonly solutions = new Map<CrossSectionKey, CrossSectionSolution>()
+  private readonly pairCouplingsBySection = new Map<number, PairCoupling[]>()
+  private readonly solvedWireSections: SolvedWireSection[] = []
+  private readonly wirePairs: IterableIterator<IndexedWireSection>
+  private coupledSections?: IterableIterator<IndexedWireSection>
   private output?: Produced<ExtractedRoutes>
+  private screenedPairCount = 0
+  private cacheHitCount = 0
   private solveMilliseconds = 0
-  readonly materials: RouteMaterials
-  /** Resolve material assumptions once; caches belong exclusively to this solver. */
-  constructor(private readonly input: RouteFieldsInput) {
+
+  /** Snapshot the board and options and validate the effective settings before stepping. */
+  constructor(input: RouteFieldsInput) {
     super()
-    this.materials = input.materials ?? {
-      ...assumedRouteMaterials,
-      maskMm: input.maskThicknessMm ?? assumedRouteMaterials.maskMm,
-    }
-    const panels = input.panels ?? DEFAULT_FIELD_PANELS
-    if (!Number.isInteger(panels) || panels < MIN_FIELD_PANELS) {
-      throw new Error(
-        `Field panels must be an integer at least ${MIN_FIELD_PANELS}`,
-      )
-    }
+    this.input = snapshot(input)
+    this.panelsPerEdge = resolvePanelsPerEdge(this.input.panelsPerEdge)
+    const { materials, maskThicknessSource } = resolveMaterials({
+      explicitMaterials: this.input.materials,
+      stackupMaskThicknessMm: this.input.copperGeometry.maskThicknessMm,
+    })
+    this.materials = materials
+    this.maskThicknessSource = maskThicknessSource
+    this.wirePairs = enumerateWirePairs(
+      this.input.copperGeometry.geometry.sections,
+    )
   }
-  /** Canonical relative geometry owns the cache identity, independent of source IDs and stimulus. */
-  private solveSlice(slice: Snapshot<WireSection>): SolvedRouteSection {
-    const section = routeCrossSection({
-      geometry: this.input.geometry,
-      slice,
+
+  /** Reuse a calculation only when all relative geometry and materials match exactly. */
+  private solveSection(
+    wireSection: Snapshot<WireSection>,
+  ): CrossSectionSolution {
+    const crossSection = buildCrossSection({
+      geometry: this.input.copperGeometry.geometry,
+      wireSection,
       materials: this.materials,
     })
-    const key = JSON.stringify(section)
-    const cached = this.cache.get(key)
-    if (cached) {
-      this.stats.cacheHits = (this.stats.cacheHits ?? 0) + 1
-      return { key, line: cached }
+    const crossSectionKey = JSON.stringify(crossSection)
+    const cachedMatrices = this.cache.get(crossSectionKey)
+    if (cachedMatrices) {
+      this.cacheHitCount += 1
+      return { crossSectionKey, rlgcMatrices: cachedMatrices }
     }
-    const start = performance.now()
-    let line: RouteCoefficients
-    try {
-      line = snapshotRouteCoefficients(
-        calculateRlgc({
-          crossSection: rlgcCrossSection(section),
-          options: { panelsPerEdge: this.input.panels ?? DEFAULT_FIELD_PANELS },
-        }),
-      )
-    } catch (error) {
-      throw Object.assign(error as Error, {
-        routeSection: section,
-        wires: slice.wires,
-        references: slice.references,
-        solved: this.cache.size,
-        solveMilliseconds: this.solveMilliseconds,
-      })
-    }
-    this.solveMilliseconds += performance.now() - start
-    this.cache.set(key, line)
-    return { key, line }
-  }
-  /** Advance one work item and record the step timing. */
-  override _step(): void {
-    const start = performance.now()
-    this.solveNext()
-    this.stats = {
-      ...this.stats,
-      uniqueSolves: this.cache.size,
-      pairs: this.pairIndex,
-      sections: this.groupIndex,
-      solveMilliseconds: this.solveMilliseconds,
-      stepMilliseconds: performance.now() - start,
-    }
-  }
-  /** Preserve the all-pairs-first ordering and routeCoupling's sole union predicate. */
-  private solveNext(): void {
-    this.pairs ??= couplingPairs(this.input.geometry.sections)
-    if (this.pairIndex < this.pairs.length) {
-      this.solveSlice(this.pairs[this.pairIndex++])
-      return
-    }
-    this.groups ??= this.input.geometry.sections.flatMap((slice) =>
-      routeCoupling({
-        slice,
-        solve: (pair) => this.cachedPair(pair),
-        records: this.coupling,
+    const startMilliseconds = performance.now()
+    const rlgcMatrices = snapshot(
+      calculateRlgc({
+        crossSection,
+        options: { panelsPerEdge: this.panelsPerEdge },
       }),
     )
-    if (this.groupIndex < this.groups.length) {
-      const slice = this.groups[this.groupIndex++]
-      this.slices.push({ ...slice, ...this.solveSlice(slice) })
-    }
-    if (this.groupIndex !== this.groups.length) return
-    this.finish()
+    this.solveMilliseconds += performance.now() - startMilliseconds
+    this.cache.set(crossSectionKey, rlgcMatrices)
+    return { crossSectionKey, rlgcMatrices }
   }
 
-  /** Retrieve the screen coefficient matrix prepared before grouping the routes. */
-  private cachedPair(pair: Snapshot<WireSection>): RouteCoefficients {
-    const section = routeCrossSection({
-      geometry: this.input.geometry,
-      slice: pair,
-      materials: this.materials,
+  /** Record a pair decision once, using the matrices calculated in this step. */
+  private screenPair({
+    wireSectionIndex,
+    wireSection,
+  }: IndexedWireSection): void {
+    const [firstWire, secondWire] = wireSection.wires
+    const { rlgcMatrices } = this.solveSection(wireSection)
+    const coupling = screenWirePair({
+      wireSectionIndex,
+      wireIndices: [firstWire.wireIndex, secondWire.wireIndex],
+      rlgcMatrices,
     })
-    const line = this.cache.get(JSON.stringify(section))
-    if (!line) throw new Error("Pair screen was not solved")
-    return line
+    const pairCouplings = this.pairCouplingsBySection.get(wireSectionIndex)
+    if (pairCouplings) pairCouplings.push(coupling)
+    else this.pairCouplingsBySection.set(wireSectionIndex, [coupling])
+    this.screenedPairCount += 1
   }
 
-  /** Freeze the solved fields and write the geometry-to-coefficient map. */
+  /** Partition each section by its completed pair decisions, in board order. */
+  private *enumerateCoupledSections(): IterableIterator<IndexedWireSection> {
+    for (const [
+      wireSectionIndex,
+      inputSection,
+    ] of this.input.copperGeometry.geometry.sections.entries()) {
+      const pairCouplings = this.pairCouplingsBySection.get(wireSectionIndex)
+      if (!pairCouplings) {
+        yield { wireSectionIndex, wireSection: inputSection }
+        continue
+      }
+      for (const wireSection of groupCoupledWires({
+        wireSection: inputSection,
+        pairCouplings,
+      }))
+        yield { wireSectionIndex, wireSection }
+    }
+  }
+
+  /** Advance one pair or one coupled section and record step timings. */
+  override _step(): void {
+    const startMilliseconds = performance.now()
+    this.solveNext()
+    this.stats = {
+      uniqueSolveCount: this.cache.size,
+      screenedPairCount: this.screenedPairCount,
+      solvedSectionCount: this.solvedWireSections.length,
+      cacheHitCount: this.cacheHitCount,
+      solveMilliseconds: this.solveMilliseconds,
+      stepMilliseconds: performance.now() - startMilliseconds,
+    }
+  }
+
+  /** Screen all pairs before calculating the matrices of their connected groups. */
+  private solveNext(): void {
+    if (!this.coupledSections) {
+      const pair = this.wirePairs.next()
+      if (!pair.done) {
+        this.screenPair(pair.value)
+        return
+      }
+      this.coupledSections = this.enumerateCoupledSections()
+    }
+    const group = this.coupledSections.next()
+    if (group.done) {
+      this.finish()
+      return
+    }
+    const { wireSectionIndex, wireSection } = group.value
+    const solution = this.solveSection(wireSection)
+    this.solutions.set(solution.crossSectionKey, solution)
+    this.solvedWireSections.push({
+      ...wireSection,
+      wireSectionIndex,
+      ...solution,
+    })
+  }
+
+  /** Publish the solved groups and the geometry entries they reference. */
   private finish(): void {
     const warnings = [
-      ...this.input.geometry.warnings,
+      ...this.input.copperGeometry.geometry.warnings,
       PARALLEL_COUPLING_WARNING,
     ]
-    const sections = [...this.cache].map(([key, line]) => ({ key, line }))
-    const value = snapshot({
-      slices: this.slices,
-      sections,
-      coupling: this.coupling,
+    const pairCouplings = Array.from(
+      this.pairCouplingsBySection.values(),
+    ).flat()
+    const solvedSections = snapshot({
+      solvedWireSections: this.solvedWireSections,
+      crossSectionSolutions: [...this.solutions.values()],
+      pairCouplings,
       warnings,
       materials: this.materials,
+      maskThicknessSource: this.maskThicknessSource,
+      panelsPerEdge: this.panelsPerEdge,
     })
     const scope = rootScope("extraction").child(this.input.artifactPrefix)
     const artifact = scope.json("fields.json", {
-      sections,
-      slices: this.slices.map((slice) => ({
-        start: slice.startMm,
-        end: slice.endMm,
-        wires: slice.wires.map((wire) => wire.wireIndex),
-        references: slice.references,
-        key: slice.key,
-      })),
-      coupling: this.coupling,
-      warnings,
-      materials: this.materials,
-      maskThicknessSource: maskThicknessSource(this.input),
-      panelsPerEdge: this.input.panels ?? DEFAULT_FIELD_PANELS,
+      ...solvedSections,
+      solvedWireSections: solvedSections.solvedWireSections.map(
+        (wireSection) => ({
+          wireSectionIndex: wireSection.wireSectionIndex,
+          startMm: wireSection.startMm,
+          endMm: wireSection.endMm,
+          wireIndices: wireSection.wires.map((wire) => wire.wireIndex),
+          references: wireSection.references,
+          crossSectionKey: wireSection.crossSectionKey,
+        }),
+      ),
     })
-    this.output = { value, artifacts: [artifact] }
+    this.output = Object.freeze({
+      value: solvedSections,
+      artifacts: snapshot([artifact]),
+    })
     this.solved = true
   }
-  /** Only a completed extraction can be consumed by the network. */
+
+  /** The completed immutable matrices and coupling decisions. */
   override getOutput(): Produced<ExtractedRoutes> {
-    if (!this.output) throw new Error("Route fields are incomplete")
+    if (!this.output) throw new Error("Wire sections are not solved")
     return this.output
   }
-  /** The cache and work queues never enter debugger downloads. */
+
+  /** Replay options independent of solver progress. */
   override getConstructorParams(): ConstructorParameters<
     typeof RouteFieldsSolver
   > {

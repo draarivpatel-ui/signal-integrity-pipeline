@@ -1,66 +1,110 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import React from "react"
+import { cju } from "@tscircuit/circuit-json-util"
 import {
   channelCopperScope,
-  extractCopperGeometry,
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
 } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
-import Board from "../fixtures/return-agreement"
+import { solveFieldsCopper } from "../fixtures/fields-input"
+import ReturnAgreement from "../fixtures/return-agreement"
 import { renderCoreSignals } from "../support/core-render"
 
 test("screens pairs by electric and magnetic coupling", async () => {
   const materials = {
-    maskMm: 0,
-    maskEr: 1,
-    maskLoss: 0,
-    substrateLoss: 0,
+    maskThicknessMm: 0,
+    maskRelativePermittivity: 1,
+    maskLossTangent: 0,
+    laminateLossTangent: 0,
   }
   const cases = [
-    { spacing: 0.3, thickness: 0.4, groupSize: 3 },
-    { spacing: 16, thickness: 0.4, groupSize: 1 },
-    { spacing: 4, thickness: 1.6, groupSize: 3 },
+    {
+      spacingMm: 0.3,
+      thicknessMm: 0.4,
+      groups: [[0, 1, 2]],
+      decisions: [true, true, true],
+    },
+    {
+      spacingMm: 16,
+      thicknessMm: 0.4,
+      groups: [[0], [1], [2]],
+      decisions: [false, false, false],
+    },
+    {
+      spacingMm: 4,
+      thicknessMm: 1.6,
+      groups: [[0, 1, 2]],
+      decisions: [true, true, true],
+    },
+    {
+      spacingMm: 3,
+      thicknessMm: 0.4,
+      groups: [[0, 1, 2]],
+      decisions: [true, false, true],
+    },
   ]
-  for (const { spacing, thickness, groupSize } of cases) {
+  for (const { spacingMm, thicknessMm, groups, decisions } of cases) {
     const circuit = await renderCoreSignals(
-      <Board spacing={spacing} thickness={thickness} />,
+      <ReturnAgreement spacingMm={spacingMm} thicknessMm={thicknessMm} />,
     )
-    const traces = circuit.filter((record) => record.type === "source_trace")
-    const twoPortTraces = traces.filter(
+    const db = cju(circuit)
+    const sourceTraces = db.source_trace.list()
+    const twoPortTraces = sourceTraces.filter(
       (trace) => trace.connected_source_port_ids.length === 2,
     )
-    const selected = new Set(
+    const channelSourcePortIds = new Set(
       twoPortTraces.flatMap((trace) => trace.connected_source_port_ids),
     )
-    const ground = circuit
-      .filter((record) => record.type === "source_net")
-      .find((net) => net.name === "GND")!
+    const groundSourceNet = db.source_net.getWhere({ name: "GND" })
+    assert(groundSourceNet)
     const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
     const scope = channelCopperScope({
       circuit,
       connectivity,
-      channelSourceIds: selected,
+      channelSourceIds: channelSourcePortIds,
       referenceSourceIds: sourceNetMembers({
         connectivity,
-        memberId: ground.source_net_id,
+        memberId: groundSourceNet.source_net_id,
       }),
       railSourceIds: new Set(),
       distanceMm: 32,
     })
-    const geometry = extractCopperGeometry({ circuit, copperScope: scope })
+    const copperGeometry = solveFieldsCopper({
+      circuitJson: circuit,
+      copperScope: scope,
+    })
     const solver = new RouteFieldsSolver({
-      geometry,
+      copperGeometry,
       materials,
       artifactPrefix: "test",
     })
     solver.solve()
-    const { slices } = solver.getOutput().value
-    assert.equal(
-      Math.max(...slices.map((slice) => slice.wires.length)),
-      groupSize,
-      "Nearby wires stay coupled; distant wires split only after both normalized mutuals fall below 0.5%",
+    const { solvedWireSections, pairCouplings, crossSectionSolutions } =
+      solver.getOutput().value
+    assert.deepEqual(
+      solvedWireSections.map(({ wires }) =>
+        wires.map(({ wireIndex }) => wireIndex),
+      ),
+      groups,
+    )
+    assert.deepEqual(
+      pairCouplings.map(({ wireIndices }) => wireIndices),
+      [
+        [0, 1],
+        [0, 2],
+        [1, 2],
+      ],
+    )
+    assert.deepEqual(
+      pairCouplings.map(({ isCoupled }) => isCoupled),
+      decisions,
+    )
+    assert.deepEqual(
+      new Set(
+        crossSectionSolutions.map(({ crossSectionKey }) => crossSectionKey),
+      ),
+      new Set(solvedWireSections.map(({ crossSectionKey }) => crossSectionKey)),
     )
   }
 })

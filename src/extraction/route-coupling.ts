@@ -1,58 +1,91 @@
 import type { TraceWire, WireSection } from "../board"
 import type { Snapshot } from "../kernel"
-import type { RouteCoefficients } from "./route-lines"
+import type { RlgcMatrices } from "../rlgc"
 
-/** Retain a pair if either normalized mutual coefficient reaches 0.5%. */
+/** A pair is coupled when either normalized mutual reaches 0.5%. */
 const COUPLING_THRESHOLD = 0.005
 
-/** Solved normalized coupling and retention decision for one copper-geometry-wire pair. */
-export interface RouteCoupling {
-  wires: TraceWire["wireIndex"][]
-  capacitive: number
-  inductive: number
-  retained: boolean
+type WireIndex = TraceWire["wireIndex"]
+
+/** The pair's normalized mutuals and decision in its source wire section. */
+export interface PairCoupling {
+  wireSectionIndex: number
+  wireIndices: readonly [WireIndex, WireIndex]
+  normalizedMutualCapacitance: number
+  normalizedMutualInductance: number
+  isCoupled: boolean
 }
 
-/** Partition by pairwise solved coupling, retaining a pair if either normalized mutual exceeds 0.5%.
- * Connected components keep intervening conductors together; this is a local pair screen,
- * not a bound on aggregate waveform error or on fields beyond the geometry admission cap.
- */
-export function routeCoupling({
-  slice,
-  solve,
-  records,
+/** Compute the dimensionless magnitude of the mutual between two conductors. */
+function normalizeMutual(matrix: Snapshot<number[][]>): number {
+  return Math.abs(matrix[0][1]) / Math.sqrt(matrix[0][0] * matrix[1][1])
+}
+
+/** Screen a pair with the same inclusive threshold for electric and magnetic coupling. */
+export function screenWirePair({
+  wireSectionIndex,
+  wireIndices,
+  rlgcMatrices,
 }: {
-  slice: Snapshot<WireSection>
-  solve: (slice: Snapshot<WireSection>) => RouteCoefficients
-  records: RouteCoupling[]
-}): Snapshot<WireSection>[] {
-  const groups = slice.wires.map((_, i) => i)
-  for (let i = 0; i < slice.wires.length; i++) {
-    for (let j = i + 1; j < slice.wires.length; j++) {
-      const first = slice.wires[i]
-      const second = slice.wires[j]
-      const line = solve({ ...slice, wires: [first, second] })
-      const capacitive =
-        Math.abs(line.C[0][1]) / Math.sqrt(line.C[0][0] * line.C[1][1])
-      const inductive =
-        Math.abs(line.L[0][1]) / Math.sqrt(line.L[0][0] * line.L[1][1])
-      const retained = Math.max(capacitive, inductive) >= COUPLING_THRESHOLD
-      records.push({
-        wires: [first.wireIndex, second.wireIndex],
-        capacitive,
-        inductive,
-        retained,
-      })
-      if (!retained) continue
-      const from = groups[j]
-      const to = groups[i]
-      for (let k = 0; k < groups.length; k++) {
-        if (groups[k] === from) groups[k] = to
-      }
-    }
+  wireSectionIndex: number
+  wireIndices: PairCoupling["wireIndices"]
+  rlgcMatrices: Snapshot<RlgcMatrices>
+}): PairCoupling {
+  const normalizedMutualCapacitance = normalizeMutual(
+    rlgcMatrices.capacitanceFaradsPerMeter,
+  )
+  const normalizedMutualInductance = normalizeMutual(
+    rlgcMatrices.externalInductanceHenriesPerMeter,
+  )
+  return {
+    wireSectionIndex,
+    wireIndices,
+    normalizedMutualCapacitance,
+    normalizedMutualInductance,
+    isCoupled:
+      Math.max(normalizedMutualCapacitance, normalizedMutualInductance) >=
+      COUPLING_THRESHOLD,
   }
-  return [...new Set(groups)].map((group) => ({
-    ...slice,
-    wires: slice.wires.filter((_, i) => groups[i] === group),
-  }))
+}
+
+/** Follow parent links to a coupled group's representative. */
+function findGroup({
+  parents,
+  wireIndex,
+}: {
+  parents: ReadonlyMap<WireIndex, WireIndex>
+  wireIndex: WireIndex
+}): WireIndex {
+  let groupIndex = wireIndex
+  let parentIndex = parents.get(groupIndex)
+  while (parentIndex !== undefined) {
+    groupIndex = parentIndex
+    parentIndex = parents.get(groupIndex)
+  }
+  return groupIndex
+}
+
+/** Group transitively coupled wires in their original order. */
+export function groupCoupledWires({
+  wireSection,
+  pairCouplings,
+}: {
+  wireSection: Snapshot<WireSection>
+  pairCouplings: readonly PairCoupling[]
+}): Snapshot<WireSection>[] {
+  const parents = new Map<WireIndex, WireIndex>()
+  for (const { wireIndices, isCoupled } of pairCouplings) {
+    if (!isCoupled) continue
+    const firstGroup = findGroup({ parents, wireIndex: wireIndices[0] })
+    const secondGroup = findGroup({ parents, wireIndex: wireIndices[1] })
+    if (firstGroup !== secondGroup) parents.set(secondGroup, firstGroup)
+  }
+  const groups = new Map<WireIndex, Snapshot<TraceWire>[]>()
+  for (const wire of wireSection.wires) {
+    const groupIndex = findGroup({ parents, wireIndex: wire.wireIndex })
+    const wires = groups.get(groupIndex)
+    if (wires) wires.push(wire)
+    else groups.set(groupIndex, [wire])
+  }
+  return Array.from(groups.values(), (wires) => ({ ...wireSection, wires }))
 }

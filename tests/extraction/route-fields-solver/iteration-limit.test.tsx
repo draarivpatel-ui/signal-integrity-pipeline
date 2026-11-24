@@ -1,17 +1,16 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { extractCopperGeometry } from "../../../src/board"
 import { RouteFieldsSolver } from "../../../src/extraction"
-import { renderRoutedCopper } from "../../fixtures/routed-copper"
+import { renderFieldsInput } from "../../fixtures/fields-input"
 
-test("route field extraction can take more than the default solver iterations", async () => {
-  const { circuitJson, copperScope: scope } = await renderRoutedCopper()
-  const solver = new RouteFieldsSolver({
-    geometry: extractCopperGeometry({
-      circuit: circuitJson,
-      copperScope: scope,
-    }),
-    artifactPrefix: "fields",
-  })
+test("completes the pair screen and group calculation in separate steps", async () => {
+  const solver = new RouteFieldsSolver(await renderFieldsInput())
   assert.equal(solver.MAX_ITERATIONS, Infinity)
+  solver.step()
+  assert.equal(solver.stats.screenedPairCount, 1)
+  assert.equal(solver.stats.solvedSectionCount, 0)
+  solver.step()
+  assert.equal(solver.stats.solvedSectionCount, 1)
+  solver.solve()
+  assert.equal(solver.solved, true)
 })

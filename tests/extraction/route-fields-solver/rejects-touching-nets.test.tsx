@@ -1,12 +1,13 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { extractCopperGeometry } from "../../../src/board"
 import { RouteFieldsSolver } from "../../../src/extraction"
 import {
   CopperTrace,
   getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
 } from "../../fixtures/copper-geometry-board"
+
+import { solveFieldsCopper } from "../../fixtures/fields-input"
 
 test("rejects touching nets", async () => {
   const circuit = await renderCopperGeometryBoard({
@@ -17,13 +18,17 @@ test("rejects touching nets", async () => {
       </>
     ),
   })
-  const geometry = extractCopperGeometry({
-    circuit,
-    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
-  })
+  const copperGeometry = solveFieldsCopper(
+    getCopperGeometryExtractionInput({ circuit }),
+  )
   const solver = new RouteFieldsSolver({
-    geometry,
-    materials: { maskMm: 0, maskEr: 1, maskLoss: 0, substrateLoss: 0 },
+    copperGeometry,
+    materials: {
+      maskThicknessMm: 0,
+      maskRelativePermittivity: 1,
+      maskLossTangent: 0,
+      laminateLossTangent: 0,
+    },
     artifactPrefix: "test",
   })
   assert.throws(

@@ -7,13 +7,6 @@ export { type MatrixCheck, validateMatrix } from "./checks"
 export type { Matrix } from "./linalg"
 export { multiply, sum, symmetrize, transpose } from "./linalg"
 export { type RouteFieldsInput, RouteFieldsSolver } from "./route-fields-solver"
-export {
-  closestRoutePoints,
-  type ExtractedRouteSlice,
-  type ExtractedRoutes,
-  type RouteCoefficients,
-  type RouteMaterials,
-  referenceSeries,
-  rlgcCrossSection,
-  routeCrossSection,
-} from "./route-lines"
+export type { ExtractedRoutes } from "./route-lines"
+export { buildCrossSection } from "./section-cross-section"
+export type { DielectricMaterials } from "./section-materials"

@@ -28,15 +28,14 @@ export function solveFieldsCopper({
 
 /** A core-rendered pair and its solver input. */
 export async function renderFieldsInput(): Promise<RouteFieldsInput> {
-  const copper = solveFieldsCopper(await renderRoutedCopper())
+  const copperGeometry = solveFieldsCopper(await renderRoutedCopper())
   return {
-    geometry: copper.geometry,
-    maskThicknessMm: copper.maskThicknessMm,
+    copperGeometry,
     materials: {
-      maskMm: 0.02,
-      maskEr: 3.3,
-      maskLoss: 0.025,
-      substrateLoss: 0.02,
+      maskThicknessMm: 0.02,
+      maskRelativePermittivity: 3.3,
+      maskLossTangent: 0.025,
+      laminateLossTangent: 0.02,
     },
     artifactPrefix: "test",
   }
