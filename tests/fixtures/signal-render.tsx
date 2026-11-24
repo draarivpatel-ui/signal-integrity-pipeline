@@ -59,17 +59,17 @@ export function prepareChannelSimulations({
   )
 }
 
-/** Binding inputs prepared by admission before a route binding solver allocates an artifact scope. */
-type AdmittedRouteBindings = Omit<RouteBindingsInput, "scope">
+/** Binding inputs prepared by channel planning before a route binding solver allocates an artifact scope. */
+type PlannedRouteBindings = Omit<RouteBindingsInput, "scope">
 
-/** The first admitted channel simulation's bindings, checked by the standalone admission solver. */
+/** The first planned channel simulation's bindings, checked by the standalone plan solver. */
 export function plannedBindings({
   circuitJson,
   ibisSources,
 }: {
   circuitJson: CircuitJson
   ibisSources: IbisSources
-}): AdmittedRouteBindings {
+}): PlannedRouteBindings {
   const textSources = Object.fromEntries(
     Object.entries(ibisSources).map(([name, bytes]) => {
       if (typeof bytes === "string") return [name, bytes] as const
@@ -81,10 +81,10 @@ export function plannedBindings({
       ] as const
     }),
   )
-  const admission = new TransientChannelSimulationPlanSolver({
+  const planner = new TransientChannelSimulationPlanSolver({
     circuitJson,
     ibisSources: textSources,
   })
-  admission.solve()
-  return admission.getOutput().value[0].bindings
+  planner.solve()
+  return planner.getOutput().value[0].bindings
 }
