@@ -2,16 +2,16 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { RouteSectionsSolver } from "../../../src/board"
-import { routedCopper } from "../../fixtures/routed-copper"
+import { renderRoutedCopper } from "../../fixtures/routed-copper"
 
 test("stops after one trace per step and publishes its resolved sections", async () => {
-  const { circuitJson, scope } = await routedCopper()
+  const { circuitJson, copperScope } = await renderRoutedCopper()
   const db = cju(circuitJson)
   const [pour] = db.pcb_copper_pour.list()
   assert(pour)
   const solver = new RouteSectionsSolver({
     circuitJson,
-    copperScope: scope,
+    copperScope,
     requiredSourcePortIds: [],
     artifactPrefix: "test",
   })

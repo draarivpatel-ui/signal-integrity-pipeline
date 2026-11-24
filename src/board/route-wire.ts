@@ -6,12 +6,10 @@ import type { RouteWire, UnitDirection } from "./route-section-types"
 export const MIN_WIRE_LENGTH_MM = 1e-7
 /** Coordinate precision in mm and component precision for direction grouping. */
 const ROUTE_DECIMAL_PLACES = 7
-/** Near-vertical wires have a canonical direction pointing up. */
-const DIRECTION_TOLERANCE = 1e-9
 
 /** Round longitudinal positions and direction components on the same grid. */
 export function roundRouteCoordinate(coordinate: number): number {
-  return Number(coordinate.toFixed(ROUTE_DECIMAL_PLACES))
+  return Number(coordinate.toFixed(ROUTE_DECIMAL_PLACES)) + 0
 }
 
 /** A rounded direction used to group parallel wires. */
@@ -36,13 +34,13 @@ export function measureChordDistanceMm({
 }): number {
   const dx = endPoint[0] - startPoint[0]
   const dy = endPoint[1] - startPoint[1]
-  const lengthSquaredMm = dx * dx + dy * dy
+  const lengthSquaredMm2 = dx * dx + dy * dy
   const offsetX = point[0] - startPoint[0]
   const offsetY = point[1] - startPoint[1]
-  if (lengthSquaredMm === 0) return hypotenuse(offsetX, offsetY)
+  if (lengthSquaredMm2 === 0) return hypotenuse(offsetX, offsetY)
   const fraction = Math.max(
     0,
-    Math.min(1, (offsetX * dx + offsetY * dy) / lengthSquaredMm),
+    Math.min(1, (offsetX * dx + offsetY * dy) / lengthSquaredMm2),
   )
   return hypotenuse(offsetX - fraction * dx, offsetY - fraction * dy)
 }
@@ -50,7 +48,7 @@ export function measureChordDistanceMm({
 /** Canonical direction and projected coordinates for a straight wire. */
 type WireProjection = Pick<
   RouteWire,
-  "direction" | "startMm" | "endMm" | "lateralOffsetMm"
+  "direction" | "longitudinalMinMm" | "longitudinalMaxMm" | "lateralOffsetMm"
 >
 
 /** Project physical endpoints onto canonical longitudinal and lateral axes. */
@@ -65,23 +63,21 @@ export function projectRouteWire({
 }): WireProjection {
   const dx = endPoint[0] - startPoint[0]
   const dy = endPoint[1] - startPoint[1]
-  const directionX = dx / lengthMm
+  const directionX = roundRouteCoordinate(dx / lengthMm)
   let sign = 1
-  if (
-    directionX < -DIRECTION_TOLERANCE ||
-    (Math.abs(directionX) <= DIRECTION_TOLERANCE && dy < 0)
-  )
-    sign = -1
+  if (directionX < 0 || (directionX === 0 && dy < 0)) sign = -1
   const direction: UnitDirection = [
     (sign * dx) / lengthMm,
     (sign * dy) / lengthMm,
   ]
-  const startMm = startPoint[0] * direction[0] + startPoint[1] * direction[1]
-  const endMm = endPoint[0] * direction[0] + endPoint[1] * direction[1]
+  const startProjectionMm =
+    startPoint[0] * direction[0] + startPoint[1] * direction[1]
+  const endProjectionMm =
+    endPoint[0] * direction[0] + endPoint[1] * direction[1]
   return {
     direction,
-    startMm: Math.min(startMm, endMm),
-    endMm: Math.max(startMm, endMm),
+    longitudinalMinMm: Math.min(startProjectionMm, endProjectionMm),
+    longitudinalMaxMm: Math.max(startProjectionMm, endProjectionMm),
     lateralOffsetMm:
       -startPoint[0] * direction[1] + startPoint[1] * direction[0],
   }
@@ -102,6 +98,12 @@ export function getRoutePoint({
   ]
 }
 
+/** Set of wires grouped by the gap between their lateral edges. */
+export type WireGroup = RouteWire[]
+
+/** Wire groups ordered along the lateral axis. */
+type WireGroups = WireGroup[]
+
 /** Partition laterally ordered wire intervals, tracking each group's full extent. */
 export function groupWiresByGap({
   wires,
@@ -109,14 +111,14 @@ export function groupWiresByGap({
 }: {
   wires: readonly RouteWire[]
   gapMm: number
-}): RouteWire[][] {
+}): WireGroups {
   const ordered = wires.toSorted(
     (a, b) =>
       a.lateralOffsetMm - a.widthMm / 2 - (b.lateralOffsetMm - b.widthMm / 2) ||
       a.wireIndex - b.wireIndex,
   )
-  const groups: RouteWire[][] = []
-  let group: RouteWire[] = []
+  const groups: WireGroups = []
+  let group: WireGroup = []
   let groupMaxMm = -Infinity
   for (const wire of ordered) {
     const minMm = wire.lateralOffsetMm - wire.widthMm / 2
