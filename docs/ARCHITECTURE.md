@@ -11,7 +11,7 @@ Rail shunts and differential terminations stay outside those paths, including te
 Each extracted trace keeps both physical contacts. Binding checks their selected models and detects signal contacts tied to ground.
 Removing an extracted trace or series passive from the receiver graph must disconnect its two ends.
 An alternate path reports the physical contacts and distinguishes an entirely routed loop from a bypass through ideal wiring.
-RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
+`RouteSectionsSolver` divides scoped wires into sections where nearby copper and reference surfaces stay consistent. It also resolves physical endpoint contacts.
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
 
 ```mermaid

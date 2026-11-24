@@ -1,4 +1,4 @@
-import React from "react"
+import { cju } from "@tscircuit/circuit-json-util"
 import {
   type CircuitJson,
   type CopperScope,
@@ -69,10 +69,11 @@ export async function routedCopper(): Promise<RoutedCopper> {
       <copperpour connectsTo="net.GND" layer="bottom" unbroken />
     </board>,
   )
-  const trace = circuitJson.find((record) => record.type === "source_trace")!
-  if (trace.type !== "source_trace") throw new Error("Missing TSX trace")
-  const ground = circuitJson.find((record) => record.type === "source_net")!
-  if (ground.type !== "source_net") throw new Error("Missing TSX ground")
+  const db = cju(circuitJson)
+  const [trace] = db.source_trace.list()
+  if (!trace) throw new Error("Missing TSX trace")
+  const ground = db.source_net.getWhere({ name: "GND" })
+  if (!ground) throw new Error("Missing TSX ground")
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuitJson)
   const scope = channelCopperScope({
     circuit: circuitJson,
