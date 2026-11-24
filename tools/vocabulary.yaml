@@ -18,6 +18,18 @@
 threshold: 85
 
 domain:
+  attempt: one evaluation of a declared channel simulation
+  bypass: an alternate path around a routed cut or series passive
+  chevron: a mark indicating the direction of a mapped path
+  dash: one mark in a dashed line
+  fault: a diagnostic tied to specific contacts or copper
+  ideal: an electrical connection with no extracted impedance
+  legend: the explanation of a drawing's symbols and colors
+  scene: the records and annotations used to draw one view
+  short: an unintended electrical connection
+  stroke: the line or outline of a drawing primitive
+  topology: the connections between electrical nodes
+  visual: a board drawing or data used to build it
   above: toward increasing solver z in a physical stackup
   actual: read directly from the physical source-board records
   admission: validation and derivation of one declared transient channel simulation
@@ -105,7 +117,7 @@ domain:
   ground: the zero-volt reference copper that signal current returns through
   h: inductance measured in henries
   halo: a dark outline behind a mark so it reads over copper
-  header: a named section or directive at the start of a line
+  header: a heading for a drawing or a directive at the start of a line
   hold: the interval over which a switching coefficient stays fixed
   impedance: a wire's opposition to changing current, in ohms
   inductance: magnetic flux linkage per unit current, measured in henries
