@@ -12,27 +12,27 @@ import {
 interface PlanDirection {
   x: number
   y: number
-  length: number
+  lengthMm: number
 }
 
 /** Normalize direction, with a right-facing glyph for coincident or unplaced targets. */
-export function direction({
+export function getDirection({
   from,
   to,
 }: {
   from: Point
   to?: Point
 }): PlanDirection {
-  if (!to) return { x: 1, y: 0, length: 0 }
+  if (!to) return { x: 1, y: 0, lengthMm: 0 }
   const x = to.x - from.x
   const y = to.y - from.y
-  const length = Math.hypot(x, y)
-  if (length === 0) return { x: 1, y: 0, length }
-  return { x: x / length, y: y / length, length }
+  const lengthMm = Math.hypot(x, y)
+  if (lengthMm === 0) return { x: 1, y: 0, lengthMm }
+  return { x: x / lengthMm, y: y / lengthMm, lengthMm }
 }
 
 /** Place a point relative to a directed glyph's center. */
-export function offset({
+export function offsetPoint({
   point,
   axis,
   along = 0,
@@ -49,25 +49,28 @@ export function offset({
   }
 }
 
+/** Number of vertices for each round marking. */
+const RING_VERTEX_COUNT = 24
+
 /** Board-aligned circle points used for the filled ring and its white center. */
-export function ring({
+export function buildRing({
   center,
-  radius,
+  radiusMm,
 }: {
   center: Point
-  radius: number
+  radiusMm: number
 }): Point[] {
-  return Array.from({ length: 24 }, (_, i) => {
-    const angle = (i * Math.PI) / 12
+  return Array.from({ length: RING_VERTEX_COUNT }, (_, i) => {
+    const angle = (i * Math.PI * 2) / RING_VERTEX_COUNT
     return {
-      x: center.x + radius * Math.cos(angle),
-      y: center.y + radius * Math.sin(angle),
+      x: center.x + radiusMm * Math.cos(angle),
+      y: center.y + radiusMm * Math.sin(angle),
     }
   })
 }
 
 /** Draw both explicit vias and inline route vias without duplicate holes. */
-export function viaShapes({
+export function buildViaShapes({
   db,
   copperScope,
   unitMm,
@@ -104,7 +107,7 @@ export function viaShapes({
     if (via.isInScope) fill = planColors.scope
     return [
       {
-        points: ring({ center: via, radius: via.outer_diameter / 2 }),
+        points: buildRing({ center: via, radiusMm: via.outer_diameter / 2 }),
         fill,
         stroke: "#334155",
         strokeWidth: unitMm * 0.18,
@@ -112,7 +115,7 @@ export function viaShapes({
         layer: "copper",
       },
       {
-        points: ring({ center: via, radius: via.hole_diameter / 2 }),
+        points: buildRing({ center: via, radiusMm: via.hole_diameter / 2 }),
         fill: "#fff",
         stroke: "none",
         label: via.label,
@@ -123,38 +126,38 @@ export function viaShapes({
 }
 
 /** A glyph radius that fits the two closest distinct active contacts. */
-export function endpointRadius({
+export function getEndpointRadiusMm({
   ports,
   unitMm,
 }: {
   ports: readonly Point[]
   unitMm: number
 }): number {
-  let radius = unitMm * 1.42
+  let radiusMm = unitMm * 1.42
   for (const [index, from] of ports.entries())
     for (const to of ports.slice(index + 1)) {
-      const { length } = direction({ from, to })
-      if (length > 0) radius = Math.min(radius, length * 0.38)
+      const { lengthMm } = getDirection({ from, to })
+      if (lengthMm > 0) radiusMm = Math.min(radiusMm, lengthMm * 0.38)
     }
-  return radius
+  return radiusMm
 }
 
 /** Triangle, white-center receiver target, or open diamond. */
-export function endpointShape({
+export function buildEndpointShape({
   point,
   endpoint,
-  radius,
+  radiusMm,
   ports,
 }: {
   point: PlanPort
   endpoint: PlanVisualEndpoint
-  radius: number
+  radiusMm: number
   ports: ReadonlyMap<SourcePortId, PlanPort>
 }): Polygon[] {
   const { kind, label, color, towardSourcePortId } = endpoint
   const layer = "endpoints"
   if (kind === "driver") {
-    const axis = direction({
+    const axis = getDirection({
       from: point,
       to: ports.get(towardSourcePortId || ""),
     })
@@ -163,14 +166,19 @@ export function endpointShape({
       [-0.78, 0.88],
       [-0.78, -0.88],
     ].map(([along, across]) =>
-      offset({ point, axis, along: along * radius, across: across * radius }),
+      offsetPoint({
+        point,
+        axis,
+        along: along * radiusMm,
+        across: across * radiusMm,
+      }),
     )
     return [
       {
         points,
         fill: "#fff",
         stroke: "#fff",
-        strokeWidth: radius * 0.62,
+        strokeWidth: radiusMm * 0.62,
         layer,
         label,
       },
@@ -178,7 +186,7 @@ export function endpointShape({
         points,
         fill: color,
         stroke: planColors.ink,
-        strokeWidth: radius * 0.17,
+        strokeWidth: radiusMm * 0.17,
         layer,
         label,
       },
@@ -187,41 +195,41 @@ export function endpointShape({
   if (kind === "receiver")
     return [
       {
-        points: ring({ center: point, radius: radius * 1.19 }),
+        points: buildRing({ center: point, radiusMm: radiusMm * 1.19 }),
         fill: "#fff",
         stroke: "none",
         layer,
         label,
       },
       {
-        points: ring({ center: point, radius: radius * 0.85 }),
+        points: buildRing({ center: point, radiusMm: radiusMm * 0.85 }),
         fill: "#fff",
         stroke: color,
-        strokeWidth: radius * 0.33,
+        strokeWidth: radiusMm * 0.33,
         layer,
         label,
       },
       {
-        points: ring({ center: point, radius: radius * 0.23 }),
+        points: buildRing({ center: point, radiusMm: radiusMm * 0.23 }),
         fill: color,
         stroke: "none",
         layer,
         label,
       },
     ]
-  let size = radius
-  if (kind === "extraTraceEnd") size *= 0.8
+  let markerHalfWidthMm = radiusMm
+  if (kind === "extraTraceEnd") markerHalfWidthMm *= 0.8
   return [
     {
       points: [
-        { x: point.x + size, y: point.y },
-        { x: point.x, y: point.y + size },
-        { x: point.x - size, y: point.y },
-        { x: point.x, y: point.y - size },
+        { x: point.x + markerHalfWidthMm, y: point.y },
+        { x: point.x, y: point.y + markerHalfWidthMm },
+        { x: point.x - markerHalfWidthMm, y: point.y },
+        { x: point.x, y: point.y - markerHalfWidthMm },
       ],
       fill: "#fff",
       stroke: color,
-      strokeWidth: radius * 0.25,
+      strokeWidth: radiusMm * 0.25,
       layer,
       label,
     },
@@ -229,7 +237,7 @@ export function endpointShape({
 }
 
 /** A contrasting cross marks the middle of a gap or implicated connection. */
-export function faultCross({
+export function buildFaultCross({
   point,
   unitMm,
   label,
@@ -266,7 +274,7 @@ export function faultCross({
 }
 
 /** Raise the conceptual bypass off the physical trace between the same terminals. */
-function bypassPoints({
+function buildBypassPoints({
   from,
   to,
   unitMm,
@@ -275,49 +283,54 @@ function bypassPoints({
   to: Point
   unitMm: number
 }): Point[] {
-  const axis = direction({ from, to })
-  const rise = Math.min(axis.length / 4, unitMm * 5)
+  const axis = getDirection({ from, to })
+  const riseMm = Math.min(axis.lengthMm / 4, unitMm * 5)
   let side = 1
   if (axis.x < 0) side = -1
   return [
     from,
-    offset({ point: from, axis, along: axis.length / 2, across: rise * side }),
+    offsetPoint({
+      point: from,
+      axis,
+      along: axis.lengthMm / 2,
+      across: riseMm * side,
+    }),
     to,
   ]
 }
 
 /** Physical passives connect their pads through a framed body. */
-export function linkShapes({
-  link,
+export function buildOverlayShapes({
+  overlay,
   from,
   to,
   unitMm,
 }: {
-  link: PlanOverlay
+  overlay: PlanOverlay
   from: Point
   to: Point
   unitMm: number
 }): Polygon[] {
-  const { kind, label } = link
-  const axis = direction({ from, to })
-  const point = offset({ point: from, axis, along: axis.length / 2 })
+  const { kind, label } = overlay
+  const axis = getDirection({ from, to })
+  const point = offsetPoint({ point: from, axis, along: axis.lengthMm / 2 })
   if (kind === "short")
     return [
-      faultCross({
-        point: bypassPoints({ from, to, unitMm })[1],
+      buildFaultCross({
+        point: buildBypassPoints({ from, to, unitMm })[1],
         unitMm,
         label,
       }),
     ]
-  if (kind === "missing") return [faultCross({ point, unitMm, label })]
-  if (kind !== "series" || axis.length === 0) return []
-  const half = axis.length / 2
+  if (kind === "missing") return [buildFaultCross({ point, unitMm, label })]
+  if (kind !== "series" || axis.lengthMm === 0) return []
+  const half = axis.lengthMm / 2
   const points = [
     [-half, -unitMm],
     [half, -unitMm],
     [half, unitMm],
     [-half, unitMm],
-  ].map(([along, across]) => offset({ point, axis, along, across }))
+  ].map(([along, across]) => offsetPoint({ point, axis, along, across }))
   return [
     {
       points,
@@ -331,25 +344,25 @@ export function linkShapes({
 }
 
 /** Dashed joins, amber series bridges and red failure overlays. */
-export function linkLine({
-  link,
+export function buildOverlayLine({
+  overlay,
   from,
   to,
   unitMm,
 }: {
-  link: PlanOverlay
+  overlay: PlanOverlay
   from: Point
   to: Point
   unitMm: number
 }): Line {
-  const { kind, label } = link
+  const { kind, label } = overlay
   if (kind === "series") {
-    const axis = direction({ from, to })
+    const axis = getDirection({ from, to })
     const points = [0, 0.24, 0.37, 0.5, 0.63, 0.76, 1].map((fraction, i) =>
-      offset({
+      offsetPoint({
         point: from,
         axis,
-        along: fraction * axis.length,
+        along: fraction * axis.lengthMm,
         across: [0, 0, 0.52, -0.52, 0.52, 0, 0][i] * unitMm,
       }),
     )
@@ -373,7 +386,7 @@ export function linkLine({
       zIndex: 3,
     }
   let points = [from, to]
-  if (kind === "short") points = bypassPoints({ from, to, unitMm })
+  if (kind === "short") points = buildBypassPoints({ from, to, unitMm })
   return {
     points,
     label,

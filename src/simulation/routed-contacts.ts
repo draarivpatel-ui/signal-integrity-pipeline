@@ -10,16 +10,16 @@ import { passiveSelectionComponents, placedSubcircuitPins } from "./netlist"
 import type { TraceContacts } from "./route-inputs"
 import type { PipelineIbisModel, SimulationModeling } from "./types"
 
-/** The source contact IDs and the paths or cuts that require each contact. */
+/** The source contact IDs and the receiver paths or traces that require each contact. */
 type RequiredContacts = ReadonlyMap<SourcePortId, string>
 
-/** Keep the first path or cut associated with each required physical contact. */
-export function requiredContacts({
+/** Keep the first receiver path or trace associated with each required physical contact. */
+export function collectRequiredContacts({
   receiverPaths,
-  cuts,
+  traceContacts,
 }: {
   receiverPaths: readonly ReceiverTracePath[]
-  cuts: readonly TraceContacts[]
+  traceContacts: readonly TraceContacts[]
 }): RequiredContacts {
   const endpoints = new Map<SourcePortId, string>()
   for (const {
@@ -32,7 +32,11 @@ export function requiredContacts({
     if (!endpoints.has(toSourcePortId))
       endpoints.set(toSourcePortId, channelName)
   }
-  for (const { fromSourcePortId, toSourcePortId, sourceTraceId } of cuts) {
+  for (const {
+    fromSourcePortId,
+    toSourcePortId,
+    sourceTraceId,
+  } of traceContacts) {
     if (!endpoints.has(fromSourcePortId))
       endpoints.set(fromSourcePortId, sourceTraceId)
     if (!endpoints.has(toSourcePortId))
