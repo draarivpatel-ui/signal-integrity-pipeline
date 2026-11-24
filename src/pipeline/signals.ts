@@ -16,6 +16,7 @@ import {
 import { type SafeId, safeId } from "../kernel"
 import type { RunControls } from "../simulation"
 import { planAggressors } from "./aggressors"
+import { prepareChannelTraces } from "./channel-traces"
 import type { NumericalSettings } from "./modeling"
 import {
   type ChannelSimulationControlOptions,
@@ -23,7 +24,6 @@ import {
   signalTiming,
   withChannelSimulationControls,
 } from "./signal-controls"
-import { prepareRoutedLanes } from "./signal-lanes"
 import {
   channelSimulationCircuit,
   prepareSignalSettings,
@@ -36,8 +36,8 @@ import {
   validateSignalPins,
 } from "./signal-pins"
 
+export { auditChannelTraces } from "./channel-traces"
 export { probeEndpoints, signalBits } from "./signal-controls"
-export { routedLanes } from "./signal-lanes"
 
 /** Default lateral search distance for channel simulation planning, in millimetres. */
 const DEFAULT_COPPER_SCOPE_DISTANCE_MM = 32
@@ -46,7 +46,7 @@ const DEFAULT_COPPER_SCOPE_DISTANCE_MM = 32
 export interface PreparedChannelSimulation {
   warnings?: string[]
   durationSeconds: number
-  riseSeconds: number
+  fastestEdgeSeconds: number
   stepSeconds: number
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
@@ -98,12 +98,12 @@ export function listChannelSimulations(
 }
 
 /** Normalize a caller's copper search radius at the preparation boundary. */
-export function validatedScopeDistanceMm(
+export function validateNearbyGapMm(
   distanceMm: number = DEFAULT_COPPER_SCOPE_DISTANCE_MM,
 ): number {
   if (!Number.isFinite(distanceMm) || distanceMm <= 0) {
     throw new Error("Copper scope distance must be finite and positive", {
-      cause: "scopeDistanceMm",
+      cause: "nearbyGapMm",
     })
   }
   return distanceMm
@@ -121,7 +121,7 @@ export function prepareChannelSimulationById({
   simulationPcbTransientChannelSimulationId: SimulationPcbTransientChannelSimulationId
   distanceMm?: number
 }): PreparedChannelSimulation {
-  const scopeDistanceMm = validatedScopeDistanceMm(distanceMm)
+  const nearbyGapMm = validateNearbyGapMm(distanceMm)
   const channelSimulations = listChannelSimulations(circuit)
   const matches = channelSimulations.filter(
     (channelSimulation) =>
@@ -140,7 +140,7 @@ export function prepareChannelSimulationById({
       field: "simulationPcbTransientChannelSimulationId",
     }),
     sources,
-    distanceMm: scopeDistanceMm,
+    distanceMm: nearbyGapMm,
   })
 }
 
@@ -243,12 +243,12 @@ interface ChannelSimulationOptions {
 function withPreparedChannelControls({
   settings,
   warnings,
-  riseSeconds,
+  fastestEdgeSeconds,
   ...options
 }: ChannelSimulationControlOptions & {
   settings: NumericalSettings
   warnings: string[]
-  riseSeconds: number
+  fastestEdgeSeconds: number
 }): PreparedChannelSimulation {
   const { circuit, controls } = withChannelSimulationControls(options)
   const {
@@ -266,7 +266,7 @@ function withPreparedChannelControls({
     pins,
     settings,
     durationSeconds,
-    riseSeconds,
+    fastestEdgeSeconds,
     stepSeconds: options.stepSeconds,
   }
   if (warnings.length > 0) prepared.warnings = warnings
@@ -301,13 +301,13 @@ export function prepareChannelSimulation(
   })
   const timing = signalTiming({ patterns, durationSeconds, edgeTimesSeconds })
   validateComponentModels({ ...scoped, topology: signalPins.topology })
-  const lanes = prepareRoutedLanes(scoped)
+  const channelTraces = prepareChannelTraces(scoped)
   const pruned = withUsedIbisModels(scoped)
   const supplied = prepareSignalSettings({
     pruned,
     signalPins,
     scopedPins,
-    lanes,
+    channelTraces,
     sources,
   })
   return withPreparedChannelControls({
