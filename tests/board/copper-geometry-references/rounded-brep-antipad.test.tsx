@@ -3,15 +3,15 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { normalizeReferencePour } from "../../../src/board/copper-geometry-references"
 import {
+  CopperTrace,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("preserves a rounded antipad encoded with BRep arcs", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Crossing" startY={0.3} />
+        <CopperTrace name="Crossing" startY={0.3} />
         <cutout shape="circle" radius={0.5} />
       </>
     ),
