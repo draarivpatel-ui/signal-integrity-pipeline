@@ -20,13 +20,9 @@ test("draws the series passive between its two distinct routed cuts", async () =
       (shape) => shape.layer === "topology" && shape.label === "Series passive",
     ),
   )
-  assert.ok(
-    drawing.texts?.some(
-      (text) =>
-        text.text.includes("Series passive · RS.pin1") &&
-        text.text.includes("RS.pin2"),
-    ),
-  )
+  assert.ok(drawing.texts?.some((text) => text.text === "Series resistor RS"))
+  assert.ok(drawing.texts?.some((text) => text.text.includes("to RS pin 1")))
+  assert.ok(drawing.texts?.some((text) => text.text.includes("RS pin 2 to")))
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",

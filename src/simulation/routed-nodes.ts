@@ -8,7 +8,7 @@ import {
   type SourceTraceId,
   selectPort,
 } from "../board"
-import type { Snapshot } from "../kernel"
+import type { DiagnosticSubject, Snapshot } from "../kernel"
 import { cutConnections, validateChannelBridge } from "./cut-connections"
 import { fail } from "./diagnostics"
 import { differentialContacts } from "./differential-contacts"
@@ -98,6 +98,11 @@ function differentialLegPorts({
 /** SPICE nodes grouped by connectivity through physical cuts. */
 type SpiceNodeGroups = NodeGroups<SpiceNodeName>
 
+/** Attach physical evidence without changing the diagnostic's error message. */
+function recordSubjects(ids: readonly string[]): DiagnosticSubject[] {
+  return [...new Set(ids)].map((id) => ({ kind: "record", id }))
+}
+
 /** Validate the physical contacts and routed interiors of both differential legs. */
 function validateDifferentialLegs({
   channels,
@@ -131,6 +136,7 @@ function validateDifferentialLegs({
       fail(
         "channel_short",
         `${name}: contact ${groundedSourcePortId} is shorted to ground`,
+        { subjects: recordSubjects([groundedSourcePortId]) },
       )
     const positiveGroups = new Map<SpiceNodeName, SourcePortId>()
     const positiveNodes = new Map<SpiceNodeName, SourcePortId>()
@@ -149,6 +155,12 @@ function validateDifferentialLegs({
         fail(
           "channel_short",
           `${name}: negative contact ${negativeSourcePortId} is shorted to ${positiveSourcePortId}`,
+          {
+            subjects: recordSubjects([
+              negativeSourcePortId,
+              positiveSourcePortId,
+            ]),
+          },
         )
     }
     for (const negativeSourcePortId of negativePorts) {
@@ -159,6 +171,12 @@ function validateDifferentialLegs({
         fail(
           "channel_short",
           `${name}: negative contact ${negativeSourcePortId} is shorted to ${positiveSourcePortId} through routed cuts`,
+          {
+            subjects: recordSubjects([
+              negativeSourcePortId,
+              positiveSourcePortId,
+            ]),
+          },
         )
     }
   }
@@ -196,16 +214,19 @@ function validateReceiverPaths({
   for (const { port, from, to, sourceTraceId, sourceTraceIds } of mappings) {
     const fromSpiceNode = node(from)
     const toSpiceNode = node(to)
-    const path = (sourceTraceIds ?? [sourceTraceId]).join(", ")
+    const traces = sourceTraceIds ?? [sourceTraceId]
+    const path = traces.join(", ")
     if (fromSpiceNode === "0" || toSpiceNode === "0")
       fail(
         "channel_short",
         `${port}: endpoints ${from} and ${to} include a ground contact on routed path ${path}`,
+        { subjects: recordSubjects([from, to, ...traces]) },
       )
     if (fromSpiceNode === toSpiceNode)
       fail(
         "channel_short",
         `${port}: endpoints ${from} and ${to} share an ideal node across routed path ${path}`,
+        { subjects: recordSubjects([from, to, ...traces]) },
       )
   }
 }
@@ -228,6 +249,7 @@ function validateSingleEndedGround({
       fail(
         "channel_short",
         `${name}: contact ${groundedSourcePortId} is shorted to ground`,
+        { subjects: recordSubjects([groundedSourcePortId]) },
       )
   }
 }
