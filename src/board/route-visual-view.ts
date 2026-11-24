@@ -1,7 +1,6 @@
 import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import type { Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
-import { routeBoardBox, routeBounds } from "./admission-view"
 import {
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
@@ -14,6 +13,7 @@ import type {
   SourcePortId,
   SourceTraceId,
 } from "./ids"
+import { routeBoardBox, routeBounds } from "./plan-view"
 import type { CircuitJson } from "./schema"
 import {
   endpointPorts,
@@ -70,7 +70,7 @@ export interface RouteView extends RouteFrame {
 /** Bound the default number of sampled items in dense route drawings. */
 const ROUTE_DISPLAY_LIMIT = 160
 
-/** Deterministic display-only sampling; never changes the admitted copper or solver input. */
+/** Deterministic display-only sampling; never changes the selected copper or solver input. */
 export function routeDisplayItems<T>({
   items,
   limit = ROUTE_DISPLAY_LIMIT,

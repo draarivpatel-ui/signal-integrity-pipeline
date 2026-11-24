@@ -1,9 +1,9 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { GraphicsObject, Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
-import { routeBoardBox as admissionBoardBox } from "./admission-view"
 import type { CopperScope } from "./geometry/scope"
 import type { PcbTraceId, SourcePortId } from "./ids"
+import { routeBoardBox as planBoardBox } from "./plan-view"
 import {
   routeCircle as circle,
   routeNets as drawRouteNets,
@@ -19,7 +19,7 @@ import {
 } from "./route-visual-view"
 import type { CircuitJson } from "./schema"
 
-export { routeBounds } from "./admission-view"
+export { routeBounds } from "./plan-view"
 export {
   routeCanvas,
   routeFailure,
@@ -145,9 +145,9 @@ export function routePane({
   return drawing
 }
 
-/** Reuse the admission bounds for the debugger's board overlay. */
+/** Reuse the plan bounds for the debugger's board overlay. */
 export function routeBoardBox(circuit: CircuitJson): Viewbox {
-  return admissionBoardBox(cju([...circuit]))
+  return planBoardBox(cju([...circuit]))
 }
 
 /**
