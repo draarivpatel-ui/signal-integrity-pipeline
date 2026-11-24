@@ -74,7 +74,9 @@ export interface PlanVisualScene {
   cuts: readonly PlanVisualCut[]
   endpoints: readonly PlanVisualEndpoint[]
   links: readonly PlanVisualLink[]
+  summary?: { text: string; scopedText?: string }
   rows: readonly PlanHeaderRow[]
+  faultCode?: string
   faultPorts: ReadonlySet<SourcePortId>
   faultTraces: ReadonlySet<SourceTraceId>
   existingTraces: ReadonlySet<SourceTraceId>
