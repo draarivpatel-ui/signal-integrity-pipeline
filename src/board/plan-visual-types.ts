@@ -18,6 +18,12 @@ export const planColors = {
   failure: "#b91c1c",
 } as const
 
+/** Translucent pours leave traces and layer overlaps visible. */
+export const planPourFills = {
+  pink: "rgba(219,39,119,0.06)",
+  gray: "rgba(100,116,139,0.08)",
+} as const
+
 /** Distinct strokes for adjacent cuts, with the same colours in the ledger. */
 const CUT_COLORS = [
   "#0369a1",
