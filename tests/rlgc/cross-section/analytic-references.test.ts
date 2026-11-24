@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { calculateRlgc, type RlgcMatrices } from "../../../src/rlgc"
 import {
   assertPositiveDefinite,
-  sectionFixture,
+  crossSectionFixture,
 } from "../../fixtures/cross-section"
 import {
   coupledMicrostrip,
@@ -165,7 +165,7 @@ function coupledLineError({
 test("line parameters match analytic references", () => {
   for (const kind of ["microstrip", "stripline"] as const) {
     for (const count of [1, 2] as const) {
-      const crossSection = sectionFixture({ kind, count })
+      const crossSection = crossSectionFixture({ kind, count })
       const result = calculateRlgc({ crossSection })
       let maximum: number
       switch (count) {
@@ -186,6 +186,7 @@ test("line parameters match analytic references", () => {
         result.externalInductanceHenriesPerMeter,
         result.dielectricLossFaradsPerMeter,
         result.totalSkinResistanceOhmsPerMeterPerSqrtHz,
+        result.conductorSkinResistanceOhmsPerMeterPerSqrtHz,
       ]) {
         assertPositiveDefinite(matrix)
         for (let i = 0; i < count; i++) {

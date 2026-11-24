@@ -9,7 +9,7 @@ export interface CrossSectionConductor {
   thicknessMm: number
   conductivitySm?: number
 }
-/** An infinite equipotential reference surface, with copper on the side away from the signals. */
+/** An infinite equipotential reference surface, with copper on the side away from the conductors. */
 export interface CrossSectionPlane {
   zMm: number
   conductivitySm?: number
@@ -27,7 +27,7 @@ export interface CrossSection {
   planes: CrossSectionPlane[]
   dielectricLayers: CrossSectionDielectricLayer[]
 }
-/** Fixed, bounded discretization; increase panel count and extent independently to check convergence. */
+/** Fixed, bounded discretization; increase panel count and interface extent independently to check convergence. */
 export interface CrossSectionOptions {
   panelsPerEdge?: number
   /** Padding beyond the conductor projections, in cross-section spans or in plane spacings / π for stripline. */
@@ -87,8 +87,8 @@ export interface FieldRegion {
 /** Discretize one region with or without its dielectric layers. */
 export interface RegionMeshInput {
   region: FieldRegion
-  count: number
-  extent: number
+  panelsPerEdge: number
+  interfaceExtent: number
   isVacuum?: boolean
   includeDielectricLoss?: boolean
   facePanelCounts?: number[]
