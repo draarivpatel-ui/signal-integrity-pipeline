@@ -14,7 +14,11 @@ test("splits both conductor sidewalls at a dielectric boundary", () => {
       { zMm: 1, thicknessMm: 1, relativePermittivity: 3, lossTangent: 0.01 },
     ],
   })
-  const panels = buildRegionPanels({ region, count: 12, extent: 24 })
+  const panels = buildRegionPanels({
+    region,
+    panelsPerEdge: 12,
+    interfaceExtent: 24,
+  })
   for (const side of [-1, 1]) {
     const sidewall = panels.filter(
       (panel) => panel.conductorIndex === 0 && panel.tangentZ === side,
