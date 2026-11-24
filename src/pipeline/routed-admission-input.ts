@@ -1,22 +1,16 @@
 import {
-  type CircuitJsonSnapshot,
+  type CircuitJson,
   type SimulationPcbTransientChannelSimulation,
   validateCircuitRecords,
 } from "../board"
 import { type IbisSources, invalidIbisSource } from "../buffers"
-import {
-  Diagnostic,
-  type SafeId,
-  type Snapshot,
-  safeId,
-  snapshot,
-} from "../kernel"
+import { Diagnostic, type SafeId, safeId, snapshot } from "../kernel"
 import type { RoutedCompileOptions } from "../simulation"
 import { listChannelSimulations, validatedScopeDistanceMm } from "./signals"
 
 /** Board and model sources supplied to routed admission. */
 export interface RoutedAdmissionInput {
-  readonly circuitJson: CircuitJsonSnapshot
+  readonly circuitJson: CircuitJson
   readonly ibisSources: Readonly<IbisSources>
   readonly scopeDistanceMm?: number
   readonly materials?: RoutedCompileOptions["materials"]
@@ -75,7 +69,7 @@ function captureIbisSources(
 
 /** A named simulation declaration and its validated artifact ID. */
 export interface AdmittedChannelSimulation {
-  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
+  channelSimulation: SimulationPcbTransientChannelSimulation
   simulationPcbTransientChannelSimulationId: SafeId
 }
 
@@ -111,7 +105,7 @@ export function captureRoutedAdmissionInput(
   input: RoutedAdmissionInput,
 ): RoutedAdmissionInput {
   return Object.freeze({
-    circuitJson: snapshot(input.circuitJson),
+    circuitJson: structuredClone(input.circuitJson),
     scopeDistanceMm: input.scopeDistanceMm,
     materials: snapshot(input.materials),
     ibisSources: captureIbisSources(input.ibisSources),

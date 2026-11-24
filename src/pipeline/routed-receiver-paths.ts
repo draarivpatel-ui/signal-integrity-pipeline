@@ -1,4 +1,5 @@
-import { circuitJsonDb, endpointPorts, type LaneMapping } from "../board"
+import { cju } from "@tscircuit/circuit-json-util"
+import { endpointPorts, type LaneMapping } from "../board"
 import {
   extractedNonrailSourceTraceIds,
   type RoutedTraceCut,
@@ -17,7 +18,7 @@ export function routedReceiverMappings({
   cuts: readonly RoutedTraceCut[]
 }): LaneMapping[] {
   const { circuit, settings, driverReceiverChannels } = prepared
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const graphs = receiverGraphs({
     db,
     circuit,

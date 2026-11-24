@@ -87,7 +87,7 @@ export interface Declarations {
   models: PipelineIbisModel[]
   nodes: CircuitNodes
   plans: SimulationPlan[]
-  ports: ReadonlyMap<SourcePortId, Snapshot<SourcePort>>
+  ports: ReadonlyMap<SourcePortId, SourcePort>
 }
 
 /** Deck lines and electrical node evidence for the modeled voltage sources and passives. */

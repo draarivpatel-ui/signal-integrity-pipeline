@@ -1,6 +1,6 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbPort } from "circuit-json"
 import { hypotenuse, type Snapshot } from "../kernel"
-import { circuitJsonDb } from "./circuit-json-db"
 import { polygonContains } from "./geometry/polygon"
 import { resolveRouteVias } from "./geometry/ports"
 import type { CopperScope } from "./geometry/scope"
@@ -22,7 +22,7 @@ import {
   simplifyRouteWires,
 } from "./route-simplify"
 import { unionRouteWires } from "./route-union"
-import type { CircuitJsonSnapshot, LayerRef } from "./schema"
+import type { CircuitJson, LayerRef } from "./schema"
 import { type BoardStackup, stackupFromCircuitJson } from "./stackup"
 
 /** Millimeter tolerance for matching ports, wire ends, via contacts and lateral joins. */
@@ -142,7 +142,7 @@ function portTouches({
   layer,
   point,
 }: {
-  port: Snapshot<PcbPort>
+  port: PcbPort
   layer: LayerRef
   point: Snapshot<RouteXY>
 }): boolean {
@@ -321,8 +321,8 @@ function traceSections({
   trace,
 }: {
   firstWireId: number
-  circuit: CircuitJsonSnapshot
-  trace: Snapshot<PcbTrace>
+  circuit: CircuitJson
+  trace: PcbTrace
 }): TraceSections {
   const viaContacts: ViaContact[] = []
   const wires: RouteWire[] = []
@@ -439,7 +439,7 @@ function sliceParallelRoutes({
 
 /** Board circuit and the copper to sweep into longitudinal sections. */
 interface RouteSectionOptions {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   scope: Snapshot<CopperScope>
 }
 
@@ -456,7 +456,7 @@ export function* routeSectionSteps({
     pours: [],
     warnings: [],
   }
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   geometry.pours = db.pcb_copper_pour.list().flatMap((pour): RoutePour[] => {
     if (pour.shape !== "brep")
       throw new Error(
