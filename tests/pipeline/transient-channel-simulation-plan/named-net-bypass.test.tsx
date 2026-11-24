@@ -7,7 +7,7 @@ import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("a named net reports its bypassed cuts as a short", async () => {
+test("a named net reports its bypassed traces as a short", async () => {
   const circuitJson = await renderSignals({
     tree: <DaisyChainFixture routeFinalLeg bypassFinalLeg namedNet />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],

@@ -23,7 +23,7 @@ test("a routed receiver segment survives an ideal driver segment", async () => {
   assert.ok(trace?.type === "pcb_trace" && trace.source_trace_id)
   assert.equal(sections.copperScope.channelPcbTraceIds.length, 1)
   assert.deepEqual(
-    bindings.receiverPaths.map((mapping) => mapping.sourceTraceId),
+    bindings.receiverPaths.map((receiverPath) => receiverPath.sourceTraceId),
     [trace.source_trace_id],
   )
 })

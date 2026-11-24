@@ -8,7 +8,7 @@ import { expectPlanPcbSnapshot } from "../../fixtures/plan-pcb-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("a named net can be split along a two-cut routed path", async () => {
+test("a named net can be split along a two-trace routed path", async () => {
   const circuitJson = await renderSignals({
     tree: <DaisyChainFixture routeFinalLeg namedNet />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
@@ -30,6 +30,6 @@ test("a named net can be split along a two-cut routed path", async () => {
     plan,
     expectedTraceCount: 2,
     testPath: import.meta.path,
-    caption: "DATA names the full two-cut path",
+    caption: "DATA names the full two-trace path",
   })
 })

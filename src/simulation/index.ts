@@ -9,7 +9,7 @@
  */
 
 export { branchSaves } from "./branch-saves"
-export { connectionGraph, connectionPath } from "./connection-paths"
+export { buildConnectionGraph, findConnectionPath } from "./connection-paths"
 export {
   generalDeclarations,
   modelRunDefinition,
@@ -23,9 +23,9 @@ export {
 } from "./netlist"
 /** @internal */
 export {
+  buildReceiverGraphs,
+  findReceiverPath,
   type ReceiverGraphs,
-  receiverGraphs,
-  receiverPath,
 } from "./receiver-paths"
 export { RouteBindingsSolver } from "./route-bindings"
 export type {
