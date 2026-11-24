@@ -96,6 +96,7 @@ function buildChannelPlan({
         refinement: BASE_REFINEMENT,
         stepSeconds: prepared.stepSeconds,
         durationSeconds: prepared.durationSeconds,
+        materials: input.materials,
       }),
       artifactPrefix,
     }),

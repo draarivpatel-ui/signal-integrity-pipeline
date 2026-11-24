@@ -23,6 +23,7 @@ export interface RouteCompileOptions {
   readonly refinement: number
   readonly durationSeconds: number
   readonly stepSeconds: number
+  readonly materials?: DielectricMaterials
   panels?: number
   currentToleranceA?: number
   cellsPerRise?: number
