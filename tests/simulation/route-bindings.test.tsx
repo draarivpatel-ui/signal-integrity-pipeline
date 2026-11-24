@@ -3,12 +3,12 @@ import assert from "node:assert/strict"
 import { RouteSectionsSolver } from "../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../src/pipeline"
 import { RouteBindingsSolver } from "../../src/simulation"
-import { channelPlanInput } from "../fixtures/routed-fixture"
+import { renderTwoTracePlanInput } from "../fixtures/two-trace-plan-input"
 import { vendorAvailable } from "../fixtures/vendor-models"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
-  const input = await channelPlanInput()
+  const input = await renderTwoTracePlanInput()
   const planner = new TransientChannelSimulationPlanSolver(input)
   planner.solve()
   const plan = planner.getOutput().value[0]

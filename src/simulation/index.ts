@@ -14,9 +14,9 @@ export {
   generalDeclarations,
   modelRunDefinition,
 } from "./declarations"
+export { extractedNonrailSourceTraceIds } from "./ideal-connectivity"
 export {
   electricalSources,
-  hasBuiltInPassiveModel,
   namespaceSpice,
   voltageSourceTerminals,
 } from "./netlist"
@@ -26,6 +26,16 @@ export {
   receiverPath,
 } from "./receiver-paths"
 export { RouteBindingsSolver } from "./route-bindings"
+export type {
+  RouteBindingsInput,
+  RouteCompileOptions,
+  RoutedBindings,
+  RoutedCapture,
+  RoutedDeck,
+  RouteNetworkInput,
+  ScopedRouteBindingsInput,
+  TraceContacts,
+} from "./route-inputs"
 export { type RouteLadder, routeLadder } from "./route-ladder"
 export { RouteNetworkSolver } from "./route-network"
 export { routeOblique } from "./route-oblique"
@@ -43,18 +53,7 @@ export {
   numberCircuitNodes,
   validateRoutedNodes,
 } from "./routed-nodes"
-export type {
-  RouteBindingsInput,
-  RoutedBindings,
-  RoutedCapture,
-  RoutedCompileOptions,
-  RoutedDeck,
-  RoutedTraceCut,
-  RouteNetworkInput,
-  ScopedRouteBindingsInput,
-} from "./routed-types"
 export { type SignalRailIds, signalRailIds } from "./signal-rails"
-export { extractedNonrailSourceTraceIds } from "./source-node-groups"
 export { transmittedBits } from "./stimulus"
 export type {
   CircuitNodes,

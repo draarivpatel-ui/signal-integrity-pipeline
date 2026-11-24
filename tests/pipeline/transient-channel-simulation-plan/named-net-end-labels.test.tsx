@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -19,11 +20,11 @@ test("end labels describe a linear path through an unlabeled contact", async () 
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.routedTraceCuts.length, 2)
-  assert.equal(bindings.mappings.length, 2)
+  assert.equal(bindings.traceContacts.length, 2)
+  assert.equal(bindings.receiverPaths.length, 2)
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   assert.equal(new Set(plan.sections.requiredSourcePortIds.map(node)).size, 3)
   expectPlanPcbSnapshot({

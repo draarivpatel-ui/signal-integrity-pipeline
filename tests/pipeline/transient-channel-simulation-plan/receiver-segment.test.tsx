@@ -3,9 +3,9 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
 test("a routed receiver segment survives an ideal driver segment", async () => {
   const circuitJson = await renderSignals({
@@ -18,12 +18,12 @@ test("a routed receiver segment survives an ideal driver segment", async () => {
   })
   solver.solve()
   const [{ bindings, sections }] = solver.getOutput().value
-  const [traceId] = sections.copperScope.channelPcbTraceIds
-  const trace = cju(circuitJson).pcb_trace.get(traceId)
+  const [pcbTraceId] = sections.copperScope.channelPcbTraceIds
+  const trace = cju(circuitJson).pcb_trace.get(pcbTraceId)
   assert.ok(trace?.type === "pcb_trace" && trace.source_trace_id)
   assert.equal(sections.copperScope.channelPcbTraceIds.length, 1)
   assert.deepEqual(
-    bindings.mappings.map((mapping) => mapping.sourceTraceId),
+    bindings.receiverPaths.map((mapping) => mapping.sourceTraceId),
     [trace.source_trace_id],
   )
 })

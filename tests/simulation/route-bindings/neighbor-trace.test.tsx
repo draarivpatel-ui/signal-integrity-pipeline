@@ -2,6 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { simulation } from "@tscircuit/core"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { RouteBindingsSolver } from "../../../src/simulation"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
@@ -53,7 +54,7 @@ test("binding separates neighboring extracted ports while planning maps the decl
   const planner = new TransientChannelSimulationPlanSolver({
     circuitJson,
     ibisSources: { "models/sn74lvc1g04.ibs": routedVisualIbis },
-    scopeDistanceMm: 1,
+    nearbyGapMm: 1,
   })
   planner.solve()
   const [{ bindings, sections }] = planner.getOutput().value
@@ -61,16 +62,19 @@ test("binding separates neighboring extracted ports while planning maps the decl
   const { extractedPcbTraceIds, channelPcbTraceIds } = copperScope
   assert.equal(channelPcbTraceIds.length, 1)
   assert.equal(extractedPcbTraceIds.length, 2)
-  assert.equal(bindings.mappings.length, 1)
+  assert.equal(bindings.receiverPaths.length, 1)
   const neighborPcbTraceId = extractedPcbTraceIds.find(
     (pcbTraceId) => !channelPcbTraceIds.includes(pcbTraceId),
   )
   assert.ok(neighborPcbTraceId)
-  const db = cju([...bindings.circuitJson])
+  const db = cju(cloneCircuitJson(bindings.circuitJson))
   const neighborSourceTraceId =
     db.pcb_trace.get(neighborPcbTraceId)?.source_trace_id
   assert.ok(neighborSourceTraceId)
-  assert.notEqual(bindings.mappings[0].sourceTraceId, neighborSourceTraceId)
+  assert.notEqual(
+    bindings.receiverPaths[0].sourceTraceId,
+    neighborSourceTraceId,
+  )
   const neighborSourcePortIds = db.source_trace.get(
     neighborSourceTraceId,
   )?.connected_source_port_ids

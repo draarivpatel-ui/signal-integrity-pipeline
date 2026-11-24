@@ -1,32 +1,34 @@
 import type { GraphicsObject, Text } from "graphics-debug"
 import {
+  estimateTextWidthEms,
   PLAN_BAND_GAP,
   PLAN_LINE_STEP,
-  textWidth,
   wrapPlanText,
 } from "../../src/board/plan-header"
-import { routeBounds } from "../../src/board/plan-view"
+import { getPointBounds } from "../../src/board/plan-view"
 
 /** Balance a two-line caption around its midpoint without breaking words. */
 function captionLines({
   text,
-  width,
+  maxWidthEms,
 }: {
   text: string
-  width: number
+  maxWidthEms: number
 }): string[] {
-  const wrapped = wrapPlanText({ text, width })
+  const wrapped = wrapPlanText({ text, maxWidthEms })
   if (wrapped.length !== 2) return wrapped
   const words = text.split(" ")
   let best = wrapped[0].length
-  let difference = Math.abs(textWidth(wrapped[0]) - textWidth(wrapped[1]))
+  let difference = Math.abs(
+    estimateTextWidthEms(wrapped[0]) - estimateTextWidthEms(wrapped[1]),
+  )
   let end = 0
   for (const word of words.slice(0, -1)) {
     end += word.length
-    const left = textWidth(text.slice(0, end))
-    const right = textWidth(text.slice(end + 1))
+    const left = estimateTextWidthEms(text.slice(0, end))
+    const right = estimateTextWidthEms(text.slice(end + 1))
     const gap = Math.abs(left - right)
-    if (Math.max(left, right) <= width && gap < difference) {
+    if (Math.max(left, right) <= maxWidthEms && gap < difference) {
       best = end
       difference = gap
     }
@@ -49,7 +51,7 @@ export function withPlanCaption({
     throw new Error("A test caption requires a framed plan drawing")
   const { fontSize: size, color } = header
 
-  const board = routeBounds([
+  const board = getPointBounds([
     ...(drawing.polygons || []).flatMap(({ points }) => points),
     ...(drawing.lines || [])
       .filter(({ layer }) => layer !== "header")
@@ -60,7 +62,10 @@ export function withPlanCaption({
 
   const x = frame.center.x
   const firstY = board.minY - size * (PLAN_BAND_GAP + 0.5)
-  const texts = captionLines({ text: caption, width: frame.width / size }).map(
+  const texts = captionLines({
+    text: caption,
+    maxWidthEms: frame.width / size,
+  }).map(
     (text, i): Text => ({
       x,
       y: firstY - size * PLAN_LINE_STEP * i,

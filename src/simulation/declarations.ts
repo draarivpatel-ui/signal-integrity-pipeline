@@ -105,8 +105,8 @@ function componentScope({
  */
 export function generalDeclarations({
   circuit,
-  mappings,
-  routedTraceCuts,
+  receiverPaths,
+  traceContacts,
   additionalSourceTraceIds,
   modeling,
   controls,
@@ -157,12 +157,12 @@ export function generalDeclarations({
     fail("ibis_model", "At least one serialized native IBIS model required")
   const { nodes, cuts } = resolveRoutedNodes({
     circuit,
-    mappings,
-    routedTraceCuts,
+    receiverPaths,
+    traceContacts,
     additionalSourceTraceIds,
     modeling,
   })
-  const endpoints = requiredContacts({ mappings, cuts })
+  const endpoints = requiredContacts({ receiverPaths, cuts })
   const passiveContacts = passiveModelContacts({ db, modeling })
   const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
   const sourceNets = new Set(
@@ -345,10 +345,10 @@ export function generalDeclarations({
       validateRoutedContacts({
         db,
         experimentName: experiment.name,
-        endpoints,
+        requiredContactsBySourcePortId: endpoints,
         scopedModels,
-        stateIds,
-        passiveContacts,
+        runStateSourcePortIds: stateIds,
+        passiveModelSourcePortIds: passiveContacts,
       })
       for (const stimulus of stimuli) {
         if (stimulusIds.has(stimulus.source_port_id))

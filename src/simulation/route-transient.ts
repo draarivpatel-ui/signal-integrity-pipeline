@@ -3,7 +3,7 @@ import { type Produced, rootScope, sha256, snapshot } from "../kernel"
 import { type SpiceProbeRow, spiceProbeRows } from "../observation"
 import { invoke, type SolverContext, type SolverRequest } from "../solver"
 import { fail } from "./diagnostics"
-import type { RoutedCapture, RoutedDeck } from "./routed-types"
+import type { RoutedCapture, RoutedDeck } from "./route-inputs"
 
 /** The compiled deck and injected engine capabilities for a routed transient. */
 export interface RouteTransientInput {
