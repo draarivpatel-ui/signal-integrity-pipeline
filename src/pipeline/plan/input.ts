@@ -73,7 +73,7 @@ export interface ValidatedChannelSimulation {
   simulationPcbTransientChannelSimulationId: SafeId
 }
 
-/** Validated search radius and ordered declarations after board validation. */
+/** Validated nearby copper gap and ordered declarations after board validation. */
 export interface ValidatedBoard {
   nearbyGapMm: number
   channelSimulations: ValidatedChannelSimulation[]

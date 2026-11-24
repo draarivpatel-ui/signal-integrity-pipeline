@@ -232,7 +232,7 @@ test("full unrouted check reaches the segment after a series passive", async () 
     sources: inverterSources,
   })
   assert.equal(
-    prepared.settings.channelTraces.length,
+    prepared.settings.traceContacts.length,
     1,
     "only the routed trace before RS is a channel trace",
   )
@@ -603,11 +603,9 @@ function declarationInput(
 ): DeclarationInput {
   return {
     circuit: prepared.circuit,
-    receiverPaths: prepared.settings.channelTraces.map((channelTrace) => ({
-      channelName: channelTrace.port,
-      sourceTraceId: channelTrace.sourceTraceId!,
-      fromSourcePortId: channelTrace.from.sourcePortId!,
-      toSourcePortId: channelTrace.to.sourcePortId!,
+    receiverPaths: prepared.settings.traceContacts.map((contacts) => ({
+      ...contacts,
+      channelName: contacts.sourceTraceId,
     })),
     modeling: prepared.settings,
     controls: prepared.controls,
