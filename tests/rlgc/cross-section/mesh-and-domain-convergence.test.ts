@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { calculateRlgc, type RlgcMatrices } from "../../../src/rlgc"
-import { sectionFixture } from "../../fixtures/cross-section"
+import { crossSectionFixture } from "../../fixtures/cross-section"
 
 /** Relative coefficient error, including mutual coefficients rather than just a diagonal norm. */
 function error({
@@ -36,7 +36,7 @@ function change({ a, b }: { a: RlgcMatrices; b: RlgcMatrices }): number {
 }
 
 test("mesh and interface extent converge", () => {
-  const fixture = sectionFixture({ kind: "microstrip", count: 2 })
+  const fixture = crossSectionFixture({ kind: "microstrip", count: 2 })
   const base = calculateRlgc({ crossSection: fixture })
   const fine = calculateRlgc({
     crossSection: fixture,
