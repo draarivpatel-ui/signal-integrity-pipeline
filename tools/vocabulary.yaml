@@ -84,7 +84,7 @@ domain:
   coupling: mutual electrical or magnetic interaction between conductors
   crossover: the frequency band where conductor loss turns from its DC value into skin loss
   cursor: the current position while traversing an ordered route
-  cut: an intentional break in physical copper
+  cut: a deliberate break in physical copper or a boundary in a geometric sweep
   deck: an input file for a solver (the ngspice netlist)
   declare: plan experiments and probes from the board's simulation records before any solver runs
   delay: time needed for a signal edge to propagate through a line
@@ -140,7 +140,7 @@ domain:
   leg: one signal path of a differential pair, positive or negative
   clearance: space left free around a feature
   vertex: a point in a connection graph, represented by a source contact, ideal group or SPICE node
-  lateral: distance transverse to a routed line in the board plane
+  lateral: across a wire within the board plane
   layer: one copper or insulating sheet in the stackup
   ledger: the single record of every artifact path the pipeline writes; a second write to a path fails
   longitudinal: along a route or trace
@@ -214,7 +214,9 @@ domain:
   sine: the trigonometric measure used here to compare route directions
   skin: concentration of alternating conductor current near its surface
   slab: a flat layer of laminate or mask in a cross-section
-  slice: one local cross-section of routed conductors and reference surfaces
+  sweep: partition geometry by visiting consecutive boundaries in order
+  section: a longitudinal interval with the same wires and reference surfaces
+  slice: one local cross-section of conductors and reference surfaces
   snapshot: a copied and frozen domain value published by a completed stage
   solver: an external program that does the physics (ngspice), or one stepped pipeline stage
   span: the range of layers a via crosses
@@ -248,7 +250,7 @@ domain:
   visualize: draw a solver's current physical work in the shared graphics atlas
   waveform: voltage over time at one probe
   weight: a switching coefficient extracted from IBIS voltage and current data
-  wire: a piece of copper that carries a signal; in plain words, a trace or via
+  wire: one straight planar conductor derived from a PCB trace
   word: a contiguous non-whitespace field in an ASCII raw file or diagnostic
 
 abbreviations:
@@ -308,7 +310,7 @@ general:
   - entry error event expression field file first format graph grid hash index input item key
   - kind label last level line list location log map mapping member message metadata method mode name
   - namespace number option options order output owner package parent part pattern payload piece
-  - plan policy prefix progress record reference request rest result root row schema section selection
+  - plan policy prefix progress record reference request rest result root row schema selection
   - selector series source state status table text title token tree type unit validation value
   # program runs and tools
   - adapter comparison conversion converter diagram directory domain engine fast faster invocation tool
@@ -339,10 +341,11 @@ general:
   # irregular plurals the checker cannot reduce
   - indices matrices stimuli
   # other everyday words
-  - seed
+  - overlap tessellate hypotenuse touch
 
 avoid:
   centre: center
+  transverse: lateral
   col: column
   ctx: context
   eps: epsilon

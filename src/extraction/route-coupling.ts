@@ -1,4 +1,4 @@
-import type { RouteSlice, RouteWire } from "../board"
+import type { RouteSection, RouteWire } from "../board"
 import type { Snapshot } from "../kernel"
 import type { RouteCoefficients } from "./route-lines"
 
@@ -7,7 +7,7 @@ const COUPLING_THRESHOLD = 0.005
 
 /** Solved normalized coupling and retention decision for one route-wire pair. */
 export interface RouteCoupling {
-  wires: RouteWire["id"][]
+  wires: RouteWire["wireIndex"][]
   capacitive: number
   inductive: number
   retained: boolean
@@ -22,10 +22,10 @@ export function routeCoupling({
   solve,
   records,
 }: {
-  slice: Snapshot<RouteSlice>
-  solve: (slice: Snapshot<RouteSlice>) => RouteCoefficients
+  slice: Snapshot<RouteSection>
+  solve: (slice: Snapshot<RouteSection>) => RouteCoefficients
   records: RouteCoupling[]
-}): Snapshot<RouteSlice>[] {
+}): Snapshot<RouteSection>[] {
   const groups = slice.wires.map((_, i) => i)
   for (let i = 0; i < slice.wires.length; i++) {
     for (let j = i + 1; j < slice.wires.length; j++) {
@@ -38,7 +38,7 @@ export function routeCoupling({
         Math.abs(line.L[0][1]) / Math.sqrt(line.L[0][0] * line.L[1][1])
       const retained = Math.max(capacitive, inductive) >= COUPLING_THRESHOLD
       records.push({
-        wires: [first.id, second.id],
+        wires: [first.wireIndex, second.wireIndex],
         capacitive,
         inductive,
         retained,
