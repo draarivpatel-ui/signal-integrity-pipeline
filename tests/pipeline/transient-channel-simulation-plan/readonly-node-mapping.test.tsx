@@ -21,7 +21,7 @@ test("the published SPICE names cannot change the node lookup", async () => {
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  const port = bindings.mappings[0].from
+  const port = bindings.receiverPaths[0].fromSourcePortId
   const original = nodes.node(port)
   assert.notEqual(original, "0")
   assert.throws(() => {

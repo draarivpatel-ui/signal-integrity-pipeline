@@ -19,7 +19,7 @@ test("rejects a partially routed channel bypass with parallel passives", async (
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.routedTraceCuts.length, 1)
+  assert.equal(bindings.traceContacts.length, 1)
   assert.throws(
     () =>
       circuitNodes({

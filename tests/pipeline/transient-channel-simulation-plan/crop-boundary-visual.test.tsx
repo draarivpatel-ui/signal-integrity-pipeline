@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { Box } from "@flatten-js/core"
 import { TwoTraceBoard } from "../../../examples/routed/two-trace-board"
 import { clipPlanLines } from "../../../src/board/plan-view"
-import { assertRouteVisual } from "../../fixtures/route-visual-snapshot"
+import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 import { renderSignals } from "../../fixtures/signal-render"
 
 test("keeps copper from a crop boundary to an interior trace point", async () => {
@@ -30,7 +30,7 @@ test("keeps copper from a crop boundary to an interior trace point", async () =>
     lines.map((line) => line.points.map(({ x, y }) => ({ x, y }))),
     [[start, end]],
   )
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing: {
       lines: [
         {

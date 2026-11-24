@@ -19,9 +19,9 @@ test("mapping-only declarations require the selected model for physical cut cont
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
   const {
-    routedTraceCuts,
+    traceContacts,
     circuitJson: plannedCircuitJson,
-    mappings,
+    receiverPaths,
     controls,
   } = bindings
   const circuit = cloneCircuitJson(plannedCircuitJson)
@@ -37,13 +37,13 @@ test("mapping-only declarations require the selected model for physical cut cont
         circuit,
         controls,
         modeling,
-        mappings,
-        routedTraceCuts,
+        receiverPaths,
+        traceContacts,
       }),
     error,
   )
   assert.throws(
-    () => generalDeclarations({ circuit, controls, modeling, mappings }),
+    () => generalDeclarations({ circuit, controls, modeling, receiverPaths }),
     error,
   )
 })

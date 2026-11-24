@@ -36,7 +36,7 @@ test("pull-ups cannot hide an ideal short between differential interiors", async
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
   assert.deepEqual(
-    bindings.mappings.map(({ sourceTraceIds }) => sourceTraceIds?.length),
+    bindings.receiverPaths.map(({ sourceTraceIds }) => sourceTraceIds?.length),
     [2, 2],
   )
   assert.throws(

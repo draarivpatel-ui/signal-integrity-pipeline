@@ -7,8 +7,8 @@ import type { CircuitJson } from "../../../src/board"
 import { sha256 } from "../../../src/kernel"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { listChannelSimulations } from "../../../src/pipeline/signals"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 import { renderCoreSignals } from "../../support/core-render"
 
 /** Render a second declaration with its own name on the same board. */
@@ -41,7 +41,7 @@ function renderTwoChannelSimulations(
 test("all channel simulations and the manifest use the same captured inputs", async () => {
   const circuitJson = await renderTwoChannelSimulations("ALT")
   const ibisSources = { [inverterModelPath]: routedVisualIbis }
-  const input = { circuitJson, ibisSources, scopeDistanceMm: 1 }
+  const input = { circuitJson, ibisSources, nearbyGapMm: 1 }
   const solver = new TransientChannelSimulationPlanSolver(input)
   solver.step()
   assert.equal(solver.solved, false)
@@ -57,7 +57,7 @@ test("all channel simulations and the manifest use the same captured inputs", as
     listChannelSimulations(capturedInput.circuitJson)[1],
     originalChannelSimulation,
   )
-  input.scopeDistanceMm = 2
+  input.nearbyGapMm = 2
   solver.step()
   const {
     value: plans,

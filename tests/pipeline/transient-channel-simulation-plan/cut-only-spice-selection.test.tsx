@@ -20,7 +20,7 @@ test("a cut-only contact needs a passive selected for the deck", async () => {
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.routedTraceCuts.length, 3)
+  assert.equal(bindings.traceContacts.length, 3)
   const load = cju(
     cloneCircuitJson(bindings.circuitJson),
   ).source_component.getWhere({

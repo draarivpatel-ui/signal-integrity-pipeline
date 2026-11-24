@@ -18,8 +18,8 @@ test("a collapsed receiver reports cycle evidence without fabricating a lane pat
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const [cut] = bindings.routedTraceCuts
-  assert.equal(bindings.mappings.length, 0)
+  const [cut] = bindings.traceContacts
+  assert.equal(bindings.receiverPaths.length, 0)
   assert.throws(
     () =>
       circuitNodes({

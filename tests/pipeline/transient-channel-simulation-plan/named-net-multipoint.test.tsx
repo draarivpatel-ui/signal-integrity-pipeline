@@ -55,8 +55,8 @@ test("a multipoint ideal trace can label the junction between routed cuts", asyn
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  assert.equal(bindings.routedTraceCuts.length, 2)
-  assert.equal(bindings.mappings[1]?.sourceTraceIds?.length, 2)
+  assert.equal(bindings.traceContacts.length, 2)
+  assert.equal(bindings.receiverPaths[1]?.sourceTraceIds?.length, 2)
   assert.equal(node(mid.source_port_id), node(join.source_port_id))
   assert.equal(new Set(sections.requiredSourcePortIds.map(node)).size, 3)
 })

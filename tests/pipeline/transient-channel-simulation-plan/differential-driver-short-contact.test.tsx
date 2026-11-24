@@ -19,7 +19,7 @@ test("names the physical driver contacts shorted between P and N", async () => {
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [positive, negative] = bindings.mappings
+  const [positive, negative] = bindings.receiverPaths
   assert.ok(positive)
   assert.ok(negative)
   assert.throws(
@@ -31,7 +31,7 @@ test("names the physical driver contacts shorted between P and N", async () => {
     {
       domain: "simulation",
       code: "channel_short",
-      message: `channel_short: BUS: negative contact ${negative.from} is shorted to ${positive.from}`,
+      message: `channel_short: BUS: negative contact ${negative.fromSourcePortId} is shorted to ${positive.fromSourcePortId}`,
     },
   )
 })

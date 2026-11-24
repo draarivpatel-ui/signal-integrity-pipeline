@@ -18,7 +18,9 @@ test("a modeled endpoint beyond the receiver needs its own run state", async () 
   solver.solve()
   const [{ bindings, sections, simulationPcbTransientChannelSimulationId }] =
     solver.getOutput().value
-  const receiverPorts = bindings.mappings.flatMap(({ from, to }) => [from, to])
+  const receiverPorts = bindings.receiverPaths.flatMap(
+    ({ fromSourcePortId: from, toSourcePortId: to }) => [from, to],
+  )
   const loadSourcePortId = sections.requiredSourcePortIds.find(
     (port) => !receiverPorts.includes(port),
   )

@@ -23,8 +23,8 @@ test("a wholly ideal single-ended channel still rejects a grounded signal contac
     cloneCircuitJson(bindings.circuitJson),
   ).simulation_pcb_driver_receiver_channel.list()
   assert.ok("source_port_id" in driver)
-  assert.deepEqual(bindings.mappings, [])
-  assert.deepEqual(bindings.routedTraceCuts, [])
+  assert.deepEqual(bindings.receiverPaths, [])
+  assert.deepEqual(bindings.traceContacts, [])
   assert.throws(
     () =>
       circuitNodes({

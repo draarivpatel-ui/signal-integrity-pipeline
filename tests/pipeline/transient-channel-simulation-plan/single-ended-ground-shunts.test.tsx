@@ -42,9 +42,9 @@ test("ground shunts do not create a bypass across a single-ended load cut", asyn
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  assert.equal(bindings.routedTraceCuts.length, 1)
-  assert.deepEqual(bindings.mappings, [])
-  const [{ fromSourcePortId, toSourcePortId }] = bindings.routedTraceCuts
+  assert.equal(bindings.traceContacts.length, 1)
+  assert.deepEqual(bindings.receiverPaths, [])
+  const [{ fromSourcePortId, toSourcePortId }] = bindings.traceContacts
   const { node } = circuitNodes({
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),

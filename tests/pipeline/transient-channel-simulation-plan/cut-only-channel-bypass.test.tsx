@@ -20,7 +20,7 @@ test("rejects an ideal bypass past the declared receiver", async () => {
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.routedTraceCuts.length, 2)
+  assert.equal(bindings.traceContacts.length, 2)
   expect(circuitJson).toMatchPcbSnapshot(import.meta.path)
   assert.throws(
     () =>

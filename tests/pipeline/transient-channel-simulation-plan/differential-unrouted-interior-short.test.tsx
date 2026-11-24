@@ -35,7 +35,7 @@ test("binding rejects an ideal short between unrouted differential interiors", a
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
   assert.deepEqual(
-    bindings.mappings.map(({ sourceTraceIds }) => sourceTraceIds?.length),
+    bindings.receiverPaths.map(({ sourceTraceIds }) => sourceTraceIds?.length),
     [2, 2],
   )
   assert.throws(

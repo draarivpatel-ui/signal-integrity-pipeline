@@ -9,6 +9,7 @@ export {
   type ConnectivityMap,
   crossesDifferentialLegs,
   getSourcePortConnectivityMapFromCircuitJson,
+  hasBuiltInPassiveModel,
   type PassiveBridge,
   passiveBridges,
   sourceConnections,
@@ -21,10 +22,10 @@ export { type CopperScope, channelCopperScope } from "./geometry/scope"
 export type {
   CopperPoint,
   CopperPolygon,
-  LaneMapping,
   LaneModeling,
   PcbTrace,
   PortSelector,
+  ReceiverTracePath,
   RoutedPoint,
   RoutePoint,
   SourcePort,
@@ -37,17 +38,17 @@ export type {
   SourceTraceId,
 } from "./ids"
 export type { PlanHeaderRow } from "./plan-header"
-export { pinName, planPorts } from "./plan-view"
-export { planDrawing } from "./plan-visual"
+export { getPinName, indexPlanPorts } from "./plan-view"
+export { renderPlanDrawing } from "./plan-visual"
 export {
-  type PlanVisualCut,
+  getTraceColor,
+  type PlanOverlay,
+  type PlanTrace,
   type PlanVisualEndpoint,
-  type PlanVisualLink,
   type PlanVisualScene,
   planColors,
-  planCutColor,
 } from "./plan-visual-types"
-export type { RouteSectionsInput } from "./route-sections-solver"
+export type { RouteSectionsInput } from "./route-sections-input"
 export type {
   CircuitJson,
   SimulationExperiment,

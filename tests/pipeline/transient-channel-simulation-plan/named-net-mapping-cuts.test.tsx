@@ -19,12 +19,12 @@ test("mapping-only multi-receiver paths cut each routed trace once", async () =>
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.mappings.length, 2)
-  assert.equal(bindings.mappings[1].sourceTraceIds?.length, 2)
+  assert.equal(bindings.receiverPaths.length, 2)
+  assert.equal(bindings.receiverPaths[1].sourceTraceIds?.length, 2)
   const { node } = circuitNodes({
     circuit: cloneCircuitJson(bindings.circuitJson),
     modeling: bindings.modeling,
-    mappings: bindings.mappings,
+    receiverPaths: bindings.receiverPaths,
   })
   assert.equal(new Set(plan.sections.requiredSourcePortIds.map(node)).size, 3)
 })

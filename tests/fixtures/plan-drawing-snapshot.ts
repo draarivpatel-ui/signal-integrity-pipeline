@@ -6,12 +6,12 @@ import { withPlanCaption } from "./plan-caption"
 
 /** Round drawing coordinates at the precision shared by the supported JavaScript engines. */
 const SNAPSHOT_DECIMAL_PLACES = 6
-/** Export the atlas at a fixed size for snapshot comparison. */
+/** Export the plan drawing at a fixed size for snapshot comparison. */
 const SNAPSHOT_WIDTH = 1100
 const SNAPSHOT_HEIGHT = 800
 
 /** Compare actual exported SVG, including explicit text and fills; snapshots contain no vendor data. */
-export function assertRouteVisual({
+export function assertPlanDrawingSnapshot({
   drawing,
   module,
   name,
@@ -29,7 +29,7 @@ export function assertRouteVisual({
     "__snapshots__",
     `${name}.snap.svg`,
   )
-  // Ignore sub-micro-atlas-unit V8/JavaScriptCore rounding in display coordinates only.
+  // Ignore sub-micro-drawing-unit V8/JavaScriptCore rounding in display coordinates only.
   const picture = caption ? withPlanCaption({ drawing, caption }) : drawing
   const serialized = JSON.stringify(picture, (_key, value) => {
     if (typeof value === "number")
@@ -43,7 +43,7 @@ export function assertRouteVisual({
     backgroundColor: "white",
     includeTextLabels: false,
   })
-  if (process.env.UPDATE_ROUTED_VISUALS === "1") {
+  if (process.env.UPDATE_PLAN_DRAWINGS === "1") {
     mkdirSync(join(path, ".."), { recursive: true })
     writeFileSync(path, svg)
   }

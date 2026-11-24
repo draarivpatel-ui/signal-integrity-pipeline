@@ -31,7 +31,7 @@ test("ground shunts load the partial differential path without joining it", asyn
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  assert.equal(bindings.mappings[0].sourceTraceIds?.length, 2)
+  assert.equal(bindings.receiverPaths[0].sourceTraceIds?.length, 2)
   const { node } = circuitNodes({
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),

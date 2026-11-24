@@ -3,10 +3,10 @@ import assert from "node:assert/strict"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { listChannelSimulations } from "../../../src/pipeline/signals"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
-import { assertRouteVisual } from "../../fixtures/route-visual-snapshot"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
+import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
 test("preserves existing copper when a receiver path is incomplete", async () => {
   const circuitJson = await renderSignals({
@@ -28,7 +28,7 @@ test("preserves existing copper when a receiver path is incomplete", async () =>
   )
   assert.ok(drawing.lines?.some(({ strokeColor }) => strokeColor === "#39789a"))
   assert.ok(drawing.lines?.every(({ layer }) => layer !== "failure"))
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "partial-route-visual",

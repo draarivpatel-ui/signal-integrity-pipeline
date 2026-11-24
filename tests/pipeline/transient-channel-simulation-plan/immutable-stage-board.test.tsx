@@ -2,9 +2,9 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TwoTraceBoard } from "../../../examples/routed/two-trace-board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
 test("stage boards share a deeply frozen Circuit JSON snapshot", async () => {
   const circuitJson = await renderSignals({ tree: <TwoTraceBoard /> })

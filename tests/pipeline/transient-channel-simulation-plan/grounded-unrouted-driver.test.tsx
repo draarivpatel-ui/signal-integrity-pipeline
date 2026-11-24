@@ -19,8 +19,8 @@ test("rejects a grounded driver beyond the first physical cut", async () => {
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [mapping] = bindings.mappings
-  assert.equal(bindings.routedTraceCuts.length, 1)
+  const [mapping] = bindings.receiverPaths
+  assert.equal(bindings.traceContacts.length, 1)
   assert.ok(mapping)
   assert.throws(
     () =>
@@ -29,7 +29,7 @@ test("rejects a grounded driver beyond the first physical cut", async () => {
         circuit: cloneCircuitJson(bindings.circuitJson),
         modeling: {
           ...bindings.modeling,
-          channelReference: { sourcePortId: mapping.from },
+          channelReference: { sourcePortId: mapping.fromSourcePortId },
         },
       }),
     { domain: "simulation", code: "channel_short", message: /ground/ },

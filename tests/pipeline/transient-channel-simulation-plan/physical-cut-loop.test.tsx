@@ -4,6 +4,7 @@ import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
+import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 import "../../fixtures/extend-expect-circuit-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
@@ -86,7 +87,7 @@ test("a pre-existing routed loop has a routed topology diagnostic", async () => 
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  assert.equal(bindings.routedTraceCuts.length, 3)
+  assert.equal(bindings.traceContacts.length, 3)
   assert.throws(
     () =>
       circuitNodes({
@@ -113,4 +114,11 @@ test("a pre-existing routed loop has a routed topology diagnostic", async () => 
     ).length,
     3,
   )
+  assertPlanDrawingSnapshot({
+    drawing,
+    module: "pipeline/transient-channel-simulation-plan",
+    name: "physical-trace-loop-visual",
+    caption:
+      "The three routed traces around R1, R2 and R3 form a loop. The ideal connection to TX lies outside that loop.",
+  })
 })

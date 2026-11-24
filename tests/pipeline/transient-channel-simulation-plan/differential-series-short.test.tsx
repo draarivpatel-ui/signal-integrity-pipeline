@@ -19,8 +19,8 @@ test("rejects a short from an interior series contact to the opposite leg", asyn
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.routedTraceCuts.length, 6)
-  assert.equal(bindings.mappings[0].sourceTraceIds?.length, 5)
+  assert.equal(bindings.traceContacts.length, 6)
+  assert.equal(bindings.receiverPaths[0].sourceTraceIds?.length, 5)
   assert.throws(
     () =>
       circuitNodes({

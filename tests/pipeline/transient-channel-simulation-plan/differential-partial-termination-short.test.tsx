@@ -32,7 +32,7 @@ test("an interior short cannot divert the partial positive leg through the far t
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const [positive, negative] = bindings.mappings
+  const [positive, negative] = bindings.receiverPaths
   assert.equal(positive.sourceTraceIds?.length, 2)
   assert.ok(!positive.sourceTraceIds?.includes(negative.sourceTraceId))
   assert.throws(

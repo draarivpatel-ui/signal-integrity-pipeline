@@ -5,9 +5,9 @@ import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
 test("allowed unrouted channels retain ideal source connectivity", async () => {
   const circuitJson = await renderSignals({
@@ -20,7 +20,7 @@ test("allowed unrouted channels retain ideal source connectivity", async () => {
   })
   solver.solve()
   const [{ bindings, sections }] = solver.getOutput().value
-  assert.deepEqual(bindings.mappings, [])
+  assert.deepEqual(bindings.receiverPaths, [])
   assert.deepEqual(sections.requiredSourcePortIds, [])
   const [signal] =
     cju(circuitJson).simulation_pcb_driver_receiver_channel.list()

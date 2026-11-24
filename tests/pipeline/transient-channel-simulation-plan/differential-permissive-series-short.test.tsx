@@ -27,7 +27,7 @@ test("permissive routing retains the routed differential path to the short", asy
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  assert.equal(bindings.mappings[0].sourceTraceIds?.length, 5)
+  assert.equal(bindings.receiverPaths[0].sourceTraceIds?.length, 5)
   assert.throws(
     () =>
       circuitNodes({

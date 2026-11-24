@@ -12,7 +12,7 @@ test("keeps both receiver paths and their SPICE nodes on the two-trace example",
   const solver = new TransientChannelSimulationPlanSolver({
     circuitJson,
     ibisSources: { "models/sn74lvc1g04.ibs": routedVisualIbis },
-    scopeDistanceMm: 1,
+    nearbyGapMm: 1,
   })
   solver.solve()
   const [{ bindings, sections }] = solver.getOutput().value
@@ -25,12 +25,19 @@ test("keeps both receiver paths and their SPICE nodes on the two-trace example",
     circuit: cloneCircuitJson(bindings.circuitJson),
   })
   assert.deepEqual(
-    bindings.mappings.map(({ port, sourceTraceId, from, to }) => ({
-      port,
-      sourceTraceId,
-      driverNode: nodes.node(from),
-      receiverNode: nodes.node(to),
-    })),
+    bindings.receiverPaths.map(
+      ({
+        channelName: port,
+        sourceTraceId,
+        fromSourcePortId: from,
+        toSourcePortId: to,
+      }) => ({
+        port,
+        sourceTraceId,
+        driverNode: nodes.node(from),
+        receiverNode: nodes.node(to),
+      }),
+    ),
     [
       {
         port: "DATA",

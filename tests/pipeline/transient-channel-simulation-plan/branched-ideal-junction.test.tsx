@@ -23,7 +23,7 @@ test("successive routed branches share one transitive ideal junction", async () 
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  const [driverCut, ...branchCuts] = bindings.routedTraceCuts
+  const [driverCut, ...branchCuts] = bindings.traceContacts
   assert.equal(branchCuts.length, 2)
   const junction = node(driverCut.toSourcePortId)
   assert.notEqual(node(driverCut.fromSourcePortId), junction)
@@ -33,7 +33,9 @@ test("successive routed branches share one transitive ideal junction", async () 
     )
   }
   assert.deepEqual(
-    bindings.mappings.map(({ sourceTraceIds }) => sourceTraceIds?.length ?? 1),
+    bindings.receiverPaths.map(
+      ({ sourceTraceIds }) => sourceTraceIds?.length ?? 1,
+    ),
     [1, 2, 2],
   )
 })

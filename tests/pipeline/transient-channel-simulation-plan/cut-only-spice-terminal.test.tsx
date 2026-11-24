@@ -19,7 +19,7 @@ test("a cut-only contact must be mapped by its placed SPICE model", async () => 
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.routedTraceCuts.length, 3)
+  assert.equal(bindings.traceContacts.length, 3)
   assert.throws(
     () =>
       generalDeclarations({

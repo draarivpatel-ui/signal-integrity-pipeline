@@ -10,17 +10,17 @@ import type {
 } from "../board"
 import { endpointPorts } from "../board"
 import { Diagnostic } from "../kernel"
-import type { NumericalSettings, RoutedLane } from "./modeling"
+import type { ChannelTrace, NumericalSettings } from "./modeling"
 import type { SignalPins } from "./signal-pins"
 
 /** Supported lanes and rejection messages from auditing the scoped copper. */
-type RoutedLanes = {
-  lanes: NumericalSettings["lanes"]
+type ChannelTraceAudit = {
+  channelTraces: NumericalSettings["channelTraces"]
   rejections: string[]
 }
 
 /** Orient the selected trace from its driver when only one end is driven. */
-function routedLane({
+function orientChannelTrace({
   trace,
   topology,
   driven,
@@ -28,7 +28,7 @@ function routedLane({
   trace: SourceTrace
   topology: ReadonlyMap<SourcePortId | SourceNetId, string>
   driven: ReadonlySet<SourcePortId>
-}): RoutedLane {
+}): ChannelTrace {
   const ordered = trace.connected_source_port_ids.toSorted()
   if (driven.has(ordered[1]) && !driven.has(ordered[0])) ordered.reverse()
   const [from, to] = ordered
@@ -42,7 +42,7 @@ function routedLane({
 }
 
 /** Build lanes and report unsupported routed traces on the channel. */
-export function routedLanes({
+export function auditChannelTraces({
   circuit,
   channelPcbTraceIds,
   topology,
@@ -54,8 +54,8 @@ export function routedLanes({
   topology: Map<SourcePortId | SourceNetId, string>
   driven: Set<SourcePortId>
   rails: Set<SourcePortId | SourceNetId>
-}): RoutedLanes {
-  const lanes: NumericalSettings["lanes"] = []
+}): ChannelTraceAudit {
+  const channelTraces: NumericalSettings["channelTraces"] = []
   const rejections: string[] = []
   const db = cju([...circuit])
   const traces = db.source_trace.list()
@@ -83,42 +83,43 @@ export function routedLanes({
       )
       continue
     }
-    lanes.push(routedLane({ trace, topology, driven }))
+    channelTraces.push(orientChannelTrace({ trace, topology, driven }))
   }
-  return { lanes, rejections }
+  return { channelTraces, rejections }
 }
 
 /** Require routed lanes for all drivers when unrouted traces are disallowed. */
 function validateRoutedDrivers({
   channelSimulation,
   driverReceiverChannels,
-  lanes,
+  channelTraces,
 }: {
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
-  lanes: NumericalSettings["lanes"]
+  channelTraces: NumericalSettings["channelTraces"]
 }): void {
   if (channelSimulation.allow_unrouted_traces) return
   for (const signal of driverReceiverChannels) {
     for (const port of endpointPorts(signal.driver)) {
       if (
-        lanes.some(
-          (lane) =>
-            lane.from.sourcePortId === port || lane.to.sourcePortId === port,
+        channelTraces.some(
+          (channelTrace) =>
+            channelTrace.from.sourcePortId === port ||
+            channelTrace.to.sourcePortId === port,
         )
       )
         continue
       throw new Error(`Signal "${signal.name}" is not routed from ${port}.`)
     }
   }
-  if (!lanes.length)
+  if (!channelTraces.length)
     throw new Error(
       "At least one routed conductor is required for routed extraction",
     )
 }
 
 /** Validate scoped lanes and order them by stable physical endpoint identity. */
-export function prepareRoutedLanes({
+export function prepareChannelTraces({
   circuit,
   copperScope,
   channelSimulation,
@@ -130,9 +131,9 @@ export function prepareRoutedLanes({
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
   signalPins: Pick<SignalPins, "topology" | "driven" | "rails">
-}): NumericalSettings["lanes"] {
+}): NumericalSettings["channelTraces"] {
   const { topology, driven, rails } = signalPins
-  const { lanes, rejections } = routedLanes({
+  const { channelTraces, rejections } = auditChannelTraces({
     circuit,
     channelPcbTraceIds: copperScope.channelPcbTraceIds,
     topology,
@@ -144,8 +145,12 @@ export function prepareRoutedLanes({
       new Diagnostic("pipeline", "channel_fanout", rejections[0]),
       { rejections, copperScope },
     )
-  validateRoutedDrivers({ channelSimulation, driverReceiverChannels, lanes })
-  return lanes.toSorted((a, b) =>
+  validateRoutedDrivers({
+    channelSimulation,
+    driverReceiverChannels,
+    channelTraces,
+  })
+  return channelTraces.toSorted((a, b) =>
     a.from.sourcePortId.localeCompare(b.from.sourcePortId),
   )
 }

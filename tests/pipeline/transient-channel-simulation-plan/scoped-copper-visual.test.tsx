@@ -2,11 +2,11 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
-import { assertRouteVisual } from "../../fixtures/route-visual-snapshot"
+import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderCoreSignals } from "../../support/core-render"
 
-test("admits a rendered daisy chain and visualizes the routed receiver path", async () => {
+test("draws the receiver path and extra trace on a daisy chain", async () => {
   const circuitJson = await renderCoreSignals(
     <DaisyChainFixture routeFinalLeg />,
   )
@@ -23,18 +23,18 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
   const [{ name, sections, bindings }] = value
   assert.equal(name, "DAISY")
   assert.equal(sections.copperScope.channelPcbTraceIds.length, 2)
-  const [mapping] = bindings.mappings
-  assert.equal(bindings.mappings.length, 1)
-  assert.equal(mapping.port, "DATA")
+  const [mapping] = bindings.receiverPaths
+  assert.equal(bindings.receiverPaths.length, 1)
+  assert.equal(mapping.channelName, "DATA")
   assert.ok(
-    bindings.routedTraceCuts.some(
+    bindings.traceContacts.some(
       (cut) =>
         cut.sourceTraceId === mapping.sourceTraceId &&
-        cut.fromSourcePortId === mapping.from &&
-        cut.toSourcePortId === mapping.to,
+        cut.fromSourcePortId === mapping.fromSourcePortId &&
+        cut.toSourcePortId === mapping.toSourcePortId,
     ),
   )
-  assert.equal(bindings.routedTraceCuts.length, 2)
+  assert.equal(bindings.traceContacts.length, 2)
   assert.equal(artifacts[0].path, "transient-channel-simulation-plan.json")
   const drawing = solver.visualize()
   const header = drawing.texts?.filter((text) => text.layer === "header")
@@ -72,7 +72,7 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
       .sort(),
     ["MID", "RX", "TX"],
   )
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "scoped-copper-visual",

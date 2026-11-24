@@ -44,11 +44,11 @@ export function resolvePlanTraceCuts({
   })
   const { channelPcbTraceIds } = sections.copperScope
   assert.equal(channelPcbTraceIds.length, expectedTraceCount)
-  assert.equal(bindings.routedTraceCuts.length, expectedTraceCount)
+  assert.equal(bindings.traceContacts.length, expectedTraceCount)
   return channelPcbTraceIds.map((pcbTraceId) => {
     const pcbTrace = db.pcb_trace.get(pcbTraceId)
     assert.ok(pcbTrace?.source_trace_id)
-    const cut = bindings.routedTraceCuts.find(
+    const cut = bindings.traceContacts.find(
       ({ sourceTraceId }) => sourceTraceId === pcbTrace.source_trace_id,
     )
     assert.ok(cut)
@@ -126,7 +126,7 @@ export function expectPlanPcbSnapshot({
   if (caption) {
     captions.push({
       ...captions[0],
-      pcb_fabrication_note_text_id: "ideal_connection",
+      pcb_fabrication_note_text_id: "plan_caption",
       text: caption,
       color: "#ffffff",
       anchor_position: {

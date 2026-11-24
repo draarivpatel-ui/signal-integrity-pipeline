@@ -19,7 +19,7 @@ test("names both contacts and every routed trace in a bypassed receiver path", a
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [mapping] = bindings.mappings
+  const [mapping] = bindings.receiverPaths
   assert.equal(mapping.sourceTraceIds?.length, 2)
   assert.throws(
     () =>
@@ -30,7 +30,7 @@ test("names both contacts and every routed trace in a bypassed receiver path", a
     {
       domain: "simulation",
       code: "channel_short",
-      message: `channel_short: DATA: endpoints ${mapping.from} and ${mapping.to} share an ideal node across routed path ${mapping.sourceTraceIds?.join(", ")}`,
+      message: `channel_short: DATA: endpoints ${mapping.fromSourcePortId} and ${mapping.toSourcePortId} share an ideal node across routed path ${mapping.sourceTraceIds?.join(", ")}`,
     },
   )
 })

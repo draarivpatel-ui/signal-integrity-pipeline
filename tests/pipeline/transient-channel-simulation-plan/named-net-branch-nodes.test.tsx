@@ -24,7 +24,7 @@ test("a named path leaves a separate unlabeled branch cut intact", async () => {
     ...bindings,
     circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  assert.equal(bindings.routedTraceCuts.length, 3)
+  assert.equal(bindings.traceContacts.length, 3)
   assert.equal(new Set(plan.sections.requiredSourcePortIds.map(node)).size, 4)
   expectPlanPcbSnapshot({
     circuitJson,
@@ -34,7 +34,7 @@ test("a named path leaves a separate unlabeled branch cut intact", async () => {
     caption: "The unlabeled branch shares the ideal junction with DATA",
   })
   assert.deepEqual(
-    bindings.mappings.map(({ sourceTraceIds }) => sourceTraceIds?.length),
+    bindings.receiverPaths.map(({ sourceTraceIds }) => sourceTraceIds?.length),
     [undefined, 2, 2],
   )
 })

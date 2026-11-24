@@ -18,7 +18,7 @@ test("rejects an ideal short between differential receiver pins", async () => {
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  assert.equal(bindings.routedTraceCuts.length, 4)
+  assert.equal(bindings.traceContacts.length, 4)
   assert.throws(
     () =>
       circuitNodes({

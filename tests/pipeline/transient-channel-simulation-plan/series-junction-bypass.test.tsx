@@ -19,7 +19,7 @@ test("rejects an ideal junction short across a series resistor", async () => {
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.routedTraceCuts.length, 2)
+  assert.equal(bindings.traceContacts.length, 2)
   assert.throws(
     () =>
       circuitNodes({

@@ -30,7 +30,7 @@ test("rejects an ideal bypass across a driver-side cut and series resistor", asy
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const { routedTraceCuts } = bindings
+  const { traceContacts } = bindings
   const from = selectPort({
     circuit: circuitJson,
     selector: { component: "TX", port: "Y" },
@@ -39,13 +39,13 @@ test("rejects an ideal bypass across a driver-side cut and series resistor", asy
     circuit: circuitJson,
     selector: { component: "RS", port: "pin1" },
   })
-  const cut = routedTraceCuts.find(
+  const cut = traceContacts.find(
     ({ fromSourcePortId, toSourcePortId }) =>
       fromSourcePortId === from.source_port_id &&
       toSourcePortId === to.source_port_id,
   )
   assert.ok(cut)
-  assert.equal(routedTraceCuts.length, 2)
+  assert.equal(traceContacts.length, 2)
   assert.throws(
     () =>
       circuitNodes({

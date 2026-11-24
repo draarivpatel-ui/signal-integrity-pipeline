@@ -2,9 +2,9 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
 test("draws a receiver pin in the color of the trace reaching it", async () => {
   const circuitJson = await renderSignals({

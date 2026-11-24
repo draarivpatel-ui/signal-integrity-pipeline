@@ -31,13 +31,13 @@ test("a cut cycle diagnostic excludes the attached load tail", async () => {
     name: "pin1",
   })
   assert.ok(port)
-  const tail = bindings.routedTraceCuts.find(
+  const tail = bindings.traceContacts.find(
     ({ fromSourcePortId, toSourcePortId }) =>
       fromSourcePortId === port.source_port_id ||
       toSourcePortId === port.source_port_id,
   )
   assert.ok(tail)
-  const cycle = bindings.routedTraceCuts.filter((cut) => cut !== tail)
+  const cycle = bindings.traceContacts.filter((cut) => cut !== tail)
   assert.equal(cycle.length, 2)
   assert.throws(
     () =>

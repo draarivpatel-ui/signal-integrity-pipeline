@@ -2,7 +2,7 @@ import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import {
   type CircuitJson,
   endpointPorts,
-  type LaneMapping,
+  type ReceiverTracePath,
   type SimulationPcbDriverReceiverChannel,
   type SourcePortId,
   type SourceTraceId,
@@ -10,43 +10,43 @@ import {
 } from "../board"
 import type { DiagnosticSubject, Snapshot } from "../kernel"
 import { findConnectionBridges } from "./connection-paths"
-import { cutConnections, validateChannelBridge } from "./cut-connections"
 import { fail } from "./diagnostics"
 import { differentialContacts } from "./differential-contacts"
+import {
+  failShortedTrace,
+  getIdealGroupId,
+  type IdealConnectivity,
+  type NodeGroups,
+  nodeGroups,
+  type SourceContactId,
+} from "./ideal-connectivity"
 import {
   type ReceiverGraphs,
   receiverGraphs,
   receiverPath,
 } from "./receiver-paths"
-import type { RoutedTraceCut } from "./routed-types"
-import {
-  type IdealSourceNodes,
-  type NodeGroups,
-  nodeGroups,
-  type SourceNodeId,
-  shortedCut,
-  sourceGroupId,
-} from "./source-node-groups"
+import type { TraceContacts } from "./route-inputs"
+import { connectTraces, validateChannelBridge } from "./trace-connections"
 import type { CircuitNodes, SimulationModeling, SpiceNodeName } from "./types"
 
 /** Board, physical cuts, and source selectors for SPICE node resolution. */
 export interface CircuitNodesInput {
   circuit: CircuitJson
-  mappings: readonly LaneMapping[]
-  routedTraceCuts?: readonly RoutedTraceCut[]
+  receiverPaths: readonly ReceiverTracePath[]
+  traceContacts?: readonly TraceContacts[]
   modeling: Snapshot<SimulationModeling>
 }
 
 /** Give mapping-only experiments their physical trace cuts. */
 function physicalCuts({
   db,
-  mappings,
+  receiverPaths,
 }: {
   db: CircuitJsonUtilObjects
-  mappings: readonly LaneMapping[]
-}): RoutedTraceCut[] {
-  const cuts = new Map<SourceTraceId, RoutedTraceCut>()
-  for (const { sourceTraceId, sourceTraceIds } of mappings) {
+  receiverPaths: readonly ReceiverTracePath[]
+}): TraceContacts[] {
+  const cuts = new Map<SourceTraceId, TraceContacts>()
+  for (const { sourceTraceId, sourceTraceIds } of receiverPaths) {
     for (const pathSourceTraceId of sourceTraceIds ?? [sourceTraceId]) {
       if (cuts.has(pathSourceTraceId)) continue
       const ports =
@@ -67,6 +67,9 @@ function physicalCuts({
   return [...cuts.values()]
 }
 
+/** Source-port IDs along a differential leg. */
+type DifferentialLegSourcePortIds = SourcePortId[]
+
 /** Include the physical contacts of each graph path on one differential leg. */
 function differentialLegPorts({
   sourcePortIds,
@@ -74,7 +77,7 @@ function differentialLegPorts({
 }: {
   sourcePortIds: SourcePortId[]
   graphs: ReceiverGraphs
-}): SourcePortId[] {
+}): DifferentialLegSourcePortIds {
   const [fromSourcePortId, ...receiverSourcePortIds] = sourcePortIds
   return [
     ...new Set([
@@ -100,8 +103,8 @@ function differentialLegPorts({
 type SpiceNodeGroups = NodeGroups<SpiceNodeName>
 
 /** Attach physical evidence without changing the diagnostic's error message. */
-function recordSubjects(ids: readonly string[]): DiagnosticSubject[] {
-  return [...new Set(ids)].map((id) => ({ kind: "record", id }))
+function recordSubjects(recordIds: readonly string[]): DiagnosticSubject[] {
+  return [...new Set(recordIds)].map((id) => ({ kind: "record", id }))
 }
 
 /** Validate the physical contacts and routed interiors of both differential legs. */
@@ -185,49 +188,67 @@ function validateDifferentialLegs({
 
 /** Create a source ID lookup over the resolved SPICE node names. */
 function createCircuitNodeLookup({
-  mapping,
+  spiceNodeNamesBySourceContactId,
   splitNets,
 }: {
-  mapping: CircuitNodes["mapping"]
-  splitNets: IdealSourceNodes["splitNets"]
+  spiceNodeNamesBySourceContactId: CircuitNodes["mapping"]
+  splitNets: IdealConnectivity["splitNets"]
 }): CircuitNodes["node"] {
   /** Resolve one physical source port or named net. */
-  return function node(sourceId: SourceNodeId): SpiceNodeName {
-    if (splitNets.has(sourceId))
+  return function node(sourceContactId: SourceContactId): SpiceNodeName {
+    if (splitNets.has(sourceContactId))
       fail(
         "channel_net",
-        `${sourceId}: extracted channel spans distinct endpoint nodes; select a physical port instead of the net`,
+        `${sourceContactId}: extracted channel spans distinct endpoint nodes; select a physical port instead of the net`,
       )
-    if (!Object.hasOwn(mapping, sourceId))
-      fail("simulation_reference", `Unknown source port/net ${sourceId}`)
-    return mapping[sourceId]
+    if (!Object.hasOwn(spiceNodeNamesBySourceContactId, sourceContactId))
+      fail("simulation_reference", `Unknown source port/net ${sourceContactId}`)
+    return spiceNodeNamesBySourceContactId[sourceContactId]
   }
 }
 
 /** Validate mapped channel paths separately from their constituent physical traces. */
 function validateReceiverPaths({
-  mappings,
+  receiverPaths,
   node,
 }: {
-  mappings: readonly LaneMapping[]
+  receiverPaths: readonly ReceiverTracePath[]
   node: CircuitNodes["node"]
 }): void {
-  for (const { port, from, to, sourceTraceId, sourceTraceIds } of mappings) {
-    const fromSpiceNode = node(from)
-    const toSpiceNode = node(to)
+  for (const {
+    channelName,
+    fromSourcePortId,
+    toSourcePortId,
+    sourceTraceId,
+    sourceTraceIds,
+  } of receiverPaths) {
+    const fromSpiceNode = node(fromSourcePortId)
+    const toSpiceNode = node(toSourcePortId)
     const traces = sourceTraceIds ?? [sourceTraceId]
     const path = traces.join(", ")
     if (fromSpiceNode === "0" || toSpiceNode === "0")
       fail(
         "channel_short",
-        `${port}: endpoints ${from} and ${to} include a ground contact on routed path ${path}`,
-        { subjects: recordSubjects([from, to, ...traces]) },
+        `${channelName}: endpoints ${fromSourcePortId} and ${toSourcePortId} include a ground contact on routed path ${path}`,
+        {
+          subjects: recordSubjects([
+            fromSourcePortId,
+            toSourcePortId,
+            ...traces,
+          ]),
+        },
       )
     if (fromSpiceNode === toSpiceNode)
       fail(
         "channel_short",
-        `${port}: endpoints ${from} and ${to} share an ideal node across routed path ${path}`,
-        { subjects: recordSubjects([from, to, ...traces]) },
+        `${channelName}: endpoints ${fromSourcePortId} and ${toSourcePortId} share an ideal node across routed path ${path}`,
+        {
+          subjects: recordSubjects([
+            fromSourcePortId,
+            toSourcePortId,
+            ...traces,
+          ]),
+        },
       )
   }
 }
@@ -258,7 +279,7 @@ function validateSingleEndedGround({
 /** The physical cuts shared by node and model contact validation. */
 interface ResolvedRoutedNodes {
   nodes: CircuitNodes
-  cuts: readonly RoutedTraceCut[]
+  cuts: readonly TraceContacts[]
 }
 
 /** Number one SPICE node per ideal group in source port order. */
@@ -273,14 +294,14 @@ export function numberCircuitNodes({
 }): CircuitNodes {
   const { groups, splitNets } = graphs
   const spiceNodeNameBySourceNodeGroupId = new Map([
-    [sourceGroupId({ groups, sourcePortId: groundSourcePortId }), "0"],
+    [getIdealGroupId({ groups, sourcePortId: groundSourcePortId }), "0"],
   ])
   const sourceNodeIds = new Set([
     ...db.source_port.list().map((port) => port.source_port_id),
     ...db.source_net.list().map((net) => net.source_net_id),
     ...groups.keys(),
   ])
-  const mapping = Object.freeze(
+  const spiceNodeNamesBySourceContactId = Object.freeze(
     Object.fromEntries(
       [...sourceNodeIds].flatMap((sourceNodeId) => {
         if (splitNets.has(sourceNodeId)) return []
@@ -294,9 +315,12 @@ export function numberCircuitNodes({
     ),
   )
   return {
-    node: createCircuitNodeLookup({ mapping, splitNets }),
+    node: createCircuitNodeLookup({
+      spiceNodeNamesBySourceContactId,
+      splitNets,
+    }),
     groundSourcePortId,
-    mapping,
+    mapping: spiceNodeNamesBySourceContactId,
   }
 }
 
@@ -304,11 +328,11 @@ export function numberCircuitNodes({
 function validateCutEndpoints({
   cuts,
   node,
-  mappingOnly,
+  isMappingOnly,
 }: {
-  cuts: readonly RoutedTraceCut[]
+  cuts: readonly TraceContacts[]
   node: CircuitNodes["node"]
-  mappingOnly: boolean
+  isMappingOnly: boolean
 }): void {
   for (const cut of cuts) {
     const fromSpiceNode = node(cut.fromSourcePortId)
@@ -318,12 +342,15 @@ function validateCutEndpoints({
       fromSpiceNode === "0" ||
       toSpiceNode === "0"
     ) {
-      if (mappingOnly)
+      if (isMappingOnly)
         fail(
           "channel_short",
           "Extracted endpoints are shorted by another ideal source trace or reference",
         )
-      shortedCut({ cut, reason: "share an ideal node or are bound to ground" })
+      failShortedTrace({
+        cut,
+        reason: "share an ideal node or are bound to ground",
+      })
     }
   }
 }
@@ -331,12 +358,12 @@ function validateCutEndpoints({
 /** Resolve the physical cuts once for both node grouping and terminal validation. */
 export function resolveRoutedNodes({
   circuit,
-  mappings,
-  routedTraceCuts,
+  receiverPaths,
+  traceContacts,
   modeling,
 }: CircuitNodesInput): ResolvedRoutedNodes {
   const db = cju([...circuit])
-  const cuts = routedTraceCuts ?? physicalCuts({ db, mappings })
+  const cuts = traceContacts ?? physicalCuts({ db, receiverPaths })
   const channels = db.simulation_pcb_driver_receiver_channel.list()
   const groundSourcePortId = selectPort({
     circuit,
@@ -353,11 +380,11 @@ export function resolveRoutedNodes({
   const nodes = numberCircuitNodes({ db, graphs, groundSourcePortId })
   validateRoutedNodes({
     cuts,
-    mappings,
+    receiverPaths,
     graphs,
     channels,
     node: nodes.node,
-    mappingOnly: routedTraceCuts === undefined,
+    isMappingOnly: traceContacts === undefined,
   })
   return { nodes, cuts }
 }
@@ -365,26 +392,29 @@ export function resolveRoutedNodes({
 /** Validate physical cuts, receiver paths and passive boundaries against the partition. */
 export function validateRoutedNodes({
   cuts,
-  mappings,
+  receiverPaths,
   graphs,
   channels,
   node,
-  mappingOnly,
+  isMappingOnly,
 }: {
-  cuts: readonly RoutedTraceCut[]
-  mappings: readonly LaneMapping[]
+  cuts: readonly TraceContacts[]
+  receiverPaths: readonly ReceiverTracePath[]
   graphs: ReceiverGraphs
   channels: readonly SimulationPcbDriverReceiverChannel[]
   node: CircuitNodes["node"]
-  mappingOnly: boolean
+  isMappingOnly: boolean
 }): void {
-  validateCutEndpoints({ cuts, node, mappingOnly })
-  const connections = cutConnections({ cuts, node })
+  validateCutEndpoints({ cuts, node, isMappingOnly })
+  const connections = connectTraces({ cuts, node })
   const legGroups = nodeGroups(
-    connections.map(({ fromNodeId, toNodeId }) => [fromNodeId, toNodeId]),
+    connections.map(({ fromVertexId, toVertexId }) => [
+      fromVertexId,
+      toVertexId,
+    ]),
   )
   validateDifferentialLegs({ channels, node, legGroups, graphs })
-  validateReceiverPaths({ mappings, node })
+  validateReceiverPaths({ receiverPaths, node })
   validateSingleEndedGround({ channels, node })
   const bridges = findConnectionBridges(graphs.ideal)
   const connection = graphs.channelConnections.find(
