@@ -24,6 +24,10 @@ interface PlanHeader {
 const INK = "#0f172a"
 const QUIET = "#475569"
 const RED = "#b91c1c"
+/** Gap between the board and its surrounding text bands, in text-size units. */
+export const PLAN_BAND_GAP = 1.54
+/** Vertical spacing of consecutive text rows, in text-size units. */
+export const PLAN_LINE_STEP = 1.31
 const SCALE_LENGTHS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
 
 /** Pick a standard length near one eighth of the drawn width. */
@@ -54,7 +58,13 @@ function textWidth(text: string): number {
 }
 
 /** Wrap at spaces and split individual words only when they exceed the frame. */
-function wrapText({ text, width }: { text: string; width: number }): string[] {
+export function wrapPlanText({
+  text,
+  width,
+}: {
+  text: string
+  width: number
+}): string[] {
   const lines: string[] = []
   let line = ""
   for (let word of text.split(" ")) {
@@ -75,6 +85,27 @@ function wrapText({ text, width }: { text: string; width: number }): string[] {
   return lines
 }
 
+/** Keep each legend entry together when the symbols need more than one row. */
+function legendRows({
+  entries,
+  width,
+}: {
+  entries: readonly string[]
+  width: number
+}): string[] {
+  const rows: string[] = []
+  let row = ""
+  for (const entry of entries) {
+    const next = [row, entry].filter(Boolean).join(" • ")
+    if (row && textWidth(next) > width) {
+      rows.push(row)
+      row = entry
+    } else row = next
+  }
+  if (row) rows.push(row)
+  return rows
+}
+
 /** Center each line above the board at its normal reading size. */
 export function planHeader({
   scene,
@@ -85,13 +116,13 @@ export function planHeader({
   scene: PlanHeaderScene
   frame: PlanFrame
   boardTop: number
-  legend: string
+  legend: readonly string[]
 }): PlanHeader {
   const { width, box } = frame
   const x = (box.minX + box.maxX) / 2
   const size = planTextSize(width)
   const scale = scaleLength(width)
-  const scaleY = boardTop + size * 1.54
+  const scaleY = boardTop + size * PLAN_BAND_GAP
   const labelY = scaleY + size * 0.88
   const lines: Line[] = [
     {
@@ -131,19 +162,25 @@ export function planHeader({
       label: scene.diagnostic?.label,
     },
     ...scene.rows.map((row) => ({ ...row, size })),
-    { text: legend, color: QUIET, size },
   ]
   const rects: Rect[] = []
   let y = labelY + size * 1.66
   const wrapped = rows.flatMap((row) => {
     if (!row.text) return []
-    return wrapText({ text: row.text, width: width / row.size }).map(
+    return wrapPlanText({ text: row.text, width: width / row.size }).map(
       (text) => ({
         ...row,
         text,
       }),
     )
   })
+  wrapped.push(
+    ...legendRows({ entries: legend, width: width / size }).map((text) => ({
+      text,
+      color: QUIET,
+      size,
+    })),
+  )
   for (const row of wrapped.reverse()) {
     texts.push({
       x,
@@ -164,7 +201,7 @@ export function planHeader({
         label: row.label,
         layer: "header",
       })
-    y += row.size * 1.31
+    y += row.size * PLAN_LINE_STEP
   }
   const top = y + size * 0.3
   const bottom = box.minY - size * 0.9
