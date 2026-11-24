@@ -231,7 +231,7 @@ function channelSimulationPackageWarnings({
   sources: IbisSources
 }): string[] {
   const warnings: string[] = []
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   for (const model of db.simulation_ibis_model.list()) {
     const pin = [...pins.values()].find((pin) => pin.model === model)
     if (!pin || pin.component.coupledPackage === undefined) continue
