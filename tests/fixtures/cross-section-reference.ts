@@ -285,11 +285,11 @@ export function imageMicrostrip({
   const r = (er - 1) / (er + 1)
   const panels = [0, 1].flatMap((group) =>
     Array.from({ length: count }, (_, i) => {
-      const lo = (1 - Math.cos((Math.PI * i) / count)) / 2
-      const hi = (1 - Math.cos((Math.PI * (i + 1)) / count)) / 2
+      const low = (1 - Math.cos((Math.PI * i) / count)) / 2
+      const high = (1 - Math.cos((Math.PI * (i + 1)) / count)) / 2
       return {
-        x: (group - 0.5) * (w + gap) + w * ((lo + hi) / 2 - 0.5),
-        length: w * (hi - lo),
+        x: (group - 0.5) * (w + gap) + w * ((low + high) / 2 - 0.5),
+        length: w * (high - low),
         group,
       }
     }),
@@ -305,12 +305,12 @@ export function imageMicrostrip({
         d,
         area: q.length * t.length,
       }
-      let value = -imagePotential({ y: 0, ...intervals })
+      let potential = -imagePotential({ y: 0, ...intervals })
       for (let n = 1; n <= IMAGE_TERMS; n++) {
-        value +=
+        potential +=
           (1 + r) * (-r) ** (n - 1) * imagePotential({ y: 2 * n, ...intervals })
       }
-      return value / (Math.PI * (er + 1))
+      return potential / (Math.PI * (er + 1))
     }),
   )
   const rhs = panels.map((q) => [Number(q.group === 0), Number(q.group === 1)])
@@ -331,10 +331,10 @@ export function imageMicrostrip({
   }
   return [0, 1].map((i) =>
     [0, 1].map((j) =>
-      panels.reduce((value, q, k) => {
+      panels.reduce((potential, q, k) => {
         let contribution = 0
         if (q.group === i) contribution = VACUUM_PERMITTIVITY * rhs[k][j]
-        return value + contribution
+        return potential + contribution
       }, 0),
     ),
   )

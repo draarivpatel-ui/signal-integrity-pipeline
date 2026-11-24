@@ -6,15 +6,12 @@ import {
   type TraceWire,
 } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
-import {
-  type CrossSection,
-  solveCrossSection,
-} from "../../src/extraction/cross-section"
 import type {
   ExtractedRoutes,
   RouteCoefficients,
 } from "../../src/extraction/route-lines"
 import type { Snapshot } from "../../src/kernel"
+import { type CrossSection, calculateRlgc } from "../../src/rlgc"
 import {
   type RouteLadder,
   routeLadder,
@@ -148,23 +145,28 @@ function straightLine({
   section: CrossSection
   lossScale: number
 }): StraightLine {
-  const solved = solveCrossSection({ section })
+  const solved = calculateRlgc({ crossSection: section })
   const line: RouteCoefficients = {
     conductorIds: solved.conductorIds,
-    C: solved.C,
-    C0: solved.C0,
-    L: solved.L,
-    dielectricLoss: solved.dielectricLoss,
-    diagnostics: solved.diagnostics,
-    dcResistance: solved.dcResistance.map((row) =>
+    C: solved.capacitanceFaradsPerMeter,
+    C0: solved.vacuumCapacitanceFaradsPerMeter,
+    L: solved.externalInductanceHenriesPerMeter,
+    dielectricLoss: solved.dielectricLossFaradsPerMeter,
+    diagnostics: {
+      panels: solved.diagnostics.panelCount,
+      reciprocityResidual: solved.diagnostics.reciprocityResidual,
+      recessionMm: solved.diagnostics.recessionMm,
+    },
+    dcResistance: solved.dcResistanceOhmsPerMeter.map((row) =>
       row.map((value) => value * lossScale),
     ),
-    skinResistance: solved.skinResistance.map((row) =>
+    skinResistance: solved.totalSkinResistanceOhmsPerMeterPerSqrtHz.map((row) =>
       row.map((value) => value * lossScale),
     ),
-    stripSkinResistance: solved.stripSkinResistance.map((row) =>
-      row.map((value) => value * lossScale),
-    ),
+    stripSkinResistance:
+      solved.conductorSkinResistanceOhmsPerMeterPerSqrtHz.map((row) =>
+        row.map((value) => value * lossScale),
+      ),
   }
   const wires: TraceWire[] = section.conductors.map((conductor, wireIndex) => ({
     wireIndex,
@@ -211,7 +213,7 @@ function straightLine({
 const stripline: CrossSection = {
   conductors: [
     {
-      id: "s",
+      conductorId: "s",
       xMm: 0,
       zMm: 0.4825,
       widthMm: 0.35,
@@ -219,11 +221,11 @@ const stripline: CrossSection = {
     },
   ],
   planes: [{ zMm: 0 }, { zMm: 1 }],
-  dielectrics: [
+  dielectricLayers: [
     {
       zMm: 0,
       thicknessMm: 1,
-      er: 4,
+      relativePermittivity: 4,
       lossTangent: 0,
     },
   ],
@@ -231,18 +233,18 @@ const stripline: CrossSection = {
 /** Inhomogeneous microstrip pair (h = 0.5 mm, er = 4 below, air above): distinct even and odd velocities. */
 const microstripPair: CrossSection = {
   conductors: [-0.375, 0.375].map((x, i) => ({
-    id: `m${i}`,
+    conductorId: `m${i}`,
     xMm: x,
     zMm: 0.5,
     widthMm: 0.5,
     thicknessMm: 0.035,
   })),
   planes: [{ zMm: 0 }],
-  dielectrics: [
+  dielectricLayers: [
     {
       zMm: 0,
       thicknessMm: 0.5,
-      er: 4,
+      relativePermittivity: 4,
       lossTangent: 0,
     },
   ],
@@ -698,7 +700,7 @@ test.skipIf(skipNativeTests)(settledDivider, async () => {
   const section: CrossSection = {
     conductors: [
       {
-        id: "s",
+        conductorId: "s",
         xMm: 0,
         zMm: 0.491,
         widthMm: 0.1,
@@ -706,11 +708,11 @@ test.skipIf(skipNativeTests)(settledDivider, async () => {
       },
     ],
     planes: [{ zMm: 0 }, { zMm: 1 }],
-    dielectrics: [
+    dielectricLayers: [
       {
         zMm: 0,
         thicknessMm: 1,
-        er: 4,
+        relativePermittivity: 4,
         lossTangent: 0.02,
       },
     ],
@@ -1002,7 +1004,7 @@ test.skipIf(skipNativeTests)(ladderAttenuation, async () => {
   const section: CrossSection = {
     conductors: [
       {
-        id: "s",
+        conductorId: "s",
         xMm: 0,
         zMm: 0.1,
         widthMm: 0.1,
@@ -1010,11 +1012,11 @@ test.skipIf(skipNativeTests)(ladderAttenuation, async () => {
       },
     ],
     planes: [{ zMm: 0 }, { zMm: 0.2152 }],
-    dielectrics: [
+    dielectricLayers: [
       {
         zMm: 0,
         thicknessMm: 0.2152,
-        er: 4.1,
+        relativePermittivity: 4.1,
         lossTangent: 0,
       },
     ],
@@ -1041,18 +1043,18 @@ async function pairAttenuation({
 }): Promise<AttenuationComparison> {
   const section: CrossSection = {
     conductors: conductors.map(([x, w, t], i) => ({
-      id: `c${i}`,
+      conductorId: `c${i}`,
       xMm: x,
       zMm: (0.2152 - t) / 2,
       widthMm: w,
       thicknessMm: t,
     })),
     planes: [{ zMm: 0 }, { zMm: 0.2152 }],
-    dielectrics: [
+    dielectricLayers: [
       {
         zMm: 0,
         thicknessMm: 0.2152,
-        er: 4.1,
+        relativePermittivity: 4.1,
         lossTangent: 0,
       },
     ],
