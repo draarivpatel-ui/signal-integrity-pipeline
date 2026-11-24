@@ -42,6 +42,12 @@ export function routedReceiverMappings({
           return fail(
             "channel_net",
             `${name}: no source path from ${fromSourcePortId} to ${toSourcePortId}`,
+            {
+              subjects: [fromSourcePortId, toSourcePortId].map((id) => ({
+                kind: "record",
+                id,
+              })),
+            },
           )
         const sourceTraceIds = path.flatMap((edge) => {
           if (edge.sourceTraceId !== undefined) return [edge.sourceTraceId]
