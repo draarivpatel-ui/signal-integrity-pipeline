@@ -1,24 +1,24 @@
 import type { GraphicsObject, Point, Viewbox } from "graphics-debug"
 import {
   type CircuitJson,
-  type CopperScope,
-  getPointBounds,
-  type RouteFrame,
-  type RouteSection,
-  type RouteView,
   type CopperPoint,
+  type CopperScope,
+  type ExtractedCopper,
+  getPointBounds,
+  getWirePoint,
+  type RouteFrame,
+  type RouteView,
   routeCanvas,
   routeDisplayItems,
   routeFailure,
   routeFrame,
   routeNets,
   routePane,
-  getRoutePoint,
   routeStroke,
   routeText,
   routeTones,
   routeView,
-  type SectionGeometry,
+  type WireSection,
   withRouteDrawing,
 } from "../board"
 import type { Snapshot } from "../kernel"
@@ -88,7 +88,7 @@ function drawCopper({
   circuitJson,
   view,
 }: {
-  geometry: Snapshot<SectionGeometry>
+  geometry: Snapshot<ExtractedCopper>
   circuitJson?: CircuitJson
   view?: RouteView
 }): NonNullable<GraphicsObject["lines"]> {
@@ -117,13 +117,13 @@ function drawCopper({
 }
 
 export interface FieldsState {
-  geometry: Snapshot<SectionGeometry>
+  geometry: Snapshot<ExtractedCopper>
   circuitJson?: CircuitJson
   scope?: Snapshot<CopperScope>
   materials: RouteMaterials
   solved: ExtractedRouteSlice[]
   /** The slice on screen and its cross-section; when solving has finished, the most informative selected slice. */
-  slice?: Snapshot<RouteSection>
+  slice?: Snapshot<WireSection>
   section?: CrossSection
   line?: RouteCoefficients
   error?: string
@@ -176,7 +176,7 @@ export function fieldsDrawing(state: FieldsState): GraphicsObject {
       if (view && !view.traces.has(wire.pcbTraceId)) continue
       const z0 = sliceImpedance({ line: slice.line, i })
       const points = [slice.startMm, slice.endMm].map((position) =>
-        drawingPoint(getRoutePoint({ wire, positionMm: position })),
+        drawingPoint(getWirePoint({ wire, positionMm: position })),
       )
       drawing.lines!.push(
         ...routeStroke({
@@ -290,7 +290,7 @@ function sliceCut({
   slice,
   unit,
 }: {
-  slice: Snapshot<RouteSection>
+  slice: Snapshot<WireSection>
   unit: number
 }): SliceMarker {
   const middle = (slice.startMm + slice.endMm) / 2
@@ -307,7 +307,7 @@ function sliceCut({
     [-half, high],
   ].map(([offset, transverse]) =>
     drawingPoint(
-      getRoutePoint({
+      getWirePoint({
         wire: {
           ...slice.wires[0],
           lateralOffsetMm: transverse,

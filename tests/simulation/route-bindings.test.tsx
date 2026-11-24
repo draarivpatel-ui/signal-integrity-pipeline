@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteSectionsSolver } from "../../src/board"
+import { CopperGeometryExtractionSolver } from "../../src/board"
 import {
   type RoutedStageSolver,
   TransientChannelSimulationPlanSolver,

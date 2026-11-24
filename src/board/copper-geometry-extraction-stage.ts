@@ -1,9 +1,10 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { GraphicsObject } from "graphics-debug"
 import type { Snapshot } from "../kernel"
-import type { RouteWire, SectionGeometry } from "./route-section-types"
-import type { RouteSectionsInput } from "./route-sections-input"
-import { RouteSectionsSolver as BoardRouteSectionsSolver } from "./route-sections-solver"
+import { CopperGeometryExtractionSolver as BoardCopperGeometryExtractionSolver } from "./copper-geometry-extraction"
+import type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
+import { extractTraceWires } from "./copper-geometry-traces"
+import type { ExtractedCopper, TraceWire } from "./copper-geometry-types"
 import {
   type RouteNet,
   routeCanvas,
@@ -23,9 +24,8 @@ import {
   routeUnrolled,
 } from "./route-visual-strip"
 import { type CircuitJson, cloneCircuitJson } from "./schema"
-import { extractTraceWires } from "./trace-wires"
 
-type DrawingGeometry = Snapshot<Pick<SectionGeometry, "wires" | "vias">>
+type DrawingGeometry = Snapshot<Pick<ExtractedCopper, "wires" | "vias">>
 
 /** Reconstruct completed steps on demand for the pipeline's animated drawing. */
 function getDrawingGeometry({
@@ -33,8 +33,8 @@ function getDrawingGeometry({
   input,
   circuit,
 }: {
-  solver: BoardRouteSectionsSolver
-  input: RouteSectionsInput
+  solver: BoardCopperGeometryExtractionSolver
+  input: CopperGeometryExtractionInput
   circuit: CircuitJson
 }): DrawingGeometry {
   if (solver.solved) return solver.getOutput().value.geometry
@@ -45,8 +45,8 @@ function getDrawingGeometry({
     .list()
     .filter((trace) => traceIds.has(trace.pcb_trace_id))
     .slice(0, traceCount)
-  const wires: RouteWire[] = []
-  const vias: SectionGeometry["vias"] = []
+  const wires: TraceWire[] = []
+  const vias: ExtractedCopper["vias"] = []
   for (const trace of traces) {
     const extracted = extractTraceWires({
       circuit,
@@ -59,7 +59,7 @@ function getDrawingGeometry({
   return { wires, vias }
 }
 
-type PcbTraceId = RouteWire["pcbTraceId"]
+type PcbTraceId = TraceWire["pcbTraceId"]
 type RouteNetLabel = RouteNet["label"]
 
 /** Alternate light and dark sections of the same net, keeping unassigned copper neutral. */
@@ -80,7 +80,7 @@ function sectionColor({
 }
 
 /** Draw route sections in the composed pipeline's shared board and length panes. */
-export const RouteSectionsStage: typeof BoardRouteSectionsSolver = class RouteSectionsSolver extends BoardRouteSectionsSolver {
+export const CopperGeometryExtractionStage: typeof BoardCopperGeometryExtractionSolver = class CopperGeometryExtractionSolver extends BoardCopperGeometryExtractionSolver {
   /**
    * Sections alternate two tones of their net's hue, the wire processed this step wears a white casing, and unprocessed copper stays neutral grey.
    */

@@ -1,7 +1,7 @@
 /**
  * board — everything known about the physical board, read from Circuit JSON.
  * Owns: Circuit JSON admission (zod record schemas, subcircuit scope), stackup, port selection,
- * the channel copper scope, routed section geometry (RouteSectionsSolver) and board drawings.
+ * the channel copper scope, routed section geometry (CopperGeometryExtractionSolver) and board drawings.
  * Imports: kernel.
  */
 
@@ -23,6 +23,7 @@ export {
   CopperGeometryExtractionSolver,
 } from "./copper-geometry-extraction"
 export type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
+export { CopperGeometryExtractionStage } from "./copper-geometry-extraction-stage"
 export {
   extractCopperGeometry,
   stepCopperGeometryExtraction,
@@ -71,7 +72,6 @@ export {
   type PlanVisualScene,
   planColors,
 } from "./plan-visual-types"
-export { RouteSectionsStage } from "./route-sections-stage"
 export {
   getBoardBounds,
   getPointBounds,

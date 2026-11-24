@@ -7,9 +7,9 @@ import {
 import type { GraphicsObject } from "graphics-debug"
 import {
   type CopperGeometry,
+  CopperGeometryExtractionStage,
   cloneCircuitJson,
   getBoardBounds,
-  RouteSectionsStage,
   routeBoardDrawing,
   routeLengths,
   routeStrip,
@@ -55,8 +55,8 @@ export const routedStages = [
     (p: RoutedPipelineSolver) => [p.inputProblem],
   ),
   definePipelineStep(
-    "RouteSectionsSolver",
-    routedStage(RouteSectionsStage),
+    "CopperGeometryExtractionSolver",
+    routedStage(CopperGeometryExtractionStage),
     (p: RoutedPipelineSolver) => [
       p
         .stageOutput("TransientChannelSimulationPlanSolver")
@@ -121,7 +121,7 @@ export const routedStages = [
     (p: RoutedPipelineSolver) => [
       p.stageOutput("RouteNetworkSolver").value.map((compiled, i) => ({
         compiled,
-        board: p.stageOutput("RouteSectionsSolver").value[i],
+        board: p.stageOutput("CopperGeometryExtractionSolver").value[i],
         artifactPrefix: p.stageOutput("TransientChannelSimulationPlanSolver")
           .value[i].sections.artifactPrefix,
         context: p.context,
