@@ -8,7 +8,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing(
+test(
   "rejects a required pad entirely within a via drill bore",
   async () => {
     const circuit = await renderSectionBoard({

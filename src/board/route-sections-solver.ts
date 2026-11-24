@@ -140,7 +140,7 @@ export class RouteSectionsSolver extends BaseSolver {
     const artifactScope = rootScope("board").child(artifactPrefix)
     this.output = Object.freeze({
       value: routeSections,
-      artifacts: Object.freeze([
+      artifacts: snapshot([
         artifactScope.json("geometry.json", routeSections.geometry),
         artifactScope.json("scope.json", copperScope),
       ]),

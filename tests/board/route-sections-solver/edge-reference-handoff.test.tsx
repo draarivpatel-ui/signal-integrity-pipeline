@@ -7,7 +7,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing(
+test(
   "uses continuous edge references from two separate pours",
   async () => {
     const circuit = await renderSectionBoard({

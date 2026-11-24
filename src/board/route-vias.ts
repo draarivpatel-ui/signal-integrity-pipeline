@@ -1,5 +1,5 @@
 import type { cju } from "@tscircuit/circuit-json-util"
-import type { PcbVia, SourceTrace } from "circuit-json"
+import type { PcbVia } from "circuit-json"
 import type { SourceConnectionGroup } from "./connectivity"
 import type { PcbViaId, SourceTraceId } from "./ids"
 import type { RouteVia } from "./route-section-types"
@@ -15,6 +15,7 @@ export function readRouteVia(via: PcbVia): RouteVia {
     point: [via.x, via.y],
     layers: via.layers,
     outerDiameterMm: via.outer_diameter,
+    holeDiameterMm: via.hole_diameter,
   }
 }
 
@@ -39,7 +40,15 @@ export function collectRouteVias({
     }
     let layers = [...boardLayers]
     if (allowsBlindVias) {
-      const layerIndices = via.layers.map((layer) => boardLayers.indexOf(layer))
+      const viaId = via.pcbViaId || via.pcbTraceId
+      if (!via.layers.length)
+        throw new Error(`via ${viaId}: missing copper layers`)
+      const layerIndices = via.layers.map((layer) => {
+        const layerIndex = boardLayers.indexOf(layer)
+        if (layerIndex < 0)
+          throw new Error(`via ${viaId}: unknown copper layer ${layer}`)
+        return layerIndex
+      })
       const firstLayerIndex = Math.min(...layerIndices)
       const lastLayerIndex = Math.max(...layerIndices)
       layers = boardLayers.slice(firstLayerIndex, lastLayerIndex + 1)
@@ -49,14 +58,6 @@ export function collectRouteVias({
     vias.push({ ...via, layers })
   }
   return vias
-}
-
-/** Find ports and nets named by a source trace. */
-export function getTraceMembers(trace: SourceTrace): SourceConnectionGroup {
-  return [
-    ...trace.connected_source_port_ids,
-    ...(trace.connected_source_net_ids || []),
-  ]
 }
 
 /** Read every declared via association for the pad-to-via net check. */

@@ -1,18 +1,19 @@
-import { cju } from "@tscircuit/circuit-json-util"
+import type { cju } from "@tscircuit/circuit-json-util"
 import {
   type ConnectivityMap,
-  getSourcePortConnectivityMapFromCircuitJson,
+  getTraceMembers,
   sourceNetMembers,
 } from "./connectivity"
 import type { SourceTraceId } from "./ids"
 import type { RouteWire } from "./route-section-types"
+import type { WireChord } from "./route-simplify"
 import {
   getDirectionKey,
   getRoutePoint,
   groupWiresByGap,
   type WireGroup,
 } from "./route-wire"
-import type { CircuitJson, SourceTrace } from "./schema"
+import type { SourceTrace } from "./schema"
 
 /** Require a positive shared length before merging parallel copper. */
 const MIN_OVERLAP_LENGTH_MM = 1e-6
@@ -50,9 +51,7 @@ function getTraceNetKey({
   sourceTrace: SourceTrace
   connectivity: ConnectivityMap
 }): string {
-  const sourceMemberId =
-    sourceTrace.connected_source_port_ids[0] ??
-    sourceTrace.connected_source_net_ids?.[0]
+  const [sourceMemberId] = getTraceMembers(sourceTrace)
   if (sourceMemberId === undefined) return sourceTrace.source_trace_id
   return [
     ...sourceNetMembers({ connectivity, memberId: sourceMemberId }),
@@ -144,9 +143,15 @@ function mergeWires({
   return merged
 }
 
+/** A union interval and the chords that contribute copper to it. */
+export interface UnionedWire {
+  wire: RouteWire
+  contributingWires: WireGroup
+}
+
 /** Partition connected wires at the ends of each copper overlap. */
-function unionWireGroup(wires: WireGroup): RouteWire[] {
-  if (wires.length === 1) return wires
+function unionWireGroup(wires: WireGroup): UnionedWire[] {
+  if (wires.length === 1) return [{ wire: wires[0], contributingWires: wires }]
   const boundariesMm = [
     ...new Set(
       wires.flatMap(({ longitudinalMinMm, longitudinalMaxMm }) => [
@@ -155,7 +160,7 @@ function unionWireGroup(wires: WireGroup): RouteWire[] {
       ]),
     ),
   ].sort((a, b) => a - b)
-  const mergedWires: RouteWire[] = []
+  const mergedWires: UnionedWire[] = []
   for (let index = 1; index < boundariesMm.length; index++) {
     const longitudinalMinMm = boundariesMm[index - 1]
     const longitudinalMaxMm = boundariesMm[index]
@@ -170,26 +175,31 @@ function unionWireGroup(wires: WireGroup): RouteWire[] {
       wires: active,
       gapMm: UNION_TOLERANCE_MM,
     }))
-      mergedWires.push(
-        mergeWires({ wires: group, longitudinalMinMm, longitudinalMaxMm }),
-      )
+      mergedWires.push({
+        wire: mergeWires({
+          wires: group,
+          longitudinalMinMm,
+          longitudinalMaxMm,
+        }),
+        contributingWires: group,
+      })
   }
   return mergedWires
 }
 
 /** Union touching, parallel same-net conductors and keep their lateral joins. */
 export function unionRouteWires({
-  wires,
-  circuit,
+  chords,
+  db,
+  connectivity,
 }: {
-  wires: RouteWire[]
-  circuit: CircuitJson
-}): RouteWire[] {
-  const db = cju([...circuit])
-  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
+  chords: WireChord[]
+  db: ReturnType<typeof cju>
+  connectivity: ConnectivityMap
+}): UnionedWire[] {
   const netKeys = new Map<SourceTraceId, string>()
   const groups = new Map<CopperGroupKey, RouteWire[]>()
-  for (const wire of wires) {
+  for (const { wire } of chords) {
     let netKey = netKeys.get(wire.sourceTraceId)
     if (netKey === undefined) {
       const sourceTrace = db.source_trace.get(wire.sourceTraceId)
@@ -212,12 +222,16 @@ export function unionRouteWires({
   const mergedWires = [...groups.values()].flatMap((group) =>
     [...groupConnectedWires(group)].flatMap(unionWireGroup),
   )
-  mergedWires.sort((a, b) => {
-    if (a.wireIndex !== b.wireIndex) return a.wireIndex - b.wireIndex
+  mergedWires.sort(({ wire: first }, { wire: second }) => {
+    if (first.wireIndex !== second.wireIndex)
+      return first.wireIndex - second.wireIndex
     return (
-      getWireOrientation(wires[a.wireIndex]) *
-      (a.longitudinalMinMm - b.longitudinalMinMm)
+      getWireOrientation(chords[first.wireIndex].wire) *
+      (first.longitudinalMinMm - second.longitudinalMinMm)
     )
   })
-  return mergedWires.map((wire, wireIndex) => ({ ...wire, wireIndex }))
+  return mergedWires.map((merged, wireIndex) => ({
+    ...merged,
+    wire: { ...merged.wire, wireIndex },
+  }))
 }

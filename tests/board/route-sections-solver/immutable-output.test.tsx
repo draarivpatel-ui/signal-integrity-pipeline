@@ -7,7 +7,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing(
+test(
   "publishes the immutable circuit and copper scope supplied by planning",
   async () => {
     const circuit = await renderSectionBoard({

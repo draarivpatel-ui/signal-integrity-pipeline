@@ -10,8 +10,14 @@ const WIRE_JOIN_TOLERANCE_MM = 1e-7
 
 interface WireRun {
   points: CopperPoint[]
-  firstWire: RouteWire
+  physicalWires: RouteWire[]
   toleranceMm: number
+}
+
+/** A modeled chord and the original copper it replaces. */
+export interface WireChord {
+  wire: RouteWire
+  physicalWires: RouteWire[]
 }
 
 /** Recursive chord acceptance bounds every original vertex, preserving width/layer/via boundaries. */
@@ -23,8 +29,8 @@ function* simplifyRun({
   start: number
   end: number
   run: WireRun
-}): Generator<RouteWire> {
-  const { points, firstWire, toleranceMm } = run
+}): Generator<WireChord> {
+  const { points, physicalWires, toleranceMm } = run
   const startPoint = points[start]
   const endPoint = points[end]
   let farthest = -1
@@ -52,16 +58,19 @@ function* simplifyRun({
   )
   if (lengthMm < MIN_CHORD_LENGTH_MM) return
   yield {
-    ...firstWire,
-    startPoint,
-    endPoint,
-    ...projectRouteWire({ startPoint, endPoint, lengthMm }),
+    wire: {
+      ...physicalWires[start],
+      startPoint,
+      endPoint,
+      ...projectRouteWire({ startPoint, endPoint, lengthMm }),
+    },
+    physicalWires: physicalWires.slice(start, end),
   }
 }
 
 /** Simplified wires and the total route lengths before and after simplification. */
 interface SimplifiedRouteWires {
-  wires: RouteWire[]
+  chords: WireChord[]
   originalLengthMm: number
   simplifiedLengthMm: number
 }
@@ -74,9 +83,10 @@ export function simplifyRouteWires({
   wires: RouteWire[]
   toleranceMm: number
 }): SimplifiedRouteWires {
-  const simplifiedWires: RouteWire[] = []
+  const chords: WireChord[] = []
   let index = 0
   while (index < wires.length) {
+    const runStart = index
     const firstWire = wires[index++]
     const points = [firstWire.startPoint, firstWire.endPoint]
     while (index < wires.length) {
@@ -96,22 +106,29 @@ export function simplifyRouteWires({
       points.push(wire.endPoint)
       index++
     }
-    const wireRun: WireRun = { points, firstWire, toleranceMm }
-    for (const wire of simplifyRun({
+    const wireRun: WireRun = {
+      points,
+      physicalWires: wires.slice(runStart, index),
+      toleranceMm,
+    }
+    for (const chord of simplifyRun({
       start: 0,
       end: points.length - 1,
       run: wireRun,
     }))
-      simplifiedWires.push({ ...wire, wireIndex: simplifiedWires.length })
+      chords.push({
+        ...chord,
+        wire: { ...chord.wire, wireIndex: chords.length },
+      })
   }
   return {
-    wires: simplifiedWires,
+    chords,
     originalLengthMm: wires.reduce(
       (sum, wire) => sum + wire.longitudinalMaxMm - wire.longitudinalMinMm,
       0,
     ),
-    simplifiedLengthMm: simplifiedWires.reduce(
-      (sum, wire) => sum + wire.longitudinalMaxMm - wire.longitudinalMinMm,
+    simplifiedLengthMm: chords.reduce(
+      (sum, { wire }) => sum + wire.longitudinalMaxMm - wire.longitudinalMinMm,
       0,
     ),
   }

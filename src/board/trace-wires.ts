@@ -98,6 +98,7 @@ export function extractTraceWires({
           point: [end.x, end.y],
           layers: [end.from_layer, end.to_layer],
           outerDiameterMm: outer_diameter,
+          holeDiameterMm: end.hole_diameter,
         })
       }
     }

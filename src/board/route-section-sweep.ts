@@ -1,5 +1,6 @@
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
+import type { LongitudinalInterval } from "./route-reference-range"
 import {
   findReferenceBoundariesMm,
   findRouteReferences,
@@ -36,7 +37,7 @@ function groupSectionReferences({
 }: {
   geometry: SectionSweepGeometry
   wires: RouteWire[]
-  interval: Pick<RouteSection, "startMm" | "endMm">
+  interval: LongitudinalInterval
   copperScope: Snapshot<CopperScope>
 }): Iterable<SectionProfile> {
   const profiles = new Map<ReferenceProfileKey, SectionProfile>()
@@ -81,7 +82,7 @@ function sweepDirection({
   const positionsMm = wires.flatMap((wire) => [
     wire.longitudinalMinMm,
     wire.longitudinalMaxMm,
-    ...findReferenceBoundariesMm({ wire, pours: geometry.pours }),
+    ...findReferenceBoundariesMm({ wire, geometry }),
   ])
   const boundariesMm = [...new Set(positionsMm.map(roundRouteCoordinate))].sort(
     (a, b) => a - b,

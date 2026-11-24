@@ -1,5 +1,6 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { Snapshot } from "../kernel"
+import { getSourcePortConnectivityMapFromCircuitJson } from "./connectivity"
 import type { CopperScope } from "./geometry/scope"
 import { resolveRouteContacts } from "./route-contacts"
 import { MAX_REFERENCE_EDGE_DISTANCE_MM } from "./route-reference-range"
@@ -66,10 +67,17 @@ function finalizeGeometry({
     wires,
     toleranceMm: CHORD_TOLERANCE_MM,
   })
-  const mergedWires = unionRouteWires({ wires: simplified.wires, circuit })
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
+  const mergedWires = unionRouteWires({
+    chords: simplified.chords,
+    db,
+    connectivity,
+  })
   const contacts = resolveRouteContacts({
-    circuit,
-    wires: mergedWires,
+    db,
+    connectivity,
+    chords: simplified.chords,
+    mergedWires,
     vias,
     copperScope,
   })
@@ -78,7 +86,7 @@ function finalizeGeometry({
     ...geometry,
     sections: sweepRouteSections({ geometry, copperScope }),
     warnings: [
-      `Chord tolerance ${CHORD_TOLERANCE_MM} mm reduced ${wires.length} wires to ${simplified.wires.length}. Total length changed from ${simplified.originalLengthMm} to ${simplified.simplifiedLengthMm} mm.`,
+      `Chord tolerance ${CHORD_TOLERANCE_MM} mm reduced ${wires.length} wires to ${simplified.chords.length}. Total length changed from ${simplified.originalLengthMm} to ${simplified.simplifiedLengthMm} mm.`,
       "Overlapping parallel same-net wires share one copper rectangle. The original endpoints join its centerline through ideal connections.",
       `When no reference lies above or below a wire, a pour edge within ${MAX_REFERENCE_EDGE_DISTANCE_MM} mm supplies an effective reference surface. The distance combines the vertical gap and lateral gap.`,
       "Wires with different directions are sectioned independently.",

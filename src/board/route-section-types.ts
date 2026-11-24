@@ -66,6 +66,7 @@ export interface RouteVia {
   layers: LayerRef[]
   point: CopperPoint
   outerDiameterMm: number
+  holeDiameterMm?: number
 }
 
 /** A real pad contact and the wire reached from that pad. */

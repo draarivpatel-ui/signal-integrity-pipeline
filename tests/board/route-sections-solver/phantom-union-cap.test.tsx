@@ -8,7 +8,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing(
+test(
   "rejects a pad beyond both physical ends of a merged wire",
   async () => {
     const circuit = await renderSectionBoard({

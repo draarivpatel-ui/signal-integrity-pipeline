@@ -7,7 +7,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing(
+test(
   "rejects a blind via with a layer outside the board stack",
   async () => {
     const circuit = await renderSectionBoard({

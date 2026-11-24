@@ -7,7 +7,11 @@ import type {
   RouteSection,
   RouteWire,
 } from "./route-section-types"
-import { getRoutePoint, measureChordDistanceMm } from "./route-wire"
+import {
+  getRoutePoint,
+  MIN_WIRE_LENGTH_MM,
+  measureChordDistanceMm,
+} from "./route-wire"
 
 /** Limit edge references to the local neighborhood of ordinary board thicknesses. */
 export const MAX_REFERENCE_EDGE_DISTANCE_MM = 2
@@ -62,51 +66,101 @@ function getEdgeInterval({
   return { startMm: Math.min(...positionsMm), endMm: Math.max(...positionsMm) }
 }
 
-/** A single pour must cover the entire edge-referenced interval, without gaps. */
-export function coversReferenceInterval({
-  interval,
+/** Ranges where a pour's edge is within the combined lateral and vertical limit. */
+export function getEdgeCoverage({
   wire,
   pour,
   verticalGapMm,
 }: {
-  interval: LongitudinalInterval
   wire: Snapshot<RouteWire>
   pour: ReferencePour
   verticalGapMm: number
-}): boolean {
+}): LongitudinalInterval[] {
+  if (verticalGapMm >= MAX_REFERENCE_EDGE_DISTANCE_MM) return []
   const lateralLimitMm = Math.sqrt(
     MAX_REFERENCE_EDGE_DISTANCE_MM ** 2 - verticalGapMm ** 2,
   )
-  const start = getRoutePoint({ wire, positionMm: interval.startMm })
-  const end = getRoutePoint({ wire, positionMm: interval.endMm })
-  if (
-    measurePourGapMm({ point: start, pour }) >= lateralLimitMm ||
-    measurePourGapMm({ point: end, pour }) >= lateralLimitMm
-  )
-    return false
-
   const [x, y] = wire.direction
-  const line = new Line(new Point(...start), new Vector(-y, x))
-  const spans = pour.polygon
+  const line = new Line(new Point(...wire.startPoint), new Vector(-y, x))
+  const edgeIntervals = pour.polygon
     .flatMap((ring) =>
       ring.flatMap((startPoint, index) => {
-        const span = getEdgeInterval({
+        const edgeInterval = getEdgeInterval({
           line,
           direction: wire.direction,
           startPoint,
           endPoint: ring[(index + 1) % ring.length],
           lateralLimitMm,
         })
-        if (!span) return []
-        return [span]
+        if (!edgeInterval) return []
+        return [edgeInterval]
       }),
     )
     .sort((first, second) => first.startMm - second.startMm)
-  let coveredToMm = interval.startMm
-  for (const span of spans) {
-    if (span.startMm >= coveredToMm) break
-    coveredToMm = Math.max(coveredToMm, span.endMm)
-    if (coveredToMm > interval.endMm) return true
+  const coverage: LongitudinalInterval[] = []
+  for (const edgeInterval of edgeIntervals) {
+    const previous = coverage.at(-1)
+    if (
+      !previous ||
+      edgeInterval.startMm > previous.endMm + MIN_WIRE_LENGTH_MM
+    ) {
+      coverage.push(edgeInterval)
+      continue
+    }
+    previous.endMm = Math.max(previous.endMm, edgeInterval.endMm)
   }
-  return false
+  return coverage
+}
+
+/** Test containment of a section interval within one continuous reference range. */
+export function containsReferenceInterval({
+  coverage,
+  interval,
+}: {
+  coverage: LongitudinalInterval
+  interval: LongitudinalInterval
+}): boolean {
+  return (
+    coverage.startMm <= interval.startMm + MIN_WIRE_LENGTH_MM &&
+    coverage.endMm >= interval.endMm - MIN_WIRE_LENGTH_MM
+  )
+}
+
+/** Place handoffs inside overlapping coverage, returning none if a gap remains. */
+export function findEdgeHandoffsMm({
+  coverage,
+  interval,
+}: {
+  coverage: LongitudinalInterval[]
+  interval: LongitudinalInterval
+}): number[] {
+  const ordered = coverage.toSorted(
+    (first, second) => first.startMm - second.startMm,
+  )
+  const handoffsMm: number[] = []
+  let coveredToMm = interval.startMm
+  let index = 0
+  while (coveredToMm < interval.endMm - MIN_WIRE_LENGTH_MM) {
+    let next: LongitudinalInterval | undefined
+    while (
+      index < ordered.length &&
+      ordered[index].startMm <= coveredToMm + MIN_WIRE_LENGTH_MM
+    ) {
+      const candidate = ordered[index++]
+      if (
+        candidate.endMm <= coveredToMm ||
+        (next && candidate.endMm <= next.endMm)
+      )
+        continue
+      next = candidate
+    }
+    if (!next) return []
+    if (coveredToMm > interval.startMm) {
+      let previousMm = interval.startMm
+      if (handoffsMm.length) previousMm = handoffsMm[handoffsMm.length - 1]
+      handoffsMm.push((Math.max(previousMm, next.startMm) + coveredToMm) / 2)
+    }
+    coveredToMm = next.endMm
+  }
+  return handoffsMm
 }

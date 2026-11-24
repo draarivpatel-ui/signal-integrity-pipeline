@@ -8,7 +8,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing(
+test(
   "marks no pad at a union endpoint outside both physical endcaps",
   async () => {
     const circuit = await renderSectionBoard({
