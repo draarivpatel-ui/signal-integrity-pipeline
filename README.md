@@ -22,7 +22,7 @@ or `"1"` for a quiet level, or use a channel pattern such as `"clock"` or
 `"prbs7"` to switch at the simulation bit rate from time zero.
 `aggressorDisabled` takes precedence and requires every aggressor
 model to support high impedance. The selected channels keep their own
-`pattern` and `driverDisabled` settings. The pinned core preview emits the
+`pattern` and `driverDisabled` settings. The pinned core version emits the
 aggressor fields.
 
 Automatic duration covers a full pattern for every switching channel or

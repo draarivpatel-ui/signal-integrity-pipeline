@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -41,12 +42,12 @@ test("ground shunts do not create a bypass across a single-ended load cut", asyn
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  assert.equal(bindings.routedTraceCuts.length, 1)
-  assert.deepEqual(bindings.mappings, [])
-  const [{ fromSourcePortId, toSourcePortId }] = bindings.routedTraceCuts
+  assert.equal(bindings.traceContacts.length, 1)
+  assert.deepEqual(bindings.receiverPaths, [])
+  const [{ fromSourcePortId, toSourcePortId }] = bindings.traceContacts
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   assert.notEqual(node(fromSourcePortId), node(toSourcePortId))
 })

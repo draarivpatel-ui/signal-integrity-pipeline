@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import {
+  cloneCircuitJson,
   type RouteSectionsInput,
   RouteSectionsSolver,
   segmentRoutes,
@@ -28,7 +29,10 @@ test("sections process one route per step", async () => {
   solver.solve()
   assert.deepEqual(
     solver.getOutput().value.geometry,
-    segmentRoutes({ circuit: circuitJson, scope: copperScope }),
+    segmentRoutes({
+      circuit: cloneCircuitJson(circuitJson),
+      scope: copperScope,
+    }),
   )
 })
 

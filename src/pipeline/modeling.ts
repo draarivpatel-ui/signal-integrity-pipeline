@@ -6,7 +6,7 @@ import type {
 } from "../board"
 import type { SimulationModeling } from "../simulation"
 /** A selected two-terminal trace with physical source ports at both ends. */
-export interface RoutedLane extends LaneModeling {
+export interface ChannelTrace extends LaneModeling {
   from: { sourcePortId: SourcePortId }
   to: { sourcePortId: SourcePortId }
   sourceTraceId: SourceTraceId
@@ -14,7 +14,7 @@ export interface RoutedLane extends LaneModeling {
 
 /** Private channel simulation planning settings derived from the board and selected IBIS buffers. */
 export type NumericalSettings = SimulationModeling & {
-  lanes: RoutedLane[]
+  channelTraces: ChannelTrace[]
   channelReference: { sourcePortId: SourcePortId }
   copperScope: CopperScope
 }

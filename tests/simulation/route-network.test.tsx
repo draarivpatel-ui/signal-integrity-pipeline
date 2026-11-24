@@ -10,8 +10,8 @@ import {
 } from "../../src/pipeline"
 import { RouteBindingsSolver, RouteNetworkSolver } from "../../src/simulation"
 import { routedRequest } from "../../src/simulation/route-transient"
-import { channelPlanInput } from "../fixtures/routed-fixture"
 import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
+import { renderTwoTracePlanInput } from "../fixtures/two-trace-plan-input"
 import Single from "../fixtures/unit-single-ended"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
@@ -63,7 +63,7 @@ function compileNetwork(
 /** Cache the network from the rendered fixture and the local vendor model. */
 async function routedNetwork(): Promise<RouteNetworkSolver> {
   if (testNetwork) return testNetwork
-  const input = await channelPlanInput()
+  const input = await renderTwoTracePlanInput()
   testNetwork = compileNetwork(input)
   return testNetwork
 }

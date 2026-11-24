@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { convertIbisModelToSpice, parseIbis } from "@tscircuit/ibis-to-spice"
 import React from "react"
+import { cloneCircuitJson } from "../../src/board"
 import { convertPackaged } from "../../src/buffers/package"
 import { isDigit, lineRanges } from "../../src/buffers/text"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
@@ -99,8 +100,8 @@ async function fixture(
     ibisSources: { [`models/${file}`]: bytes },
   })
   const declarations = generalDeclarations({
-    circuit: bindings.circuitJson,
-    mappings: bindings.mappings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+    receiverPaths: bindings.receiverPaths,
     modeling: bindings.modeling,
     controls: bindings.controls,
   })
