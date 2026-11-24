@@ -14,7 +14,7 @@ import {
 } from "./admission-view"
 import type { LaneMapping } from "./geometry/types"
 import type { SourcePortId, SourceTraceId } from "./ids"
-import type { CircuitJsonSnapshot } from "./schema"
+import type { CircuitJson } from "./schema"
 
 /** Colours for physical copper, endpoint outlines and admission diagnostics. */
 export const routeCopperTones = {
@@ -137,7 +137,7 @@ export function routeNets<Net extends RouteCopperNet>({
   view,
   color,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   view: Pick<RouteCopperView, "traces"> & {
     sources: ReadonlyMap<SourceTraceId, Net>
   }

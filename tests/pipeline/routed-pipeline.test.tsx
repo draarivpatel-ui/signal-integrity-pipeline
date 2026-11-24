@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises"
 import { BasePipelineSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import { TwoTraceBoard } from "../../examples/routed/two-trace-board"
-import type { CircuitJson, CircuitJsonSnapshot } from "../../src/board"
+import type { CircuitJson } from "../../src/board"
 import { boardPictureView } from "../../src/board/board-picture"
 import { sha256 } from "../../src/kernel"
 import { formatSpiceVectors } from "../../src/observation"
@@ -346,7 +346,7 @@ function assertDrawing({
   circuit,
   frame,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   frame: {
     drawing: GraphicsObject
     state: string

@@ -3,7 +3,6 @@ import { BaseSolver } from "@tscircuit/solver-utils"
 import type { PcbComponent, PcbPort } from "circuit-json"
 import type { GraphicsObject } from "graphics-debug"
 import {
-  circuitJsonDb,
   routeBoardDrawing,
   routeBuffers,
   routeFailure,
@@ -182,7 +181,7 @@ export class RouteBindingsSolver extends BaseSolver {
     const circuit = this.input.circuitJson
     const view = routeView({ circuit, scope: this.input.copperScope })
     let drawing = routeBoardDrawing({ circuit, scope: this.input.copperScope })
-    const db = circuitJsonDb(circuit)
+    const db = cju([...circuit])
     const pcbPorts = new Map(
       db.pcb_port.list().map((port) => [port.source_port_id, port]),
     )
@@ -279,7 +278,7 @@ export class RouteBindingsSolver extends BaseSolver {
 
 /** Circuit lookups and drawing scale shared by all component outlines. */
 interface PortOutlineContext {
-  pcbPorts: ReadonlyMap<PcbPort["source_port_id"], Snapshot<PcbPort>>
+  pcbPorts: ReadonlyMap<PcbPort["source_port_id"], PcbPort>
   components: ReadonlyMap<
     PcbComponent["pcb_component_id"],
     Snapshot<PcbComponent>

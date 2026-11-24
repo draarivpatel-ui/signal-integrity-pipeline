@@ -566,7 +566,7 @@ export class RouteNetworkSolver extends BaseSolver {
     let transitions: Record<string, unknown>[] = []
     if (Array.isArray(records)) transitions = records
     const physical = new Map(
-      circuitJsonDb(circuit)
+      cju([...circuit])
         .pcb_via.list()
         .map((item) => [item.pcb_via_id, item]),
     )

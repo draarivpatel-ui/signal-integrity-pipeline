@@ -28,7 +28,7 @@ import {
   routeStrip,
   routeUnrolled,
 } from "./route-visual-strip"
-import type { CircuitJsonSnapshot } from "./schema"
+import type { CircuitJson } from "./schema"
 
 /** The board, copper scope and required ports passed to route sectioning. */
 export interface RouteSectionsInput {

@@ -118,7 +118,7 @@ export function routeSourceNets({
 
 /** The board's physical extent, including unscoped copper on boards without a boundary. */
 /** @internal */
-export function routeBoardBox(db: CircuitJsonDb): Viewbox {
+export function routeBoardBox(db: CircuitJsonUtilObjects): Viewbox {
   const board = db.pcb_board.getWhere({})
   if (board?.outline) {
     const outline = routeBounds(board.outline)

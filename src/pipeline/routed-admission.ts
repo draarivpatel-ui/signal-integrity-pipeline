@@ -251,7 +251,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
       }),
     })
     const marks = routeAdmissionMarks({
-      db: circuitJsonDb(circuit),
+      db: cju([...circuit]),
       mappings: plan.bindings.mappings,
       view,
     })
