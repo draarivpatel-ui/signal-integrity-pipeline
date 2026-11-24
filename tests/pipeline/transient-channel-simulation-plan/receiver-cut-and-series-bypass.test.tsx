@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
-import { selectPort } from "../../../src/board"
+import { cloneCircuitJson, selectPort } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -30,7 +30,7 @@ test("rejects an ideal bypass across a receiver-side cut and series resistor", a
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const { routedTraceCuts } = bindings
+  const { traceContacts } = bindings
   const from = selectPort({
     circuit: circuitJson,
     selector: { component: "RS", port: "pin2" },
@@ -39,15 +39,19 @@ test("rejects an ideal bypass across a receiver-side cut and series resistor", a
     circuit: circuitJson,
     selector: { component: "RX", port: "A" },
   })
-  const cut = routedTraceCuts.find(
+  const cut = traceContacts.find(
     ({ fromSourcePortId, toSourcePortId }) =>
       fromSourcePortId === from.source_port_id &&
       toSourcePortId === to.source_port_id,
   )
   assert.ok(cut)
-  assert.equal(routedTraceCuts.length, 2)
+  assert.equal(traceContacts.length, 2)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     {
       code: "channel_short",
       message: new RegExp(

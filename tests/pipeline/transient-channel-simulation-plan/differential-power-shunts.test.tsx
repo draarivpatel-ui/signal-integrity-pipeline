@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
@@ -25,11 +26,14 @@ test("pull-ups on both differential legs keep their signal nodes distinct", asyn
   const [{ bindings }] = solver.getOutput().value
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  const [positive, negative] = bindings.mappings
+  const [positive, negative] = bindings.receiverPaths
   assert.equal(positive.sourceTraceIds?.length, 2)
   assert.equal(negative.sourceTraceIds?.length, 2)
-  assert.notEqual(node(positive.from), node(negative.from))
-  assert.notEqual(node(positive.to), node(negative.to))
+  assert.notEqual(
+    node(positive.fromSourcePortId),
+    node(negative.fromSourcePortId),
+  )
+  assert.notEqual(node(positive.toSourcePortId), node(negative.toSourcePortId))
 })

@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 
-test("empty boards admit no fake channel simulations", () => {
+test("an empty board produces no channel simulation plans", () => {
   const solver = new TransientChannelSimulationPlanSolver({
     circuitJson: [],
     ibisSources: {},

@@ -1,27 +1,30 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
-  planDrawing,
   type RouteSectionsInput,
+  renderPlanDrawing,
   type SimulationPcbTransientChannelSimulationId,
 } from "../board"
 import type { IbisSources } from "../buffers"
-import { type Produced, rootScope, sha256, snapshot } from "../kernel"
-import type { RouteBindingsInput, RoutedTraceCut } from "../simulation"
-import type { RoutedLane } from "./modeling"
-import { routedReceiverMappings } from "./routed-receiver-paths"
-import { compareNames, prepareChannelSimulation } from "./signals"
 import {
-  captureTransientChannelSimulationPlanInput,
+  Diagnostic,
+  type Produced,
+  rootScope,
+  sha256,
+  snapshot,
+} from "../kernel"
+import type { RouteBindingsInput, TraceContacts } from "../simulation"
+import type { ChannelTrace } from "./modeling"
+import {
+  capturePlanInput,
   type TransientChannelSimulationPlanInput,
   type ValidatedBoard,
   type ValidatedChannelSimulation,
   validatePlanningBoard,
-} from "./transient-channel-simulation-plan-input"
-import {
-  buildPlanVisualScene,
-  type FailedPlanAttempt,
-} from "./transient-channel-simulation-plan-visual"
+} from "./plan/input"
+import { buildPlanVisualScene, type FailedPlanAttempt } from "./plan/visual"
+import { resolveReceiverTracePaths } from "./resolve-receiver-paths"
+import { compareNames, prepareChannelSimulation } from "./signals"
 
 /** Planning starts with the base route mesh resolution. */
 const BASE_REFINEMENT = 1
@@ -39,27 +42,25 @@ export interface TransientChannelSimulationPlan {
 }
 
 /** The completed channel plans and their plan manifest. */
-type TransientChannelSimulationPlanOutput = Produced<
-  readonly TransientChannelSimulationPlan[]
->
+type PlanOutput = Produced<readonly TransientChannelSimulationPlan[]>
 
 /** Take the physical port pair from each cut, including loads beyond the receivers. */
-function routedTraceCut(lane: RoutedLane): RoutedTraceCut {
+function getTraceContacts(channelTrace: ChannelTrace): TraceContacts {
   return {
-    sourceTraceId: lane.sourceTraceId,
-    fromSourcePortId: lane.from.sourcePortId,
-    toSourcePortId: lane.to.sourcePortId,
+    sourceTraceId: channelTrace.sourceTraceId,
+    fromSourcePortId: channelTrace.from.sourcePortId,
+    toSourcePortId: channelTrace.to.sourcePortId,
   }
 }
 
 /** Lower the validated declaration into sectioning and binding inputs. */
-function planTransientChannelSimulation({
+function buildChannelPlan({
   input,
-  scopeDistanceMm,
+  nearbyGapMm,
   validatedChannelSimulation,
 }: {
   input: TransientChannelSimulationPlanInput
-  scopeDistanceMm: number
+  nearbyGapMm: number
   validatedChannelSimulation: ValidatedChannelSimulation
 }): TransientChannelSimulationPlan {
   const { channelSimulation, simulationPcbTransientChannelSimulationId } =
@@ -68,22 +69,22 @@ function planTransientChannelSimulation({
     boardCircuitJson: input.circuitJson,
     sources: input.ibisSources,
     ...validatedChannelSimulation,
-    distanceMm: scopeDistanceMm,
+    distanceMm: nearbyGapMm,
   })
   const artifactPrefix = `channelSimulations/${simulationPcbTransientChannelSimulationId}`
-  const circuitJson = structuredClone(prepared.circuit)
+  const circuitJson = snapshot(prepared.circuit)
   const modeling = snapshot(prepared.settings)
-  const routedTraceCuts = snapshot(modeling.lanes.map(routedTraceCut))
+  const traceContacts = snapshot(modeling.channelTraces.map(getTraceContacts))
   const requiredSourcePortIds = Object.freeze([
     ...new Set(
-      routedTraceCuts.flatMap(({ fromSourcePortId, toSourcePortId }) => [
+      traceContacts.flatMap(({ fromSourcePortId, toSourcePortId }) => [
         fromSourcePortId,
         toSourcePortId,
       ]),
     ),
   ])
-  const mappings = snapshot(
-    routedReceiverMappings({ prepared, cuts: routedTraceCuts }),
+  const receiverPaths = snapshot(
+    resolveReceiverTracePaths({ prepared, cuts: traceContacts }),
   )
   return Object.freeze({
     simulationPcbTransientChannelSimulationId,
@@ -97,13 +98,13 @@ function planTransientChannelSimulation({
     }),
     bindings: Object.freeze({
       circuitJson,
-      mappings,
-      routedTraceCuts,
+      receiverPaths,
+      traceContacts,
       modeling,
       controls: snapshot(prepared.controls),
       ibisSources: input.ibisSources,
       options: Object.freeze({
-        riseSeconds: prepared.riseSeconds,
+        fastestEdgeSeconds: prepared.fastestEdgeSeconds,
         refinement: BASE_REFINEMENT,
         stepSeconds: prepared.stepSeconds,
         durationSeconds: prepared.durationSeconds,
@@ -120,7 +121,7 @@ function finalizePlans({
 }: {
   channelSimulationPlans: readonly TransientChannelSimulationPlan[]
   ibisSources: Readonly<IbisSources>
-}): TransientChannelSimulationPlanOutput {
+}): PlanOutput {
   const channelSimulations = channelSimulationPlans.map(
     ({ simulationPcbTransientChannelSimulationId, name, warnings }) => ({
       simulationPcbTransientChannelSimulationId,
@@ -153,13 +154,13 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
   private readonly input: TransientChannelSimulationPlanInput
   private validatedBoard?: ValidatedBoard
   private readonly channelSimulationPlans: TransientChannelSimulationPlan[] = []
-  private channelPcbTraceCount = 0
-  private output?: TransientChannelSimulationPlanOutput
+  private totalChannelPcbTraceCount = 0
+  private output?: PlanOutput
   private failedAttempt?: FailedPlanAttempt
   /** Capture a single board and model version for the whole planning run. */
   constructor(input: TransientChannelSimulationPlanInput) {
     super()
-    this.input = captureTransientChannelSimulationPlanInput(input)
+    this.input = capturePlanInput(input)
   }
   /** Prepare the next channel simulation and finalize once all plans are ready. */
   override _step(): void {
@@ -169,22 +170,22 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
       this.failedAttempt = { error }
       throw error
     }
-    const { channelSimulations, scopeDistanceMm } = this.validatedBoard
+    const { channelSimulations, nearbyGapMm } = this.validatedBoard
     const validatedChannelSimulation =
       channelSimulations[this.channelSimulationPlans.length]
     if (validatedChannelSimulation) {
       try {
-        const plan = planTransientChannelSimulation({
+        const plan = buildChannelPlan({
           input: this.input,
-          scopeDistanceMm,
+          nearbyGapMm,
           validatedChannelSimulation,
         })
         this.channelSimulationPlans.push(plan)
-        this.channelPcbTraceCount +=
+        this.totalChannelPcbTraceCount +=
           plan.sections.copperScope.channelPcbTraceIds.length
       } catch (error) {
         this.failedAttempt = {
-          simulation: validatedChannelSimulation.channelSimulation,
+          channelSimulation: validatedChannelSimulation.channelSimulation,
           error,
         }
         throw error
@@ -193,17 +194,22 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
     const channelSimulationCount = this.channelSimulationPlans.length
     this.stats = {
       channelSimulationCount,
-      channelPcbTraceCount: this.channelPcbTraceCount,
+      totalChannelPcbTraceCount: this.totalChannelPcbTraceCount,
     }
     if (channelSimulationCount !== channelSimulations.length) return
-    this.output = finalizePlans({
-      channelSimulationPlans: this.channelSimulationPlans,
-      ibisSources: this.input.ibisSources,
-    })
+    try {
+      this.output = finalizePlans({
+        channelSimulationPlans: this.channelSimulationPlans,
+        ibisSources: this.input.ibisSources,
+      })
+    } catch (error) {
+      this.failedAttempt = { error }
+      throw error
+    }
     this.solved = true
   }
   /** No partially planned channel simulation list escapes. */
-  override getOutput(): TransientChannelSimulationPlanOutput {
+  override getOutput(): PlanOutput {
     if (!this.output)
       throw new Error("Transient channel simulation plan is incomplete")
     return this.output
@@ -221,9 +227,13 @@ export class TransientChannelSimulationPlanSolver extends BaseSolver {
   }
   /** Inspect the most recent attempted channel simulation and its board. */
   override visualize(): GraphicsObject {
-    return planDrawing(
+    const error = this.failedAttempt?.error
+    let circuitJson = this.input.circuitJson
+    if (error instanceof Diagnostic && error.code === "circuit_schema")
+      circuitJson = []
+    return renderPlanDrawing(
       buildPlanVisualScene({
-        circuit: this.input.circuitJson,
+        circuitJson,
         plan: this.channelSimulationPlans.at(-1),
         failed: this.failedAttempt,
         error: this.error || null,

@@ -14,11 +14,11 @@ export type SignalRailIds = Set<SourcePortId | SourceNetId>
 export function signalRailIds({
   db,
   connectivity,
-  referenceIds,
+  referenceSourcePortIds,
 }: {
   db: CircuitJsonUtilObjects
   connectivity: ConnectivityMap
-  referenceIds: readonly (SourcePortId | undefined)[]
+  referenceSourcePortIds: readonly (SourcePortId | undefined)[]
 }): SignalRailIds {
   const flaggedNets = db.source_net
     .list()
@@ -39,7 +39,7 @@ export function signalRailIds({
     ...flaggedNets,
     ...ibisReferences,
     ...voltageTerminals,
-    ...referenceIds,
+    ...referenceSourcePortIds,
   ]) {
     if (memberId === undefined || rails.has(memberId)) continue
     for (const id of sourceNetMembers({ connectivity, memberId })) rails.add(id)
