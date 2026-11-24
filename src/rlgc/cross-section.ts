@@ -2,7 +2,7 @@ import { defaultCopperConductivitySm } from "../board"
 import type { Matrix } from "../kernel"
 import { calculateRegionField } from "./cross-section-field"
 import { assertMatrixPassive } from "./cross-section-matrix"
-import { partitionCrossSection } from "./cross-section-mesh"
+import { partitionCrossSection } from "./cross-section-regions"
 import type {
   CrossSection,
   CrossSectionOptions,

@@ -1,9 +1,7 @@
 import type { GraphicsObject, Line } from "graphics-debug"
 import type { CrossSection } from "../../src/rlgc"
-import {
-  buildRegionPanels,
-  partitionCrossSection,
-} from "../../src/rlgc/cross-section-mesh"
+import { buildRegionPanels } from "../../src/rlgc/cross-section-mesh"
+import { partitionCrossSection } from "../../src/rlgc/cross-section-regions"
 
 const PLANE_COLOR = "#263758"
 const CONDUCTOR_COLOR = "#b35a25"
