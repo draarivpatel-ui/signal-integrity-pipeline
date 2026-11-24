@@ -1,9 +1,7 @@
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
-import { Circuit } from "@tscircuit/core"
-import type { TraceProps } from "@tscircuit/props"
 import type { LayerRef } from "circuit-json"
-import type { ReactElement, ReactNode } from "react"
+import type { JSX, ReactElement, ReactNode } from "react"
 import {
   type CircuitJson,
   channelCopperScope,
@@ -12,6 +10,7 @@ import {
   sourceNetMembers,
 } from "../../src/board"
 import { snapshot } from "../../src/kernel"
+import { renderCoreBoard } from "../support/core-render"
 
 interface SectionPinProps {
   name: string
@@ -59,10 +58,11 @@ interface SectionTraceProps {
   endX?: number
   startY?: number
   endY?: number
+  startLayer?: LayerRef
   endLayer?: LayerRef
   width?: number
   net?: string
-  points?: TraceProps["pcbPath"]
+  points?: JSX.IntrinsicElements["trace"]["pcbPath"]
   hasStartTeardrop?: boolean
 }
 
@@ -73,7 +73,8 @@ export function SectionTrace({
   endX = 4,
   startY = 0,
   endY = startY,
-  endLayer = "top",
+  startLayer = "top",
+  endLayer = startLayer,
   width = 0.2,
   net = "net.SIGNAL",
   points = [],
@@ -83,7 +84,13 @@ export function SectionTrace({
   const to = `.${name}End > .P`
   return (
     <>
-      <SectionPin name={`${name}Start`} x={startX} y={startY} net={net} />
+      <SectionPin
+        name={`${name}Start`}
+        x={startX}
+        y={startY}
+        net={net}
+        layer={startLayer}
+      />
       <SectionPin
         name={`${name}End`}
         x={endX}
@@ -106,32 +113,34 @@ export function SectionTrace({
 /** Render the test geometry through core. Overlaps and open ports are deliberate. */
 export async function renderSectionBoard({
   children,
+  allowBlindAndBuriedVias = true,
   reference = <copperpour connectsTo="net.GND" layer="bottom" unbroken />,
 }: {
   children: ReactNode
+  allowBlindAndBuriedVias?: boolean
   reference?: ReactNode
 }): Promise<CircuitJson> {
-  const circuit = new Circuit({ platform: { partsEngineDisabled: true } })
-  circuit.add(
-    <board
-      width={14}
-      height={10}
-      layers={4}
-      thickness={1.6}
-      fabricatorPreset="jlcpcb_standard"
-      allowBlindAndBuriedVias
-      routeRemaining={false}
-      schematicDisabled
-    >
-      <net name="GND" />
-      <net name="SIGNAL" />
-      <net name="OTHER" />
-      {children}
-      {reference}
-    </board>,
-  )
-  await circuit.renderUntilSettled()
-  return circuit.getCircuitJson()
+  return renderCoreBoard({
+    tree: (
+      <board
+        width={14}
+        height={10}
+        layers={4}
+        thickness={1.6}
+        fabricatorPreset="jlcpcb_standard"
+        allowBlindAndBuriedVias={allowBlindAndBuriedVias}
+        routeRemaining={false}
+        schematicDisabled
+      >
+        <net name="GND" />
+        <net name="SIGNAL" />
+        <net name="OTHER" />
+        {children}
+        {reference}
+      </board>
+    ),
+    keepDrcErrors: true,
+  })
 }
 
 /** Select the real traces and ports generated for a section fixture. */
@@ -139,16 +148,27 @@ export function getSectionInput({
   circuit,
   required = [],
   distanceMm = 1,
+  railNetName,
 }: {
   circuit: CircuitJson
   required?: readonly string[]
   distanceMm?: number
+  railNetName?: string
 }): RouteSectionsInput {
   const db = cju([...circuit])
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
   const channel = db.source_net.getWhere({ name: "SIGNAL" })
   const reference = db.source_net.getWhere({ name: "GND" })
   assert(channel && reference)
+  let railSourceIds = new Set<string>()
+  if (railNetName !== undefined) {
+    const rail = db.source_net.getWhere({ name: railNetName })
+    assert(rail, railNetName)
+    railSourceIds = sourceNetMembers({
+      connectivity,
+      memberId: rail.source_net_id,
+    })
+  }
   const copperScope = channelCopperScope({
     circuit,
     connectivity,
@@ -160,7 +180,7 @@ export function getSectionInput({
       connectivity,
       memberId: reference.source_net_id,
     }),
-    railSourceIds: new Set(),
+    railSourceIds,
     distanceMm,
   })
   const requiredSourcePortIds = required.map((name) => {
