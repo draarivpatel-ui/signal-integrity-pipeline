@@ -91,7 +91,7 @@ export function DaisyChainFixture({
         <>
           <trace from={driver} to={finalReceiver} />
           <pcbnotetext
-            text="TX.Y and RX.A joined by an ideal bypass across both cuts"
+            text="TX.Y and RX.A joined by an ideal bypass across both traces"
             pcbX={0}
             pcbY={4.8}
           />
