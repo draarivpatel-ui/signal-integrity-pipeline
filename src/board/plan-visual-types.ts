@@ -63,8 +63,7 @@ export interface PlanVisualEndpoint {
 export interface PlanVisualScene {
   db: CircuitJsonUtilObjects
   title: string
-  summary: string
-  diagnostic?: string
+  diagnostic?: { text: string; label: string }
   scope?: Snapshot<CopperScope>
   cuts: readonly PlanVisualCut[]
   endpoints: readonly PlanVisualEndpoint[]

@@ -33,7 +33,7 @@ test("draws the whole board with the open differential leg diagnostic in red", a
   assert.ok(drawing.lines?.length)
   assert.ok(drawing.texts?.length)
   const fault = drawing.texts.find((text) =>
-    text.text.includes("no source path"),
+    text.text.includes("no copper connects"),
   )
   assert.equal(fault?.color, "#b91c1c")
   assert.ok(
@@ -46,12 +46,17 @@ test("draws the whole board with the open differential leg diagnostic in red", a
         line.label?.includes("No routed source path"),
     ),
   )
-  assert.ok(drawing.texts.some((text) => text.text.includes("TX.A")))
-  assert.ok(drawing.texts.some((text) => text.text.includes("RX.A")))
-  assert.match(
-    drawing.texts.map((text) => text.text).join(" "),
-    /BUS: no source path/,
+  assert.equal(
+    fault?.text,
+    "BUS +: no copper connects TX pin A to RX pin A (red dashed line).",
   )
+  assert.ok(
+    drawing.rects?.some(
+      (rect) =>
+        rect.layer === "header" && rect.label?.startsWith("channel_net:"),
+    ),
+  )
+  assert.ok(drawing.texts.every((text) => !text.text.includes("source_port_")))
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",

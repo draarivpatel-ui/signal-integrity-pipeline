@@ -5,7 +5,6 @@ import {
   type PlanVisualCut,
   type PlanVisualLink,
   type PlanVisualScene,
-  planColors,
   planPorts,
   type SimulationPcbDriverReceiverChannel,
   type SimulationPcbTransientChannelSimulation,
@@ -25,12 +24,13 @@ import {
 import type { TransientChannelSimulationPlan } from "./transient-channel-simulation-plan"
 import {
   planEndpoints,
+  planFailure,
   planLedger,
 } from "./transient-channel-simulation-plan-ledger"
 
 /** The declaration and original diagnostic captured before the solver reports a failure. */
 export interface FailedPlanAttempt {
-  simulation: SimulationPcbTransientChannelSimulation
+  simulation?: SimulationPcbTransientChannelSimulation
   error: unknown
 }
 
@@ -264,26 +264,6 @@ function planTopology({
   return topology
 }
 
-/** Preserve exact record tokens in diagnostics which predate structured subjects. */
-function diagnosticRecords(error: string): Set<string> {
-  const records = new Set<string>()
-  let token = ""
-  for (const char of `${error} `) {
-    if (
-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_".includes(
-        char,
-      )
-    ) {
-      token += char
-      continue
-    }
-    if (token.startsWith("source_port_") || token.startsWith("source_trace_"))
-      records.add(token)
-    token = ""
-  }
-  return records
-}
-
 /** Fault ports and routes are selected only from the current attempt's evidence. */
 export interface PlanFault {
   ports: Set<SourcePortId>
@@ -294,22 +274,18 @@ export interface PlanFault {
 /** Diagnose open legs and collapsed or bypassed connections from the evidence. */
 function faultGeometry({
   issue,
-  message,
   paths,
   topology,
 }: {
   issue?: Diagnostic
-  message?: string
   paths: readonly PlanPath[]
   topology?: PlanTopology
 }): PlanFault {
   const ports = new Set<SourcePortId>()
   const traces = new Set<SourceTraceId>()
   const links: PlanVisualLink[] = []
-  if (!message) return { ports, traces, links }
-  const ids = diagnosticRecords(message)
-  for (const { id } of issue?.subjects || []) ids.add(id)
-  for (const id of ids) {
+  for (const { id, kind } of issue?.subjects || []) {
+    if (kind !== "record") continue
     if (id.startsWith("source_port_")) ports.add(id)
     if (id.startsWith("source_trace_")) traces.add(id)
   }
@@ -349,9 +325,10 @@ export function buildPlanVisualScene({
 }): PlanVisualScene {
   const db = cju([...circuit])
   const simulationId =
-    failed?.simulation.simulation_pcb_transient_channel_simulation_id ||
+    failed?.simulation?.simulation_pcb_transient_channel_simulation_id ||
     plan?.simulationPcbTransientChannelSimulationId
-  const name = failed?.simulation.name || plan?.name || simulationId
+  const name = failed?.simulation?.name || plan?.name
+  const simulationName = name === simulationId ? undefined : name
   const channels = db.simulation_pcb_driver_receiver_channel
     .list()
     .filter(
@@ -367,16 +344,25 @@ export function buildPlanVisualScene({
       : undefined
   const issue =
     failed?.error instanceof Diagnostic ? failed.error : topology?.issue
-  let message = issue?.message || error || undefined
-  if (failed?.error instanceof Error) message = failed.error.message
-  const fault = faultGeometry({ issue, message, paths, topology })
-  const names = [...fault.ports].flatMap((id) => {
-    const label = labels.get(id)
-    if (!label) return []
-    return [`${id} = ${label}`]
-  })
-  const diagnostic =
-    [message, names.join("  ·  ")].filter(Boolean).join("\n") || undefined
+  const fault = faultGeometry({ issue, paths, topology })
+  const message =
+    failed?.error instanceof Error
+      ? failed.error.message
+      : issue?.message || error
+  let diagnostic: PlanVisualScene["diagnostic"]
+  if (message)
+    diagnostic = {
+      text: planFailure({
+        issue,
+        error: failed?.error,
+        paths,
+        topology,
+        fault,
+        placed: new Set(ports.keys()),
+        db,
+      }),
+      label: message,
+    }
   const traces = new Map(
     db.source_trace.list().map((trace) => [trace.source_trace_id, trace]),
   )
@@ -392,77 +378,25 @@ export function buildPlanVisualScene({
       }),
     ),
   )
-  const rows = planLedger({
-    paths,
-    topology,
-    fault,
-    labels,
-    existingTraces,
-    db,
-  })
-  const refdes = new Map(
-    db.source_component
-      .list()
-      .map((component) => [component.source_component_id, component.name]),
-  )
-  const components = [
-    ...new Set(
-      db.pcb_component
-        .list()
-        .toSorted((a, b) => a.center.x - b.center.x)
-        .map((component) => refdes.get(component.source_component_id))
-        .filter(Boolean),
-    ),
-  ]
-  if (components.length)
-    rows.push({
-      text: `Components · ${components.join("  ·  ")}`,
-      color: planColors.quiet,
-    })
-  const nets = new Map(
-    db.source_net.list().map((net) => [net.source_net_id, net.name]),
-  )
-  const pours = [
-    ...new Set(
-      db.pcb_copper_pour.list().flatMap((pour) => {
-        const name = nets.get(pour.source_net_id || "")
-        if (!name) return []
-        return [`${name} (${pour.layer})`]
-      }),
-    ),
-  ]
-  if (pours.length)
-    rows.push({
-      text: `Pours · ${pours.join("  ·  ")}`,
-      color: planColors.quiet,
-    })
-  let status = "AWAITING PLAN"
-  if (failed || error) status = "PLAN FAILED"
-  else if (issue) status = "TOPOLOGY CHECK FAILED"
-  else if (plan) status = "ADMITTED"
-  const parts: string[] = channels.map(({ name }) => name)
-  if (topology) {
-    const { cuts, segments } = topology
-    const contacts = [...topology.paths, ...cuts, ...segments].flatMap(
-      ({ from, to }) => [topology.nodes[from], topology.nodes[to]],
-    )
-    parts.push(
-      `${cuts.length} cuts`,
-      `${segments.filter(({ kind }) => kind === "series").length} series`,
-      `${segments.filter(({ kind }) => kind === "ideal").length} ideal joins`,
-      `${new Set(contacts.filter(Boolean)).size} nodes`,
-    )
-  }
+  const endpoints = planEndpoints({ paths, topology, labels })
+  let title = "Waiting to plan a simulation"
+  if (diagnostic) title = `${simulationName || "Simulation"} — can't simulate`
+  else if (plan) title = `${simulationName || "Simulation"} — ready to simulate`
   return {
     db,
-    title: [status, name].filter(Boolean).join("  ·  "),
-    summary: parts.join("  ·  "),
+    title,
     diagnostic,
     scope: topology && plan?.sections.copperScope,
     cuts: topology?.cuts || [],
-    endpoints: planEndpoints({ paths, topology, labels }),
+    endpoints,
     links: [...(topology?.segments || []), ...fault.links],
-    rows,
+    rows: planLedger({
+      topology,
+      fault,
+      endpoints,
+      db,
+      failed: diagnostic !== undefined,
+    }),
     faultPorts: fault.ports,
     faultTraces: fault.traces,
     existingTraces,
