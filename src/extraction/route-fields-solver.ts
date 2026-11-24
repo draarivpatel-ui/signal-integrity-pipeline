@@ -2,7 +2,7 @@ import { BaseSolver } from "@tscircuit/solver-utils"
 import type {
   CircuitJson,
   CopperScope,
-  RouteSlice,
+  RouteSection,
   SectionGeometry,
 } from "../board"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
@@ -58,9 +58,9 @@ function maskThicknessSource(
 
 /** Queue each conductor pair in slice order so cache population precedes coupling decisions. */
 function couplingPairs(
-  slices: readonly Snapshot<RouteSlice>[],
-): Snapshot<RouteSlice>[] {
-  const pairs: Snapshot<RouteSlice>[] = []
+  slices: readonly Snapshot<RouteSection>[],
+): Snapshot<RouteSection>[] {
+  const pairs: Snapshot<RouteSection>[] = []
   for (const slice of slices) {
     const count = slice.wires.length
     for (let i = 0; i < count; i++) {
@@ -79,8 +79,8 @@ export class RouteFieldsSolver extends BaseSolver {
     SolvedRouteSection["key"],
     RouteCoefficients
   >()
-  private pairs?: Snapshot<RouteSlice>[]
-  private groups?: Snapshot<RouteSlice>[]
+  private pairs?: Snapshot<RouteSection>[]
+  private groups?: Snapshot<RouteSection>[]
   private readonly slices: ExtractedRouteSlice[] = []
   private readonly coupling: RouteCoupling[] = []
   private pairIndex = 0
@@ -103,7 +103,7 @@ export class RouteFieldsSolver extends BaseSolver {
     }
   }
   /** Canonical relative geometry owns the cache identity, independent of source IDs and stimulus. */
-  private solveSlice(slice: Snapshot<RouteSlice>): SolvedRouteSection {
+  private solveSlice(slice: Snapshot<RouteSection>): SolvedRouteSection {
     const section = routeCrossSection({
       geometry: this.input.geometry,
       slice,
@@ -152,12 +152,12 @@ export class RouteFieldsSolver extends BaseSolver {
   }
   /** Preserve the all-pairs-first ordering and routeCoupling's sole union predicate. */
   private solveNext(): void {
-    this.pairs ??= couplingPairs(this.input.geometry.slices)
+    this.pairs ??= couplingPairs(this.input.geometry.sections)
     if (this.pairIndex < this.pairs.length) {
       this.solveSlice(this.pairs[this.pairIndex++])
       return
     }
-    this.groups ??= this.input.geometry.slices.flatMap((slice) =>
+    this.groups ??= this.input.geometry.sections.flatMap((slice) =>
       routeCoupling({
         slice,
         solve: (pair) => this.cachedPair(pair),
@@ -173,7 +173,7 @@ export class RouteFieldsSolver extends BaseSolver {
   }
 
   /** Retrieve the screen coefficient matrix prepared before grouping the routes. */
-  private cachedPair(pair: Snapshot<RouteSlice>): RouteCoefficients {
+  private cachedPair(pair: Snapshot<RouteSection>): RouteCoefficients {
     const section = routeCrossSection({
       geometry: this.input.geometry,
       slice: pair,
@@ -202,9 +202,9 @@ export class RouteFieldsSolver extends BaseSolver {
     const artifact = scope.json("fields.json", {
       sections,
       slices: this.slices.map((slice) => ({
-        start: slice.start,
-        end: slice.end,
-        wires: slice.wires.map((wire) => wire.id),
+        start: slice.startMm,
+        end: slice.endMm,
+        wires: slice.wires.map((wire) => wire.wireIndex),
         references: slice.references,
         key: slice.key,
       })),

@@ -1,72 +1,16 @@
 import { hypotenuse } from "../kernel"
-import type { RouteWire, RouteXY } from "./route-sections"
+import type { CopperPoint } from "./geometry/types"
+import type { RouteWire } from "./route-section-types"
+import { measureChordDistanceMm, projectRouteWire } from "./route-wire"
 
-/** Treat near-vertical segments as vertical when choosing the canonical direction. */
-const DIRECTION_TOLERANCE = 1e-9
-
-/** Discard zero-length chords after simplifying, in millimeters. */
+/** Discard zero-length chords after simplification. */
 const MIN_CHORD_LENGTH_MM = 1e-9
-
-/** Maximum separation between consecutive segments of a tessellated curve, in millimeters. */
+/** Maximum separation between consecutive wires in one run. */
 const WIRE_JOIN_TOLERANCE_MM = 1e-7
 
-/** Shortest point-to-chord distance in mm. */
-export function chordDistance({
-  point,
-  a,
-  b,
-}: {
-  point: RouteXY
-  a: RouteXY
-  b: RouteXY
-}): number {
-  const dx = b[0] - a[0]
-  const dy = b[1] - a[1]
-  const t = Math.max(
-    0,
-    Math.min(
-      1,
-      ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / (dx * dx + dy * dy),
-    ),
-  )
-  return hypotenuse(point[0] - a[0] - t * dx, point[1] - a[1] - t * dy)
-}
-
-/** The wire's canonical direction and signed longitudinal and transverse coordinates. */
-type WireProjection = Pick<RouteWire, "u" | "start" | "end" | "transverse">
-
-/** Use one canonical projection for both original and simplified wire segments. */
-export function projectRouteWire({
-  a,
-  b,
-  length,
-}: {
-  a: RouteXY
-  b: RouteXY
-  length: number
-}): WireProjection {
-  const dx = b[0] - a[0]
-  const dy = b[1] - a[1]
-  let direction = 1
-  if (
-    dx < -DIRECTION_TOLERANCE ||
-    (Math.abs(dx) < DIRECTION_TOLERANCE && b[1] < a[1])
-  )
-    direction = -1
-  const u: RouteXY = [(direction * dx) / length, (direction * dy) / length]
-  const first = a[0] * u[0] + a[1] * u[1]
-  const last = b[0] * u[0] + b[1] * u[1]
-  return {
-    u,
-    start: Math.min(first, last),
-    end: Math.max(first, last),
-    transverse: -a[0] * u[1] + a[1] * u[0],
-  }
-}
-
 interface WireRun {
-  points: RouteXY[]
-  seed: RouteWire
+  points: CopperPoint[]
+  firstWire: RouteWire
   toleranceMm: number
 }
 
@@ -80,15 +24,21 @@ function* simplifyRun({
   end: number
   run: WireRun
 }): Generator<RouteWire> {
-  const { points, seed, toleranceMm } = run
-  const a = points[start]
-  const b = points[end]
+  const { points, firstWire, toleranceMm } = run
+  const startPoint = points[start]
+  const endPoint = points[end]
   let farthest = -1
-  let distance = toleranceMm
+  let maxDistanceMm = toleranceMm
+  if (startPoint[0] === endPoint[0] && startPoint[1] === endPoint[1])
+    maxDistanceMm = MIN_CHORD_LENGTH_MM
   for (let i = start + 1; i < end; i++) {
-    const candidate = chordDistance({ point: points[i], a, b })
-    if (!(candidate > distance)) continue
-    distance = candidate
+    const candidate = measureChordDistanceMm({
+      point: points[i],
+      startPoint,
+      endPoint,
+    })
+    if (!(candidate > maxDistanceMm)) continue
+    maxDistanceMm = candidate
     farthest = i
   }
   if (farthest >= 0) {
@@ -96,13 +46,16 @@ function* simplifyRun({
     yield* simplifyRun({ start: farthest, end, run })
     return
   }
-  const length = hypotenuse(b[0] - a[0], b[1] - a[1])
-  if (length < MIN_CHORD_LENGTH_MM) return
+  const lengthMm = hypotenuse(
+    endPoint[0] - startPoint[0],
+    endPoint[1] - startPoint[1],
+  )
+  if (lengthMm < MIN_CHORD_LENGTH_MM) return
   yield {
-    ...seed,
-    a,
-    b,
-    ...projectRouteWire({ a, b, length }),
+    ...firstWire,
+    startPoint,
+    endPoint,
+    ...projectRouteWire({ startPoint, endPoint, lengthMm }),
   }
 }
 
@@ -121,45 +74,44 @@ export function simplifyRouteWires({
   wires: RouteWire[]
   toleranceMm: number
 }): SimplifiedRouteWires {
-  const output: RouteWire[] = []
+  const simplifiedWires: RouteWire[] = []
   let index = 0
   while (index < wires.length) {
-    const seed = wires[index++]
-    const run = [seed]
+    const firstWire = wires[index++]
+    const points = [firstWire.startPoint, firstWire.endPoint]
     while (index < wires.length) {
       const wire = wires[index]
-      const previous = run.at(-1)!
+      const previousEndPoint = points[points.length - 1]
       if (
-        wire.trace !== seed.trace ||
-        wire.layer !== seed.layer ||
-        wire.width !== seed.width
+        wire.pcbTraceId !== firstWire.pcbTraceId ||
+        wire.layer !== firstWire.layer ||
+        wire.widthMm !== firstWire.widthMm
       )
         break
       const gap = hypotenuse(
-        wire.a[0] - previous.b[0],
-        wire.a[1] - previous.b[1],
+        wire.startPoint[0] - previousEndPoint[0],
+        wire.startPoint[1] - previousEndPoint[1],
       )
       if (gap > WIRE_JOIN_TOLERANCE_MM) break
-      run.push(wire)
+      points.push(wire.endPoint)
       index++
     }
-    const points = [seed.a, ...run.map((wire) => wire.b)]
-    const wireRun: WireRun = { points, seed, toleranceMm }
+    const wireRun: WireRun = { points, firstWire, toleranceMm }
     for (const wire of simplifyRun({
       start: 0,
       end: points.length - 1,
       run: wireRun,
     }))
-      output.push({ ...wire, id: output.length })
+      simplifiedWires.push({ ...wire, wireIndex: simplifiedWires.length })
   }
   return {
-    wires: output,
+    wires: simplifiedWires,
     originalLengthMm: wires.reduce(
-      (sum, wire) => sum + wire.end - wire.start,
+      (sum, wire) => sum + wire.endMm - wire.startMm,
       0,
     ),
-    simplifiedLengthMm: output.reduce(
-      (sum, wire) => sum + wire.end - wire.start,
+    simplifiedLengthMm: simplifiedWires.reduce(
+      (sum, wire) => sum + wire.endMm - wire.startMm,
       0,
     ),
   }
