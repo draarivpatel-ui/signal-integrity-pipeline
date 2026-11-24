@@ -1,8 +1,8 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
   admissionRouteView,
-  circuitJsonDb,
   type RouteSectionsInput,
   routeAdmissionMarks,
   routeBoardBox,
@@ -73,7 +73,7 @@ function planRoutedChannelSimulation({
     distanceMm: scopeDistanceMm,
   })
   const artifactPrefix = `channelSimulations/${simulationPcbTransientChannelSimulationId}`
-  const circuitJson = snapshot(prepared.circuit)
+  const circuitJson = structuredClone(prepared.circuit)
   const modeling = snapshot(prepared.settings)
   const routedTraceCuts = snapshot(modeling.lanes.map(routedTraceCut))
   const requiredSourcePortIds = Object.freeze([
@@ -197,7 +197,12 @@ export class RoutedAdmissionSolver extends BaseSolver {
   override getConstructorParams(): ConstructorParameters<
     typeof RoutedAdmissionSolver
   > {
-    return [this.input]
+    return [
+      Object.freeze({
+        ...this.input,
+        circuitJson: structuredClone(this.input.circuitJson),
+      }),
+    ]
   }
   /** Inspect the latest channel's copper and endpoints or the whole unscoped board. */
   visualizeCopper(): GraphicsObject {
@@ -206,7 +211,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
     if (plan === undefined)
       return unscopedAdmissionDrawing({ circuit, error: this.error })
     const { mappings } = plan.bindings
-    const db = circuitJsonDb(circuit)
+    const db = cju([...circuit])
     const view = admissionRouteView({
       db,
       scope: plan.sections.copperScope,
@@ -246,7 +251,7 @@ export class RoutedAdmissionSolver extends BaseSolver {
       }),
     })
     const marks = routeAdmissionMarks({
-      db: circuitJsonDb(circuit),
+      db: cju([...circuit]),
       mappings: plan.bindings.mappings,
       view,
     })

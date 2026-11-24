@@ -1,14 +1,15 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { SourceTrace } from "circuit-json"
 import type {
-  CircuitJsonSnapshot,
+  CircuitJson,
   CopperScope,
   SimulationPcbDriverReceiverChannel,
   SimulationPcbTransientChannelSimulation,
   SourceNetId,
   SourcePortId,
 } from "../board"
-import { circuitJsonDb, endpointPorts } from "../board"
-import { Diagnostic, type Snapshot } from "../kernel"
+import { endpointPorts } from "../board"
+import { Diagnostic } from "../kernel"
 import type { NumericalSettings, RoutedLane } from "./modeling"
 import type { SignalPins } from "./signal-pins"
 
@@ -24,7 +25,7 @@ function routedLane({
   topology,
   driven,
 }: {
-  trace: Snapshot<SourceTrace>
+  trace: SourceTrace
   topology: ReadonlyMap<SourcePortId | SourceNetId, string>
   driven: ReadonlySet<SourcePortId>
 }): RoutedLane {
@@ -48,7 +49,7 @@ export function routedLanes({
   driven,
   rails,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   channelPcbTraceIds: Readonly<CopperScope["channelPcbTraceIds"]>
   topology: Map<SourcePortId | SourceNetId, string>
   driven: Set<SourcePortId>
@@ -56,7 +57,7 @@ export function routedLanes({
 }): RoutedLanes {
   const lanes: NumericalSettings["lanes"] = []
   const rejections: string[] = []
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const traces = db.source_trace.list()
   const pcbTraces = db.pcb_trace.list()
   const sortedTraces = traces.toSorted((a, b) =>
@@ -93,8 +94,8 @@ function validateRoutedDrivers({
   driverReceiverChannels,
   lanes,
 }: {
-  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
-  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
   lanes: NumericalSettings["lanes"]
 }): void {
   if (channelSimulation.allow_unrouted_traces) return
@@ -124,10 +125,10 @@ export function prepareRoutedLanes({
   driverReceiverChannels,
   signalPins,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   copperScope: CopperScope
-  channelSimulation: Snapshot<SimulationPcbTransientChannelSimulation>
-  driverReceiverChannels: Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channelSimulation: SimulationPcbTransientChannelSimulation
+  driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
   signalPins: Pick<SignalPins, "topology" | "driven" | "rails">
 }): NumericalSettings["lanes"] {
   const { topology, driven, rails } = signalPins
