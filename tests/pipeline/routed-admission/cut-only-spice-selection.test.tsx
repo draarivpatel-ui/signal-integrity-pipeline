@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { generalDeclarations } from "../../../src/simulation"
 import { AdmissionDaisyChain } from "../../fixtures/admission-daisy-chain"
@@ -20,7 +20,7 @@ test("a cut-only contact needs a passive selected for the deck", async () => {
   const [plan] = solver.getOutput().value
   const { bindings } = plan
   assert.equal(bindings.routedTraceCuts.length, 3)
-  const load = circuitJsonDb(bindings.circuitJson).source_component.getWhere({
+  const load = cju([...bindings.circuitJson]).source_component.getWhere({
     name: "LOAD",
   })
   assert.ok(load)

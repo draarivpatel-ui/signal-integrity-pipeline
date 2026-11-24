@@ -1,13 +1,14 @@
 /* eslint-disable local/max-file-lines -- Experiment declaration checks share Circuit JSON and IBIS plan types. */
 // Experiment declarations and IBIS run definitions.
 
+import { cju } from "@tscircuit/circuit-json-util"
 import type {
   IbisModelDefinition,
   IbisReferencePorts,
   IbisRunConfig,
 } from "@tscircuit/ibis-to-spice"
 import type { SourceComponentBase, SourceGroup } from "circuit-json"
-import { circuitJsonDb, subcircuitTree } from "../board"
+import { subcircuitTree } from "../board"
 import type { ModelRunDefinition } from "../buffers"
 import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
@@ -74,7 +75,7 @@ function componentScope({
   groups,
 }: {
   id: SourceComponentBase["source_component_id"] | undefined
-  components: readonly Snapshot<SourceComponentBase>[]
+  components: readonly SourceComponentBase[]
   groups: ReadonlyMap<SourceGroup["source_group_id"], SourceGroup>
 }): NonNullable<SourceComponentBase["subcircuit_id"]> | null {
   const component = components.find(
@@ -131,7 +132,7 @@ export function generalDeclarations({
       seen.add(id)
     }
   }
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const errors = db.source_invalid_component_property_error
     .list()
     .filter((e) =>
