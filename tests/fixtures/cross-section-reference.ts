@@ -44,8 +44,7 @@ function fillingFactor({ u, er }: { u: number; er: number }): number {
 }
 
 /** Independent Hammerstad–Jensen quasi-static oracle, Qucs technical manual eqs. 11.156–11.176.
- * https://qucs.sourceforge.net/tech/node77.html (Hammerstad & Jensen, MTT-S 1980).
- */
+ * https://qucs.sourceforge.net/tech/node77.html (Hammerstad & Jensen, MTT-S 1980). */
 export function coupledMicrostrip({
   width: w,
   gap,
