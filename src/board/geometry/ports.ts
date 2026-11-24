@@ -13,7 +13,7 @@ interface ResolvedTraceRoute {
   pcbViasByRouteIndex: Map<number, PcbVia>
 }
 
-/** Resolve physical vias only once so sectioning can use the same record identity. */
+/** Resolve the physical via records that supply the route via dimensions. */
 export function resolveTraceRoute({
   circuit,
   trace,

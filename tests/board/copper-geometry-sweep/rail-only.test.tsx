@@ -2,21 +2,21 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("keeps nearby rail copper without emitting rail-only sections", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Signal" startX={-1} endX={1} />
-        <SectionTrace name="Rail" startY={0.7} net="net.OTHER" />
+        <CopperTrace name="Signal" startX={-1} endX={1} />
+        <CopperTrace name="Rail" startY={0.7} net="net.OTHER" />
       </>
     ),
   })
-  const { copperScope } = getCopperExtractionInput({
+  const { copperScope } = getCopperGeometryExtractionInput({
     circuit,
     railNetName: "OTHER",
   })

@@ -3,14 +3,14 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("uses the reference net instead of nearer signal copper", async () => {
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Signal" />,
+    children: <CopperTrace name="Signal" />,
     reference: (
       <>
         <copperpour connectsTo="net.GND" layer="bottom" unbroken />
@@ -22,7 +22,7 @@ test("uses the reference net instead of nearer signal copper", async () => {
   assert.equal(db.pcb_copper_pour.list().length, 2)
   const { sections } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert.deepEqual(
     sections.flatMap(({ references }) => references.map(({ layer }) => layer)),
