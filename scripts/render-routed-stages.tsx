@@ -219,7 +219,7 @@ await stages({
   input: {
     circuitJson: core.getCircuitJson() as CircuitJson,
     ibisSources: { "models/sn74lvc1g04.ibs": twoSource },
-    scopeDistanceMm: TWO_TRACE_SCOPE_DISTANCE_MM,
+    nearbyGapMm: TWO_TRACE_SCOPE_DISTANCE_MM,
   },
 })
 

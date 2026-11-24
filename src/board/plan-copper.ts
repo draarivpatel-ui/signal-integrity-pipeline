@@ -4,16 +4,17 @@ import type { SourcePortId } from "./ids"
 import { direction, faultCross, offset } from "./plan-marks"
 import type { PlanPort } from "./plan-view"
 import {
-  type PlanVisualCut,
+  getTraceColor,
+  type PlanLine,
+  type PlanTrace,
   type PlanVisualScene,
   planColors,
-  planCutColor,
 } from "./plan-visual-types"
 
 /** A run of copper sharing a layer and width. */
 interface PlanWire {
   points: Point[]
-  width: number
+  strokeWidthMm: number
   layer: LayerRef
 }
 
@@ -22,22 +23,25 @@ function planWires(trace: PcbTrace): PlanWire[] {
   const wires: PlanWire[] = []
   for (const [index, end] of trace.route.slice(1).entries()) {
     const start = trace.route[index]
-    const wire = start.route_type === "wire" ? start : end
+    let wire = end
+    if (start.route_type === "wire") wire = start
     if (wire.route_type !== "wire") continue
-    const a = start.route_type === "through_pad" ? start.end : start
-    const b = end.route_type === "through_pad" ? end.start : end
+    let a: Point = start as Point
+    if (start.route_type === "through_pad") a = start.end
+    let b: Point = end as Point
+    if (end.route_type === "through_pad") b = end.start
     if (a.x === b.x && a.y === b.y) continue
-    const width = Math.max(wire.width, wire.end_width || wire.width)
+    const strokeWidthMm = Math.max(wire.width, wire.end_width || wire.width)
     const previous = wires.at(-1)
     const last = previous?.points.at(-1)
     if (
       previous?.layer === wire.layer &&
-      previous.width === width &&
+      previous.strokeWidthMm === strokeWidthMm &&
       last?.x === a.x &&
       last.y === a.y
     )
       previous.points.push(b)
-    else wires.push({ points: [a, b], width, layer: wire.layer })
+    else wires.push({ points: [a, b], strokeWidthMm, layer: wire.layer })
   }
   return wires
 }
@@ -53,10 +57,10 @@ interface PlanCopperStyle {
 
 /** Resolve per-trace scope membership once before rendering its wire runs. */
 function copperStyles(scene: PlanVisualScene): Map<string, PlanCopperStyle> {
-  const { db, scope, existingTraces } = scene
-  const nearby = new Set(scope?.extractedPcbTraceIds)
-  const rails = new Set(scope?.nearbyRailPcbTraceIds)
-  const channel = new Set(scope?.channelPcbTraceIds)
+  const { db, copperScope, existingSourceTraceIds } = scene
+  const nearby = new Set(copperScope?.extractedPcbTraceIds)
+  const rails = new Set(copperScope?.nearbyRailPcbTraceIds)
+  const channel = new Set(copperScope?.channelPcbTraceIds)
   return new Map(
     db.pcb_trace.list().map((trace) => {
       const id = trace.pcb_trace_id
@@ -67,7 +71,7 @@ function copperStyles(scene: PlanVisualScene): Map<string, PlanCopperStyle> {
         layer: "board",
         zIndex: 0,
       }
-      if (channel.has(id) || existingTraces.has(source))
+      if (channel.has(id) || existingSourceTraceIds.has(source))
         style = {
           strokeColor: planColors.existing,
           label: `Routed copper · ${source}`,
@@ -89,7 +93,7 @@ function copperStyles(scene: PlanVisualScene): Map<string, PlanCopperStyle> {
           zIndex: 1,
           strokeDash: "10,3",
         }
-      else if (!scope && !scene.diagnostic)
+      else if (!copperScope && !scene.diagnostic)
         style = { ...style, label: `Board copper · ${source}` }
       return [id, style]
     }),
@@ -103,14 +107,16 @@ function cutStrokes({
   label,
 }: {
   wire: PlanWire
-  cut: PlanVisualCut
+  cut: PlanTrace
   label: string
 }): Line[] {
-  const { points, width, layer } = wire
+  const { points, strokeWidthMm, layer } = wire
+  let traceStrokeWidthMm = strokeWidthMm
+  if (!cut.isMapped) traceStrokeWidthMm *= 0.7
   const line: Line = {
     points,
-    strokeWidth: width * (cut.mapped ? 1 : 0.7),
-    strokeColor: planCutColor(cut.index),
+    strokeWidth: traceStrokeWidthMm,
+    strokeColor: getTraceColor(cut.index),
     label: `${label} · ${layer}`,
     layer: "cuts",
     zIndex: 2,
@@ -118,21 +124,24 @@ function cutStrokes({
   if (layer === "top") return [line]
   if (layer === "bottom")
     return [
-      { ...line, strokeColor: "#cbd5e1", strokeWidth: width },
+      { ...line, strokeColor: "#cbd5e1", strokeWidth: strokeWidthMm },
       { ...line, strokeDash: "10,4" },
     ]
-  return [line, { ...line, strokeColor: "#fff", strokeWidth: width * 0.18 }]
+  return [
+    line,
+    { ...line, strokeColor: "#fff", strokeWidth: strokeWidthMm * 0.18 },
+  ]
 }
 
 /** Cut ticks sit just inside the partition, away from the endpoint glyphs. */
 function cutTicks({
   wires,
-  unit,
+  unitMm,
   label,
   color,
 }: {
   wires: readonly PlanWire[]
-  unit: number
+  unitMm: number
   label: string
   color: string
 }): Line[] {
@@ -148,16 +157,16 @@ function cutTicks({
     const point = offset({
       point: from,
       axis,
-      along: Math.min(unit * 2.2, axis.length * 0.32),
+      along: Math.min(unitMm * 2.2, axis.length * 0.32),
     })
-    const width = Math.max(unit, first.width * 0.9)
+    const width = Math.max(unitMm, first.strokeWidthMm * 0.9)
     const points = [-width, width].map((across) =>
       offset({ point, axis, across }),
     )
     return [
       {
         points,
-        strokeWidth: unit * 0.62,
+        strokeWidth: unitMm * 0.62,
         strokeColor: "#fff",
         label,
         layer: "cuts",
@@ -165,7 +174,7 @@ function cutTicks({
       },
       {
         points,
-        strokeWidth: unit * 0.29,
+        strokeWidth: unitMm * 0.29,
         strokeColor: color,
         label,
         layer: "cuts",
@@ -179,44 +188,44 @@ function cutTicks({
 function mappingChevrons({
   wires,
   from,
-  unit,
+  unitMm,
   label,
   color,
 }: {
   wires: readonly PlanWire[]
   from?: Point
-  unit: number
+  unitMm: number
   label: string
   color: string
 }): Polygon[] {
   const first = wires[0]?.points[0]
   const last = wires.at(-1)?.points.at(-1)
   if (!first || !last) return []
-  let reverse = false
+  let isReversed = false
   if (from)
-    reverse =
+    isReversed =
       direction({ from, to: first }).length >
       direction({ from, to: last }).length
   const segments = wires.flatMap(({ points }) =>
     points.slice(1).map((to, i) => {
       const start = points[i]
-      if (reverse)
+      if (isReversed)
         return { start: to, axis: direction({ from: to, to: start }) }
       return { start, axis: direction({ from: start, to }) }
     }),
   )
-  if (reverse) segments.reverse()
+  if (isReversed) segments.reverse()
   const total = segments.reduce(
     (length, segment) => length + segment.axis.length,
     0,
   )
-  const count = Math.floor(total / (unit * 8)) + 1
-  if (total < unit * 5) return []
+  const count = Math.floor(total / (unitMm * 8)) + 1
+  if (total < unitMm * 5) return []
   let traversed = 0
   let next = total / (count + 1)
   const shapes: Polygon[] = []
   for (const { start, axis } of segments) {
-    while (next <= traversed + axis.length && next < total - unit) {
+    while (next <= traversed + axis.length && next < total - unitMm) {
       const point = offset({ point: start, axis, along: next - traversed })
       const points = [
         [-0.7, -0.68],
@@ -226,13 +235,13 @@ function mappingChevrons({
         [0.7, 0],
         [-0.16, -0.68],
       ].map(([along, across]) =>
-        offset({ point, axis, along: along * unit, across: across * unit }),
+        offset({ point, axis, along: along * unitMm, across: across * unitMm }),
       )
       shapes.push({
         points,
         fill: color,
         stroke: "#fff",
-        strokeWidth: unit * 0.23,
+        strokeWidth: unitMm * 0.23,
         layer: "mappings",
         label,
       })
@@ -245,7 +254,7 @@ function mappingChevrons({
 
 /** The physical copper plus cut and path overlays. */
 interface PlanCopperDrawing {
-  lines: Line[]
+  lines: PlanLine[]
   chevrons: Polygon[]
   faults: Polygon[]
 }
@@ -254,54 +263,55 @@ interface PlanCopperDrawing {
 export function drawCopper({
   scene,
   ports,
-  unit,
+  unitMm,
 }: {
   scene: PlanVisualScene
   ports: ReadonlyMap<SourcePortId, PlanPort>
-  unit: number
+  unitMm: number
 }): PlanCopperDrawing {
-  const lines: Line[] = []
+  const lines: PlanLine[] = []
   const chevrons: Polygon[] = []
   const faults: Polygon[] = []
   const styles = copperStyles(scene)
-  const cuts = new Map(scene.cuts.map((cut) => [cut.trace, cut]))
+  const cuts = new Map(scene.traces.map((cut) => [cut.sourceTraceId, cut]))
   for (const trace of scene.db.pcb_trace.list()) {
     const id = trace.source_trace_id || trace.pcb_trace_id
     const cut = cuts.get(id)
     const wires = planWires(trace)
     const style = styles.get(trace.pcb_trace_id)
     if (cut) {
-      const label = `C${cut.index + 1} · ${ports.get(cut.from)?.label || cut.from} → ${ports.get(cut.to)?.label || cut.to}`
+      const label = `Trace ${cut.index + 1} · ${ports.get(cut.fromSourcePortId)?.label || cut.fromSourcePortId} → ${ports.get(cut.toSourcePortId)?.label || cut.toSourcePortId}`
       lines.push(...wires.flatMap((wire) => cutStrokes({ wire, cut, label })))
-      const color = planCutColor(cut.index)
-      lines.push(...cutTicks({ wires, unit, label, color }))
-      if (cut.mapped)
+      const color = getTraceColor(cut.index)
+      lines.push(...cutTicks({ wires, unitMm, label, color }))
+      if (cut.isMapped)
         chevrons.push(
           ...mappingChevrons({
             wires,
-            from: ports.get(cut.from),
-            unit,
-            label: `Mapped path · ${label}`,
+            from: ports.get(cut.fromSourcePortId),
+            unitMm,
+            label: `Receiver path · ${label}`,
             color,
           }),
         )
     } else {
       lines.push(
-        ...wires.map(({ points, width }) => ({
+        ...wires.map(({ points, strokeWidthMm }) => ({
           points,
-          strokeWidth: width,
+          strokeWidth: strokeWidthMm,
           ...style,
         })),
       )
     }
-    if (!scene.faultTraces.has(id)) continue
+    if (!scene.faultSourceTraceIds.has(id)) continue
     const label = `Short or loop · ${id}`
-    for (const { points, width } of wires)
+    for (const { points, strokeWidthMm } of wires)
       lines.push({
         points,
         strokeColor: planColors.failure,
-        strokeWidth: Math.max(width, unit * 0.64),
+        strokeWidth: Math.max(strokeWidthMm, unitMm * 0.64),
         strokeDash: "6,3",
+        mark: "traceFault",
         zIndex: 4,
         layer: "failure",
         label,
@@ -314,7 +324,7 @@ export function drawCopper({
     faults.push(
       faultCross({
         point: offset({ point: from, axis, along: axis.length / 2 }),
-        unit,
+        unitMm,
         label,
       }),
     )

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -30,16 +31,20 @@ test("a cut cycle diagnostic excludes the attached load tail", async () => {
     name: "pin1",
   })
   assert.ok(port)
-  const tail = bindings.routedTraceCuts.find(
+  const tail = bindings.traceContacts.find(
     ({ fromSourcePortId, toSourcePortId }) =>
       fromSourcePortId === port.source_port_id ||
       toSourcePortId === port.source_port_id,
   )
   assert.ok(tail)
-  const cycle = bindings.routedTraceCuts.filter((cut) => cut !== tail)
+  const cycle = bindings.traceContacts.filter((cut) => cut !== tail)
   assert.equal(cycle.length, 2)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     (error: Error & { code?: string }) => {
       assert.equal(error.code, "channel_short")
       for (const cut of cycle) {

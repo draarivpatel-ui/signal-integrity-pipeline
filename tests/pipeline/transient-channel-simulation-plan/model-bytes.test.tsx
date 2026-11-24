@@ -3,8 +3,8 @@ import assert from "node:assert/strict"
 import { TwoTraceBoard } from "../../../examples/routed/two-trace-board"
 import { sha256 } from "../../../src/kernel"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 import { renderCoreSignals } from "../../support/core-render"
 
 test("byte inputs retain the exact model bytes", async () => {

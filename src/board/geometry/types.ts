@@ -33,11 +33,11 @@ export interface LaneModeling {
 export type RoutedPoint = PcbTraceRoutePointWire | PcbTraceRoutePointVia
 
 /** One driver-to-receiver path; `sourceTraceIds` lists its routed traces in path order. */
-export interface LaneMapping {
-  readonly port: string
+export interface ReceiverTracePath {
+  readonly channelName: string
   readonly sourceTraceId: SourceTrace["source_trace_id"]
-  readonly from: SourcePortId
-  readonly to: SourcePortId
+  readonly fromSourcePortId: SourcePortId
+  readonly toSourcePortId: SourcePortId
   readonly sourceTraceIds?: readonly SourceTrace["source_trace_id"][]
 }
 

@@ -54,7 +54,7 @@ export interface ChannelSimulationControlOptions {
 
 /** Fastest edge and maximum transient step for the recording. */
 interface SignalTiming {
-  riseSeconds: number
+  fastestEdgeSeconds: number
   stepSeconds: number
 }
 
@@ -68,20 +68,20 @@ export function signalTiming({
   durationSeconds: number
   edgeTimesSeconds: number[]
 }): SignalTiming {
-  const riseSeconds = Math.min(...edgeTimesSeconds)
+  const fastestEdgeSeconds = Math.min(...edgeTimesSeconds)
   const rate = Math.max(...patterns.map((signal) => signal.bit_rate_bps))
   const stepSeconds = Math.min(
     1 / rate / STEPS_PER_BIT,
-    riseSeconds / STEPS_PER_EDGE,
+    fastestEdgeSeconds / STEPS_PER_EDGE,
     durationSeconds / MIN_STEPS_PER_RECORDING,
   )
   if (!Number.isFinite(stepSeconds) || stepSeconds <= 0)
     throw new Diagnostic(
       "pipeline",
       "simulation_timing",
-      "The admitted experiment requires a finite positive time_per_step",
+      "Transient timestep must be finite and positive (time_per_step)",
     )
-  return { riseSeconds, stepSeconds }
+  return { fastestEdgeSeconds, stepSeconds }
 }
 
 /** Choose the capture duration in seconds and check coverage of enabled stimuli. */

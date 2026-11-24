@@ -10,11 +10,11 @@ Declare transient channels in Circuit JSON. Signal preparation validates endpoin
 timing and pseudo-random binary sequence (PRBS) patterns.
 TransientChannelSimulationPlanSolver lowers each declared channel simulation into immutable inputs for route sections and buffer binding.
 Ideal wires, named nets and internal pin ties form the source groups used by SPICE.
-A named net can span the cuts connecting its own contacts, including multipoint ideal junctions.
-Channel planning and binding use the same receiver graph. Its paths traverse ideal junctions, physical cuts and series passives.
+A named net can span the extracted traces connecting its own contacts, including multipoint ideal junctions.
+Channel planning and binding use the same receiver graph. Its paths traverse ideal junctions, extracted traces and series passives.
 Rail shunts and differential terminations stay outside those paths, including terminations attached by both copper and ideal wires.
-Each cut keeps both physical contacts. Binding checks their selected models and detects signal contacts tied to ground.
-Removing a cut or series passive from the receiver graph must disconnect its two ends.
+Each extracted trace keeps both physical contacts. Binding checks their selected models and detects signal contacts tied to ground.
+Removing an extracted trace or series passive from the receiver graph must disconnect its two ends.
 An alternate path reports the physical contacts and distinguishes an entirely routed loop from a bypass through ideal wiring.
 RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
@@ -247,3 +247,5 @@ qualification.
 
 Async stepping uses solver-utils PR #62 at `127f17012c7c391005254993864b26801f418249`
 through an integrity-locked pkg.pr.new URL. Switch to a release after #62 ships.
+
+The native solver uses its built-in timeout. The legacy caller-specified timeout and its dedicated diagnostic were removed. IBIS source validation continues to check paths and reject non-IBIS data. The previous byte-size limit was removed.

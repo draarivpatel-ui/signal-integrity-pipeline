@@ -6,6 +6,8 @@ import { Inverter, Reference } from "./signal-parts"
 /** Two modeled inputs on one straight signal with a routed or ideal final leg. */
 export function DaisyChainFixture({
   routeFinalLeg,
+  boardWidthMm = 18,
+  allowBlindAndBuriedVias = false,
   namedNet = false,
   bypassFinalLeg = false,
   idealMiddleLeg = false,
@@ -14,6 +16,8 @@ export function DaisyChainFixture({
   children,
 }: {
   routeFinalLeg: boolean
+  boardWidthMm?: number
+  allowBlindAndBuriedVias?: boolean
   namedNet?: boolean | "ends" | "multipoint"
   bypassFinalLeg?: boolean
   idealMiddleLeg?: boolean
@@ -45,13 +49,14 @@ export function DaisyChainFixture({
 
   return (
     <board
-      width={18}
+      width={boardWidthMm}
       height={12}
       layers={4}
       thickness={1.6}
       fabricatorPreset="jlcpcb_standard"
       routeRemaining={false}
       schematicDisabled
+      allowBlindAndBuriedVias={allowBlindAndBuriedVias}
       isViaInPadAllowed
     >
       <Inverter name="TX" x={-5} y={0} driver />

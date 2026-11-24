@@ -105,7 +105,7 @@ async function solveVisualFixture(
     input: {
       circuitJson,
       ibisSources: { "models/sn74lvc1g04.ibs": routedVisualIbis },
-      scopeDistanceMm: FIXTURE_SCOPE_DISTANCE_MM,
+      nearbyGapMm: FIXTURE_SCOPE_DISTANCE_MM,
     },
     context,
   })
@@ -127,4 +127,4 @@ export function routedVisualFixture(
   return fixture
 }
 
-export { assertRouteVisual } from "./route-visual-snapshot"
+export { assertPlanDrawingSnapshot } from "./plan-drawing-snapshot"

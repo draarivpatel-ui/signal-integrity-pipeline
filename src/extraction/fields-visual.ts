@@ -2,11 +2,11 @@ import type { GraphicsObject, Point, Viewbox } from "graphics-debug"
 import {
   type CircuitJson,
   type CopperScope,
+  getPointBounds,
   type RouteFrame,
   type RouteSlice,
   type RouteView,
   type RouteXY,
-  routeBounds,
   routeCanvas,
   routeDisplayItems,
   routeFailure,
@@ -140,7 +140,7 @@ export function fieldsDrawing(state: FieldsState): GraphicsObject {
   const frame =
     view ??
     routeFrame(
-      routeBounds(
+      getPointBounds(
         geometry.wires.flatMap((wire) => [wire.a, wire.b].map(drawingPoint)),
       ) ?? {
         minX: 0,
@@ -237,7 +237,7 @@ function drawSlice({
   if (!slice || !section) return drawing
   const marker = sliceCut({ slice, unit: frame.unit })
   drawing.polygons!.push(marker)
-  const cut = routeBounds(marker.points)!
+  const cut = getPointBounds(marker.points)!
   const from = { x: (cut.minX + cut.maxX) / 2, y: (cut.minY + cut.maxY) / 2 }
   let to = { x: from.x, y: frame.pane.maxY }
   if (frame.pane.minX > frame.focus.maxX) to = { x: frame.pane.minX, y: from.y }
