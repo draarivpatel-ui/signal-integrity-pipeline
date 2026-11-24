@@ -2,14 +2,14 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
-import { circuitNodes } from "../../../src/simulation"
+import { generalDeclarations } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("mapping-only multi-receiver paths cut each routed trace once", async () => {
+test("a trace contact outside a receiver path must be mapped by its placed SPICE model", async () => {
   const circuitJson = await renderSignals({
-    tree: <DaisyChainFixture routeFinalLeg idealMiddleLeg namedNet />,
+    tree: <DaisyChainFixture routeFinalLeg placedLoad />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
   const solver = new TransientChannelSimulationPlanSolver({
@@ -19,12 +19,13 @@ test("mapping-only multi-receiver paths cut each routed trace once", async () =>
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  assert.equal(bindings.receiverPaths.length, 2)
-  assert.equal(bindings.receiverPaths[1].sourceTraceIds?.length, 2)
-  const { node } = circuitNodes({
-    circuit: cloneCircuitJson(bindings.circuitJson),
-    modeling: bindings.modeling,
-    receiverPaths: bindings.receiverPaths,
-  })
-  assert.equal(new Set(plan.sections.requiredSourcePortIds.map(node)).size, 3)
+  assert.equal(bindings.traceContacts.length, 3)
+  assert.throws(
+    () =>
+      generalDeclarations({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
+    { domain: "simulation", code: "channel_model" },
+  )
 })

@@ -7,7 +7,7 @@ import { ChannelFixture } from "../../fixtures/channel-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("ground shunts do not create a bypass across a single-ended load cut", async () => {
+test("ground shunts do not create a bypass across a single-ended load trace", async () => {
   const circuitJson = await renderSignals({
     tree: (
       <ChannelFixture route="unrouted">

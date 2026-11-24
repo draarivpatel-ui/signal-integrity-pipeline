@@ -1,9 +1,9 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import { endpointPorts, type ReceiverTracePath } from "../board"
 import {
+  buildReceiverGraphs,
   extractedNonrailSourceTraceIds,
-  receiverGraphs,
-  receiverPath,
+  findReceiverPath,
   type TraceContacts,
 } from "../simulation"
 import { fail } from "./diagnostics"
@@ -12,19 +12,19 @@ import type { PreparedChannelSimulation } from "./signals"
 /** Resolve each declared receiver to its ordered routed trace path. */
 export function resolveReceiverTracePaths({
   prepared,
-  cuts,
+  traceContacts,
 }: {
   prepared: PreparedChannelSimulation
-  cuts: readonly TraceContacts[]
+  traceContacts: readonly TraceContacts[]
 }): ReceiverTracePath[] {
   const { circuit, settings, driverReceiverChannels } = prepared
   const db = cju([...circuit])
-  const graphs = receiverGraphs({
+  const graphs = buildReceiverGraphs({
     db,
     circuit,
     groundSourcePortId: settings.channelReference.sourcePortId,
     modeling: settings,
-    cuts,
+    traceContacts,
     additionalSourceTraceIds: extractedNonrailSourceTraceIds({
       db,
       copperScope: settings.copperScope,
@@ -37,7 +37,7 @@ export function resolveReceiverTracePaths({
     for (const receiver of receivers) {
       for (const [leg, toSourcePortId] of endpointPorts(receiver).entries()) {
         const fromSourcePortId = driverPorts[leg]
-        const path = receiverPath({
+        const path = findReceiverPath({
           graphs,
           fromSourcePortId,
           toSourcePortId,
