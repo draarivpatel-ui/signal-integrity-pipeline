@@ -142,7 +142,7 @@ export function plannedAggressors({
 }): PlannedAggressor[] {
   const planner = new TransientChannelSimulationPlanSolver({
     ...localProblem({ input, simulation }),
-    scopeDistanceMm: stimulusRadius({
+    nearbyGapMm: stimulusRadius({
       simulation,
       defaultMm: input.distanceMm,
     }),
@@ -266,7 +266,7 @@ export async function runLocalSimulation({
       input: {
         ...problem,
         captureDrivers: true,
-        scopeDistanceMm: stimulusRadius({
+        nearbyGapMm: stimulusRadius({
           simulation,
           defaultMm: input.distanceMm,
         }),
@@ -307,7 +307,7 @@ export async function runLocalSimulation({
     ).value)
       for (const warning of plan.warnings)
         log({ stage: "Channel plan", level: "Warning", message: warning })
-    const { models, mappings } = solver.stageOutput("RouteBindingsSolver")
+    const { models, receiverPaths } = solver.stageOutput("RouteBindingsSolver")
       .value[0]
     log({
       stage: "Capture",
@@ -323,7 +323,9 @@ export async function runLocalSimulation({
       threshold: receiverThreshold({
         ibisSources: problem.ibisSources,
         models,
-        receivers: new Set(mappings.map(({ to }) => to)),
+        receivers: new Set(
+          receiverPaths.map(({ toSourcePortId }) => toSourcePortId),
+        ),
       }),
     }
   } catch (cause) {

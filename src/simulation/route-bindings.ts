@@ -3,6 +3,7 @@ import { BaseSolver } from "@tscircuit/solver-utils"
 import type { PcbComponent, PcbPort } from "circuit-json"
 import type { GraphicsObject } from "graphics-debug"
 import {
+  cloneCircuitJson,
   routeBoardDrawing,
   routeBuffers,
   routeFailure,
@@ -31,13 +32,13 @@ import {
   snapshot,
 } from "../kernel"
 import { generalDeclarations, modelRunDefinition } from "./declarations"
+import { extractedNonrailSourceTraceIds } from "./ideal-connectivity"
 import { electricalSources } from "./netlist"
 import type {
   RouteBuffer,
   RoutedBindings,
   ScopedRouteBindingsInput,
-} from "./routed-types"
-import { extractedNonrailSourceTraceIds } from "./source-node-groups"
+} from "./route-inputs"
 import type { Declarations, SimulationPlan } from "./types"
 
 /** Bind one vendor buffer per step; electrical names retain source-record order. */
@@ -59,25 +60,26 @@ export class RouteBindingsSolver extends BaseSolver {
   private initialize(scope: ArtifactScope): Declarations {
     if (this.declarations) return this.declarations
     const {
-      circuitJson,
+      circuitJson: plannedCircuitJson,
       copperScope,
-      mappings,
-      routedTraceCuts,
+      receiverPaths,
+      traceContacts,
       modeling,
       controls,
       options,
       ibisSources,
     } = this.input
-    if (!routedTraceCuts.length)
-      throw new Error("Routed compilation requires physical signal mappings")
+    if (!traceContacts.length)
+      throw new Error("Routed compilation requires physical signal traces")
+    const circuitJson = cloneCircuitJson(plannedCircuitJson)
     const additionalSourceTraceIds = extractedNonrailSourceTraceIds({
       db: cju([...circuitJson]),
       copperScope,
     })
     const declarations = generalDeclarations({
       circuit: circuitJson,
-      mappings,
-      routedTraceCuts,
+      receiverPaths,
+      traceContacts,
       additionalSourceTraceIds,
       modeling,
       controls,
@@ -137,10 +139,10 @@ export class RouteBindingsSolver extends BaseSolver {
     }
     if (this.models.length !== declarations.models.length) return
     const bindings: RoutedBindings = Object.freeze({
-      circuitJson: structuredClone(this.input.circuitJson),
+      circuitJson: cloneCircuitJson(this.input.circuitJson),
       ...snapshot({
         scope: this.input.copperScope,
-        mappings: this.input.mappings,
+        receiverPaths: this.input.receiverPaths,
         plan: this.plan!,
         nodeMap: declarations.nodes.mapping,
         groundSourcePortId: declarations.nodes.groundSourcePortId,
@@ -178,7 +180,7 @@ export class RouteBindingsSolver extends BaseSolver {
    * grey dots; unbound lane ends turn red.
    */
   override visualize(): GraphicsObject {
-    const circuit = this.input.circuitJson
+    const circuit = cloneCircuitJson(this.input.circuitJson)
     const view = routeView({ circuit, scope: this.input.copperScope })
     let drawing = routeBoardDrawing({ circuit, scope: this.input.copperScope })
     const db = cju([...circuit])
@@ -208,8 +210,9 @@ export class RouteBindingsSolver extends BaseSolver {
         (id) => {
           const point = routePortPoint({ circuit, sourcePortId: id })
           if (!point) return []
-          const mappedSignal = this.input.mappings.some(
-            (mapping) => mapping.from === id || mapping.to === id,
+          const mappedSignal = this.input.receiverPaths.some(
+            (mapping) =>
+              mapping.fromSourcePortId === id || mapping.toSourcePortId === id,
           )
           if (
             !mappedSignal ||
@@ -256,9 +259,9 @@ export class RouteBindingsSolver extends BaseSolver {
     if (this.failed) {
       drawing.polygons!.push(
         ...portComponentOutlines({
-          ports: this.input.mappings.flatMap((mapping) => [
-            mapping.from,
-            mapping.to,
+          ports: this.input.receiverPaths.flatMap((mapping) => [
+            mapping.fromSourcePortId,
+            mapping.toSourcePortId,
           ]),
           color: routeTones.failure,
           label: "unbound",

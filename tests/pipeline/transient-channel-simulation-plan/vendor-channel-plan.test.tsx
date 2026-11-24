@@ -5,13 +5,13 @@ import {
   listChannelSimulations,
   prepareChannelSimulationById,
 } from "../../../src/pipeline/signals"
-import { channelPlanInput } from "../../fixtures/routed-fixture"
+import { renderTwoTracePlanInput } from "../../fixtures/two-trace-plan-input"
 import { vendorAvailable, vendorModels } from "../../fixtures/vendor-models"
 
 test.skipIf(!vendorAvailable(vendorModels.cmos.file))(
   "vendor planning uses shared channel simulation preparation",
   async () => {
-    const input = await channelPlanInput()
+    const input = await renderTwoTracePlanInput()
     const [id] = listChannelSimulations(input.circuitJson).map(
       (channelSimulation) =>
         channelSimulation.simulation_pcb_transient_channel_simulation_id,
@@ -20,7 +20,7 @@ test.skipIf(!vendorAvailable(vendorModels.cmos.file))(
       circuit: input.circuitJson,
       sources: input.ibisSources,
       simulationPcbTransientChannelSimulationId: id,
-      distanceMm: input.scopeDistanceMm,
+      distanceMm: input.nearbyGapMm,
     })
     const solver = new TransientChannelSimulationPlanSolver(input)
     solver.step()
@@ -66,7 +66,7 @@ test.skipIf(!vendorAvailable(vendorModels.cmos.file))(
       () =>
         new TransientChannelSimulationPlanSolver({
           ...input,
-          scopeDistanceMm: 0,
+          nearbyGapMm: 0,
         }).solve(),
       /scope distance/,
     )

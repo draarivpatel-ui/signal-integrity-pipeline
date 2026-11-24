@@ -10,7 +10,7 @@ import {
   type SourcePortId,
   sourceNetMembers,
 } from "../../src/board"
-import { validatedScopeDistanceMm } from "../../src/pipeline/signals"
+import { validateNearbyGapMm } from "../../src/pipeline/signals"
 import { signalTopology } from "../../src/pipeline/topology"
 import { signalRailIds } from "../../src/simulation"
 
@@ -110,7 +110,7 @@ export function categorizeCopper({
     throw new Error("Circuit JSON needs a PCB board to scope its copper.")
 
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
-  const rails = signalRailIds({ db, connectivity, referenceIds: [] })
+  const rails = signalRailIds({ db, connectivity, referenceSourcePortIds: [] })
   const topology = signalTopology({ circuit, rails })
   const channelBySource = new Map<SourceId, string>()
   for (const channel of channels) {
@@ -137,7 +137,7 @@ export function categorizeCopper({
     channelSourceIds: new Set(channelBySource.keys()),
     referenceSourceIds,
     railSourceIds: rails,
-    distanceMm: validatedScopeDistanceMm(distanceMm),
+    distanceMm: validateNearbyGapMm(distanceMm),
   })
   const selectedTraces = new Set(scope.channelPcbTraceIds)
   const keptTraces = new Set(scope.extractedPcbTraceIds)

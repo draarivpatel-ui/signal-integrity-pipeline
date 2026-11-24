@@ -1,12 +1,17 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
-import type { LaneMapping, RoutedSections } from "../board"
+import type { RoutedSections, SourcePortId } from "../board"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
 import { type SpiceProbeRow, spiceProbeRows } from "../observation"
 import { invoke, type SolverContext, type SolverRequest } from "../solver"
 import { fail } from "./diagnostics"
-import type { RoutedCapture, RoutedDeck } from "./routed-types"
+import type { RoutedCapture, RoutedDeck } from "./route-inputs"
 import { type ReceiverThreshold, routeWaveformDrawing } from "./waveform-visual"
+
+/** Driver-port key in the serialized route evidence. */
+interface DeckRouteEvidence {
+  from: SourcePortId
+}
 
 /** The compiled deck and injected engine capabilities for a routed transient. */
 export interface RouteTransientInput {
@@ -102,9 +107,7 @@ export class RouteTransientSolver extends BaseSolver {
   /** Probe marks on the board and their waveforms beside it; the axes stay empty until ngspice returns samples. */
   override visualize(): GraphicsObject {
     const { compiled, board } = this.input
-    const routes = compiled.evidence.routes as
-      | Pick<LaneMapping, "from">[]
-      | undefined
+    const routes = compiled.evidence.routes as DeckRouteEvidence[] | undefined
     const probes = compiled.probes.map((probe) => ({
       name: probe.name,
       sourcePortId: probe.signalSourceId,

@@ -5,7 +5,7 @@ import {
 } from "../../src/board"
 import {
   listChannelSimulations,
-  validatedScopeDistanceMm,
+  validateNearbyGapMm,
 } from "../../src/pipeline/signals"
 import { type InspectorBoard, inspectorBoard } from "./geometry"
 import { isInlineIbis } from "./ibis-panel"
@@ -103,7 +103,7 @@ export async function loadInput({
 }): Promise<InspectorInput> {
   let circuit: CircuitJson
   let name: string
-  let distanceMm = validatedScopeDistanceMm()
+  let distanceMm = validateNearbyGapMm()
   if (typeof source !== "string") {
     if (!source.name.toLowerCase().endsWith(".json"))
       throw new Error("Choose a .json Circuit JSON file.")

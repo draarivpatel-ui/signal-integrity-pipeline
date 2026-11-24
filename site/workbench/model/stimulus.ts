@@ -9,7 +9,7 @@ import {
   channelSimulationDurationSeconds,
   signalBits,
 } from "../../../src/pipeline/signal-controls"
-import { validatedScopeDistanceMm } from "../../../src/pipeline/signals"
+import { validateNearbyGapMm } from "../../../src/pipeline/signals"
 import { prbsPatterns } from "../../../src/pipeline/timing"
 
 export type ChannelEdit = Pick<
@@ -81,7 +81,7 @@ export function editStimulus({
     duration_ms: edit.durationMs,
     aggressor_disabled: edit.aggressorsDisabled,
     aggressor_pattern: edit.aggressorPattern?.trim() || undefined,
-    workbench_scope_distance_mm: validatedScopeDistanceMm(edit.radiusMm),
+    workbench_scope_distance_mm: validateNearbyGapMm(edit.radiusMm),
   }
   if (
     !next.name &&
@@ -150,7 +150,7 @@ export function editScopeRadius({
   id: string
   radiusMm: number
 }): CircuitJson {
-  const workbench_scope_distance_mm = validatedScopeDistanceMm(radiusMm)
+  const workbench_scope_distance_mm = validateNearbyGapMm(radiusMm)
   return circuit.map((record) => {
     if (
       record.type !== "simulation_pcb_transient_channel_simulation" ||

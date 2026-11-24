@@ -10,12 +10,12 @@ import {
   type RoutedBindings,
   type ScopedRouteBindingsInput,
 } from "../../src/simulation"
-import { channelPlanInput } from "../fixtures/routed-fixture"
+import { renderTwoTracePlanInput } from "../fixtures/two-trace-plan-input"
 import { vendorAvailable } from "../fixtures/vendor-models"
 
 /** Prepare routed bindings from the standalone TSX fixture. */
 async function routeBindings(): Promise<RouteBindingsSolver> {
-  const input = await channelPlanInput()
+  const input = await renderTwoTracePlanInput()
   const planner = new TransientChannelSimulationPlanSolver(input)
   planner.solve()
   const plan = planner.getOutput().value[0]
@@ -77,13 +77,13 @@ test.skipIf(!vendorAvailable("sn74lvc1g04.ibs"))(
 
 import { routeTones } from "../../src/board"
 import {
-  assertRouteVisual,
+  assertPlanDrawingSnapshot,
   routedVisualFixture,
 } from "../fixtures/routed-visual"
 
 test("two-trace TSX route-bindings visual SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing: root
       .getSolver<RouteBindingsSolver>("RouteBindingsSolver")!
       .visualize(),
@@ -111,7 +111,7 @@ test("missing IBIS bytes mark physical endpoints and rejection reason red", asyn
         text.color === routeTones.failure && text.text.includes("model"),
     ),
   )
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing,
     module: "simulation",
     name: "route-bindings-missing",

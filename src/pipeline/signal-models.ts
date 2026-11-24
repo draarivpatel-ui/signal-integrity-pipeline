@@ -5,6 +5,7 @@ import {
   type CopperScope,
   endpointPorts,
   getSourcePortConnectivityMapFromCircuitJson,
+  hasBuiltInPassiveModel,
   type SignalEndpoint,
   type SimulationIbisModel,
   type SimulationPcbDriverReceiverChannel,
@@ -22,7 +23,7 @@ import {
   packageCapacitanceWarnings,
 } from "../buffers"
 import { snapshot } from "../kernel"
-import { hasBuiltInPassiveModel, voltageSourceTerminals } from "../simulation"
+import { voltageSourceTerminals } from "../simulation"
 import type { NumericalSettings } from "./modeling"
 import type { ScopedSignalPins, SignalPins } from "./signal-pins"
 import { withChannelSimulationSupplies } from "./supplies"
@@ -371,13 +372,13 @@ export function prepareSignalSettings({
   pruned,
   signalPins,
   scopedPins,
-  lanes,
+  channelTraces,
   sources,
 }: {
   pruned: PrunedIbisModels
   signalPins: Pick<SignalPins, "connectivity" | "rails" | "reference">
   scopedPins: Pick<ScopedSignalPins, "copperScope" | "retained">
-  lanes: NumericalSettings["lanes"]
+  channelTraces: NumericalSettings["channelTraces"]
   sources: IbisSources
 }): SuppliedSignalSettings {
   const { connectivity, rails, reference } = signalPins
@@ -395,7 +396,7 @@ export function prepareSignalSettings({
     )
   }
   const settings: NumericalSettings = {
-    lanes,
+    channelTraces,
     copperScope,
     channelReference: { sourcePortId: reference },
   }

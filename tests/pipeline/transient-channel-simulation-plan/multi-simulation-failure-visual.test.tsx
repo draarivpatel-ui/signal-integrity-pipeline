@@ -2,13 +2,13 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { simulation } from "@tscircuit/core"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import {
   differentialIbis,
   routedVisualIbis,
 } from "../../fixtures/routed-visual-fixture"
 import { Inverter } from "../../fixtures/signal-parts"
 import { renderSignals } from "../../fixtures/signal-render"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 import Differential from "../../fixtures/unit-differential"
 
 test("attributes a late failure to the failed simulation instead of the earlier plan", async () => {
@@ -41,7 +41,7 @@ test("attributes a late failure to the failed simulation instead of the earlier 
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
   const solver = new TransientChannelSimulationPlanSolver({
-    scopeDistanceMm: 0.05,
+    nearbyGapMm: 0.05,
     circuitJson,
     ibisSources: {
       [inverterModelPath]: routedVisualIbis,

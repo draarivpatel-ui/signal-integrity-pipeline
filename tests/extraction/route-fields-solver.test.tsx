@@ -63,13 +63,13 @@ test("replays extraction from serialized constructor parameters", async () => {
 
 import { routeTones } from "../../src/board"
 import {
-  assertRouteVisual,
+  assertPlanDrawingSnapshot,
   routedVisualFixture,
 } from "../fixtures/routed-visual"
 
 test("two-trace TSX route-fields-solver visual SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing: root
       .getSolver<RouteFieldsSolver>("RouteFieldsSolver")!
       .visualize(),

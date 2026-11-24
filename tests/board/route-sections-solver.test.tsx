@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import {
+  cloneCircuitJson,
   type RouteSectionsInput,
   RouteSectionsSolver,
   segmentRoutes,
@@ -28,7 +29,10 @@ test("sections process one route per step", async () => {
   solver.solve()
   assert.deepEqual(
     solver.getOutput().value.geometry,
-    segmentRoutes({ circuit: circuitJson, scope: copperScope }),
+    segmentRoutes({
+      circuit: cloneCircuitJson(circuitJson),
+      scope: copperScope,
+    }),
   )
   assert.ok(solver.visualize().lines!.length)
 })
@@ -45,13 +49,13 @@ test("sections reject missing physical contacts", async () => {
 })
 
 import {
-  assertRouteVisual,
+  assertPlanDrawingSnapshot,
   routedVisualFixture,
 } from "../fixtures/routed-visual"
 
 test("two-trace TSX route-sections-solver visual SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  assertRouteVisual({
+  assertPlanDrawingSnapshot({
     drawing: root
       .getSolver<RouteSectionsSolver>("RouteSectionsSolver")!
       .visualize(),

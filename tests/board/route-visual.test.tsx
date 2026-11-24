@@ -15,7 +15,7 @@ import {
 } from "../../src/board"
 import { routedCopper } from "../fixtures/routed-copper"
 import {
-  assertRouteVisual,
+  assertPlanDrawingSnapshot,
   routedVisualFixture,
 } from "../fixtures/routed-visual"
 import { renderCoreSignals } from "../support/core-render"
@@ -221,7 +221,11 @@ test("two-trace TSX board drawing SVG snapshot", async () => {
     circuit: root.inputProblem.circuitJson,
     scope: sections.scope,
   })
-  assertRouteVisual({ drawing, module: "board", name: "route-visual-board" })
+  assertPlanDrawingSnapshot({
+    drawing,
+    module: "board",
+    name: "route-visual-board",
+  })
 })
 
 test("display sampling bounds object counts and preserves the first and last item", () => {
