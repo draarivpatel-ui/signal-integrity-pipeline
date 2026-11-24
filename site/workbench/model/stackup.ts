@@ -1,7 +1,7 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { LayerRef, PcbStackup } from "circuit-json"
 import { type CircuitJson, stackupFromCircuitJson } from "../../../src/board"
-import { solveCrossSection } from "../../../src/extraction"
+import { calculateRlgc } from "../../../src/rlgc"
 
 /** Copper foil thickness in mm for one ounce per square foot. */
 export const copperOunceMm = 0.035
@@ -62,7 +62,7 @@ interface ImpedanceReadout {
   effectiveDk: number
 }
 
-/** Compute an ideal reference-plane cross-section using the actual browser field extractor. */
+/** Compute an ideal reference-plane cross-section with the browser RLGC calculation. */
 export function stackupImpedance({
   circuit,
   signal,
@@ -85,11 +85,11 @@ export function stackupImpedance({
     .getWhere({})!
     .layers.filter((layer) => layer.layer_type === "dielectric")
     .reverse()
-  const { L, C, C0 } = solveCrossSection({
-    section: {
+  const matrices = calculateRlgc({
+    crossSection: {
       conductors: [
         {
-          id: signal,
+          conductorId: signal,
           xMm: 0,
           widthMm,
           zMm: conductor.zMinMm,
@@ -103,21 +103,25 @@ export function stackupImpedance({
           conductivitySm: plane.conductivitySm,
         },
       ],
-      dielectrics: stack.dielectrics.map((layer, index) => {
+      dielectricLayers: stack.dielectrics.map((layer, index) => {
         if (layer.relativePermittivity === undefined)
-          throw new Error("A dielectric layer needs a Dk before extraction.")
+          throw new Error(
+            "A dielectric layer needs a Dk for the RLGC calculation.",
+          )
         return {
           zMm: layer.zMinMm,
           thicknessMm: layer.zMaxMm - layer.zMinMm,
-          er: layer.relativePermittivity,
+          relativePermittivity: layer.relativePermittivity,
           lossTangent: material[index].loss_tangent ?? 0,
         }
       }),
     },
   })
+  const capacitance = matrices.capacitanceFaradsPerMeter[0][0]
+  const inductance = matrices.externalInductanceHenriesPerMeter[0][0]
   return {
-    ohms: Math.sqrt(L[0][0] / C[0][0]),
-    delayPsPerMm: 1e9 * Math.sqrt(L[0][0] * C[0][0]),
-    effectiveDk: C[0][0] / C0[0][0],
+    ohms: Math.sqrt(inductance / capacitance),
+    delayPsPerMm: 1e9 * Math.sqrt(inductance * capacitance),
+    effectiveDk: capacitance / matrices.vacuumCapacitanceFaradsPerMeter[0][0],
   }
 }
