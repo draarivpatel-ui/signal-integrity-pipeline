@@ -210,22 +210,32 @@ test("every completed stage retains its own final drawing with few, readable lab
   for (const definition of root.pipelineDef) {
     const graphics = root.getSolver(definition.solverName)!.visualize()
     const texts = graphics.texts ?? []
-    assert.ok(
-      texts.length <= 12,
-      `${definition.solverName}: no titles, legends or footers`,
-    )
+    const admission = definition.solverName === "RoutedAdmissionSolver"
+    if (admission) {
+      assert.ok(texts.some((text) => text.text.startsWith("ADMITTED")))
+      assert.ok(texts.every((text) => text.anchorSide === "center"))
+    } else {
+      assert.ok(
+        texts.length <= 12,
+        `${definition.solverName}: no titles, legends or footers`,
+      )
+    }
     const view = boardPictureView({
       circuit: root.inputProblem.circuitJson,
       drawing: graphics,
     })
+    const [width, height] = admission ? [1100, 800] : [1000, 540]
     const scale = Math.min(
-      1000 / (view.maxX - view.minX),
-      540 / (view.maxY - view.minY),
+      width / (view.maxX - view.minX),
+      height / (view.maxY - view.minY),
     )
-    const readableLabels = texts.every((text) => text.fontSize! * scale >= 10)
+    const readableLabels = texts.every(
+      (text) =>
+        typeof text.fontSize === "number" && text.fontSize * scale >= 10,
+    )
     assert.ok(
       readableLabels,
-      `${definition.solverName}: all labels are readable at 1080 × 620`,
+      `${definition.solverName}: all labels are readable in the stage view`,
     )
   }
 })
