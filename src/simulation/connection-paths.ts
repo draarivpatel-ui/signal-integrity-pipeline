@@ -1,117 +1,120 @@
-/** An undirected connection between two electrical nodes with its physical evidence. */
-export interface Connection<NodeId, Evidence> {
-  fromVertexId: NodeId
-  toVertexId: NodeId
+/** An undirected connection between two electrical vertices with its physical evidence. */
+export interface Connection<VertexId, Evidence> {
+  fromVertexId: VertexId
+  toVertexId: VertexId
   evidence: Evidence
 }
 
-/** Electrical nodes indexed by their incident connections. */
-export type ConnectionGraph<NodeId, Evidence> = ReadonlyMap<
-  NodeId,
-  readonly Connection<NodeId, Evidence>[]
+/** Electrical vertices indexed by their incident connections. */
+export type ConnectionGraph<VertexId, Evidence> = ReadonlyMap<
+  VertexId,
+  readonly Connection<VertexId, Evidence>[]
 >
 
-/** Index connections at both nodes, including contacts that already share a node. */
-export function connectionGraph<NodeId, Evidence>(
-  connections: readonly Connection<NodeId, Evidence>[],
-): ConnectionGraph<NodeId, Evidence> {
-  const graph = new Map<NodeId, Connection<NodeId, Evidence>[]>()
+/** Index connections at both vertices, including contacts that already share a vertex. */
+export function buildConnectionGraph<VertexId, Evidence>(
+  connections: readonly Connection<VertexId, Evidence>[],
+): ConnectionGraph<VertexId, Evidence> {
+  const graph = new Map<VertexId, Connection<VertexId, Evidence>[]>()
   for (const connection of connections) {
     const { fromVertexId, toVertexId } = connection
-    const nodes = new Set([fromVertexId, toVertexId])
-    for (const nodeId of nodes) {
-      const incident = graph.get(nodeId)
+    const vertices = new Set([fromVertexId, toVertexId])
+    for (const vertexId of vertices) {
+      const incident = graph.get(vertexId)
       if (incident) incident.push(connection)
-      else graph.set(nodeId, [connection])
+      else graph.set(vertexId, [connection])
     }
   }
   return graph
 }
 
-/** Read the other node of an incident connection. */
-function getOppositeVertexId<NodeId, Evidence>({
+/** Read the other vertex of an incident connection. */
+function getOppositeVertexId<VertexId, Evidence>({
   connection,
-  nodeId,
+  vertexId,
 }: {
-  connection: Connection<NodeId, Evidence>
-  nodeId: NodeId
-}): NodeId {
-  if (connection.fromVertexId === nodeId) return connection.toVertexId
+  connection: Connection<VertexId, Evidence>
+  vertexId: VertexId
+}): VertexId {
+  if (connection.fromVertexId === vertexId) return connection.toVertexId
   return connection.fromVertexId
 }
 
-/** Ordered connections traversed between two nodes. */
-type ConnectionPath<NodeId, Evidence> = Connection<NodeId, Evidence>[]
+/** Ordered connections traversed between two vertices. */
+type ConnectionPath<VertexId, Evidence> = Connection<VertexId, Evidence>[]
 
 /** Find the shortest path in the selected connection graph. */
-export function connectionPath<NodeId, Evidence>({
+export function findConnectionPath<VertexId, Evidence>({
   graph,
   fromVertexId,
   toVertexId,
   omitted,
 }: {
-  graph: ConnectionGraph<NodeId, Evidence>
-  fromVertexId: NodeId
-  toVertexId: NodeId
-  omitted?: Connection<NodeId, Evidence>
-}): ConnectionPath<NodeId, Evidence> | undefined {
-  const reached = new Map<NodeId, Connection<NodeId, Evidence> | null>([
+  graph: ConnectionGraph<VertexId, Evidence>
+  fromVertexId: VertexId
+  toVertexId: VertexId
+  omitted?: Connection<VertexId, Evidence>
+}): ConnectionPath<VertexId, Evidence> | undefined {
+  const reached = new Map<VertexId, Connection<VertexId, Evidence> | null>([
     [fromVertexId, null],
   ])
-  for (const nodeId of reached.keys()) {
-    if (nodeId === toVertexId) return orderedPath({ reached, toVertexId })
-    for (const connection of graph.get(nodeId) ?? []) {
+  for (const vertexId of reached.keys()) {
+    if (vertexId === toVertexId) return reconstructPath({ reached, toVertexId })
+    for (const connection of graph.get(vertexId) ?? []) {
       if (connection === omitted) continue
-      const nextNodeId = getOppositeVertexId({ connection, nodeId })
-      if (!reached.has(nextNodeId)) reached.set(nextNodeId, connection)
+      const nextVertexId = getOppositeVertexId({ connection, vertexId })
+      if (!reached.has(nextVertexId)) reached.set(nextVertexId, connection)
     }
   }
 }
 
-/** Follow one predecessor per reached node back to the path's first contact. */
-function orderedPath<NodeId, Evidence>({
+/** Follow one predecessor per reached vertex back to the path's first contact. */
+function reconstructPath<VertexId, Evidence>({
   reached,
   toVertexId,
 }: {
-  reached: ReadonlyMap<NodeId, Connection<NodeId, Evidence> | null>
-  toVertexId: NodeId
-}): ConnectionPath<NodeId, Evidence> {
-  const path: ConnectionPath<NodeId, Evidence> = []
-  let currentNodeId = toVertexId
-  let connection = reached.get(currentNodeId)
+  reached: ReadonlyMap<VertexId, Connection<VertexId, Evidence> | null>
+  toVertexId: VertexId
+}): ConnectionPath<VertexId, Evidence> {
+  const path: ConnectionPath<VertexId, Evidence> = []
+  let currentVertexId = toVertexId
+  let connection = reached.get(currentVertexId)
   while (connection) {
     path.push(connection)
-    currentNodeId = getOppositeVertexId({ connection, nodeId: currentNodeId })
-    connection = reached.get(currentNodeId)
+    currentVertexId = getOppositeVertexId({
+      connection,
+      vertexId: currentVertexId,
+    })
+    connection = reached.get(currentVertexId)
   }
   return path.reverse()
 }
 
 /** An unfinished depth-first visit and its lowest reachable discovery index. */
-interface BridgeVisit<NodeId, Evidence> {
-  vertexId: NodeId
+interface BridgeVisit<VertexId, Evidence> {
+  vertexId: VertexId
   discoveryIndex: number
   lowIndex: number
-  incident: Iterator<Connection<NodeId, Evidence>>
-  parentConnection?: Connection<NodeId, Evidence>
+  incident: Iterator<Connection<VertexId, Evidence>>
+  parentConnection?: Connection<VertexId, Evidence>
 }
 
-/** The links whose removal disconnects their endpoints in an undirected graph. */
-export type ConnectionBridges<NodeId, Evidence> = ReadonlySet<
-  Connection<NodeId, Evidence>
+/** The connections whose removal disconnects their endpoints in an undirected graph. */
+export type ConnectionBridges<VertexId, Evidence> = ReadonlySet<
+  Connection<VertexId, Evidence>
 >
 
-/** Find every bridge in one traversal, treating parallel links as separate edges. */
-export function findConnectionBridges<NodeId, Evidence>(
-  graph: ConnectionGraph<NodeId, Evidence>,
-): ConnectionBridges<NodeId, Evidence> {
-  const discovery = new Map<NodeId, number>()
-  const bridges = new Set<Connection<NodeId, Evidence>>()
+/** Find every bridge in one traversal, treating parallel connections as separate edges. */
+export function findConnectionBridges<VertexId, Evidence>(
+  graph: ConnectionGraph<VertexId, Evidence>,
+): ConnectionBridges<VertexId, Evidence> {
+  const discovery = new Map<VertexId, number>()
+  const bridges = new Set<Connection<VertexId, Evidence>>()
   for (const [rootVertexId, incident] of graph) {
     if (discovery.has(rootVertexId)) continue
     discovery.set(rootVertexId, discovery.size)
     const rootIndex = discovery.size - 1
-    const visits: BridgeVisit<NodeId, Evidence>[] = [
+    const visits: BridgeVisit<VertexId, Evidence>[] = [
       {
         vertexId: rootVertexId,
         discoveryIndex: rootIndex,
@@ -133,7 +136,7 @@ export function findConnectionBridges<NodeId, Evidence>(
       if (connection === visit.parentConnection) continue
       const vertexId = getOppositeVertexId({
         connection,
-        nodeId: visit.vertexId,
+        vertexId: visit.vertexId,
       })
       const discoveryIndex = discovery.get(vertexId)
       if (discoveryIndex !== undefined) {

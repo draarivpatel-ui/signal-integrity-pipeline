@@ -62,7 +62,7 @@ test("attributes a late failure to the failed simulation instead of the earlier 
     ),
   )
   assert.equal(
-    drawing.lines?.some((line) => line.label?.startsWith("C1")),
+    drawing.lines?.some((line) => line.label?.startsWith("Trace 1 ·")),
     false,
   )
 })

@@ -1,5 +1,5 @@
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
-import type { Line, Polygon } from "graphics-debug"
+import type { Line, Point, Polygon } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId, SourceTraceId } from "./ids"
@@ -41,13 +41,13 @@ export function getTraceColor(index: number): string {
   return TRACE_COLORS[index % TRACE_COLORS.length]
 }
 
-/** A physical conductor partition, oriented for its first mapped path. */
+/** A trace oriented for its first receiver path. */
 export interface PlanTrace {
   sourceTraceId: SourceTraceId
   fromSourcePortId: SourcePortId
   toSourcePortId: SourcePortId
   index: number
-  isMapped: boolean
+  isOnReceiverPath: boolean
 }
 
 /** A point-to-point topology overlay independent of the physical copper. */
@@ -86,6 +86,7 @@ export interface PlanLine extends Line {
 
 /** Endpoint symbol carried through polygon clipping for the legend. */
 export interface PlanPolygon extends Polygon {
+  holes?: Point[][]
   endpointKind?: PlanVisualEndpoint["kind"]
 }
 
@@ -101,7 +102,7 @@ export interface PlanVisualScene {
   overlays: readonly PlanOverlay[]
   summary?: PlanVisualSummary
   rows: readonly PlanHeaderRow[]
-  faultCode?: string
+  traceFaultKind?: "branch" | "loop"
   faultSourcePortIds: ReadonlySet<SourcePortId>
   faultSourceTraceIds: ReadonlySet<SourceTraceId>
   existingSourceTraceIds: ReadonlySet<SourceTraceId>

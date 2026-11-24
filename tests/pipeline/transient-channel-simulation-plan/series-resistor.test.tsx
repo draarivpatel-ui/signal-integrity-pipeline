@@ -21,13 +21,13 @@ test("series resistor keeps both routed segments electrically distinct", async (
   const { bindings, sections } = plan
   assert.equal(sections.requiredSourcePortIds.length, 4)
   assert.equal(bindings.receiverPaths.length, 1)
-  const [mapping] = bindings.receiverPaths
+  const [receiverPath] = bindings.receiverPaths
   const traces = cju(circuitJson).source_trace.list()
   const driverTrace = traces.find((trace) =>
-    trace.connected_source_port_ids.includes(mapping.fromSourcePortId),
+    trace.connected_source_port_ids.includes(receiverPath.fromSourcePortId),
   )
   const receiverTrace = traces.find((trace) =>
-    trace.connected_source_port_ids.includes(mapping.toSourcePortId),
+    trace.connected_source_port_ids.includes(receiverPath.toSourcePortId),
   )
   assert.ok(driverTrace && receiverTrace)
   const { node } = circuitNodes({
@@ -38,7 +38,7 @@ test("series resistor keeps both routed segments electrically distinct", async (
     const [from, to] = trace.connected_source_port_ids
     assert.notEqual(node(from), node(to), trace.source_trace_id)
   }
-  assert.deepEqual(mapping.sourceTraceIds, [
+  assert.deepEqual(receiverPath.sourceTraceIds, [
     driverTrace.source_trace_id,
     receiverTrace.source_trace_id,
   ])
