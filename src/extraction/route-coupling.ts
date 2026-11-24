@@ -1,13 +1,13 @@
-import type { RouteSection, RouteWire } from "../board"
+import type { TraceWire, WireSection } from "../board"
 import type { Snapshot } from "../kernel"
 import type { RouteCoefficients } from "./route-lines"
 
 /** Retain a pair if either normalized mutual coefficient reaches 0.5%. */
 const COUPLING_THRESHOLD = 0.005
 
-/** Solved normalized coupling and retention decision for one route-wire pair. */
+/** Solved normalized coupling and retention decision for one copper-geometry-wire pair. */
 export interface RouteCoupling {
-  wires: RouteWire["wireIndex"][]
+  wires: TraceWire["wireIndex"][]
   capacitive: number
   inductive: number
   retained: boolean
@@ -22,10 +22,10 @@ export function routeCoupling({
   solve,
   records,
 }: {
-  slice: Snapshot<RouteSection>
-  solve: (slice: Snapshot<RouteSection>) => RouteCoefficients
+  slice: Snapshot<WireSection>
+  solve: (slice: Snapshot<WireSection>) => RouteCoefficients
   records: RouteCoupling[]
-}): Snapshot<RouteSection>[] {
+}): Snapshot<WireSection>[] {
   const groups = slice.wires.map((_, i) => i)
   for (let i = 0; i < slice.wires.length; i++) {
     for (let j = i + 1; j < slice.wires.length; j++) {

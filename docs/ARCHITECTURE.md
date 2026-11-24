@@ -8,7 +8,7 @@ transient records are private and never appear in the input Circuit JSON.
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
 Declare transient channels in Circuit JSON. Signal preparation validates endpoint topology, selected IBIS capabilities,
 timing and pseudo-random binary sequence (PRBS) patterns.
-TransientChannelSimulationPlanSolver lowers each declared channel simulation into immutable inputs for route sections and buffer binding.
+TransientChannelSimulationPlanSolver lowers each declared channel simulation into immutable inputs for copper geometry extraction and buffer binding.
 Ideal wires, named nets and internal pin ties form the source groups used by SPICE.
 A named net can span the extracted traces connecting its own contacts, including multipoint ideal junctions.
 Channel planning and binding use the same receiver graph. Its paths traverse ideal junctions, extracted traces and series passives.
@@ -16,7 +16,7 @@ Rail shunts and differential terminations stay outside those paths, including te
 Each extracted trace keeps both physical contacts. Binding checks their selected models and detects signal contacts tied to ground.
 Removing an extracted trace or series passive from the receiver graph must disconnect its two ends.
 An alternate path reports the physical contacts and distinguishes an entirely routed loop from a bypass through ideal wiring.
-`RouteSectionsSolver` divides scoped wires into sections where nearby copper and reference surfaces stay consistent. It also resolves physical endpoint contacts.
+`CopperGeometryExtractionSolver` models scoped traces, vias, reference pours, and pad contacts. It groups wires into sections with consistent nearby copper and reference surfaces.
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
 RouteFieldsSolver screens nearby conductor pairs and extracts coupled coefficients for each unique section.
 IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during planning.
@@ -130,7 +130,7 @@ Regenerate with `bun scripts/document-routed-stages.ts`.
 | # | Stage solver |
 |---|---|
 | 1 | TransientChannelSimulationPlanSolver |
-| 2 | RouteSectionsSolver |
+| 2 | CopperGeometryExtractionSolver |
 | 3 | RouteFieldsSolver |
 | 4 | RouteBindingsSolver |
 | 5 | RouteNetworkSolver |
@@ -139,7 +139,7 @@ Regenerate with `bun scripts/document-routed-stages.ts`.
 ```mermaid
 flowchart LR
   s0["TransientChannelSimulationPlanSolver<br/>Plan one transient channel simulation per step"]
-  s1["RouteSectionsSolver<br/>All planned channel simulations, one item per step"]
+  s1["CopperGeometryExtractionSolver<br/>All planned channel simulations, one item per step"]
   s2["RouteFieldsSolver<br/>All planned channel simulations, one item per step"]
   s3["RouteBindingsSolver<br/>All planned channel simulations, one item per step"]
   s4["RouteNetworkSolver<br/>All planned channel simulations, one item per step"]
@@ -155,14 +155,14 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
   [*] --> TransientChannelSimulationPlanSolver
-  TransientChannelSimulationPlanSolver --> RouteSectionsSolver: all channel simulations completed
-  RouteSectionsSolver --> RouteFieldsSolver: all channel simulations completed
+  TransientChannelSimulationPlanSolver --> CopperGeometryExtractionSolver: all channel simulations completed
+  CopperGeometryExtractionSolver --> RouteFieldsSolver: all channel simulations completed
   RouteFieldsSolver --> RouteBindingsSolver: all channel simulations completed
   RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
   RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
   TransientChannelSimulationPlanSolver --> failed: invalid channel simulation input, including undeclared aggressors
-  RouteSectionsSolver --> failed
+  CopperGeometryExtractionSolver --> failed
   RouteFieldsSolver --> failed
   RouteBindingsSolver --> failed
   RouteNetworkSolver --> failed
