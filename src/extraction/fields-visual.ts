@@ -4,16 +4,16 @@ import {
   type CopperScope,
   getPointBounds,
   type RouteFrame,
-  type RouteSlice,
+  type RouteSection,
   type RouteView,
-  type RouteXY,
+  type CopperPoint,
   routeCanvas,
   routeDisplayItems,
   routeFailure,
   routeFrame,
   routeNets,
   routePane,
-  routePosition,
+  getRoutePoint,
   routeStroke,
   routeText,
   routeTones,
@@ -78,7 +78,7 @@ function impedanceColorAt(t: number): string {
 }
 
 /** Convert route coordinates to the points used by drawing primitives. */
-function drawingPoint([x, y]: Snapshot<RouteXY>): Point {
+function drawingPoint([x, y]: Snapshot<CopperPoint>): Point {
   return { x, y }
 }
 
@@ -107,9 +107,9 @@ function drawCopper({
   for (const wire of geometry.wires)
     drawing.lines!.push(
       ...routeStroke({
-        points: [wire.a, wire.b].map(drawingPoint),
+        points: [wire.startPoint, wire.endPoint].map(drawingPoint),
         color: routeTones.copper,
-        width: wire.width,
+        width: wire.widthMm,
         layer: wire.layer,
       }),
     )
@@ -123,7 +123,7 @@ export interface FieldsState {
   materials: RouteMaterials
   solved: ExtractedRouteSlice[]
   /** The slice on screen and its cross-section; when solving has finished, the most informative selected slice. */
-  slice?: Snapshot<RouteSlice>
+  slice?: Snapshot<RouteSection>
   section?: CrossSection
   line?: RouteCoefficients
   error?: string
@@ -141,7 +141,9 @@ export function fieldsDrawing(state: FieldsState): GraphicsObject {
     view ??
     routeFrame(
       getPointBounds(
-        geometry.wires.flatMap((wire) => [wire.a, wire.b].map(drawingPoint)),
+        geometry.wires.flatMap((wire) =>
+          [wire.startPoint, wire.endPoint].map(drawingPoint),
+        ),
       ) ?? {
         minX: 0,
         maxX: 1,
@@ -159,7 +161,7 @@ export function fieldsDrawing(state: FieldsState): GraphicsObject {
   )
   const impedances = state.solved.flatMap((slice) =>
     slice.wires.flatMap((wire, i) => {
-      if (view && !view.traces.has(wire.trace)) return []
+      if (view && !view.traces.has(wire.pcbTraceId)) return []
       return [sliceImpedance({ line: slice.line, i })]
     }),
   )
@@ -171,16 +173,16 @@ export function fieldsDrawing(state: FieldsState): GraphicsObject {
   const high = Math.max(...impedances, median * 1.1)
   for (const slice of state.solved)
     for (const [i, wire] of slice.wires.entries()) {
-      if (view && !view.traces.has(wire.trace)) continue
+      if (view && !view.traces.has(wire.pcbTraceId)) continue
       const z0 = sliceImpedance({ line: slice.line, i })
-      const points = [slice.start, slice.end].map((position) =>
-        drawingPoint(routePosition({ wire, position })),
+      const points = [slice.startMm, slice.endMm].map((position) =>
+        drawingPoint(getRoutePoint({ wire, positionMm: position })),
       )
       drawing.lines!.push(
         ...routeStroke({
           points,
           color: impedanceColor({ impedance: z0, low, high }),
-          width: wire.width,
+          width: wire.widthMm,
           layer: wire.layer,
           label: `${z0.toFixed(0)} Ω`,
         }),
@@ -248,10 +250,11 @@ function drawSlice({
     strokeDash: "6 4",
   })
   const conductorDisplay = slice.wires.map((wire, i) => {
-    if (view && !view.traces.has(wire.trace)) return { color: "#56606b" }
+    if (view && !view.traces.has(wire.pcbTraceId)) return { color: "#56606b" }
     if (!line)
       return {
-        color: view?.sources.get(wire.source)?.color ?? routeTones.copper,
+        color:
+          view?.sources.get(wire.sourceTraceId)?.color ?? routeTones.copper,
       }
     const z0 = sliceImpedance({ line, i })
     return {
@@ -287,14 +290,16 @@ function sliceCut({
   slice,
   unit,
 }: {
-  slice: Snapshot<RouteSlice>
+  slice: Snapshot<RouteSection>
   unit: number
 }): SliceMarker {
-  const middle = (slice.start + slice.end) / 2
-  const reach = Math.max(...slice.wires.map((wire) => wire.width), unit * 1.2)
+  const middle = (slice.startMm + slice.endMm) / 2
+  const reach = Math.max(...slice.wires.map((wire) => wire.widthMm), unit * 1.2)
   const half = unit * 0.35
-  const low = Math.min(...slice.wires.map((wire) => wire.transverse)) - reach
-  const high = Math.max(...slice.wires.map((wire) => wire.transverse)) + reach
+  const low =
+    Math.min(...slice.wires.map((wire) => wire.lateralOffsetMm)) - reach
+  const high =
+    Math.max(...slice.wires.map((wire) => wire.lateralOffsetMm)) + reach
   const points = [
     [-half, low],
     [half, low],
@@ -302,12 +307,12 @@ function sliceCut({
     [-half, high],
   ].map(([offset, transverse]) =>
     drawingPoint(
-      routePosition({
+      getRoutePoint({
         wire: {
           ...slice.wires[0],
-          transverse,
+          lateralOffsetMm: transverse,
         },
-        position: middle + offset,
+        positionMm: middle + offset,
       }),
     ),
   )
