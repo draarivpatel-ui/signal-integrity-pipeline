@@ -231,7 +231,7 @@ export interface IdealSourceNodes {
   wireConnections: SourceNodeId[][]
 }
 
-/** Find all extracted nonrail traces using the same copper scope in admission and binding. */
+/** Find all extracted nonrail traces using the same copper scope in channel planning and binding. */
 export function extractedNonrailSourceTraceIds({
   db,
   copperScope,
