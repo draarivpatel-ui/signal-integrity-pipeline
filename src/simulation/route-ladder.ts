@@ -1,4 +1,4 @@
-import type { CopperPoint, RouteWire } from "../board"
+import type { CopperPoint, TraceWire } from "../board"
 import {
   causalLossPoles,
   causalLossResponse,
@@ -106,7 +106,7 @@ function maxCellDelay({
 
 /** A wire and the board coordinates of a point on its route arc. */
 type ArcPoint = {
-  wire: Snapshot<RouteWire>
+  wire: Snapshot<TraceWire>
   position: Snapshot<CopperPoint>
 }
 
@@ -117,7 +117,7 @@ function arcPoint({
   arc,
 }: {
   distance: number
-  run: Snapshot<RouteWire>[]
+  run: Snapshot<TraceWire>[]
   arc: ReadonlyMap<number, ArcWire>
 }): ArcPoint {
   const wire =
@@ -143,7 +143,7 @@ function wirePosition({
   entry,
   distance,
 }: {
-  wire: Snapshot<RouteWire>
+  wire: Snapshot<TraceWire>
   entry: ArcWire
   distance: number
 }): number {
@@ -162,7 +162,7 @@ export function routeContactKey({
   layer,
   point,
 }: {
-  layer: RouteWire["layer"]
+  layer: TraceWire["layer"]
   point: Snapshot<CopperPoint>
 }): RouteContactKey {
   const coordinates = point

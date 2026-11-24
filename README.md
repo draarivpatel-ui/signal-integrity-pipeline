@@ -171,7 +171,7 @@ be stepped up to stage 6; `RouteTransientSolver` awaits one live ngspice run.
 | # | Stage solver |
 |---|---|
 | 1 | TransientChannelSimulationPlanSolver |
-| 2 | RouteSectionsSolver |
+| 2 | CopperGeometryExtractionSolver |
 | 3 | RouteFieldsSolver |
 | 4 | RouteBindingsSolver |
 | 5 | RouteNetworkSolver |
@@ -180,7 +180,7 @@ be stepped up to stage 6; `RouteTransientSolver` awaits one live ngspice run.
 ```mermaid
 flowchart LR
   s0["TransientChannelSimulationPlanSolver<br/>Plan one transient channel simulation per step"]
-  s1["RouteSectionsSolver<br/>All planned channel simulations, one item per step"]
+  s1["CopperGeometryExtractionSolver<br/>All planned channel simulations, one item per step"]
   s2["RouteFieldsSolver<br/>All planned channel simulations, one item per step"]
   s3["RouteBindingsSolver<br/>All planned channel simulations, one item per step"]
   s4["RouteNetworkSolver<br/>All planned channel simulations, one item per step"]
@@ -196,14 +196,14 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
   [*] --> TransientChannelSimulationPlanSolver
-  TransientChannelSimulationPlanSolver --> RouteSectionsSolver: all channel simulations completed
-  RouteSectionsSolver --> RouteFieldsSolver: all channel simulations completed
+  TransientChannelSimulationPlanSolver --> CopperGeometryExtractionSolver: all channel simulations completed
+  CopperGeometryExtractionSolver --> RouteFieldsSolver: all channel simulations completed
   RouteFieldsSolver --> RouteBindingsSolver: all channel simulations completed
   RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
   RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
   TransientChannelSimulationPlanSolver --> failed: invalid channel simulation input, including undeclared aggressors
-  RouteSectionsSolver --> failed
+  CopperGeometryExtractionSolver --> failed
   RouteFieldsSolver --> failed
   RouteBindingsSolver --> failed
   RouteNetworkSolver --> failed

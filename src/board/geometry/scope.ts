@@ -8,6 +8,7 @@ import {
 } from "circuit-json"
 import {
   type ConnectivityMap,
+  getTraceMembers,
   type PassiveBridge,
   passiveBridges,
   type SourceConnectionGroup,
@@ -103,10 +104,7 @@ function traceMembers({
   if (!id) return []
   const trace = sources.get(id)
   if (!trace) return []
-  return [
-    ...trace.connected_source_port_ids,
-    ...(trace.connected_source_net_ids ?? []),
-  ]
+  return getTraceMembers(trace)
 }
 
 /** Copper layer names in top-to-bottom order. */

@@ -2,8 +2,8 @@ import { beforeAll, describe, setDefaultTimeout, test } from "bun:test"
 import assert from "node:assert/strict"
 import {
   type CopperPoint,
-  type RouteWire,
-  sectionRoutes,
+  extractCopperGeometry,
+  type TraceWire,
 } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
 import {
@@ -41,7 +41,7 @@ function endpoint({
   wire,
   point,
 }: {
-  wire: Snapshot<RouteWire>
+  wire: Snapshot<TraceWire>
   point: Snapshot<CopperPoint>
 }): string {
   const coordinates = point
@@ -56,7 +56,7 @@ describe("large routed TSX ladder", () => {
   beforeAll(async () => {
     const { circuitJson, copperScope: scope } = await renderRoutedCopper()
     const fields = new RouteFieldsSolver({
-      geometry: sectionRoutes({
+      geometry: extractCopperGeometry({
         circuit: circuitJson,
         copperScope: scope,
       }),
@@ -166,7 +166,7 @@ function straightLine({
       row.map((value) => value * lossScale),
     ),
   }
-  const wires: RouteWire[] = section.conductors.map((conductor, wireIndex) => ({
+  const wires: TraceWire[] = section.conductors.map((conductor, wireIndex) => ({
     wireIndex,
     pcbTraceId: `t${wireIndex}`,
     sourceTraceId: `s${wireIndex}`,

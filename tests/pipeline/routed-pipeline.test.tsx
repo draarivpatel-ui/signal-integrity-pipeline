@@ -315,9 +315,12 @@ test("actual two-channel simulation TSX advances every flat stage and invokes tr
     root.stageOutput("TransientChannelSimulationPlanSolver").value.length,
     2,
   )
-  assert.equal(root.stageOutput("RouteSectionsSolver").value.length, 2)
+  assert.equal(
+    root.stageOutput("CopperGeometryExtractionSolver").value.length,
+    2,
+  )
   assert.equal(root.stageOutput("RouteFieldsSolver").value.length, 2)
-  const sections = root.getSolver("RouteSectionsSolver")!.visualize()
+  const sections = root.getSolver("CopperGeometryExtractionSolver")!.visualize()
   assertPlanDrawingSnapshot({
     drawing: root.visualizeStage(3),
     module: "pipeline",
@@ -330,7 +333,9 @@ test("actual two-channel simulation TSX advances every flat stage and invokes tr
   await root.solveAsync()
   assert.equal(calls, 2)
   assert.equal(root.getOutput().channelSimulations.length, 2)
-  const retainedSections = root.getSolver("RouteSectionsSolver")!.visualize()
+  const retainedSections = root
+    .getSolver("CopperGeometryExtractionSolver")!
+    .visualize()
   assert.deepEqual(
     retainedSections,
     sections,

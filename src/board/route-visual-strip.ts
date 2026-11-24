@@ -1,6 +1,6 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { Viewbox } from "graphics-debug"
-import type { RouteWire } from "./route-section-types"
+import type { TraceWire } from "./copper-geometry-types"
 import {
   type RouteBuffer,
   type RouteNet,
@@ -243,13 +243,13 @@ interface UnrolledWireOffset {
 
 /** Resolve a wire position into a distance from the start of its net. */
 type RoutePositionLookup = (location: {
-  id: RouteWire["wireIndex"]
+  id: TraceWire["wireIndex"]
   position: number
 }) => UnrolledRoutePosition | undefined
 
 /** Bind a position lookup to the offsets of one unrolled route. */
 function routePositionLookup(
-  offsets: ReadonlyMap<RouteWire["wireIndex"], UnrolledWireOffset>,
+  offsets: ReadonlyMap<TraceWire["wireIndex"], UnrolledWireOffset>,
 ): RoutePositionLookup {
   return ({
     id,
@@ -268,7 +268,7 @@ export function routeUnrolled({
 }: {
   view: RouteView
   wires: readonly Pick<
-    RouteWire,
+    TraceWire,
     | "wireIndex"
     | "pcbTraceId"
     | "sourceTraceId"
@@ -277,7 +277,7 @@ export function routeUnrolled({
   >[]
 }): UnrolledRoutes {
   const lengths = new Map<RouteNet, number>()
-  const offsets = new Map<RouteWire["wireIndex"], UnrolledWireOffset>()
+  const offsets = new Map<TraceWire["wireIndex"], UnrolledWireOffset>()
   for (const wire of wires) {
     if (!view.traces.has(wire.pcbTraceId)) continue
     const net = view.sources.get(wire.sourceTraceId)

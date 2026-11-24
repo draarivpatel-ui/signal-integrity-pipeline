@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { sectionRoutes } from "../../src/board"
+import { extractCopperGeometry } from "../../src/board"
 import {
   type RouteFieldsInput,
   RouteFieldsSolver,
@@ -12,7 +12,10 @@ import { renderRoutedCopper } from "../fixtures/routed-copper"
 /** Input shared by the field solver tests. */
 async function fieldsInput(): Promise<RouteFieldsInput> {
   const { circuitJson, copperScope: scope } = await renderRoutedCopper()
-  const geometry = sectionRoutes({ circuit: circuitJson, copperScope: scope })
+  const geometry = extractCopperGeometry({
+    circuit: circuitJson,
+    copperScope: scope,
+  })
   const materials = {
     maskMm: 0.02,
     maskEr: 3.3,
@@ -145,7 +148,7 @@ test("golden invariants: every routed TSX section has SPD L/C with |k| < 1, Maxw
   // the largest.
   const { circuitJson, copperScope: scope } = await renderRoutedCopper()
   const copper = new RouteFieldsSolver({
-    geometry: sectionRoutes({
+    geometry: extractCopperGeometry({
       circuit: circuitJson,
       copperScope: scope,
     }),
