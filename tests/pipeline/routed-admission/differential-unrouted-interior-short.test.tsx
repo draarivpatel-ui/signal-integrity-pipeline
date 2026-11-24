@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import "../../fixtures/extend-expect-circuit-snapshot"
@@ -16,7 +16,7 @@ test("binding rejects an ideal short between unrouted differential interiors", a
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
   expect(circuitJson).toMatchPcbSnapshot(import.meta.path)
-  const db = circuitJsonDb(circuitJson)
+  const db = cju([...circuitJson])
   const [positive, negative] = ["RA1", "RB1"].map((name) => {
     const resistor = db.source_component.getWhere({ name })
     assert.ok(resistor)

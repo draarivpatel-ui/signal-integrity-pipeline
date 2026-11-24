@@ -1,6 +1,6 @@
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import {
-  type CircuitJsonDb,
-  type CircuitJsonSnapshot,
+  type CircuitJson,
   crossesDifferentialLegs,
   endpointPorts,
   getSourcePortConnectivityMapFromCircuitJson,
@@ -115,7 +115,7 @@ function receiverSeriesBridges({
   wires,
 }: {
   bridges: readonly PassiveBridge[]
-  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channels: readonly SimulationPcbDriverReceiverChannel[]
   wires: SourceNodeId[][]
 }): PassiveBridge[] {
   const contacts = differentialContacts(channels)
@@ -182,7 +182,7 @@ function channelConnections({
   groups,
 }: {
   idealConnections: readonly ReceiverConnection[]
-  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channels: readonly SimulationPcbDriverReceiverChannel[]
   groups: SourceNodeGroups
 }): ReceiverConnection[] {
   const networks = nodeGroups(
@@ -215,12 +215,12 @@ export function receiverGraphs({
   cuts,
   channels,
 }: {
-  db: CircuitJsonDb
-  circuit: CircuitJsonSnapshot
+  db: CircuitJsonUtilObjects
+  circuit: CircuitJson
   groundSourcePortId: SourcePortId
   modeling: Snapshot<SimulationModeling>
   cuts: readonly RoutedTraceCut[]
-  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channels: readonly SimulationPcbDriverReceiverChannel[]
 }): ReceiverGraphs {
   const idealNodes = idealSourceNodes({ db, cuts })
   const physicalCuts = cutConnections({

@@ -10,7 +10,6 @@ export {
   scopedAdmissionDrawing,
   unscopedAdmissionDrawing,
 } from "./admission-visual"
-export { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
 export {
   type ConnectivityMap,
   crossesDifferentialLegs,
@@ -61,7 +60,6 @@ export {
 } from "./route-sections-solver"
 export type {
   CircuitJson,
-  CircuitJsonSnapshot,
   SimulationExperiment,
   SimulationIbisModel,
 } from "./schema"
