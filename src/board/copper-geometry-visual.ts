@@ -1,13 +1,17 @@
+import { Point, Segment } from "@flatten-js/core"
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { GraphicsObject, Line, Text, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import { drawContacts, drawJoin, toBoardPoint } from "./copper-geometry-marks"
 import type {
   ExtractedCopper,
+  ReferencePour,
   TraceWire,
+  UnitDirection,
   WireSection,
 } from "./copper-geometry-types"
-import { getWirePoint } from "./copper-geometry-wire"
+import { getWirePoint, roundWireCoordinate } from "./copper-geometry-wire"
+import type { CopperPoint } from "./geometry/types"
 import { drawPlanPolygon } from "./plan-shapes"
 import { getBoardBounds, getBoxPoints } from "./plan-view"
 import { getTraceColor, planColors, planPourFills } from "./plan-visual-types"
@@ -47,14 +51,120 @@ function drawSectionBoundary({
   }))
 }
 
+/** Find which side of the wire contains the closest edge of the reference pour. */
+function getPourSide({
+  center,
+  normal,
+  pour,
+}: {
+  center: CopperPoint
+  normal: UnitDirection
+  pour: Snapshot<ReferencePour>
+}): number {
+  const centerPoint = new Point(...center)
+  let side = 0
+  let gapMm = Infinity
+  for (const ring of pour.polygon) {
+    for (const [index, start] of ring.entries()) {
+      const end = ring[(index + 1) % ring.length]
+      const edge = new Segment(new Point(...start), new Point(...end))
+      const [distanceMm, nearest] = centerPoint.distanceTo(edge)
+      if (distanceMm >= gapMm) continue
+      gapMm = distanceMm
+      const offsetMm =
+        (nearest.end.x - center[0]) * normal[0] +
+        (nearest.end.y - center[1]) * normal[1]
+      side = Math.sign(roundWireCoordinate(offsetMm))
+    }
+  }
+  return side
+}
+
+/** Place the text box on the outward side of its anchor for any normal. */
+function getTextAnchor([x, y]: UnitDirection): NonNullable<Text["anchorSide"]> {
+  let horizontal: "left" | "center" | "right" = "center"
+  let vertical: "top" | "center" | "bottom" = "center"
+  if (roundWireCoordinate(x) > 0) horizontal = "left"
+  if (roundWireCoordinate(x) < 0) horizontal = "right"
+  if (roundWireCoordinate(y) > 0) vertical = "bottom"
+  if (roundWireCoordinate(y) < 0) vertical = "top"
+  if (vertical !== "center") return `${vertical}_${horizontal}`
+  if (horizontal === "center") return "center"
+  return `center_${horizontal}`
+}
+
+/** Anchor at the first wire and clear the group's copper on the selected side. */
+function drawSectionLabel({
+  section,
+  pours,
+  label,
+  color,
+  unitMm,
+}: {
+  section: Snapshot<WireSection>
+  pours: Snapshot<ReferencePour[]>
+  label: string
+  color: string
+  unitMm: number
+}): Text | undefined {
+  const { startMm, endMm, wires, references } = section
+  const [firstWire] = wires
+  if (!firstWire) return undefined
+  const [directionX, directionY] = firstWire.direction
+  const normal: UnitDirection = [-directionY, directionX]
+  const center = getWirePoint({
+    wire: firstWire,
+    positionMm: (startMm + endMm) / 2,
+  })
+  const wireLayers = [...new Set(wires.map(({ layer }) => layer))].join(" / ")
+  const text = `${wireLayers} · ${label}`
+  const fontSize = unitMm * 1.65
+  const marginMm = unitMm * 0.9
+  const firstEdgeMm = firstWire.widthMm / 2
+  let side = 1
+  if (text.length * fontSize * SECTION_LABEL_ADVANCE_EM > endMm - startMm)
+    side = -1
+  const edgeReference = references.find(
+    ({ lateralGapMm }) =>
+      lateralGapMm !== undefined &&
+      lateralGapMm < firstEdgeMm + marginMm + fontSize,
+  )
+  const edgePour = pours.find(
+    ({ pcbCopperPourId }) => pcbCopperPourId === edgeReference?.pcbCopperPourId,
+  )
+  if (edgePour) {
+    const pourSide = getPourSide({ center, normal, pour: edgePour })
+    if (pourSide !== 0) side = -pourSide
+  }
+  let offsetMm = -(firstEdgeMm + marginMm)
+  if (side > 0) {
+    const lastEdgeMm = Math.max(
+      ...wires.map(
+        ({ lateralOffsetMm, widthMm }) => lateralOffsetMm + widthMm / 2,
+      ),
+    )
+    offsetMm = lastEdgeMm - firstWire.lateralOffsetMm + marginMm
+  }
+  return {
+    x: center[0] + normal[0] * offsetMm,
+    y: center[1] + normal[1] * offsetMm,
+    text,
+    fontSize,
+    anchorSide: getTextAnchor([normal[0] * side, normal[1] * side]),
+    color,
+  }
+}
+
 /** Draw one section with the layer and net of its reference. */
 function drawSection({
   section,
+  pours,
   index,
   db,
   unitMm,
 }: {
   section: Snapshot<WireSection>
+  pours: Snapshot<ReferencePour[]>
   index: number
   db: CircuitJsonUtilObjects
   unitMm: number
@@ -81,32 +191,10 @@ function drawSection({
       drawSectionBoundary({ wire, positionMm, unitMm }),
     ),
   ])
-  const wire = wires.at(-1)
-  if (!wire) return { lines }
-  const center = getWirePoint({ wire, positionMm: (startMm + endMm) / 2 })
-  const wireLayers = [...new Set(wires.map(({ layer }) => layer))].join(" / ")
-  const copperClearanceMm = wire.widthMm / 2 + unitMm * 0.9
-  const fontSize = unitMm * 1.65
-  const text: Text = {
-    x: center[0],
-    y: center[1] + copperClearanceMm,
-    text: `${wireLayers} · ${label}`,
-    fontSize,
-    anchorSide: "bottom_center",
-    color,
+  return {
+    lines,
+    text: drawSectionLabel({ section, pours, label, color, unitMm }),
   }
-  const hasNearbyReferenceEdge = references.some(
-    ({ lateralGapMm }) =>
-      lateralGapMm !== undefined && lateralGapMm < copperClearanceMm + fontSize,
-  )
-  if (
-    hasNearbyReferenceEdge ||
-    text.text.length * fontSize * SECTION_LABEL_ADVANCE_EM > endMm - startMm
-  ) {
-    text.y = center[1] - copperClearanceMm
-    text.anchorSide = "top_center"
-  }
-  return { lines, text }
 }
 
 /** Draw the original trace as a light outline behind the modeled wire. */
@@ -212,7 +300,7 @@ export function drawCopperGeometry({
   if (!geometry) return drawing
 
   const sections = geometry.sections.map((section, index) =>
-    drawSection({ section, index, db, unitMm }),
+    drawSection({ section, pours: geometry.pours, index, db, unitMm }),
   )
   const joins = geometry.wires.flatMap((wire) => wire.joins || [])
   const pcbTraceIds = new Set(
