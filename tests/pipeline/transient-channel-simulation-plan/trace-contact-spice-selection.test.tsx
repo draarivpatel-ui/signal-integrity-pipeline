@@ -8,7 +8,7 @@ import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("a cut-only contact needs a passive selected for the deck", async () => {
+test("a trace contact outside a receiver path needs a passive selected for the deck", async () => {
   const circuitJson = await renderSignals({
     tree: <DaisyChainFixture routeFinalLeg placedLoad="mapped" />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],

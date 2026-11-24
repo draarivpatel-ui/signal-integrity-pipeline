@@ -12,10 +12,10 @@ import {
 } from "../board"
 import type { Snapshot } from "../kernel"
 import {
+  buildConnectionGraph,
   type Connection,
   type ConnectionGraph,
-  connectionGraph,
-  connectionPath,
+  findConnectionPath,
 } from "./connection-paths"
 import {
   differentialContacts,
@@ -23,9 +23,9 @@ import {
 } from "./differential-contacts"
 import {
   getIdealGroupId,
+  groupConnectedVertices,
   type IdealConnectivity,
   type IdealGroups,
-  nodeGroups,
   resolveIdealConnectivity,
   type SourceContactId,
 } from "./ideal-connectivity"
@@ -79,7 +79,7 @@ function seriesOnLeg({
   const oppositeWires = new Set(
     oppositeReceivers.flatMap(
       (toVertexId) =>
-        connectionPath({
+        findConnectionPath({
           graph: wireGraph,
           fromVertexId: oppositeDriver,
           toVertexId,
@@ -87,7 +87,7 @@ function seriesOnLeg({
     ),
   )
   const oppositePorts = new Set<SourceContactId>(oppositeSourcePortIds)
-  const graph = connectionGraph(
+  const graph = buildConnectionGraph(
     connections.filter(
       (connection) =>
         !oppositePorts.has(connection.fromVertexId) &&
@@ -98,7 +98,7 @@ function seriesOnLeg({
   const [fromVertexId, ...receivers] = sourcePortIds
   return new Set(
     receivers.flatMap((toVertexId) =>
-      (connectionPath({ graph, fromVertexId, toVertexId }) ?? []).flatMap(
+      (findConnectionPath({ graph, fromVertexId, toVertexId }) ?? []).flatMap(
         ({ evidence }) => {
           if (evidence) return [evidence]
           return []
@@ -120,10 +120,10 @@ function receiverSeriesBridges({
 }): PassiveBridge[] {
   const contacts = differentialContacts(channels)
   if (!contacts.length) return [...bridges]
-  const groups = nodeGroups(wires)
+  const groups = groupConnectedVertices(wires)
   const differential = differentialGroups({ contacts, groups })
-  const wireConnections = wires.flatMap(([fromVertexId, ...toNodeIds]) =>
-    toNodeIds.map(
+  const wireConnections = wires.flatMap(([fromVertexId, ...toVertexIds]) =>
+    toVertexIds.map(
       (toVertexId): WireOrPassive => ({
         fromVertexId,
         toVertexId,
@@ -131,7 +131,7 @@ function receiverSeriesBridges({
       }),
     ),
   )
-  const wireGraph = connectionGraph(wireConnections)
+  const wireGraph = buildConnectionGraph(wireConnections)
   const connections = [
     ...wireConnections,
     ...bridges.map(
@@ -179,7 +179,7 @@ function receiverSeriesBridges({
   return bridges.filter((bridge) => !terminations.has(bridge))
 }
 
-/** Include passive segments only in components with a routed cut or a declared signal contact. */
+/** Include passive segments only in components with a channel trace or a declared signal contact. */
 function channelConnections({
   idealConnections,
   channels,
@@ -189,7 +189,7 @@ function channelConnections({
   channels: readonly SimulationPcbDriverReceiverChannel[]
   groups: IdealGroups
 }): ReceiverConnection[] {
-  const networks = nodeGroups(
+  const networks = groupConnectedVertices(
     idealConnections.map(({ fromVertexId, toVertexId }) => [
       fromVertexId,
       toVertexId,
@@ -206,7 +206,7 @@ function channelConnections({
       ...idealConnections
         .filter(({ evidence }) => evidence.sourceTraceId !== undefined)
         .map(({ fromVertexId }) => fromVertexId),
-    ].map((sourceNodeId) => networks.get(sourceNodeId)),
+    ].map((idealGroupId) => networks.get(idealGroupId)),
   )
   return idealConnections.filter(({ fromVertexId }) =>
     channelNetworks.has(networks.get(fromVertexId)),
@@ -214,25 +214,25 @@ function channelConnections({
 }
 
 /** Resolve ideal groups and index the same series connections for channel planning and binding. */
-export function receiverGraphs({
+export function buildReceiverGraphs({
   db,
   circuit,
   groundSourcePortId,
   modeling,
-  cuts,
+  traceContacts,
   channels,
 }: {
   db: CircuitJsonUtilObjects
   circuit: CircuitJson
   groundSourcePortId: SourcePortId
   modeling: Snapshot<SimulationModeling>
-  cuts: readonly TraceContacts[]
+  traceContacts: readonly TraceContacts[]
   channels: readonly SimulationPcbDriverReceiverChannel[]
 }): ReceiverGraphs {
-  const idealNodes = resolveIdealConnectivity({ db, cuts })
-  const physicalCuts = connectTraces({
-    cuts,
-    node: (sourcePortId) => sourcePortId,
+  const idealConnectivity = resolveIdealConnectivity({ db, traceContacts })
+  const physicalTraceConnections = connectTraces({
+    traceContacts,
+    getVertexId: (sourcePortId) => sourcePortId,
   })
   const referenceSourcePortIds = (modeling.supplies ?? []).flatMap(
     ({ positive, negative }) =>
@@ -249,15 +249,15 @@ export function receiverGraphs({
     bridges: passiveBridges({ circuit, excluded: rails }),
     channels,
     wires: [
-      ...idealNodes.wireConnections,
-      ...physicalCuts.map(({ fromVertexId, toVertexId }) => [
+      ...idealConnectivity.wireConnections,
+      ...physicalTraceConnections.map(({ fromVertexId, toVertexId }) => [
         fromVertexId,
         toVertexId,
       ]),
     ],
   })
   const physical = [
-    ...physicalCuts,
+    ...physicalTraceConnections,
     ...seriesBridges.map(([fromSourcePortId, toSourcePortId]) => ({
       fromVertexId: fromSourcePortId,
       toVertexId: toSourcePortId,
@@ -265,16 +265,16 @@ export function receiverGraphs({
     })),
   ]
   const idealConnections = physical.map(({ evidence }) =>
-    idealReceiverConnection({ evidence, groups: idealNodes.groups }),
+    idealReceiverConnection({ evidence, groups: idealConnectivity.groups }),
   )
   return {
-    ...idealNodes,
-    physical: connectionGraph(physical),
-    ideal: connectionGraph(idealConnections),
+    ...idealConnectivity,
+    physical: buildConnectionGraph(physical),
+    ideal: buildConnectionGraph(idealConnections),
     channelConnections: channelConnections({
       idealConnections,
       channels,
-      groups: idealNodes.groups,
+      groups: idealConnectivity.groups,
     }),
   }
 }
@@ -283,7 +283,7 @@ export function receiverGraphs({
 type ReceiverPath = ChannelSegment[]
 
 /** Prefer a physical path; allow ideal connections to complete a partial route. */
-export function receiverPath({
+export function findReceiverPath({
   graphs,
   fromSourcePortId,
   toSourcePortId,
@@ -294,14 +294,14 @@ export function receiverPath({
   toSourcePortId: SourcePortId
   allowUnroutedTraces: boolean
 }): ReceiverPath | undefined {
-  const physical = connectionPath({
+  const physical = findConnectionPath({
     graph: graphs.physical,
     fromVertexId: fromSourcePortId,
     toVertexId: toSourcePortId,
   })
   if (physical) return physical.map(({ evidence }) => evidence)
   if (!allowUnroutedTraces) return
-  return connectionPath({
+  return findConnectionPath({
     graph: graphs.ideal,
     fromVertexId: getIdealGroupId({
       groups: graphs.groups,

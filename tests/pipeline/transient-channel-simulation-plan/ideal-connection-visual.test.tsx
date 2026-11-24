@@ -7,7 +7,7 @@ import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
-test("shows the ideal join and ordered cuts through the two receiver paths", async () => {
+test("shows the ideal connection and ordered traces through the two receiver paths", async () => {
   const circuitJson = await renderSignals({
     tree: <DaisyChainFixture routeFinalLeg idealMiddleLeg />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
@@ -37,7 +37,7 @@ test("shows the ideal join and ordered cuts through the two receiver paths", asy
   assertPlanDrawingSnapshot({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
-    name: "ideal-join-visual",
+    name: "ideal-connection-visual",
     caption:
       "Traces run from TX to MID and JOIN to RX, while MID and JOIN connect without a trace. This test allows that connection, so the plan reaches both receivers.",
   })

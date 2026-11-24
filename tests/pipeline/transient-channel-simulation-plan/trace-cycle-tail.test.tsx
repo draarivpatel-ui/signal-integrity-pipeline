@@ -9,7 +9,7 @@ import "../../fixtures/extend-expect-circuit-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("a cut cycle diagnostic excludes the attached load tail", async () => {
+test("a trace cycle diagnostic excludes the attached load tail", async () => {
   const circuitJson = await renderSignals({
     tree: (
       <DaisyChainFixture routeFinalLeg bypassFinalLeg placedLoad="mapped" />
@@ -37,7 +37,7 @@ test("a cut cycle diagnostic excludes the attached load tail", async () => {
       toSourcePortId === port.source_port_id,
   )
   assert.ok(tail)
-  const cycle = bindings.traceContacts.filter((cut) => cut !== tail)
+  const cycle = bindings.traceContacts.filter((contacts) => contacts !== tail)
   assert.equal(cycle.length, 2)
   assert.throws(
     () =>
@@ -47,10 +47,10 @@ test("a cut cycle diagnostic excludes the attached load tail", async () => {
       }),
     (error: Error & { code?: string }) => {
       assert.equal(error.code, "channel_short")
-      for (const cut of cycle) {
-        assert.ok(error.message.includes(cut.sourceTraceId))
-        assert.ok(error.message.includes(cut.fromSourcePortId))
-        assert.ok(error.message.includes(cut.toSourcePortId))
+      for (const contacts of cycle) {
+        assert.ok(error.message.includes(contacts.sourceTraceId))
+        assert.ok(error.message.includes(contacts.fromSourcePortId))
+        assert.ok(error.message.includes(contacts.toSourcePortId))
       }
       assert.ok(!error.message.includes(tail.sourceTraceId))
       return true

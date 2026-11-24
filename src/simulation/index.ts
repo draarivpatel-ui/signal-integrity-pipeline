@@ -8,7 +8,7 @@
  * Imports: kernel, solver, board, extraction, observation, buffers.
  */
 
-export { connectionGraph, connectionPath } from "./connection-paths"
+export { buildConnectionGraph, findConnectionPath } from "./connection-paths"
 export {
   generalDeclarations,
   modelRunDefinition,
@@ -19,9 +19,9 @@ export {
   voltageSourceTerminals,
 } from "./netlist"
 export {
+  buildReceiverGraphs,
+  findReceiverPath,
   type ReceiverGraphs,
-  receiverGraphs,
-  receiverPath,
 } from "./receiver-paths"
 export type {
   RouteBindingsInput,

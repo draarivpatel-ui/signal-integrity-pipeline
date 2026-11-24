@@ -7,7 +7,7 @@ import { ChannelFixture } from "../../fixtures/channel-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("rejects a grounded driver beyond the first physical cut", async () => {
+test("rejects a grounded driver beyond the first physical trace", async () => {
   const circuitJson = await renderSignals({
     tree: <ChannelFixture route="receiver-only" />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
@@ -19,9 +19,9 @@ test("rejects a grounded driver beyond the first physical cut", async () => {
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [mapping] = bindings.receiverPaths
+  const [receiverPath] = bindings.receiverPaths
   assert.equal(bindings.traceContacts.length, 1)
-  assert.ok(mapping)
+  assert.ok(receiverPath)
   assert.throws(
     () =>
       circuitNodes({
@@ -29,7 +29,7 @@ test("rejects a grounded driver beyond the first physical cut", async () => {
         circuit: cloneCircuitJson(bindings.circuitJson),
         modeling: {
           ...bindings.modeling,
-          channelReference: { sourcePortId: mapping.fromSourcePortId },
+          channelReference: { sourcePortId: receiverPath.fromSourcePortId },
         },
       }),
     { domain: "simulation", code: "channel_short", message: /ground/ },

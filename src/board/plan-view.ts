@@ -3,15 +3,17 @@ import {
   Box,
   Point as CopperPoint,
   Polygon as CopperPolygon,
+  type Face,
   Segment,
 } from "@flatten-js/core"
 import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { PcbTrace } from "circuit-json"
-import type { Line, Point, Polygon, Viewbox } from "graphics-debug"
+import type { Line, Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId } from "./ids"
-import { padOutline } from "./plan-shapes"
+import { getPadOutline } from "./plan-shapes"
+import type { PlanPolygon } from "./plan-visual-types"
 
 /** Bounds of points, or undefined when there are none. */
 export function getPointBounds(points: readonly Point[]): Viewbox | undefined {
@@ -147,20 +149,24 @@ export function boxPoints({ minX, minY, maxX, maxY }: Viewbox): Point[] {
   ]
 }
 
-/** Enlarge around the center until no dimension exceeds 2.2 times the other. */
+/** Keep narrow boards from producing unreadably wide or tall frames. */
+const MAX_FRAME_ASPECT_RATIO = 2.2
+
+/** Enlarge around the center to fit the maximum aspect ratio. */
 function fitBox(box: Viewbox): Viewbox {
   const widthMm = box.maxX - box.minX
-  const height = box.maxY - box.minY
-  const aspectLimit = 2.2
+  const heightMm = box.maxY - box.minY
   const x = (box.minX + box.maxX) / 2
   const y = (box.minY + box.maxY) / 2
-  const halfWidth = Math.max(widthMm, height / aspectLimit, 1) / 2
-  const halfHeight = Math.max(height, widthMm / aspectLimit, 1) / 2
+  const halfWidthMm =
+    Math.max(widthMm, heightMm / MAX_FRAME_ASPECT_RATIO, 1) / 2
+  const halfHeightMm =
+    Math.max(heightMm, widthMm / MAX_FRAME_ASPECT_RATIO, 1) / 2
   return {
-    minX: x - halfWidth,
-    maxX: x + halfWidth,
-    minY: y - halfHeight,
-    maxY: y + halfHeight,
+    minX: x - halfWidthMm,
+    maxX: x + halfWidthMm,
+    minY: y - halfHeightMm,
+    maxY: y + halfHeightMm,
   }
 }
 
@@ -203,21 +209,21 @@ export function buildPlanFrame({
 export function getCopperSearchBox({
   db,
   board,
-  scope,
-  active,
+  copperScope,
+  activeSourcePortIds: active,
   ports,
 }: {
   db: CircuitJsonUtilObjects
   board: Viewbox
-  scope: Snapshot<CopperScope>
-  active: ReadonlySet<SourcePortId>
+  copperScope: Snapshot<CopperScope>
+  activeSourcePortIds: ReadonlySet<SourcePortId>
   ports: ReadonlyMap<SourcePortId, PlanPort>
 }): Viewbox | undefined {
-  const traces = new Set(scope.channelPcbTraceIds)
+  const channelPcbTraceIds = new Set(copperScope.channelPcbTraceIds)
   const positions = [...ports.values()].filter((port) =>
     active.has(port.sourcePortId),
   )
-  const activePcbPorts = new Set(
+  const activePcbPortIds = new Set(
     db.pcb_port
       .list()
       .filter((port) => active.has(port.source_port_id))
@@ -225,9 +231,12 @@ export function getCopperSearchBox({
   )
   const pads = [...db.pcb_smtpad.list(), ...db.pcb_plated_hole.list()].flatMap(
     (pad) => {
-      if (pad.pcb_port_id === undefined || !activePcbPorts.has(pad.pcb_port_id))
+      if (
+        pad.pcb_port_id === undefined ||
+        !activePcbPortIds.has(pad.pcb_port_id)
+      )
         return []
-      const { xmin, ymin, xmax, ymax } = padOutline({ db, pad }).box
+      const { xmin, ymin, xmax, ymax } = getPadOutline({ db, pad }).box
       return [
         { x: xmin, y: ymin },
         { x: xmax, y: ymax },
@@ -238,12 +247,12 @@ export function getCopperSearchBox({
     ...positions,
     ...pads,
     ...db.pcb_trace.list().flatMap((trace) => {
-      if (traces.has(trace.pcb_trace_id)) return tracePoints(trace)
+      if (channelPcbTraceIds.has(trace.pcb_trace_id)) return tracePoints(trace)
       return []
     }),
   ])
   if (!bounds) return
-  const { nearbyGapMm } = scope
+  const { nearbyGapMm } = copperScope
   return {
     minX: Math.max(board.minX, bounds.minX - nearbyGapMm),
     maxX: Math.min(board.maxX, bounds.maxX + nearbyGapMm),
@@ -253,7 +262,7 @@ export function getCopperSearchBox({
 }
 
 /** Clip a segment to the display bounds while retaining its direction. */
-function clippedSegment({
+function clipPlanSegment({
   start,
   end,
   crop,
@@ -291,7 +300,7 @@ export function clipPlanLines<Mark extends Line>({
   if (!crop) return lines
   return lines.flatMap((line) =>
     line.points.slice(1).flatMap((end, index) => {
-      const points = clippedSegment({ start: line.points[index], end, crop })
+      const points = clipPlanSegment({ start: line.points[index], end, crop })
       if (points.length < 2) return []
       return [{ ...line, points }]
     }),
@@ -299,7 +308,7 @@ export function clipPlanLines<Mark extends Line>({
 }
 
 /** Clip board geometry to the window before converting it to graphics primitives. */
-export function clipPlanPolygons<Mark extends Polygon>({
+export function clipPlanPolygons<Mark extends PlanPolygon>({
   polygons,
   crop,
 }: {
@@ -310,10 +319,19 @@ export function clipPlanPolygons<Mark extends Polygon>({
   const window = new CopperPolygon(crop)
   return polygons.flatMap((polygon) => {
     const shape = new CopperPolygon(polygon.points.map(({ x, y }) => [x, y]))
+    for (const hole of polygon.holes || [])
+      shape.addFace(hole.map(({ x, y }) => new CopperPoint(x, y)))
     if (crop.not_intersect(shape.box)) return []
     if (crop.contains(shape.box)) return [polygon]
     return BooleanOperations.intersect(shape, window)
       .splitToIslands()
-      .map((island) => ({ ...polygon, points: island.vertices }))
+      .map((island) => {
+        const [outer, ...holes] = island.faces as Iterable<Face>
+        return {
+          ...polygon,
+          points: outer.vertices,
+          holes: holes.map((hole) => hole.vertices),
+        }
+      })
   })
 }
