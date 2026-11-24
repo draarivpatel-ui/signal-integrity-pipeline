@@ -17,7 +17,7 @@ test("pivoted factors solve independent excitations", () => {
     boundaryMatrix.map((row) => Array.from(row)),
     matrix,
   )
-  for (const rhs of [
+  for (const rightHandSides of [
     [
       [1, 0],
       [0, 1],
@@ -25,14 +25,14 @@ test("pivoted factors solve independent excitations", () => {
     ],
     [[1], [-2], [3]],
   ]) {
-    const x = solveBoundarySystem({ factors, rightHandSides: rhs })
+    const x = solveBoundarySystem({ factors, rightHandSides })
     for (let i = 0; i < 3; i++) {
-      for (let j = 0; j < rhs[0].length; j++) {
+      for (let j = 0; j < rightHandSides[0].length; j++) {
         const product = matrix[i].reduce(
           (sum, coefficient, k) => sum + coefficient * x[k][j],
           0,
         )
-        assert.ok(Math.abs(product - rhs[i][j]) < 1e-12)
+        assert.ok(Math.abs(product - rightHandSides[i][j]) < 1e-12)
       }
     }
   }

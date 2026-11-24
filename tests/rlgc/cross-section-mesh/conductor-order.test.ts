@@ -1,10 +1,10 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { calculateRlgc } from "../../../src/rlgc"
-import { sectionFixture } from "../../fixtures/cross-section"
+import { crossSectionFixture } from "../../fixtures/cross-section"
 
 test("preserves conductor ordering", () => {
-  const crossSection = sectionFixture({ kind: "mask", count: 2 })
+  const crossSection = crossSectionFixture({ kind: "mask", count: 2 })
   const original = calculateRlgc({ crossSection })
   const permuted = calculateRlgc({
     crossSection: {
@@ -17,6 +17,7 @@ test("preserves conductor ordering", () => {
     "vacuumCapacitanceFaradsPerMeter",
     "externalInductanceHenriesPerMeter",
     "totalSkinResistanceOhmsPerMeterPerSqrtHz",
+    "conductorSkinResistanceOhmsPerMeterPerSqrtHz",
     "dielectricLossFaradsPerMeter",
   ] as const) {
     for (let i = 0; i < 2; i++) {
