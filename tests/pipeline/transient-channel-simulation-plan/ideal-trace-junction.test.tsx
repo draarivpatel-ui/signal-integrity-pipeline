@@ -9,7 +9,7 @@ import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
-test("an ideal wire can join successive cuts on one partial receiver path", async () => {
+test("an ideal connection can join successive traces on one partial receiver path", async () => {
   const circuitJson = await renderSignals({
     tree: <DaisyChainFixture routeFinalLeg idealMiddleLeg />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
