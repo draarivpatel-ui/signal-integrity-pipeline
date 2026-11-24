@@ -24,9 +24,12 @@ import {
 import type { TransientChannelSimulationPlan } from "./transient-channel-simulation-plan"
 import {
   planEndpoints,
-  planFailure,
   planLedger,
 } from "./transient-channel-simulation-plan-ledger"
+import {
+  planFailure,
+  planSummary,
+} from "./transient-channel-simulation-plan-summary"
 
 /** The declaration and original diagnostic captured before the solver reports a failure. */
 export interface FailedPlanAttempt {
@@ -36,6 +39,7 @@ export interface FailedPlanAttempt {
 
 /** A declared driver/receiver pair, keeping differential polarity. */
 export interface PlanPath {
+  channel: string
   name: string
   from: SourcePortId
   to: SourcePortId
@@ -49,9 +53,9 @@ function planPaths(
     const drivers = endpointPorts(driver)
     return receivers.flatMap((receiver) =>
       endpointPorts(receiver).map((to, leg) => {
-        let port = name
-        if (drivers.length > 1) port += leg === 0 ? " +" : " −"
-        return { name: port, from: drivers[leg], to }
+        let signal = name
+        if (drivers.length > 1) signal += ["+", "−"][leg]
+        return { channel: name, name: signal, from: drivers[leg], to }
       }),
     )
   })
@@ -66,50 +70,54 @@ export interface PlanTopology {
   issue?: Diagnostic
 }
 
-/** Ordered physical cuts traversed by one driver-to-receiver connection. */
+/** One ordered trace, series part, or direct connection between route contacts. */
+export type PlanHop = Pick<PlanPath, "from" | "to"> &
+  ({ kind: "trace"; trace: SourceTraceId } | { kind: "series" | "ideal" })
+
+/** Ordered hops traversed by one driver-to-receiver connection. */
 export interface ResolvedPlanPath extends PlanPath {
-  traces: SourceTraceId[]
+  hops: PlanHop[]
 }
 
-/** Orient the route using each physical segment and the intervening ideal node. */
-function resolvePaths({
-  paths,
+/** Orient each edge and fill jumps between contacts on the same ideal node. */
+function resolvePath({
+  path,
   graphs,
   nodes,
 }: {
-  paths: readonly PlanPath[]
+  path: PlanPath
   graphs: ReceiverGraphs
   nodes: CircuitNodes["mapping"]
-}): Map<ResolvedPlanPath, Map<SourceTraceId, SourcePortId>> {
-  return new Map(
-    paths.map((path) => {
-      const edges = receiverPath({
-        graphs,
-        fromSourcePortId: path.from,
-        toSourcePortId: path.to,
-        allowUnroutedTraces: true,
-      })
-      const directions = new Map<SourceTraceId, SourcePortId>()
-      let current = path.from
-      for (const { fromSourcePortId, toSourcePortId, sourceTraceId } of edges ||
-        []) {
-        let from = fromSourcePortId
-        let to = toSourcePortId
-        if (
-          current === to ||
-          (current !== from &&
-            nodes[current] !== nodes[from] &&
-            nodes[current] === nodes[to])
-        ) {
-          from = toSourcePortId
-          to = fromSourcePortId
-        }
-        if (sourceTraceId !== undefined) directions.set(sourceTraceId, from)
-        current = to
-      }
-      return [{ ...path, traces: [...directions.keys()] }, directions]
-    }),
-  )
+}): ResolvedPlanPath {
+  const edges = receiverPath({
+    graphs,
+    fromSourcePortId: path.from,
+    toSourcePortId: path.to,
+    allowUnroutedTraces: true,
+  })
+  const hops: PlanHop[] = []
+  let current = path.from
+  for (const { fromSourcePortId, toSourcePortId, sourceTraceId } of edges ||
+    []) {
+    let from = fromSourcePortId
+    let to = toSourcePortId
+    if (
+      current === to ||
+      (current !== from &&
+        nodes[current] !== nodes[from] &&
+        nodes[current] === nodes[to])
+    ) {
+      from = toSourcePortId
+      to = fromSourcePortId
+    }
+    if (current !== from) hops.push({ kind: "ideal", from: current, to: from })
+    if (sourceTraceId === undefined) hops.push({ kind: "series", from, to })
+    else hops.push({ kind: "trace", trace: sourceTraceId, from, to })
+    current = to
+  }
+  if (edges && current !== path.to)
+    hops.push({ kind: "ideal", from: current, to: path.to })
+  return { ...path, hops }
 }
 
 /** Draw only relevant series passives and ideal wires, keeping distinct explicit joins. */
@@ -201,11 +209,12 @@ function planTopology({
     graphs,
     groundSourcePortId,
   })
-  const directed = resolvePaths({ paths, graphs, nodes })
+  const resolved = paths.map((path) => resolvePath({ path, graphs, nodes }))
   const oriented = new Map<SourceTraceId, SourcePortId>()
-  for (const directions of directed.values())
-    for (const [id, from] of directions)
-      if (!oriented.has(id)) oriented.set(id, from)
+  for (const { hops } of resolved)
+    for (const hop of hops)
+      if (hop.kind === "trace" && !oriented.has(hop.trace))
+        oriented.set(hop.trace, hop.from)
   const cutOrder = new Map(
     [
       ...oriented.keys(),
@@ -245,7 +254,7 @@ function planTopology({
   const topology: PlanTopology = {
     cuts: visualCuts.sort((a, b) => a.index - b.index),
     nodes,
-    paths: [...directed.keys()],
+    paths: resolved,
     segments: topologyLinks({ graphs, touched, placed, nodes }),
   }
   try {
@@ -317,11 +326,13 @@ export function buildPlanVisualScene({
   plan,
   failed,
   error,
+  solved,
 }: {
   circuit: CircuitJson
   plan?: TransientChannelSimulationPlan
   failed?: FailedPlanAttempt
   error: string | null
+  solved: boolean
 }): PlanVisualScene {
   const db = cju([...circuit])
   const simulationId =
@@ -358,7 +369,6 @@ export function buildPlanVisualScene({
         paths,
         topology,
         fault,
-        placed: new Set(ports.keys()),
         db,
       }),
       label: message,
@@ -379,24 +389,25 @@ export function buildPlanVisualScene({
     ),
   )
   const endpoints = planEndpoints({ paths, topology, labels })
-  let title = "Waiting to plan a simulation"
-  if (diagnostic) title = `${simulationName || "Simulation"} — can't simulate`
-  else if (plan) title = `${simulationName || "Simulation"} — ready to simulate`
+  const scope = topology && plan?.sections.copperScope
+  let summary: PlanVisualScene["summary"]
+  if (!diagnostic && topology)
+    summary = planSummary({ topology, db, gap: scope?.nearbyGapMm })
+  let title = "Plan: waiting to run"
+  if (diagnostic) title = `${simulationName || "Plan"}: can't simulate`
+  else if (plan) title = `${simulationName || "Plan"}: ready to simulate`
+  else if (solved) title = "Plan: no signals to simulate"
   return {
     db,
     title,
     diagnostic,
-    scope: topology && plan?.sections.copperScope,
+    scope,
+    summary,
     cuts: topology?.cuts || [],
     endpoints,
     links: [...(topology?.segments || []), ...fault.links],
-    rows: planLedger({
-      topology,
-      fault,
-      endpoints,
-      db,
-      failed: diagnostic !== undefined,
-    }),
+    rows: planLedger({ topology, paths, fault, db }),
+    faultCode: issue?.code,
     faultPorts: fault.ports,
     faultTraces: fault.traces,
     existingTraces,
