@@ -1,6 +1,5 @@
 /**
- * extraction — what the channel is electrically.
- * Owns: routed fields, coupling, matrix checks and causal loss.
+ * Routed fields, coupling, causal loss and matrix checks for the channel model.
  * Imports: kernel, board.
  */
 

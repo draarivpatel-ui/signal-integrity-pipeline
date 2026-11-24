@@ -2,6 +2,7 @@ import { type Matrix, symmetrize } from "../kernel"
 import { evaluatePanelKernel } from "./cross-section-kernel"
 import {
   calculateReciprocityResidual,
+  createZeroMatrix,
   factorBoundaryMatrix,
   solveBoundarySystem,
 } from "./cross-section-matrix"
@@ -12,15 +13,15 @@ import {
 } from "./cross-section-types"
 import { fail } from "./diagnostics"
 
-/** Largest raw reciprocity residual allowed before requesting targetPanel finer mesh or wider domain. */
+/** Largest raw reciprocity residual allowed before requesting a finer mesh or wider domain. */
 const MAX_RECIPROCITY_RESIDUAL = 0.015
 
 /** Capacitance and dielectric loss matrices with mesh size and reciprocity error. */
 interface RegionField {
   capacitanceFaradsPerMeter: Matrix
-  loss: Matrix
+  dielectricLossFaradsPerMeter: Matrix
   panelCount: number
-  residual: number
+  reciprocityResidual: number
 }
 
 /** Solve potential and dielectric-transmission equations; differentiate the SAME field operator
@@ -73,36 +74,37 @@ export function calculateRegionField(mesh: RegionMeshInput): RegionField {
       rightHandSides: sensitivityRightHandSides,
     })
   }
-  const capacitanceFaradsPerMeter: Matrix = Array.from({ length: size }, () =>
-    Array(size).fill(0),
-  )
-  const loss = capacitanceFaradsPerMeter.map((row) => [...row])
+  const capacitanceFaradsPerMeter = createZeroMatrix(size)
+  const dielectricLossFaradsPerMeter = createZeroMatrix(size)
   for (const [k, panel] of panels.entries()) {
     if (panel.conductorIndex < 0) continue
     for (let j = 0; j < size; j++) {
       capacitanceFaradsPerMeter[panel.conductorIndex][j] +=
         VACUUM_PERMITTIVITY_F_PER_M * panel.relativePermittivity * charge[k][j]
       if (!hasLoss) continue
-      loss[panel.conductorIndex][j] +=
+      dielectricLossFaradsPerMeter[panel.conductorIndex][j] +=
         VACUUM_PERMITTIVITY_F_PER_M *
         panel.relativePermittivity *
         (lossCharge[k][j] + panel.lossTangent * charge[k][j])
     }
   }
-  const residual = Math.max(
+  const reciprocityResidual = Math.max(
     calculateReciprocityResidual(capacitanceFaradsPerMeter),
-    calculateReciprocityResidual(loss),
+    calculateReciprocityResidual(dielectricLossFaradsPerMeter),
   )
-  if (!Number.isFinite(residual) || residual > MAX_RECIPROCITY_RESIDUAL) {
-    fail(
-      "reciprocity",
-      `Cross-section raw reciprocity ${residual}; refine panels or interface extent`,
-    )
+  if (
+    !Number.isFinite(reciprocityResidual) ||
+    reciprocityResidual > MAX_RECIPROCITY_RESIDUAL
+  ) {
+    fail({
+      code: "reciprocity",
+      text: `Cross-section raw reciprocity ${reciprocityResidual}; refine panels or interface extent`,
+    })
   }
   return {
     capacitanceFaradsPerMeter: symmetrize(capacitanceFaradsPerMeter),
-    loss: symmetrize(loss),
+    dielectricLossFaradsPerMeter: symmetrize(dielectricLossFaradsPerMeter),
     panelCount: panels.length,
-    residual,
+    reciprocityResidual,
   }
 }
