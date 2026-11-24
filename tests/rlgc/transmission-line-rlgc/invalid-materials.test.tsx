@@ -1,10 +1,10 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteFieldsSolver } from "../../../src/extraction"
-import { renderFieldsInput } from "../../fixtures/fields-input"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
+import { renderTransmissionLineRlgcInput } from "../../fixtures/transmission-line-rlgc"
 
 test("rejects invalid soldermask and laminate properties before solving", async () => {
-  const input = await renderFieldsInput()
+  const input = await renderTransmissionLineRlgcInput()
   const defaults = {
     maskThicknessMm: 0.02,
     maskRelativePermittivity: 3.3,
@@ -20,7 +20,7 @@ test("rejects invalid soldermask and laminate properties before solving", async 
   ]) {
     assert.throws(
       () =>
-        new RouteFieldsSolver({
+        new TransmissionLineRlgcSolver({
           ...input,
           materials: { ...defaults, ...materialOverride },
         }),

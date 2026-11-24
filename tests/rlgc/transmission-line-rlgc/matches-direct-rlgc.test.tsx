@@ -1,15 +1,18 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { buildCrossSection, RouteFieldsSolver } from "../../../src/extraction"
-import { calculateRlgc } from "../../../src/rlgc"
-import { renderFieldsInput } from "../../fixtures/fields-input"
+import {
+  buildCrossSection,
+  calculateRlgc,
+  TransmissionLineRlgcSolver,
+} from "../../../src/rlgc"
+import { renderTransmissionLineRlgcInput } from "../../fixtures/transmission-line-rlgc"
 
 test("publishes frozen matrices matching direct RLGC calculation", async () => {
-  const input = await renderFieldsInput()
+  const input = await renderTransmissionLineRlgcInput()
   const {
     copperGeometry: { geometry },
   } = input
-  const solver = new RouteFieldsSolver(input)
+  const solver = new TransmissionLineRlgcSolver(input)
   solver.solve()
   const result = solver.getOutput()
   const section = buildCrossSection({

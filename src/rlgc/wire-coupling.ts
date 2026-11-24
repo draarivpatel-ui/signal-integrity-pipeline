@@ -1,6 +1,6 @@
 import type { TraceWire, WireSection } from "../board"
 import type { Snapshot } from "../kernel"
-import type { RlgcMatrices } from "../rlgc"
+import type { RlgcMatrices } from "./cross-section"
 
 /** A pair is coupled when either normalized mutual reaches 0.5%. */
 const COUPLING_THRESHOLD = 0.005

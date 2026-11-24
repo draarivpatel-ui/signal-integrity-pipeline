@@ -1,13 +1,13 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteFieldsSolver } from "../../../src/extraction"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
 import {
   CopperTrace,
   getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
 } from "../../fixtures/copper-geometry-board"
 
-import { solveFieldsCopper } from "../../fixtures/fields-input"
+import { solveBoardCopperGeometry } from "../../fixtures/transmission-line-rlgc"
 
 test("rejects touching nets", async () => {
   const circuit = await renderCopperGeometryBoard({
@@ -18,10 +18,10 @@ test("rejects touching nets", async () => {
       </>
     ),
   })
-  const copperGeometry = solveFieldsCopper(
+  const copperGeometry = solveBoardCopperGeometry(
     getCopperGeometryExtractionInput({ circuit }),
   )
-  const solver = new RouteFieldsSolver({
+  const solver = new TransmissionLineRlgcSolver({
     copperGeometry,
     materials: {
       maskThicknessMm: 0,

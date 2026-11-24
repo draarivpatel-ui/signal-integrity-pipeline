@@ -1,7 +1,7 @@
 import type { BoardStackup } from "../board"
 import { type Snapshot, snapshot } from "../kernel"
-import type { CrossSectionDielectricLayer } from "../rlgc"
-import { fail } from "../rlgc/diagnostics"
+import type { CrossSectionDielectricLayer } from "./cross-section"
+import { fail } from "./diagnostics"
 
 /** Laminate loss and planar soldermask properties. */
 export interface DielectricMaterials {

@@ -1,13 +1,15 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteFieldsSolver } from "../../../src/extraction"
-import { renderFieldsInput } from "../../fixtures/fields-input"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
+import { renderTransmissionLineRlgcInput } from "../../fixtures/transmission-line-rlgc"
 
 test("replays RLGC calculation from serialized constructor parameters", async () => {
-  const solver = new RouteFieldsSolver(await renderFieldsInput())
+  const solver = new TransmissionLineRlgcSolver(
+    await renderTransmissionLineRlgcInput(),
+  )
   solver.solve()
   const result = solver.getOutput()
-  const repeat = new RouteFieldsSolver(
+  const repeat = new TransmissionLineRlgcSolver(
     JSON.parse(JSON.stringify(solver.getConstructorParams()[0])),
   )
   repeat.solve()

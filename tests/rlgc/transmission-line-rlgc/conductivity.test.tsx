@@ -1,11 +1,11 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteFieldsSolver } from "../../../src/extraction"
-import {
-  solveFieldsCopper,
-  withStackupLayers,
-} from "../../fixtures/fields-input"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
 import { renderRoutedCopper } from "../../fixtures/routed-copper"
+import {
+  solveBoardCopperGeometry,
+  withStackupLayers,
+} from "../../fixtures/transmission-line-rlgc"
 
 test("conductivity changes conductor and plane resistance and cross-section identity", async () => {
   const board = await renderRoutedCopper()
@@ -20,8 +20,8 @@ test("conductivity changes conductor and plane resistance and cross-section iden
             : layer,
         ),
     })
-    const copper = solveFieldsCopper({ ...board, circuitJson })
-    const solver = new RouteFieldsSolver({
+    const copper = solveBoardCopperGeometry({ ...board, circuitJson })
+    const solver = new TransmissionLineRlgcSolver({
       copperGeometry: copper,
       artifactPrefix: "test",
     })

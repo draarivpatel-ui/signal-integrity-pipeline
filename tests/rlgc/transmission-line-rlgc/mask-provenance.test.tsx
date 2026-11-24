@@ -1,18 +1,18 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteFieldsSolver } from "../../../src/extraction"
-import {
-  solveFieldsCopper,
-  withStackupLayers,
-} from "../../fixtures/fields-input"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
 import { renderRoutedCopper } from "../../fixtures/routed-copper"
+import {
+  solveBoardCopperGeometry,
+  withStackupLayers,
+} from "../../fixtures/transmission-line-rlgc"
 
 test("publishes stackup, explicit, and assumed mask thickness provenance", async () => {
   const board = await renderRoutedCopper()
-  const unmasked = solveFieldsCopper(board)
+  const unmasked = solveBoardCopperGeometry(board)
   assert.equal(unmasked.maskThicknessMm, null)
   const mask = { layer_type: "soldermask", thickness: 0.031 } as const
-  const masked = solveFieldsCopper({
+  const masked = solveBoardCopperGeometry({
     ...board,
     circuitJson: withStackupLayers({
       circuitJson: board.circuitJson,
@@ -36,7 +36,7 @@ test("publishes stackup, explicit, and assumed mask thickness provenance", async
     },
   ]
   for (const { copper, materials, source, thicknessMm } of cases) {
-    const solver = new RouteFieldsSolver({
+    const solver = new TransmissionLineRlgcSolver({
       copperGeometry: copper,
       materials,
       artifactPrefix: "test",

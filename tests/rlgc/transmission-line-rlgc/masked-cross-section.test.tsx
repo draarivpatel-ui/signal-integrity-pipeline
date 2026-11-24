@@ -6,11 +6,14 @@ import {
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
 } from "../../../src/board"
-import { buildCrossSection, RouteFieldsSolver } from "../../../src/extraction"
+import {
+  buildCrossSection,
+  TransmissionLineRlgcSolver,
+} from "../../../src/rlgc"
 import { drawCrossSection } from "../../fixtures/cross-section-drawing"
-import { solveFieldsCopper } from "../../fixtures/fields-input"
 import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 import ReturnAgreement from "../../fixtures/return-agreement"
+import { solveBoardCopperGeometry } from "../../fixtures/transmission-line-rlgc"
 import { renderCoreSignals } from "../../support/core-render"
 
 test("draws the soldermask and laminate used by a coupled wire pair", async () => {
@@ -34,8 +37,8 @@ test("draws the soldermask and laminate used by a coupled wire pair", async () =
     railSourceIds: new Set(),
     distanceMm: 1,
   })
-  const copperGeometry = solveFieldsCopper({ circuitJson, copperScope })
-  const solver = new RouteFieldsSolver({
+  const copperGeometry = solveBoardCopperGeometry({ circuitJson, copperScope })
+  const solver = new TransmissionLineRlgcSolver({
     copperGeometry,
     artifactPrefix: "test",
   })

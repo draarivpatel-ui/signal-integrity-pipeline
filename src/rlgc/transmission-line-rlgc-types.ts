@@ -1,11 +1,11 @@
 import type { WireSection } from "../board"
 import type { Snapshot } from "../kernel"
-import type { RlgcMatrices } from "../rlgc"
-import type { PairCoupling } from "./route-coupling"
+import type { RlgcMatrices } from "./cross-section"
 import type {
   DielectricMaterials,
   MaskThicknessSource,
-} from "./section-materials"
+} from "./dielectric-materials"
+import type { PairCoupling } from "./wire-coupling"
 
 /** Serialized relative conductor geometry, reference planes, and dielectric layers. */
 export type CrossSectionKey = string
@@ -24,7 +24,7 @@ export interface SolvedWireSection
 }
 
 /** Solved wire sections and the material and coupling decisions used to construct them. */
-export type ExtractedRoutes = Snapshot<{
+export type TransmissionLineRlgc = Snapshot<{
   solvedWireSections: SolvedWireSection[]
   crossSectionSolutions: CrossSectionSolution[]
   pairCouplings: PairCoupling[]

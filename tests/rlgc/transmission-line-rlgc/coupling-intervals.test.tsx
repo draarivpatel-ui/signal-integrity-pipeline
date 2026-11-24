@@ -1,12 +1,12 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteFieldsSolver } from "../../../src/extraction"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
 import {
   CopperTrace,
   getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
 } from "../../fixtures/copper-geometry-board"
-import { solveFieldsCopper } from "../../fixtures/fields-input"
+import { solveBoardCopperGeometry } from "../../fixtures/transmission-line-rlgc"
 
 test("identifies the input section of each pair across a reference handoff", async () => {
   const circuit = await renderCopperGeometryBoard({
@@ -33,7 +33,7 @@ test("identifies the input section of each pair across a reference handoff", asy
       </>
     ),
   })
-  const copper = solveFieldsCopper(
+  const copper = solveBoardCopperGeometry(
     getCopperGeometryExtractionInput({ circuit }),
   )
   const { sections } = copper.geometry
@@ -42,7 +42,7 @@ test("identifies the input section of each pair across a reference handoff", asy
     sections.map(({ references }) => references[0].layer),
     ["bottom", "inner1"],
   )
-  const solver = new RouteFieldsSolver({
+  const solver = new TransmissionLineRlgcSolver({
     copperGeometry: copper,
     artifactPrefix: "test",
   })

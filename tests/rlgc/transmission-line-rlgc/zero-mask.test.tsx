@@ -1,12 +1,12 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { buildCrossSection } from "../../../src/extraction"
-import { renderFieldsInput } from "../../fixtures/fields-input"
+import { buildCrossSection } from "../../../src/rlgc"
+import { renderTransmissionLineRlgcInput } from "../../fixtures/transmission-line-rlgc"
 
 test("zero soldermask leaves the outer copper band and overcoat in air", async () => {
   const {
     copperGeometry: { geometry },
-  } = await renderFieldsInput()
+  } = await renderTransmissionLineRlgcInput()
   const wireSection = geometry.sections[0]
   const outerCopper = geometry.stackup.copperLayers.find(
     (layer) => layer.name === "top",

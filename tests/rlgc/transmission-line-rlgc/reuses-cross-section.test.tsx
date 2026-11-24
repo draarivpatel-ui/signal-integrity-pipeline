@@ -1,10 +1,12 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteFieldsSolver } from "../../../src/extraction"
-import { renderFieldsInput } from "../../fixtures/fields-input"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
+import { renderTransmissionLineRlgcInput } from "../../fixtures/transmission-line-rlgc"
 
 test("reuses canonical pair geometry", async () => {
-  const solver = new RouteFieldsSolver(await renderFieldsInput())
+  const solver = new TransmissionLineRlgcSolver(
+    await renderTransmissionLineRlgcInput(),
+  )
   solver.step()
   assert.equal(solver.solved, false)
   assert.equal(solver.stats.uniqueSolveCount, 1)

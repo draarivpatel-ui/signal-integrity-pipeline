@@ -1,25 +1,28 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { CopperGeometry, WireSection } from "../board"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
-import { calculateRlgc, type RlgcMatrices } from "../rlgc"
-import { resolvePanelsPerEdge } from "../rlgc/cross-section"
 import {
-  groupCoupledWires,
-  type PairCoupling,
-  screenWirePair,
-} from "./route-coupling"
-import type {
-  CrossSectionKey,
-  CrossSectionSolution,
-  ExtractedRoutes,
-  SolvedWireSection,
-} from "./route-lines"
-import { buildCrossSection } from "./section-cross-section"
+  calculateRlgc,
+  type RlgcMatrices,
+  resolvePanelsPerEdge,
+} from "./cross-section"
 import {
   type DielectricMaterials,
   type MaskThicknessSource,
   resolveMaterials,
-} from "./section-materials"
+} from "./dielectric-materials"
+import type {
+  CrossSectionKey,
+  CrossSectionSolution,
+  SolvedWireSection,
+  TransmissionLineRlgc,
+} from "./transmission-line-rlgc-types"
+import {
+  groupCoupledWires,
+  type PairCoupling,
+  screenWirePair,
+} from "./wire-coupling"
+import { buildCrossSection } from "./wire-cross-section"
 
 const PARALLEL_COUPLING_WARNING = [
   "Wires are coupled when normalized mutual capacitance or inductance reaches 0.5%.",
@@ -28,7 +31,7 @@ const PARALLEL_COUPLING_WARNING = [
 ].join(" ")
 
 /** Copper geometry, material overrides, and the artifact location. */
-export interface RouteFieldsInput {
+export interface TransmissionLineRlgcInput {
   readonly copperGeometry: Snapshot<CopperGeometry>
   readonly materials?: DielectricMaterials
   readonly panelsPerEdge?: number
@@ -65,10 +68,10 @@ function* enumerateWirePairs(
 }
 
 /** One pair screen or coupled-group calculation per step. */
-export class RouteFieldsSolver extends BaseSolver {
+export class TransmissionLineRlgcSolver extends BaseSolver {
   override MAX_ITERATIONS = Infinity
   readonly materials: DielectricMaterials
-  private readonly input: RouteFieldsInput
+  private readonly input: TransmissionLineRlgcInput
   private readonly panelsPerEdge: number
   private readonly maskThicknessSource: MaskThicknessSource
   private readonly cache = new Map<CrossSectionKey, Snapshot<RlgcMatrices>>()
@@ -77,13 +80,13 @@ export class RouteFieldsSolver extends BaseSolver {
   private readonly solvedWireSections: SolvedWireSection[] = []
   private readonly wirePairs: IterableIterator<IndexedWireSection>
   private coupledSections?: IterableIterator<IndexedWireSection>
-  private output?: Produced<ExtractedRoutes>
+  private output?: Produced<TransmissionLineRlgc>
   private screenedPairCount = 0
   private cacheHitCount = 0
   private solveMilliseconds = 0
 
   /** Snapshot the board and options and validate the effective settings before stepping. */
-  constructor(input: RouteFieldsInput) {
+  constructor(input: TransmissionLineRlgcInput) {
     super()
     this.input = snapshot(input)
     this.panelsPerEdge = resolvePanelsPerEdge(this.input.panelsPerEdge)
@@ -219,8 +222,8 @@ export class RouteFieldsSolver extends BaseSolver {
       maskThicknessSource: this.maskThicknessSource,
       panelsPerEdge: this.panelsPerEdge,
     })
-    const scope = rootScope("extraction").child(this.input.artifactPrefix)
-    const artifact = scope.json("fields.json", {
+    const scope = rootScope("rlgc").child(this.input.artifactPrefix)
+    const artifact = scope.json("transmission-line-rlgc.json", {
       ...solvedSections,
       solvedWireSections: solvedSections.solvedWireSections.map(
         (wireSection) => ({
@@ -241,14 +244,14 @@ export class RouteFieldsSolver extends BaseSolver {
   }
 
   /** The completed immutable matrices and coupling decisions. */
-  override getOutput(): Produced<ExtractedRoutes> {
+  override getOutput(): Produced<TransmissionLineRlgc> {
     if (!this.output) throw new Error("Wire sections are not solved")
     return this.output
   }
 
   /** Replay options independent of solver progress. */
   override getConstructorParams(): ConstructorParameters<
-    typeof RouteFieldsSolver
+    typeof TransmissionLineRlgcSolver
   > {
     return [this.input]
   }

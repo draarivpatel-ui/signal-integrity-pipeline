@@ -1,12 +1,12 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { buildCrossSection } from "../../../src/extraction"
+import { buildCrossSection } from "../../../src/rlgc"
 import {
   CopperTrace,
   getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
 } from "../../fixtures/copper-geometry-board"
-import { solveFieldsCopper } from "../../fixtures/fields-input"
+import { solveBoardCopperGeometry } from "../../fixtures/transmission-line-rlgc"
 
 test("uses the same board dielectric stack for a mixed-layer section and its inner pair", async () => {
   const circuit = await renderCopperGeometryBoard({
@@ -42,7 +42,7 @@ test("uses the same board dielectric stack for a mixed-layer section and its inn
       </>
     ),
   })
-  const { geometry } = solveFieldsCopper(
+  const { geometry } = solveBoardCopperGeometry(
     getCopperGeometryExtractionInput({ circuit }),
   )
   const wireSection = geometry.sections.find(

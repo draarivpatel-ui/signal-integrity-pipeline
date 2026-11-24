@@ -5,11 +5,11 @@ import {
   type CopperGeometryExtractionInput,
   CopperGeometryExtractionSolver,
 } from "../../src/board"
-import type { RouteFieldsInput } from "../../src/extraction"
+import type { TransmissionLineRlgcInput } from "../../src/rlgc"
 import { renderRoutedCopper } from "./routed-copper"
 
 /** Solve copper geometry from a rendered fixture. */
-export function solveFieldsCopper({
+export function solveBoardCopperGeometry({
   circuitJson,
   copperScope,
 }: Pick<
@@ -27,8 +27,8 @@ export function solveFieldsCopper({
 }
 
 /** A core-rendered pair and its solver input. */
-export async function renderFieldsInput(): Promise<RouteFieldsInput> {
-  const copperGeometry = solveFieldsCopper(await renderRoutedCopper())
+export async function renderTransmissionLineRlgcInput(): Promise<TransmissionLineRlgcInput> {
+  const copperGeometry = solveBoardCopperGeometry(await renderRoutedCopper())
   return {
     copperGeometry,
     materials: {

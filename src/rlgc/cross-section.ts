@@ -49,7 +49,7 @@ function isPanelCountValid(panelsPerEdge: number): boolean {
 
 /** Resolve the default conductor edge resolution before starting a stepped solve. */
 export function resolvePanelsPerEdge(
-  panelsPerEdge = DEFAULT_PANELS_PER_EDGE,
+  panelsPerEdge: number = DEFAULT_PANELS_PER_EDGE,
 ): number {
   if (!isPanelCountValid(panelsPerEdge))
     fail({

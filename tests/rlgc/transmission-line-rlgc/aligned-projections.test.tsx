@@ -7,8 +7,7 @@ import {
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
 } from "../../../src/board"
-import { buildCrossSection } from "../../../src/extraction"
-import { calculateRlgc } from "../../../src/rlgc"
+import { buildCrossSection, calculateRlgc } from "../../../src/rlgc"
 import { AlignedEdges } from "../../fixtures/aligned-edges"
 import { renderCoreSignals } from "../../support/core-render"
 

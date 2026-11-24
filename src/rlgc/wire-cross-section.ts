@@ -1,13 +1,13 @@
 import type { LayerRef } from "circuit-json"
 import type { BoardStackup, ExtractedCopper, WireSection } from "../board"
 import type { Snapshot } from "../kernel"
-import type { CrossSection, CrossSectionDielectricLayer } from "../rlgc"
-import { DIELECTRIC_BOUNDARY_TOLERANCE_MM } from "../rlgc/cross-section-regions"
-import { fail } from "../rlgc/diagnostics"
+import type { CrossSection, CrossSectionDielectricLayer } from "./cross-section"
+import { DIELECTRIC_BOUNDARY_TOLERANCE_MM } from "./cross-section-regions"
+import { fail } from "./diagnostics"
 import {
   buildDielectricLayers,
   type DielectricMaterials,
-} from "./section-materials"
+} from "./dielectric-materials"
 
 type CopperLayer = Snapshot<BoardStackup["copperLayers"][number]>
 

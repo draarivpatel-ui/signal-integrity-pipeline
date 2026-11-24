@@ -5,11 +5,11 @@ import {
   channelCopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
-} from "../../src/board"
-import { RouteFieldsSolver } from "../../src/extraction"
-import { solveFieldsCopper } from "../fixtures/fields-input"
-import ReturnAgreement from "../fixtures/return-agreement"
-import { renderCoreSignals } from "../support/core-render"
+} from "../../../src/board"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
+import ReturnAgreement from "../../fixtures/return-agreement"
+import { solveBoardCopperGeometry } from "../../fixtures/transmission-line-rlgc"
+import { renderCoreSignals } from "../../support/core-render"
 
 test("screens pairs by electric and magnetic coupling", async () => {
   const materials = {
@@ -70,11 +70,11 @@ test("screens pairs by electric and magnetic coupling", async () => {
       railSourceIds: new Set(),
       distanceMm: 32,
     })
-    const copperGeometry = solveFieldsCopper({
+    const copperGeometry = solveBoardCopperGeometry({
       circuitJson: circuit,
       copperScope: scope,
     })
-    const solver = new RouteFieldsSolver({
+    const solver = new TransmissionLineRlgcSolver({
       copperGeometry,
       materials,
       artifactPrefix: "test",

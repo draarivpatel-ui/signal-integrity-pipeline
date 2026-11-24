@@ -25,14 +25,14 @@ aggressor, measured at its declared bit rate after its offset.
 
 ## General workflow
 
-RouteFieldsSolver maps each routed section to its electrical coefficients and screens nearby pairs for coupling.
+`TransmissionLineRlgcSolver` screens nearby wire pairs for coupling and calculates per-unit-length RLGC matrices for each coupled group.
 
 ```mermaid
 flowchart LR
   board["Circuit JSON and channel declarations"] --> plan["TransientChannelSimulationPlanSolver"]
   ibis["IBIS sources"] --> plan
   plan --> geometry["CopperGeometryExtractionSolver"]
-  geometry --> routeFields["RouteFieldsSolver"]
+  geometry --> transmissionLineRlgc["TransmissionLineRlgcSolver"]
   plan --> binding["IBIS binding inputs"]
   plan --> manifest["Transient channel simulation plan manifest"]
 ```
@@ -42,8 +42,8 @@ stateDiagram-v2
   [*] --> Ready
   Ready --> Planned: TransientChannelSimulationPlanSolver
   Planned --> GeometryReady: CopperGeometryExtractionSolver
-  GeometryReady --> Complete: RouteFieldsSolver
-  GeometryReady --> Failed: invalid field geometry or inputs
+  GeometryReady --> Complete: TransmissionLineRlgcSolver
+  GeometryReady --> Failed: invalid cross-section geometry or material options
   Planned --> Failed: missing required contact or reference, unsupported route or soldermask
   Ready --> Failed: invalid input, conflicting IBIS model selections or undeclared aggressors
   Complete --> [*]

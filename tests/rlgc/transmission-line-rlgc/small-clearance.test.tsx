@@ -1,12 +1,12 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteFieldsSolver } from "../../../src/extraction"
+import { TransmissionLineRlgcSolver } from "../../../src/rlgc"
 import {
   CopperTrace,
   getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
 } from "../../fixtures/copper-geometry-board"
-import { solveFieldsCopper } from "../../fixtures/fields-input"
+import { solveBoardCopperGeometry } from "../../fixtures/transmission-line-rlgc"
 
 test("preserves the physical clearance of nearly touching conductors", async () => {
   const circuit = await renderCopperGeometryBoard({
@@ -22,11 +22,11 @@ test("preserves the physical clearance of nearly touching conductors", async () 
       </>
     ),
   })
-  const copper = solveFieldsCopper(
+  const copper = solveBoardCopperGeometry(
     getCopperGeometryExtractionInput({ circuit }),
   )
   assert.equal(copper.geometry.sections[0].wires[1].lateralOffsetMm, 0.30000004)
-  const solver = new RouteFieldsSolver({
+  const solver = new TransmissionLineRlgcSolver({
     copperGeometry: copper,
     artifactPrefix: "test",
   })
