@@ -34,7 +34,7 @@ interface StageRender {
 
 const stageNames = [
   "transient-channel-simulation-plan",
-  "sections",
+  "copper-geometry-extraction",
   "fields",
   "bindings",
   "network",

@@ -1,8 +1,8 @@
 import type {
   CircuitJson,
   CopperScope,
+  ExtractedCopper,
   ReceiverTracePath,
-  SectionGeometry,
   SourcePortId,
   SourceTraceId,
 } from "../board"
@@ -75,7 +75,7 @@ export type RoutedBindings = { readonly circuitJson: CircuitJson } & Snapshot<{
 export interface RouteNetworkInput {
   simulationPcbTransientChannelSimulationId: string
   name: string
-  geometry: Snapshot<SectionGeometry>
+  geometry: Snapshot<ExtractedCopper>
   extracted: ExtractedRoutes
   bindings: RoutedBindings
   materials: RouteMaterials

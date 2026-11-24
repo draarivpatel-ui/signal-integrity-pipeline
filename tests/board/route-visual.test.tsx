@@ -24,7 +24,7 @@ import { renderCoreSignals } from "../support/core-render"
 test("one camera frames connected copper, its endpoint parts and a pane", async () => {
   const { root } = await routedVisualFixture()
   const { circuitJson: sectionsCircuit, copperScope: scope } = root.stageOutput(
-    "RouteSectionsSolver",
+    "CopperGeometryExtractionSolver",
   ).value[0]
   const circuitJson = cloneCircuitJson(sectionsCircuit)
   const view = routeView({ circuit: circuitJson, scope })
@@ -77,8 +77,9 @@ test("one camera frames connected copper, its endpoint parts and a pane", async 
 
 test("a differential channel colours its two nets as two shades of one hue and carries its bit period", async () => {
   const { root } = await routedVisualFixture()
-  const { copperScope: scope } = root.stageOutput("RouteSectionsSolver")
-    .value[0]
+  const { copperScope: scope } = root.stageOutput(
+    "CopperGeometryExtractionSolver",
+  ).value[0]
   const board = TwoTraceBoard()
   const children = React.Children.toArray(board.props.children).filter(
     (child) =>
@@ -198,7 +199,7 @@ test("pin marks never grow past half their closest spacing, and sit on a dark ha
 test("the strip unrolls nets to scale, centred in the pane, with one length label", async () => {
   const { root } = await routedVisualFixture()
   const { circuitJson: sectionsCircuit, copperScope: scope } = root.stageOutput(
-    "RouteSectionsSolver",
+    "CopperGeometryExtractionSolver",
   ).value[0]
   const circuitJson = cloneCircuitJson(sectionsCircuit)
   const view = routeView({ circuit: circuitJson, scope })
@@ -222,7 +223,7 @@ test("the strip unrolls nets to scale, centred in the pane, with one length labe
 
 test("two-trace TSX board drawing SVG snapshot", async () => {
   const { root } = await routedVisualFixture()
-  const sections = root.stageOutput("RouteSectionsSolver").value[0]
+  const sections = root.stageOutput("CopperGeometryExtractionSolver").value[0]
   const drawing = routeBoardDrawing({
     circuit: root.inputProblem.circuitJson,
     scope: sections.copperScope,

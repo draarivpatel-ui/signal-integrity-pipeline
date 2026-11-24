@@ -84,7 +84,7 @@ domain:
   coupling: mutual electrical or magnetic interaction between conductors
   crossover: the frequency band where conductor loss turns from its DC value into skin loss
   cursor: the current position while traversing an ordered route
-  cut: a deliberate break in physical copper
+  cut: a deliberate break in physical copper, as in a pour cutout
   deck: an input file for a solver (the ngspice netlist)
   declare: plan experiments and probes from the board's simulation records before any solver runs
   delay: time needed for a signal edge to propagate through a line
@@ -107,8 +107,8 @@ domain:
   execution: a completed invocation through the solver port
   experiment: one transient run with stimuli and probes
   extent: horizontal reach of the discretised dielectric interfaces
-  extract: measure each wire's R, L, G and C from its board cross-sections
-  extraction: measuring wire R, L, G and C from board cross-sections with the 2D field solver
+  extract: derive copper geometry from PCB records or calculate electrical fields from that geometry
+  extraction: deriving copper geometry from PCB records or electrical fields from wire cross-sections
   eye: a waveform folded every two bit periods so all transitions overlay
   filament: an ideal thin current path used to estimate mutual inductance
   fixture: a known resistive load used to capture an IBIS switching waveform
@@ -127,14 +127,14 @@ domain:
   initial: the state or value at the beginning of a simulation
   integration: accumulating per-length electrical values along a route or over time
   interface: boundary between two dielectric materials
-  join: connect physically continuous copper pieces into one path
+  join: an ideal connection from an original wire to the centerline of its copper union
   junction: the point where electrically connected conductors meet
   kernel: Green function relating boundary charge to potential or field
   ladder: distributed line approximated by connected lumped electrical cells
   lane: an existing converter term for an extracted transmission line
   overlay: a drawing mark that depicts an electrical connection or a fault
   segment: one trace, series component, or ideal connection along a receiver path
-  contact: a source port or source net used in electrical connectivity
+  contact: an electrical connection at a source port or net, or where a physical pad touches wire or via copper
   group: contacts joined by ideal connections before SPICE node numbering
   receiver: the declared destination of a channel path
   path: the ordered connections from a driver to a receiver
@@ -195,6 +195,7 @@ domain:
   recede: move a conducting wall away from the field region
   recession: displacement of conducting walls away from the field for Wheeler loss
   reciprocity: the check that a matrix is symmetric (the effect of A on B equals B on A)
+  reference: a copper surface or edge that supplies a return path
   refinement: a finer spatial subdivision of a solve, used to check that the answer stops changing
   region: the part of a cross-section electrically separated by reference planes
   remainder: the part of a matrix diagonal left after its mutual energy terms
@@ -225,7 +226,7 @@ domain:
   span: the range of layers a via crosses
   sparse: a matrix or realization with mostly zero couplings
   stackup: the order and thickness of the board's copper and insulating layers
-  stage: one fixed step of the routed pipeline (planning, sections, fields, bindings, network, transient)
+  stage: one fixed step of the routed pipeline (planning, copper geometry extraction, fields, bindings, network, transient)
   startup: the time a switching channel needs to settle after its stimulus starts
   stimulus: the bit pattern a driver sends during an experiment
   strip: a pane showing each selected net unrolled into a to-scale bar
@@ -317,7 +318,7 @@ general:
   - entry error event expression field file first format graph grid hash index input item key
   - kind label last level line list location log map mapping member message metadata method mode name
   - namespace number option options order output owner package parent part pattern payload piece
-  - plan policy prefix progress record reference request rest result root row schema selection
+  - plan policy prefix progress record request rest result root row schema selection
   - selector series source state status table text title token tree type unit validation value
   # program runs and tools
   - adapter comparison conversion converter diagram directory domain engine fast faster invocation tool

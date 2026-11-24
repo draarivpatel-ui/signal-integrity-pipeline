@@ -3,8 +3,8 @@ import assert from "node:assert/strict"
 import React from "react"
 import {
   channelCopperScope,
+  extractCopperGeometry,
   getSourcePortConnectivityMapFromCircuitJson,
-  sectionRoutes,
   sourceNetMembers,
 } from "../../src/board"
 import { routeCrossSection, solveCrossSection } from "../../src/extraction"
@@ -183,7 +183,7 @@ test("coalesces aligned conductor projections", async () => {
     railSourceIds: new Set(),
     distanceMm: 1,
   })
-  const geometry = sectionRoutes({ circuit, copperScope: scope })
+  const geometry = extractCopperGeometry({ circuit, copperScope: scope })
   const slice = geometry.sections.find(
     (slice) =>
       slice.wires.length === 2 &&

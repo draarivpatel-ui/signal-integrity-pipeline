@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { RouteSectionsSolver } from "../../src/board"
+import { CopperGeometryExtractionSolver } from "../../src/board"
 import {
   type RoutedStageSolver,
   TransientChannelSimulationPlanSolver,
@@ -19,7 +19,7 @@ async function routeBindings(): Promise<RouteBindingsSolver> {
   const planner = new TransientChannelSimulationPlanSolver(input)
   planner.solve()
   const plan = planner.getOutput().value[0]
-  const sections = new RouteSectionsSolver(plan.sections)
+  const sections = new CopperGeometryExtractionSolver(plan.sections)
   sections.solve()
   return new RouteBindingsSolver({
     ...plan.bindings,
