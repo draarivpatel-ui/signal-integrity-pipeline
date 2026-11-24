@@ -1,6 +1,6 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
-import { circuitJsonDb } from "./circuit-json-db"
 import type { CopperScope } from "./geometry/scope"
 import type { SourcePortId } from "./ids"
 import {
@@ -8,7 +8,7 @@ import {
   routeSectionSteps,
   type SectionGeometry,
 } from "./route-sections"
-import type { CircuitJson, CircuitJsonSnapshot } from "./schema"
+import type { CircuitJson } from "./schema"
 
 /** The board, copper scope and required ports passed to route sectioning. */
 export interface RouteSectionsInput {
@@ -19,7 +19,7 @@ export interface RouteSectionsInput {
 }
 /** Completed route geometry and its outer soldermask thickness when declared. */
 export interface RoutedSections {
-  circuitJson: CircuitJsonSnapshot
+  circuitJson: CircuitJson
   scope: Snapshot<CopperScope>
   geometry: Snapshot<SectionGeometry>
   maskThicknessMm: number | null
@@ -53,7 +53,7 @@ export class RouteSectionsSolver extends BaseSolver {
     if (!result.done) return
 
     const { circuitJson, requiredSourcePortIds, artifactPrefix } = this.input
-    const db = circuitJsonDb(circuitJson)
+    const db = cju([...circuitJson])
     const [stackup] = db.pcb_stackup.list()
     const masks = stackup.layers.filter(
       (layer) => layer.layer_type === "soldermask",
@@ -82,10 +82,10 @@ export class RouteSectionsSolver extends BaseSolver {
       )
     }
 
-    const value = snapshot<RoutedSections>({
-      circuitJson,
-      scope: this.input.copperScope,
-      geometry,
+    const value: RoutedSections = Object.freeze({
+      circuitJson: structuredClone(circuitJson),
+      scope: snapshot(this.input.copperScope),
+      geometry: snapshot(geometry),
       maskThicknessMm: masks[0]?.thickness ?? null,
     })
     const scope = rootScope("board").child(artifactPrefix)
