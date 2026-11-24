@@ -94,4 +94,17 @@ test("a pre-existing routed loop has a routed topology diagnostic", async () => 
       message: /Routed cuts form a loop/,
     },
   )
+  const drawing = solver.visualize()
+  assert.ok(
+    drawing.texts?.some((text) =>
+      text.text.includes("Routed cuts form a loop"),
+    ),
+  )
+  assert.equal(
+    drawing.polygons?.filter(
+      (shape) =>
+        shape.layer === "failure" && shape.label?.startsWith("Short or loop"),
+    ).length,
+    3,
+  )
 })
