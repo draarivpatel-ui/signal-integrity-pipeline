@@ -33,9 +33,12 @@ const SCALE_LENGTHS_MM = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
 
 /** Pick a standard length near one eighth of the drawn width. */
 function getScaleLengthMm(widthMm: number): number {
-  const target = widthMm / 8
+  const targetLengthMm = widthMm / 8
   return SCALE_LENGTHS_MM.reduce((best, length) => {
-    if (Math.abs(Math.log(length / target)) < Math.abs(Math.log(best / target)))
+    if (
+      Math.abs(Math.log(length / targetLengthMm)) <
+      Math.abs(Math.log(best / targetLengthMm))
+    )
       return length
     return best
   })
@@ -147,27 +150,27 @@ function buildHeaderRows({
 export function buildPlanHeader({
   scene,
   frame,
-  boardTop,
+  boardTopMm,
   legend,
 }: {
   scene: PlanHeaderScene
   frame: PlanFrame
-  boardTop: number
+  boardTopMm: number
   legend: readonly string[]
 }): PlanHeader {
   const { widthMm, box } = frame
   const x = (box.minX + box.maxX) / 2
   const fontSizeMm = getPlanTextSizeMm(widthMm)
   const scaleLengthMm = getScaleLengthMm(widthMm)
-  const scaleY = boardTop + fontSizeMm * PLAN_BAND_GAP
-  const labelY = scaleY + fontSizeMm * 0.88
+  const scaleYMm = boardTopMm + fontSizeMm * PLAN_BAND_GAP
+  const labelYMm = scaleYMm + fontSizeMm * 0.88
   const lines: Line[] = [
     {
       points: [
-        { x: x - scaleLengthMm / 2, y: scaleY + fontSizeMm * 0.23 },
-        { x: x - scaleLengthMm / 2, y: scaleY },
-        { x: x + scaleLengthMm / 2, y: scaleY },
-        { x: x + scaleLengthMm / 2, y: scaleY + fontSizeMm * 0.23 },
+        { x: x - scaleLengthMm / 2, y: scaleYMm + fontSizeMm * 0.23 },
+        { x: x - scaleLengthMm / 2, y: scaleYMm },
+        { x: x + scaleLengthMm / 2, y: scaleYMm },
+        { x: x + scaleLengthMm / 2, y: scaleYMm + fontSizeMm * 0.23 },
       ],
       strokeColor: planColors.quiet,
       strokeWidth: fontSizeMm * 0.085,
@@ -178,7 +181,7 @@ export function buildPlanHeader({
   const texts: Text[] = [
     {
       x,
-      y: labelY,
+      y: labelYMm,
       text: `${scaleLengthMm} mm`,
       anchorSide: "center",
       fontSize: fontSizeMm,
@@ -187,7 +190,7 @@ export function buildPlanHeader({
     },
   ]
   const rects: Rect[] = []
-  let y = labelY + fontSizeMm * 1.66
+  let y = labelYMm + fontSizeMm * 1.66
   const rows = buildHeaderRows({ scene, fontSizeMm, widthMm, legend })
   for (const row of rows.reverse()) {
     texts.push({
