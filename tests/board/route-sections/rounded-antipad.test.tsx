@@ -1,14 +1,14 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
-import { segmentRoutes } from "../../../src/board"
+import { sectionRoutes } from "../../../src/board"
 import {
   getSectionInput,
   renderSectionBoard,
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing("keeps the arc of a rounded antipad", async () => {
+test("keeps the arc of a rounded antipad", async () => {
   const circuit = await renderSectionBoard({
     children: (
       <>
@@ -41,11 +41,11 @@ test.failing("keeps the arc of a rounded antipad", async () => {
       },
     }
   })
-  const { slices } = segmentRoutes({
+  const { sections } = sectionRoutes({
     circuit: board,
-    scope: getSectionInput({ circuit: board }).copperScope,
+    copperScope: getSectionInput({ circuit: board }).copperScope,
   })
-  assert.equal(slices.length, 3)
-  assert.ok(slices[1].references[0].lateralGapMm)
-  assert.equal("distance" in slices[1].references[0], false)
+  assert.equal(sections.length, 3)
+  assert.ok(sections[1].references[0].lateralGapMm)
+  assert.equal("distance" in sections[1].references[0], false)
 })

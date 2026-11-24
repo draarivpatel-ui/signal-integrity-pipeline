@@ -7,7 +7,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing("rejects a taper on the outgoing wire point", async () => {
+test("rejects a taper on the outgoing wire point", async () => {
   const circuit = await renderSectionBoard({
     children: <SectionTrace name="Taper" hasStartTeardrop />,
   })

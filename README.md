@@ -8,7 +8,7 @@ The stack retains Circuit JSON validation, physical stackup and stimulus helpers
 `TransientChannelSimulationPlanSolver` reads PCB transient channel simulation records written by core from TSX. It checks
 channel endpoints, IBIS models, timing and patterns, including pseudo-random binary sequences (PRBS).
 Each declared channel simulation becomes immutable inputs for route sections and buffer binding.
-RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
+`RouteSectionsSolver` divides scoped wires into sections where nearby copper and reference surfaces stay consistent. It also resolves physical endpoint contacts.
 
 Aggressors are output-capable pins retained by the copper scope that do not
 drive a declared channel in the simulation. This includes bidirectional
@@ -37,8 +37,10 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
   [*] --> Ready
-  Ready --> Complete: RouteSectionsSolver
-  Ready --> Failed: invalid input or undeclared aggressors
+  Ready --> Planned: TransientChannelSimulationPlanSolver
+  Planned --> Complete: RouteSectionsSolver
+  Planned --> Failed: missing required contact or reference, unsupported route or soldermask
+  Ready --> Failed: invalid input, conflicting IBIS model selections or undeclared aggressors
   Complete --> [*]
   Failed --> [*]
 ```

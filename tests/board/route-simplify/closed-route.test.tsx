@@ -1,13 +1,13 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { segmentRoutes } from "../../../src/board"
+import { sectionRoutes } from "../../../src/board"
 import {
   getSectionInput,
   renderSectionBoard,
   SectionPin,
 } from "../../fixtures/route-section-board"
 
-test.failing("keeps the three sides of a closed route", async () => {
+test("keeps the three sides of a closed route", async () => {
   const circuit = await renderSectionBoard({
     children: (
       <>
@@ -25,12 +25,12 @@ test.failing("keeps the three sides of a closed route", async () => {
       </>
     ),
   })
-  const geometry = segmentRoutes({
+  const geometry = sectionRoutes({
     circuit,
-    scope: getSectionInput({ circuit }).copperScope,
+    copperScope: getSectionInput({ circuit }).copperScope,
   })
   assert.deepEqual(
-    geometry.wires.map(({ a, b }) => [a, b]),
+    geometry.wires.map(({ startPoint, endPoint }) => [startPoint, endPoint]),
     [
       [
         [-3, 0],

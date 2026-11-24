@@ -48,23 +48,21 @@ export {
   type PlanVisualScene,
   planColors,
 } from "./plan-visual-types"
-export {
-  type RouteReference,
-  type RouteSlice,
-  type RouteWire,
-  type RouteXY,
-  routeContactFrame,
-  routePosition,
-  routeReferences,
-  routeSectionSteps,
-  type SectionGeometry,
-  segmentRoutes,
-} from "./route-sections"
+export { findContactWire } from "./route-contacts"
+export { findRouteReferences } from "./route-references"
+export type {
+  RouteReference,
+  RouteSection,
+  RouteWire,
+  SectionGeometry,
+} from "./route-section-types"
+export { sectionRoutes, stepRouteSections } from "./route-sections"
 export type { RouteSectionsInput } from "./route-sections-input"
 export {
-  type RoutedSections,
+  type RouteSectionsOutput,
   RouteSectionsSolver,
 } from "./route-sections-solver"
+export { getRoutePoint } from "./route-wire"
 export type {
   CircuitJson,
   SimulationExperiment,

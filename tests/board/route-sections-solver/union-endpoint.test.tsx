@@ -7,7 +7,7 @@ import {
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test.failing("marks port contacts on a shifted union centerline", async () => {
+test("marks port contacts on a shifted union centerline", async () => {
   const circuit = await renderSectionBoard({
     children: (
       <>
@@ -22,6 +22,6 @@ test.failing("marks port contacts on a shifted union centerline", async () => {
   solver.solve()
   const { wires } = solver.getOutput().value.geometry
   assert.equal(wires.length, 1)
-  assert.equal(wires[0].aPort, true)
-  assert.equal(wires[0].bPort, true)
+  assert.equal(wires[0].startTouchesPort, true)
+  assert.equal(wires[0].endTouchesPort, true)
 })

@@ -11,7 +11,7 @@ Rail shunts and differential terminations stay outside those paths, including te
 Each extracted trace keeps both physical contacts. Binding checks their selected models and detects signal contacts tied to ground.
 Removing an extracted trace or series passive from the receiver graph must disconnect its two ends.
 An alternate path reports the physical contacts and distinguishes an entirely routed loop from a bypass through ideal wiring.
-RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
+`RouteSectionsSolver` divides scoped wires into sections where nearby copper and reference surfaces stay consistent. It also resolves physical endpoint contacts.
 
 ```mermaid
 flowchart LR
@@ -29,8 +29,10 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
   [*] --> Ready
-  Ready --> Complete: RouteSectionsSolver
-  Ready --> Failed: invalid input or undeclared aggressors
+  Ready --> Planned: TransientChannelSimulationPlanSolver
+  Planned --> Complete: RouteSectionsSolver
+  Planned --> Failed: missing required contact or reference, unsupported route or soldermask
+  Ready --> Failed: invalid input, conflicting IBIS model selections or undeclared aggressors
   Complete --> [*]
   Failed --> [*]
 ```
