@@ -1,6 +1,6 @@
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { Point, Viewbox } from "graphics-debug"
 import type { Snapshot } from "../kernel"
-import type { CircuitJsonDb } from "./circuit-json-db"
 import {
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
@@ -77,7 +77,7 @@ export function routeSourceNets({
   db,
   traces,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   traces: ReadonlySet<PcbTraceId>
 }): RouteSourceNet[] {
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(db.toArray())
@@ -118,7 +118,7 @@ export function routeSourceNets({
 
 /** The board's physical extent, including unscoped copper on boards without a boundary. */
 /** @internal */
-export function routeBoardBox(db: CircuitJsonDb): Viewbox {
+export function routeBoardBox(db: CircuitJsonUtilObjects): Viewbox {
   const board = db.pcb_board.getWhere({})
   if (board?.outline) {
     const outline = routeBounds(board.outline)
@@ -154,7 +154,7 @@ export function routeCopperStyles({
   db,
   traces,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   traces: ReadonlySet<PcbTraceId>
 }): RouteCopperStyles {
   const nets = routeSourceNets({ db, traces })
@@ -185,7 +185,7 @@ export function admissionRouteView({
   scope,
   endpointSourcePortIds,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   scope: Snapshot<CopperScope>
   endpointSourcePortIds: ReadonlySet<SourcePortId>
 }): RouteCopperView {

@@ -14,8 +14,6 @@ export {
   unscopedAdmissionDrawing,
 } from "./admission-visual"
 /** @internal */
-export { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
-/** @internal */
 export {
   type ConnectivityMap,
   crossesDifferentialLegs,
@@ -98,7 +96,6 @@ export {
 } from "./route-visual-strip"
 export type {
   CircuitJson,
-  CircuitJsonSnapshot,
   Point,
   SimulationExperiment,
   SimulationIbisModel,

@@ -1,4 +1,5 @@
-import type { CircuitJsonDb, LaneMapping, SourcePortId } from "../board"
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
+import type { LaneMapping, SourcePortId } from "../board"
 import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import {
@@ -39,7 +40,7 @@ export function passiveModelContacts({
   db,
   modeling,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   modeling: Snapshot<SimulationModeling>
 }): ReadonlySet<SourcePortId> {
   const components = db.source_component.list()
@@ -81,7 +82,7 @@ export function validateRoutedContacts({
   stateIds,
   passiveContacts,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   experimentName: string
   endpoints: RequiredContacts
   scopedModels: readonly PipelineIbisModel[]
