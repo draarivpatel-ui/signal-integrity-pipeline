@@ -47,7 +47,8 @@ test("layered two-plane stripline approaches the parallel-plate limit", () => {
     widthMm *
     (((0.04 / 2.2) * 0.009 + (0.06 / 5.1) * 0.023) / lowerElectricalMm ** 2 +
       ((0.04 / 5.1) * 0.023 + (0.06 / 3.3) * 0.035) / upperElectricalMm ** 2)
-  const result = calculateRlgc({ crossSection })
+  const options = { panelsPerEdge: 6 }
+  const result = calculateRlgc({ crossSection, options })
   // The simple reference omits fringing at the two finite-width edges.
   assert.ok(
     Math.abs(
@@ -62,6 +63,7 @@ test("layered two-plane stripline approaches the parallel-plate limit", () => {
   const step = 0.001
   const [plus, minus] = [step, -step].map((perturbation) =>
     calculateCapacitanceMatrix({
+      options,
       crossSection: {
         ...crossSection,
         dielectricLayers: crossSection.dielectricLayers.map((layer) => ({
