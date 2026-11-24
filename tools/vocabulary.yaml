@@ -146,7 +146,6 @@ domain:
   layer: one copper or insulating sheet in the stackup
   ledger: the single record of every artifact path the pipeline writes; a second write to a path fails
   local: running on the user's computer through its installed native solver
-  longitudinal: along a route or trace
   loss: energy dissipated in conductors or dielectrics
   mark: a dot or ring drawn at a pin; a dot for a driver, a ring for a receiver
   mask: insulating soldermask on the outer copper layers
