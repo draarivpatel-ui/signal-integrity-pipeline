@@ -1,5 +1,5 @@
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import {
-  type CircuitJsonDb,
   type ConnectivityMap,
   type SourceNetId,
   type SourcePortId,
@@ -16,7 +16,7 @@ export function signalRailIds({
   connectivity,
   referenceIds,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   connectivity: ConnectivityMap
   referenceIds: readonly (SourcePortId | undefined)[]
 }): SignalRailIds {

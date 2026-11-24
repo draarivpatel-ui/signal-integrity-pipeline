@@ -1,10 +1,10 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { SimulationVoltageSource } from "circuit-json"
 import {
   type ConnectivityMap,
   findConnectedNetworks,
 } from "circuit-json-to-connectivity-map"
-import type { CircuitJsonSnapshot, SourceNetId, SourcePortId } from "../board"
-import { circuitJsonDb } from "../board"
+import type { CircuitJson, SourceNetId, SourcePortId } from "../board"
 import { type InspectedPin, referenceVoltages } from "../buffers"
 import { type SimulationModeling, voltageSourceTerminals } from "../simulation"
 
@@ -17,7 +17,7 @@ interface ReferenceBias {
 }
 
 interface ChannelSimulationSupplyOptions {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   connectivity: ConnectivityMap
   pins: Map<SourcePortId, InspectedPin>
   retained: ReadonlySet<SourcePortId | SourceNetId>
@@ -85,7 +85,7 @@ function retainedVoltageSources({
 
 /** Circuit with its retained sources and any inferred supplies. */
 interface ChannelSimulationSupplies {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   supplies: NonNullable<SimulationModeling["supplies"]>
 }
 
@@ -94,7 +94,7 @@ export function withChannelSimulationSupplies(
   options: ChannelSimulationSupplyOptions,
 ): ChannelSimulationSupplies {
   const { circuit, connectivity, pins, reference } = options
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const voltageSources = db.simulation_voltage_source.list()
   const { sources, sourceNets } = retainedVoltageSources({
     ...options,
@@ -150,7 +150,7 @@ export function withChannelSimulationSupplies(
       voltageV: voltage,
     })
   }
-  const discardedSources = new Set<CircuitJsonSnapshot[number]>(
+  const discardedSources = new Set<CircuitJson[number]>(
     voltageSources.filter((source) => !sources.has(source)),
   )
   return {

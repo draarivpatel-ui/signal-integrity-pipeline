@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cju } from "@tscircuit/circuit-json-util"
 import { simulation } from "@tscircuit/core"
-import { circuitJsonDb } from "../../../src/board"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { RouteBindingsSolver } from "../../../src/simulation"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
@@ -66,7 +66,7 @@ test("binding separates neighboring extracted ports while admission maps the dec
     (pcbTraceId) => !channelPcbTraceIds.includes(pcbTraceId),
   )
   assert.ok(neighborPcbTraceId)
-  const db = circuitJsonDb(bindings.circuitJson)
+  const db = cju([...bindings.circuitJson])
   const neighborSourceTraceId =
     db.pcb_trace.get(neighborPcbTraceId)?.source_trace_id
   assert.ok(neighborSourceTraceId)
