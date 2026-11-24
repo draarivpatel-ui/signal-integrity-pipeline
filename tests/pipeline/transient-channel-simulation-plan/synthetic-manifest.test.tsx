@@ -5,17 +5,17 @@ import { cju } from "@tscircuit/circuit-json-util"
 import { TwoTraceBoard } from "../../../examples/routed/two-trace-board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { listChannelSimulations } from "../../../src/pipeline/signals"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 import { renderCoreSignals } from "../../support/core-render"
 
-test("synthetic planning emits the board mappings and hashes the supplied bytes", async () => {
+test("synthetic planning emits the receiver paths and hashes the supplied bytes", async () => {
   const circuitJson = await renderCoreSignals(<TwoTraceBoard />)
   const bytes = Buffer.from(routedVisualIbis)
   const input = {
     circuitJson,
     ibisSources: { [inverterModelPath]: bytes },
-    scopeDistanceMm: 1,
+    nearbyGapMm: 1,
   }
   const solver = new TransientChannelSimulationPlanSolver(input)
   solver.step()
@@ -39,7 +39,7 @@ test("synthetic planning emits the board mappings and hashes the supplied bytes"
   const driverReceiverChannels =
     db.simulation_pcb_driver_receiver_channel.list()
   const traces = db.source_trace.list()
-  const expectedMappings = driverReceiverChannels.map((signal) => {
+  const expectedReceiverPaths = driverReceiverChannels.map((signal) => {
     assert.ok(
       "source_port_id" in signal.driver &&
         "source_port_id" in signal.receivers[0],
@@ -51,9 +51,14 @@ test("synthetic planning emits the board mappings and hashes the supplied bytes"
       return ports.length === 2 && ports.includes(from) && ports.includes(to)
     })
     assert.ok(trace, signal.name)
-    return { port: signal.name, from, to, sourceTraceId: trace.source_trace_id }
+    return {
+      channelName: signal.name,
+      fromSourcePortId: from,
+      toSourcePortId: to,
+      sourceTraceId: trace.source_trace_id,
+    }
   })
-  assert.deepEqual(plan.bindings.mappings, expectedMappings)
+  assert.deepEqual(plan.bindings.receiverPaths, expectedReceiverPaths)
   assert.equal(plan.sections.copperScope.channelPcbTraceIds.length, 2)
   assert.deepEqual(
     artifacts.map((artifact) => artifact.path),
@@ -71,7 +76,7 @@ test("synthetic planning emits the board mappings and hashes the supplied bytes"
     () =>
       new TransientChannelSimulationPlanSolver({
         ...input,
-        scopeDistanceMm: 0,
+        nearbyGapMm: 0,
       }).solve(),
     /scope distance/,
   )

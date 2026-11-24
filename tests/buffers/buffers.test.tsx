@@ -2,6 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import React from "react"
+import { cloneCircuitJson } from "../../src/board"
 import { admitBuffers, compileBuffers } from "../../src/buffers"
 import { rootScope, sha256 } from "../../src/kernel"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
@@ -20,8 +21,8 @@ test.skipIf(!modelDir)(description, async () => {
     ibisSources: ibis,
   })
   const declarations = generalDeclarations({
-    circuit: bindings.circuitJson,
-    mappings: bindings.mappings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+    receiverPaths: bindings.receiverPaths,
     modeling: bindings.modeling,
     controls: bindings.controls,
   })
