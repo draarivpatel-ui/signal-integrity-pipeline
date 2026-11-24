@@ -4,8 +4,7 @@ import {
   validateCircuitRecords,
 } from "../../board"
 import { failInvalidIbisSource, type IbisSources } from "../../buffers"
-import { Diagnostic, type SafeId, safeId, snapshot } from "../../kernel"
-import type { RouteCompileOptions } from "../../simulation"
+import { Diagnostic, type SafeId, safeId } from "../../kernel"
 import { listChannelSimulations, validateNearbyGapMm } from "../signals"
 
 /** Board and model sources supplied to channel simulation planning. */
@@ -13,7 +12,6 @@ export interface TransientChannelSimulationPlanInput {
   readonly circuitJson: CircuitJson
   readonly ibisSources: Readonly<IbisSources>
   readonly nearbyGapMm?: number
-  readonly materials?: RouteCompileOptions["materials"]
 }
 
 /** Model bytes that serialize as exact UTF-8 when exported in solver constructor inputs. */
@@ -107,7 +105,6 @@ export function capturePlanInput(
   return Object.freeze({
     circuitJson: structuredClone(input.circuitJson),
     nearbyGapMm: input.nearbyGapMm,
-    materials: snapshot(input.materials),
     ibisSources: captureIbisSources(input.ibisSources),
   })
 }
