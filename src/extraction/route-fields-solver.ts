@@ -7,17 +7,19 @@ import type {
   WireSection,
 } from "../board"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
-import { solveCrossSection } from "./cross-section"
-import type { CrossSection } from "./cross-section-types"
+import { calculateRlgc } from "../rlgc"
 import { fieldsDrawing } from "./fields-visual"
 import { type RouteCoupling, routeCoupling } from "./route-coupling"
 import {
   type ExtractedRouteSlice,
   type ExtractedRoutes,
   type RouteCoefficients,
+  type RouteCrossSection,
   type RouteMaterials,
+  rlgcCrossSection,
   routeCrossSection,
   type SolvedRouteSection,
+  snapshotRouteCoefficients,
 } from "./route-lines"
 
 /** Standard edge resolution and lower bound accepted by the routed field stage. */
@@ -104,7 +106,7 @@ export class RouteFieldsSolver extends BaseSolver {
   private pairIndex = 0
   private groupIndex = 0
   private currentSlice?: Snapshot<WireSection>
-  private current?: CrossSection
+  private current?: RouteCrossSection
   private output?: Produced<ExtractedRoutes>
   private solveMilliseconds = 0
   readonly materials: RouteMaterials
@@ -140,9 +142,9 @@ export class RouteFieldsSolver extends BaseSolver {
     const start = performance.now()
     let line: RouteCoefficients
     try {
-      line = snapshot(
-        solveCrossSection({
-          section,
+      line = snapshotRouteCoefficients(
+        calculateRlgc({
+          crossSection: rlgcCrossSection(section),
           options: { panelsPerEdge: this.input.panels ?? DEFAULT_FIELD_PANELS },
         }),
       )
