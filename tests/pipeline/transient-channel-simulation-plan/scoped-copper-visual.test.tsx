@@ -37,6 +37,7 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
   assert.equal(bindings.routedTraceCuts.length, 2)
   assert.equal(artifacts[0].path, "transient-channel-simulation-plan.json")
   const drawing = solver.visualize()
+  const header = drawing.texts?.filter((text) => text.layer === "header")
   assert.equal(
     drawing.polygons?.filter(
       (shape) => shape.layer === "endpoints" && shape.label?.includes("Driver"),
@@ -47,16 +48,28 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
     drawing.polygons?.some((shape) => shape.label?.includes("Load RX.A")),
   )
   assert.ok(drawing.lines?.some((line) => line.layer === "scope"))
-  assert.ok(
-    drawing.texts?.every((text) => text.anchorSide === "center" && text.y > 6),
-  )
+  assert.ok(header?.every((text) => text.anchorSide === "center" && text.y > 6))
   assert.ok(
     drawing.texts?.some((text) =>
       text.text.includes("Extra trace to RX pin A (not a receiver)"),
     ),
   )
   assert.equal(drawing.title, "DAISY — ready to simulate")
-  assert.equal(drawing.texts?.length, 5)
+  assert.equal(header?.length, 5)
+  assert.deepEqual(
+    drawing.texts
+      ?.filter((text) => text.layer === "pin labels")
+      .map(({ text }) => text)
+      .sort(),
+    ["MID pin A", "RX pin A", "TX pin Y"],
+  )
+  assert.deepEqual(
+    drawing.texts
+      ?.filter((text) => text.layer === "part labels")
+      .map(({ text }) => text)
+      .sort(),
+    ["MID", "RX", "TX"],
+  )
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
