@@ -12,7 +12,7 @@ Each extracted trace keeps both physical contacts. Binding checks their selected
 Removing an extracted trace or series passive from the receiver graph must disconnect its two ends.
 An alternate path reports the physical contacts and distinguishes an entirely routed loop from a bypass through ideal wiring.
 `CopperGeometryExtractionSolver` models scoped traces, vias, reference pours, and pad contacts. It groups wires into sections with consistent nearby copper and reference surfaces.
-RouteFieldsSolver screens nearby conductor pairs and calculates coupled coefficients for each unique section.
+`TransmissionLineRlgcSolver` screens nearby wire pairs for coupling and calculates per-unit-length RLGC matrices for each coupled group.
 IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during planning.
 
 ```mermaid
@@ -37,7 +37,7 @@ flowchart LR
   traces --> groups["Group ideal source contacts"]
   groups --> paths["Map ordered driver-to-receiver paths"]
   traces --> geometry["CopperGeometryExtractionSolver"]
-  geometry --> routeFields["RouteFieldsSolver"]
+  geometry --> transmissionLineRlgc["TransmissionLineRlgcSolver"]
   paths --> bindings["Binding inputs"]
   bindings --> checks["Check contacts and alternate paths around each segment"]
   paths --> manifest["Transient channel simulation plan manifest"]
@@ -48,8 +48,8 @@ stateDiagram-v2
   [*] --> Ready
   Ready --> Planned: TransientChannelSimulationPlanSolver
   Planned --> GeometryReady: CopperGeometryExtractionSolver
-  GeometryReady --> Complete: RouteFieldsSolver
-  GeometryReady --> Failed: invalid field geometry or inputs
+  GeometryReady --> Complete: TransmissionLineRlgcSolver
+  GeometryReady --> Failed: invalid cross-section geometry or material options
   Planned --> Failed: missing required contact or reference, unsupported route or soldermask
   Ready --> Failed: invalid input, conflicting IBIS model selections or undeclared aggressors
   Complete --> [*]
