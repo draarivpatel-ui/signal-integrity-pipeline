@@ -62,7 +62,7 @@ domain:
   capacitive: coupling between conductors through their electric field
   capture: a finite recording of voltages over time
   causal: a response that depends only on present and earlier input
-  channel: everything electrical between driver and receiver: lanes, their return paths and nearby copper
+  channel: everything electrical between driver and receiver: signal traces, return paths and nearby copper
   charge: electric charge on a conductor or dielectric interface in the cross-section solve
   chord: straight approximation to a densely tessellated curve
   circuit: an electrical network; also the Circuit JSON document that describes the board
@@ -121,6 +121,7 @@ domain:
   contact: a source port or source net used in electrical connectivity
   group: contacts joined by ideal connections before SPICE node numbering
   receiver: the declared destination of a channel path
+  path: the ordered connections from a driver to a receiver
   vertex: a point in a connection graph, represented by a source contact, ideal group or SPICE node
   lateral: distance transverse to a routed line in the board plane
   layer: one copper or insulating sheet in the stackup
@@ -265,9 +266,9 @@ general:
   # data shapes and code structure
   - all any array attachment base binding body boolean box bucket budget byte candidate cell chain child
   - code column command comment content context count data declaration definition descriptor element
-  - entry error event expression field file first format graph grid group hash index input item key
+  - entry error event expression field file first format graph grid hash index input item key
   - kind label last level line list location log map mapping member message metadata method mode name
-  - namespace number option options order output owner package parent part path pattern payload piece
+  - namespace number option options order output owner package parent part pattern payload piece
   - plan policy prefix progress record reference request rest result root row schema section selection
   - selector series source state status table text title token tree type unit validation value
   # program runs and tools
@@ -288,7 +289,7 @@ general:
   # math
   - cholesky delaunay interpolation multiply norm sum symmetrize transpose union total
   # geometry
-  - alignment anchor ancestor area aspect border boundary center contact connection coordinate curve
+  - alignment anchor ancestor area aspect border boundary center connection coordinate curve
   - depth direction distance division edge endpoint epsilon face gap height hole left length nearest
   - outline point position profile radius right round side sign size sizing spacing surface circle corner closest across
   - thickness triangle width
