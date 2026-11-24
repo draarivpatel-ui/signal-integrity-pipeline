@@ -31,7 +31,7 @@ import type {
   SourcePortId,
   SourceTraceId,
 } from "../ids"
-import type { CircuitJson, CircuitJsonSnapshot } from "../schema"
+import type { CircuitJson } from "../schema"
 import type { RoutedPoint } from "./types"
 
 /** Nearby copper can be one layer above or below the channel copper. */
@@ -88,7 +88,7 @@ interface CopperProximity {
 
 /** Channel, AC ground and supply source port and net IDs, with the proximity distance. */
 interface CopperScopeOptions {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   connectivity: ConnectivityMap
   channelSourceIds: ReadonlySet<SourcePortId | SourceNetId>
   referenceSourceIds: ReadonlySet<SourcePortId | SourceNetId>
@@ -350,7 +350,7 @@ export function channelCopperScopeWithBounds({
       "Copper scope distance must be finite and non-negative",
     )
   }
-  const db = cju(circuit.slice() as CircuitJson)
+  const db = cju([...circuit])
   const board = db.pcb_board.getWhere({})!
   const boardLayers = copperLayers(board)
   const blindViasAllowed = board.allow_blind_and_buried_vias === true
@@ -361,7 +361,7 @@ export function channelCopperScopeWithBounds({
   const sourcePortIdByPcbPortId = new Map<PcbPortId, SourcePortId>(
     pcbPorts.map((pcbPort) => [pcbPort.pcb_port_id, pcbPort.source_port_id]),
   )
-  const padRecords = new Set<CircuitJsonSnapshot[number]>([
+  const padRecords = new Set<CircuitJson[number]>([
     ...db.pcb_smtpad.list(),
     ...db.pcb_plated_hole.list(),
   ])

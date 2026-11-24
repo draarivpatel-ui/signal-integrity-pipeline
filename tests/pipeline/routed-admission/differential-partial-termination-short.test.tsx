@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
@@ -16,11 +16,11 @@ test("an interior short cannot divert the partial positive leg through the far t
     ),
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
-  const resistor = circuitJsonDb(circuitJson).source_component.getWhere({
+  const resistor = cju([...circuitJson]).source_component.getWhere({
     name: "RA1",
   })
   assert.ok(resistor)
-  const contact = circuitJsonDb(circuitJson).source_port.getWhere({
+  const contact = cju([...circuitJson]).source_port.getWhere({
     source_component_id: resistor.source_component_id,
     name: "pin2",
   })
