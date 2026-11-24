@@ -86,7 +86,7 @@ flowchart TD
 ```
 
 The pipeline is inspectable with solver-utils. All six stage rows exist before the
-first step; each stage processes all admitted channel simulations in order, with no nested channel simulation
+first step; each stage processes all planned channel simulations in order, with no nested channel simulation
 pipelines.
 
 <!-- routed-stages:start -->
