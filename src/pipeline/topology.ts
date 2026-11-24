@@ -43,10 +43,10 @@ type ReachableCopper = Set<CopperPointKey>
 /** Look up the complete connected copper net for each junction. */
 type CopperNets = Record<CopperPointKey, CopperPointKey[]>
 
-/** Readable names for the ports of admitted channel endpoints. */
+/** Readable names for the ports of validated channel endpoints. */
 type PortNames = Record<SourcePortId, string>
 
-/** Source records admitted to the routed copper graph. */
+/** Source records in the routed copper graph. */
 interface SelectedCopper {
   selected: ReadonlySet<SourcePortId | SourceNetId>
   traceIds: ReadonlySet<SourceTrace["source_trace_id"]>
@@ -206,7 +206,7 @@ function withPassiveBridges({
   return connected
 }
 
-/** Describe the component-bound ports admitted by channel endpoint resolution. */
+/** Describe the component-bound ports resolved as channel endpoints. */
 function portNames(db: CircuitJsonUtilObjects): PortNames {
   const components = Object.fromEntries(
     db.source_component

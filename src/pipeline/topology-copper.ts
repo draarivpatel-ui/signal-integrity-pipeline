@@ -92,7 +92,7 @@ interface WireJunctions {
 /** A route point that can end a wire. Through-pad copper comes from the pad record. */
 type WireEnd = PcbTraceRoutePointWire | PcbTraceRoutePointVia
 
-/** Source ports and routes admitted to physical topology validation. */
+/** Source ports and routes selected for physical topology validation. */
 interface CopperSelection {
   circuit: CircuitJson
   ports: readonly PcbPort[]
