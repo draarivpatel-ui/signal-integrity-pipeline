@@ -15,7 +15,8 @@ import {
   getSegmentKey,
   orderExtraTraces,
 } from "./rows"
-import type { FailedPlanAttempt, PlanPath, PlanTopology } from "./visual"
+import type { FailedPlanAttempt, PlanPath } from "./visual"
+import type { PlanTopology } from "./visual-topology"
 
 /** Join names or quantities as they would appear in a sentence. */
 function joinParts(parts: readonly string[]): string {
@@ -191,13 +192,13 @@ function describeBypass({
   let end = toSourcePortId
   if (path?.fromSourcePortId === toSourcePortId)
     [start, end] = [toSourcePortId, fromSourcePortId]
-  const text = `${path?.signalName || "The signal"} has a bypass from ${describePartOrPin({ sourcePortId: start, db })} to ${describePartOrPin({ sourcePortId: end, db })}`
+  const text = `${path?.legLabel || "The signal"} has a bypass from ${describePartOrPin({ sourcePortId: start, db })} to ${describePartOrPin({ sourcePortId: end, db })}`
   if (!skipped.length) return `${text}.`
   return `${text}, skipping ${joinParts(skipped)}.`
 }
 
 /** State the problem supported by the diagnostic's board and path evidence. */
-export function describePlanFailure({
+function describePlanFailure({
   issue,
   error,
   paths,
@@ -217,15 +218,20 @@ export function describePlanFailure({
   const path = fault.incompletePaths[0]
   if (issue?.code === "circuit_schema" || issue?.code === "ibis_asset")
     return issue.message
+  if (
+    issue?.code === "simulation_timing" ||
+    issue?.code === "ibis_asset_missing"
+  )
+    return issue.message.slice(issue.code.length + 2)
   if (path) {
-    const { fromSourcePortId, toSourcePortId, signalName } = path
+    const { fromSourcePortId, toSourcePortId, legLabel } = path
     const fromPart = findPinPart({ sourcePortId: fromSourcePortId, db })?.name
     const toPart = findPinPart({ sourcePortId: toSourcePortId, db })?.name
     if (issue?.code === "channel_receiver_terminal_missing")
-      return `${getPinName({ sourcePortId: toSourcePortId, db })} has no board pad to receive ${signalName} from ${describePartOrPin({ sourcePortId: fromSourcePortId, db })}.`
+      return `${getPinName({ sourcePortId: toSourcePortId, db })} has no board pad to receive ${legLabel} from ${describePartOrPin({ sourcePortId: fromSourcePortId, db })}.`
     if (fromPart && toPart && fromPart !== toPart)
-      return `${signalName} has an incomplete route between ${fromPart} and ${toPart}.`
-    return `${signalName} has an incomplete route from ${getPinName({ sourcePortId: fromSourcePortId, db })} to ${getPinName({ sourcePortId: toSourcePortId, db })}.`
+      return `${legLabel} has an incomplete route between ${fromPart} and ${toPart}.`
+    return `${legLabel} has an incomplete route from ${getPinName({ sourcePortId: fromSourcePortId, db })} to ${getPinName({ sourcePortId: toSourcePortId, db })}.`
   }
   const pins = [...fault.sourcePortIds]
   const names = pins.map((sourcePortId) => getPinName({ sourcePortId, db }))
@@ -233,10 +239,12 @@ export function describePlanFailure({
     const driver = paths.find(({ fromSourcePortId }) =>
       fault.sourcePortIds.has(fromSourcePortId),
     )
-    return `${names[0]} has no board pad to drive ${driver?.signalName || "the signal"}.`
+    return `${names[0]} has no board pad to drive ${driver?.legLabel || "the signal"}.`
   }
-  if (issue?.code === "channel_fanout" && !topology)
-    return issue.message.slice(issue.code.length + 2)
+  if (issue?.code === "channel_fanout") {
+    if ("rejections" in issue) return issue.message.slice(issue.code.length + 2)
+    if (issue.hint) return issue.hint
+  }
   if (issue?.code === "channel_fanout" && fault.sourceTraceIds.size) {
     const parts = new Set(
       pins.map((sourcePortId) => describePartOrPin({ sourcePortId, db })),

@@ -18,8 +18,8 @@ import {
   findConnectionPath,
 } from "./connection-paths"
 import {
-  differentialContacts,
-  differentialGroups,
+  listDifferentialContacts,
+  resolveDifferentialGroups,
 } from "./differential-contacts"
 import {
   getIdealGroupId,
@@ -30,7 +30,7 @@ import {
   type SourceContactId,
 } from "./ideal-connectivity"
 import type { TraceContacts } from "./route-inputs"
-import { signalRailIds } from "./signal-rails"
+import { collectSignalRailIds } from "./signal-rails"
 import { type ChannelSegment, connectTraces } from "./trace-connections"
 import type { SimulationModeling } from "./types"
 
@@ -45,7 +45,7 @@ export interface ReceiverGraphs extends IdealConnectivity {
 }
 
 /** Retain the physical contacts when projecting an edge onto ideal groups. */
-function idealReceiverConnection({
+function projectReceiverConnection({
   evidence,
   groups,
 }: {
@@ -64,7 +64,7 @@ function idealReceiverConnection({
 type WireOrPassive = Connection<SourceContactId, PassiveBridge | null>
 
 /** Find series bridge evidence without traversing the opposite leg's wire backbone. */
-function seriesOnLeg({
+function findLegSeriesBridges({
   sourcePortIds,
   oppositeSourcePortIds,
   wireGraph,
@@ -109,7 +109,7 @@ function seriesOnLeg({
 }
 
 /** Exclude terminations across combined wire groups and retain genuine shorted series paths. */
-function receiverSeriesBridges({
+function filterReceiverSeriesBridges({
   bridges,
   channels,
   wires,
@@ -118,10 +118,10 @@ function receiverSeriesBridges({
   channels: readonly SimulationPcbDriverReceiverChannel[]
   wires: SourceContactId[][]
 }): PassiveBridge[] {
-  const contacts = differentialContacts(channels)
+  const contacts = listDifferentialContacts(channels)
   if (!contacts.length) return [...bridges]
   const groups = groupConnectedVertices(wires)
-  const differential = differentialGroups({ contacts, groups })
+  const differential = resolveDifferentialGroups({ contacts, groups })
   const wireConnections = wires.flatMap(([fromVertexId, ...toVertexIds]) =>
     toVertexIds.map(
       (toVertexId): WireOrPassive => ({
@@ -160,13 +160,13 @@ function receiverSeriesBridges({
       )
     })
     if (!crossing.length) continue
-    const positiveSeries = seriesOnLeg({
+    const positiveSeries = findLegSeriesBridges({
       sourcePortIds: positiveSourcePortIds,
       oppositeSourcePortIds: negativeSourcePortIds,
       wireGraph,
       connections,
     })
-    const negativeSeries = seriesOnLeg({
+    const negativeSeries = findLegSeriesBridges({
       sourcePortIds: negativeSourcePortIds,
       oppositeSourcePortIds: positiveSourcePortIds,
       wireGraph,
@@ -180,7 +180,7 @@ function receiverSeriesBridges({
 }
 
 /** Include passive segments only in components with a channel trace or a declared signal contact. */
-function channelConnections({
+function selectChannelConnections({
   idealConnections,
   channels,
   groups,
@@ -240,12 +240,12 @@ export function buildReceiverGraphs({
         (selector) => selectPort({ circuit, selector }).source_port_id,
       ),
   )
-  const rails = signalRailIds({
+  const rails = collectSignalRailIds({
     db,
     connectivity: getSourcePortConnectivityMapFromCircuitJson(circuit),
     referenceSourcePortIds: [groundSourcePortId, ...referenceSourcePortIds],
   })
-  const seriesBridges = receiverSeriesBridges({
+  const seriesBridges = filterReceiverSeriesBridges({
     bridges: passiveBridges({ circuit, excluded: rails }),
     channels,
     wires: [
@@ -265,13 +265,13 @@ export function buildReceiverGraphs({
     })),
   ]
   const idealConnections = physical.map(({ evidence }) =>
-    idealReceiverConnection({ evidence, groups: idealConnectivity.groups }),
+    projectReceiverConnection({ evidence, groups: idealConnectivity.groups }),
   )
   return {
     ...idealConnectivity,
     physical: buildConnectionGraph(physical),
     ideal: buildConnectionGraph(idealConnections),
-    channelConnections: channelConnections({
+    channelConnections: selectChannelConnections({
       idealConnections,
       channels,
       groups: idealConnectivity.groups,

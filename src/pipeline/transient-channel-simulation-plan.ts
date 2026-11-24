@@ -13,8 +13,7 @@ import {
   sha256,
   snapshot,
 } from "../kernel"
-import type { RouteBindingsInput, TraceContacts } from "../simulation"
-import type { ChannelTrace } from "./modeling"
+import type { RouteBindingsInput } from "../simulation"
 import {
   capturePlanInput,
   type TransientChannelSimulationPlanInput,
@@ -45,15 +44,6 @@ export interface TransientChannelSimulationPlan {
 /** The completed channel plans and their plan manifest. */
 type PlanOutput = Produced<readonly TransientChannelSimulationPlan[]>
 
-/** Take the physical port pair from each trace, including loads beyond the receivers. */
-function getTraceContacts(channelTrace: ChannelTrace): TraceContacts {
-  return {
-    sourceTraceId: channelTrace.sourceTraceId,
-    fromSourcePortId: channelTrace.from.sourcePortId,
-    toSourcePortId: channelTrace.to.sourcePortId,
-  }
-}
-
 /** Lower the validated declaration into sectioning and binding inputs. */
 function buildChannelPlan({
   input,
@@ -75,7 +65,7 @@ function buildChannelPlan({
   const artifactPrefix = `channelSimulations/${simulationPcbTransientChannelSimulationId}`
   const circuitJson = snapshot(prepared.circuit)
   const modeling = snapshot(prepared.settings)
-  const traceContacts = snapshot(modeling.channelTraces.map(getTraceContacts))
+  const { traceContacts } = modeling
   const requiredSourcePortIds = Object.freeze([
     ...new Set(
       traceContacts.flatMap(({ fromSourcePortId, toSourcePortId }) => [
