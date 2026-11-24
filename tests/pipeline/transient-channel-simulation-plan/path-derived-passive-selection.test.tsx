@@ -7,7 +7,7 @@ import { ChannelFixture } from "../../fixtures/channel-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("mapping-only declarations require the selected model for physical cut contacts", async () => {
+test("receiver paths without explicit trace contacts require the selected model for trace contacts", async () => {
   const circuitJson = await renderSignals({
     tree: <ChannelFixture route="receiver-only" namedNets />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],

@@ -8,13 +8,13 @@ import "../../fixtures/extend-expect-circuit-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("rejects an ideal bypass across a driver-side cut and series resistor", async () => {
+test("rejects an ideal bypass across a receiver-side trace and series resistor", async () => {
   const circuitJson = await renderSignals({
     tree: (
       <ChannelFixture route="series">
-        <trace from=".TX > .Y" to=".RS > .pin2" />
+        <trace from=".RS > .pin1" to=".RX > .A" />
         <pcbnotetext
-          text="Ideal TX.Y to RS.pin2 bypasses left cut + RS"
+          text="Ideal RS.pin1 to RX.A bypasses RS + right trace"
           fontSize={0.45}
           pcbX={0}
           pcbY={4.8}
@@ -33,18 +33,18 @@ test("rejects an ideal bypass across a driver-side cut and series resistor", asy
   const { traceContacts } = bindings
   const from = selectPort({
     circuit: circuitJson,
-    selector: { component: "TX", port: "Y" },
+    selector: { component: "RS", port: "pin2" },
   })
   const to = selectPort({
     circuit: circuitJson,
-    selector: { component: "RS", port: "pin1" },
+    selector: { component: "RX", port: "A" },
   })
-  const cut = traceContacts.find(
+  const contacts = traceContacts.find(
     ({ fromSourcePortId, toSourcePortId }) =>
       fromSourcePortId === from.source_port_id &&
       toSourcePortId === to.source_port_id,
   )
-  assert.ok(cut)
+  assert.ok(contacts)
   assert.equal(traceContacts.length, 2)
   assert.throws(
     () =>
@@ -55,7 +55,7 @@ test("rejects an ideal bypass across a driver-side cut and series resistor", asy
     {
       code: "channel_short",
       message: new RegExp(
-        `${cut.sourceTraceId}.*${cut.fromSourcePortId}.*${cut.toSourcePortId}`,
+        `${contacts.sourceTraceId}.*${contacts.fromSourcePortId}.*${contacts.toSourcePortId}`,
       ),
     },
   )
