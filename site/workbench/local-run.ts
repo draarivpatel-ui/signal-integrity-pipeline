@@ -8,9 +8,9 @@ import {
 import type { IbisSources } from "../../src/buffers"
 import { Diagnostic } from "../../src/kernel"
 import {
-  RoutedAdmissionSolver,
   RoutedPipelineSolver,
   routedStages,
+  TransientChannelSimulationPlanSolver,
 } from "../../src/pipeline"
 import type {
   ReceiverThreshold,
@@ -126,21 +126,21 @@ function localProblem({
   }
 }
 
-/** An aggressor and its drive state as lowered by routed admission. */
-export interface AdmittedAggressor {
+/** An aggressor and its drive state as lowered by channel simulation planning. */
+export interface PlannedAggressor {
   port: SourcePortId
   enabled: boolean
 }
 
-/** Read the same admitted aggressor states that the simulation will use. */
-export function admittedAggressors({
+/** Read the same planned aggressor states that the simulation will use. */
+export function plannedAggressors({
   input,
   simulation,
 }: {
   input: InspectorInput
   simulation: ChannelSimulation
-}): AdmittedAggressor[] {
-  const admission = new RoutedAdmissionSolver({
+}): PlannedAggressor[] {
+  const planner = new TransientChannelSimulationPlanSolver({
     ...localProblem({ input, simulation }),
     scopeDistanceMm: stimulusRadius({
       simulation,
@@ -148,10 +148,12 @@ export function admittedAggressors({
     }),
     captureDrivers: true,
   })
-  admission.solve()
-  if (admission.failed)
-    throw new Error(admission.error ?? "Routed admission failed.")
-  const [plan] = admission.getOutput().value
+  planner.solve()
+  if (planner.failed)
+    throw new Error(
+      planner.error ?? "Transient channel simulation planning failed.",
+    )
+  const [plan] = planner.getOutput().value
   const db = cju([...input.circuit])
   const declaredDrivers = new Set(
     db.simulation_pcb_driver_receiver_channel
@@ -300,9 +302,11 @@ export async function runLocalSimulation({
 
     const [result] = solver.getOutput().channelSimulations
     if (!result) throw new Error("The selected simulation produced no capture.")
-    for (const plan of solver.stageOutput("RoutedAdmissionSolver").value)
+    for (const plan of solver.stageOutput(
+      "TransientChannelSimulationPlanSolver",
+    ).value)
       for (const warning of plan.warnings)
-        log({ stage: "Admission", level: "Warning", message: warning })
+        log({ stage: "Channel plan", level: "Warning", message: warning })
     const { models, mappings } = solver.stageOutput("RouteBindingsSolver")
       .value[0]
     log({

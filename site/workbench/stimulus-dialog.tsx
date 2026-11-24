@@ -6,7 +6,7 @@ import type {
   InspectorInput,
 } from "../channel-inspector/input"
 import { Modal } from "./chrome"
-import { type AdmittedAggressor, admittedAggressors } from "./local-run"
+import { type PlannedAggressor, plannedAggressors } from "./local-run"
 import {
   displayBuffer,
   displayDirection,
@@ -26,9 +26,9 @@ type StimulusTab = (typeof stimulusTabs)[number]
 const nanosecondsPerMillisecond = 1e6
 const bitsPerMegabit = 1e6
 
-/** Admission either reports real driver states or explains why the design cannot run. */
+/** Channel planning either reports real driver states or explains why the design cannot run. */
 interface AggressorPreview {
-  drivers: AdmittedAggressor[]
+  drivers: PlannedAggressor[]
   error?: string
 }
 
@@ -48,7 +48,7 @@ function previewAggressors({
       ...circuit,
     ]).simulation_pcb_transient_channel_simulation.get(id)!
     return {
-      drivers: admittedAggressors({ input: { ...input, circuit }, simulation }),
+      drivers: plannedAggressors({ input: { ...input, circuit }, simulation }),
     }
   } catch (cause) {
     return { drivers: [], error: (cause as Error).message }
@@ -423,7 +423,7 @@ export function StimulusDialog({
                 </p>
               )}
               {preview && !preview.error && preview.drivers.length === 0 && (
-                <p>No aggressor drivers in the admitted copper scope.</p>
+                <p>No aggressor drivers in the planned copper scope.</p>
               )}
             </>
           )}
