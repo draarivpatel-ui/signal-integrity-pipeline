@@ -1,190 +1,166 @@
 import { cju } from "@tscircuit/circuit-json-util"
-import { hypotenuse } from "../kernel"
-
 import {
   type ConnectivityMap,
   getSourcePortConnectivityMapFromCircuitJson,
   sourceNetMembers,
 } from "./connectivity"
 import type { SourceTraceId } from "./ids"
-import { type RouteWire, routePosition } from "./route-sections"
+import type { RouteWire } from "./route-section-types"
+import { getDirectionKey, getRoutePoint, groupWiresByGap } from "./route-wire"
 import type { CircuitJson, SourceTrace } from "./schema"
 
-/** Require more than this shared length before merging parallel copper. */
+/** Require a positive shared length before merging parallel copper. */
 const MIN_OVERLAP_LENGTH_MM = 1e-6
-
-/** Geometric tolerance for touching edges, short intervals and coincident join endpoints. */
+/** Geometry tolerance for touching edges, short intervals and coincident joins. */
 const UNION_TOLERANCE_MM = 1e-7
-
-/** Round direction keys before grouping nominally parallel copper. */
-const DIRECTION_DECIMAL_PLACES = 7
 
 type CopperGroupKey = string
 
-/** Parallel wires considered together for physical copper overlap. */
-type RouteWireGroup = RouteWire[]
+/** A set of wires in contact on the same electrical net and layer. */
+type WireGroup = RouteWire[]
 
-/** Compress a connected set of overlapping same-net copper bodies. */
-function root({
+/** Find the common root index without modifying the caller's array. */
+function findRootIndex({
   index,
   parents,
 }: {
   index: number
-  parents: number[]
+  parents: readonly number[]
 }): number {
-  if (parents[index] === index) return index
-  parents[index] = root({ index: parents[index], parents })
-  return parents[index]
+  while (parents[index] !== index) index = parents[index]
+  return index
 }
 
-/** Relative direction of the physical endpoints along the canonical wire axis. */
-function wireDirection(wire: RouteWire): number {
-  if (
-    (wire.b[0] - wire.a[0]) * wire.u[0] + (wire.b[1] - wire.a[1]) * wire.u[1] >
-    0
-  )
-    return 1
+/** Direction of travel relative to the wire's canonical axis. */
+function getWireOrientation(wire: RouteWire): number {
+  const [x, y] = wire.direction
+  const dx = wire.endPoint[0] - wire.startPoint[0]
+  const dy = wire.endPoint[1] - wire.startPoint[1]
+  if (dx * x + dy * y > 0) return 1
   return -1
 }
 
-/** The electrical seed shared by all traces on the net. */
-function wireNet({
-  source,
+/** A stable identifier shared by traces attached to the same electrical net. */
+function getTraceNetKey({
+  sourceTrace,
   connectivity,
 }: {
-  source: SourceTrace
+  sourceTrace: SourceTrace
   connectivity: ConnectivityMap
 }): string {
-  const port =
-    source.connected_source_port_ids[0] ?? source.connected_source_net_ids?.[0]
-  if (!port) return source.source_trace_id
-  return [...sourceNetMembers({ connectivity, memberId: port })].sort()[0]
+  const sourceMemberId =
+    sourceTrace.connected_source_port_ids[0] ??
+    sourceTrace.connected_source_net_ids?.[0]
+  if (sourceMemberId === undefined) return sourceTrace.source_trace_id
+  return [
+    ...sourceNetMembers({ connectivity, memberId: sourceMemberId }),
+  ].sort()[0]
 }
 
-/** Partition parallel wires into connected sets based on their physical overlap. */
-function connectedWires(group: RouteWireGroup): Iterable<RouteWireGroup> {
-  const parents = group.map((_, i) => i)
-  for (let i = 0; i < group.length; i++) {
-    for (let j = i + 1; j < group.length; j++) {
-      const a = group[i]
-      const b = group[j]
-      const overlap = Math.min(a.end, b.end) - Math.max(a.start, b.start)
-      if (!(overlap > MIN_OVERLAP_LENGTH_MM)) continue
-      const separation = Math.abs(a.transverse - b.transverse)
-      if (!(separation <= (a.width + b.width) / 2 + UNION_TOLERANCE_MM))
+/** Partition parallel wires by physical contact. */
+function groupConnectedWires(wires: WireGroup): Iterable<WireGroup> {
+  const parents = wires.map((_, index) => index)
+  for (const [index, wire] of wires.entries()) {
+    for (let otherIndex = index + 1; otherIndex < wires.length; otherIndex++) {
+      const otherWire = wires[otherIndex]
+      const overlapMm =
+        Math.min(wire.endMm, otherWire.endMm) -
+        Math.max(wire.startMm, otherWire.startMm)
+      if (overlapMm <= MIN_OVERLAP_LENGTH_MM) continue
+      const separationMm = Math.abs(
+        wire.lateralOffsetMm - otherWire.lateralOffsetMm,
+      )
+      if (
+        separationMm >
+        (wire.widthMm + otherWire.widthMm) / 2 + UNION_TOLERANCE_MM
+      )
         continue
-      parents[root({ index: j, parents })] = root({ index: i, parents })
+      parents[findRootIndex({ index: otherIndex, parents })] = findRootIndex({
+        index,
+        parents,
+      })
     }
   }
-  const components = new Map<number, RouteWireGroup>()
-  for (const [i, wire] of group.entries()) {
-    const component = root({ index: i, parents })
-    components.set(component, [...(components.get(component) ?? []), wire])
+  const groups = new Map<number, WireGroup>()
+  for (const [index, wire] of wires.entries()) {
+    const rootIndex = findRootIndex({ index, parents })
+    const group = groups.get(rootIndex)
+    if (group) group.push(wire)
+    else groups.set(rootIndex, [wire])
   }
-  return components.values()
+  return groups.values()
 }
 
-/** Join laterally touching wires present in one longitudinal interval. */
-function transverseClusters(active: RouteWire[]): RouteWireGroup[] {
-  const clusters: RouteWireGroup[] = []
-  for (const wire of active) {
-    const last = clusters.at(-1)
-    if (!last) {
-      clusters.push([wire])
-      continue
-    }
-    const rightEdge = Math.max(
-      ...last.map((wire) => wire.transverse + wire.width / 2),
-    )
-    const leftEdge = wire.transverse - wire.width / 2
-    if (leftEdge <= rightEdge + UNION_TOLERANCE_MM) {
-      last.push(wire)
-      continue
-    }
-    clusters.push([wire])
-  }
-  return clusters
-}
-
-/** Build the union wire and the joins from the original endpoints to its centreline. */
-function unionCluster({
-  cluster,
-  start,
-  end,
-}: Pick<RouteWire, "start" | "end"> & {
-  cluster: RouteWireGroup
+/** Build the occupied rectangle and join the original wires to its centerline. */
+function mergeWires({
+  wires,
+  startMm,
+  endMm,
+}: Pick<RouteWire, "startMm" | "endMm"> & {
+  wires: WireGroup
 }): RouteWire {
-  const wire = [...cluster].sort((a, b) => a.id - b.id)[0]
-  const low = Math.min(
-    ...cluster.map((wire) => wire.transverse - wire.width / 2),
+  const firstWire = wires.toSorted((a, b) => a.wireIndex - b.wireIndex)[0]
+  const minMm = Math.min(
+    ...wires.map((wire) => wire.lateralOffsetMm - wire.widthMm / 2),
   )
-  const high = Math.max(
-    ...cluster.map((wire) => wire.transverse + wire.width / 2),
+  const maxMm = Math.max(
+    ...wires.map((wire) => wire.lateralOffsetMm + wire.widthMm / 2),
   )
-  const body = {
-    ...wire,
-    start,
-    end,
-    width: high - low,
-    transverse: (low + high) / 2,
+  const mergedWire = {
+    ...firstWire,
+    startMm,
+    endMm,
+    widthMm: maxMm - minMm,
+    lateralOffsetMm: (minMm + maxMm) / 2,
   }
-  const endpoints = [start, end]
-  if (wireDirection(wire) < 0) endpoints.reverse()
-  const [a, b] = endpoints.map((position) =>
-    routePosition({ wire: body, position }),
+  const positionsMm = [startMm, endMm]
+  if (getWireOrientation(firstWire) < 0) positionsMm.reverse()
+  const [startPoint, endPoint] = positionsMm.map((positionMm) =>
+    getRoutePoint({ wire: mergedWire, positionMm }),
   )
-  const joins = cluster.flatMap((original) =>
-    [start, end].map((position) => ({
-      source: original.source,
-      trace: original.trace,
-      from: routePosition({ wire: original, position }),
-      to: routePosition({ wire: body, position }),
-    })),
-  )
-  const lateralJoins = joins.filter((join) => {
-    return (
-      hypotenuse(join.from[0] - join.to[0], join.from[1] - join.to[1]) >
-      UNION_TOLERANCE_MM
+  const joins = wires
+    .toSorted((a, b) => a.wireIndex - b.wireIndex)
+    .filter(
+      (wire) =>
+        Math.abs(wire.lateralOffsetMm - mergedWire.lateralOffsetMm) >
+        UNION_TOLERANCE_MM,
     )
-  })
-  return {
-    ...body,
-    a,
-    b,
-    joins: lateralJoins,
-  }
+    .flatMap((wire) =>
+      [startMm, endMm].map((positionMm) => ({
+        sourceTraceId: wire.sourceTraceId,
+        pcbTraceId: wire.pcbTraceId,
+        fromPoint: getRoutePoint({ wire, positionMm }),
+        toPoint: getRoutePoint({ wire: mergedWire, positionMm }),
+      })),
+    )
+  return { ...mergedWire, startPoint, endPoint, joins }
 }
 
-/** Split connected wires at overlap ends and union each interval across its width. */
-function unionComponent({
-  component,
-  result,
-}: {
-  component: RouteWireGroup
-  result: RouteWire[]
-}): void {
-  if (component.length === 1) {
-    result.push(component[0])
-    return
-  }
-  const cuts = [
-    ...new Set(component.flatMap((wire) => [wire.start, wire.end])),
+/** Partition connected wires at the ends of each copper overlap. */
+function unionWireGroup(wires: WireGroup): RouteWire[] {
+  if (wires.length === 1) return wires
+  const boundariesMm = [
+    ...new Set(wires.flatMap(({ startMm, endMm }) => [startMm, endMm])),
   ].sort((a, b) => a - b)
-  for (let i = 1; i < cuts.length; i++) {
-    const start = cuts[i - 1]
-    const end = cuts[i]
-    if (end - start < UNION_TOLERANCE_MM) continue
-    const middle = (start + end) / 2
-    const active = component.filter(
-      (wire) => wire.start < middle && wire.end > middle,
+  const mergedWires: RouteWire[] = []
+  for (let index = 1; index < boundariesMm.length; index++) {
+    const startMm = boundariesMm[index - 1]
+    const endMm = boundariesMm[index]
+    if (endMm - startMm < UNION_TOLERANCE_MM) continue
+    const midpointMm = (startMm + endMm) / 2
+    const active = wires.filter(
+      (wire) => wire.startMm < midpointMm && wire.endMm > midpointMm,
     )
-    active.sort((a, b) => a.transverse - b.transverse)
-    for (const cluster of transverseClusters(active))
-      result.push(unionCluster({ cluster, start, end }))
+    for (const group of groupWiresByGap({
+      wires: active,
+      gapMm: UNION_TOLERANCE_MM,
+    }))
+      mergedWires.push(mergeWires({ wires: group, startMm, endMm }))
   }
+  return mergedWires
 }
 
-/** Exact transverse metal union, with equipotential lateral joins at overlap-patch ends. */
+/** Union touching, parallel same-net conductors and retain their lateral joins. */
 export function unionRouteWires({
   wires,
   circuit,
@@ -193,36 +169,35 @@ export function unionRouteWires({
   circuit: CircuitJson
 }): RouteWire[] {
   const db = cju([...circuit])
-  const connectivity = getSourcePortConnectivityMapFromCircuitJson(db.toArray())
-  const nets = new Map<SourceTraceId, string>()
-  const sources = db.source_trace.list()
+  const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
+  const netKeys = new Map<SourceTraceId, string>()
   const groups = new Map<CopperGroupKey, RouteWire[]>()
   for (const wire of wires) {
-    let net = nets.get(wire.source)
-    if (!net) {
-      const source = sources.find(
-        (source) => source.source_trace_id === wire.source,
-      )!
-      net = wireNet({ source, connectivity })
-      nets.set(wire.source, net)
+    let netKey = netKeys.get(wire.sourceTraceId)
+    if (netKey === undefined) {
+      const sourceTrace = db.source_trace.get(wire.sourceTraceId)
+      if (!sourceTrace)
+        throw new Error(
+          `${wire.pcbTraceId}: missing source trace ${wire.sourceTraceId}`,
+        )
+      netKey = getTraceNetKey({ sourceTrace, connectivity })
+      netKeys.set(wire.sourceTraceId, netKey)
     }
-    const key = [
-      net,
+    const key = JSON.stringify([
+      netKey,
       wire.layer,
-      ...wire.u.map((value) => value.toFixed(DIRECTION_DECIMAL_PLACES)),
-    ].join(":")
-    groups.set(key, [...(groups.get(key) ?? []), wire])
+      getDirectionKey(wire.direction),
+    ])
+    const group = groups.get(key)
+    if (group) group.push(wire)
+    else groups.set(key, [wire])
   }
-  const result: RouteWire[] = []
-  for (const group of groups.values()) {
-    for (const component of connectedWires(group)) {
-      unionComponent({ component, result })
-    }
-  }
-  const original = new Map(wires.map((wire) => [wire.id, wire]))
-  result.sort((a, b) => {
-    if (a.id !== b.id) return a.id - b.id
-    return wireDirection(original.get(a.id)!) * (a.start - b.start)
+  const mergedWires = [...groups.values()].flatMap((group) =>
+    [...groupConnectedWires(group)].flatMap(unionWireGroup),
+  )
+  mergedWires.sort((a, b) => {
+    if (a.wireIndex !== b.wireIndex) return a.wireIndex - b.wireIndex
+    return getWireOrientation(wires[a.wireIndex]) * (a.startMm - b.startMm)
   })
-  return result.map((wire, id) => ({ ...wire, id }))
+  return mergedWires.map((wire, wireIndex) => ({ ...wire, wireIndex }))
 }

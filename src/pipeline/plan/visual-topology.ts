@@ -6,7 +6,6 @@ import {
   type SourceNetId,
   type SourcePortId,
   type SourceTraceId,
-  selectPort,
 } from "../../board"
 import { Diagnostic } from "../../kernel"
 import {
@@ -257,10 +256,9 @@ export function resolvePlanTopology({
   const circuitJson = cloneCircuitJson(plannedCircuitJson)
   const db = cju(circuitJson)
   const channels = db.simulation_pcb_driver_receiver_channel.list()
-  const groundSourcePortId = selectPort({
-    circuit: circuitJson,
-    selector: modeling.channelReference,
-  }).source_port_id
+  const groundSourcePortId = modeling.channelReference?.sourcePortId
+  if (groundSourcePortId === undefined)
+    throw new Error("Plan has no resolved reference port")
   const graphs = buildReceiverGraphs({
     db,
     circuit: circuitJson,

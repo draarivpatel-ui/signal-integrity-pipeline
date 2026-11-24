@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { segmentRoutes } from "../../src/board"
+import { sectionRoutes } from "../../src/board"
 import {
   type RouteFieldsInput,
   RouteFieldsSolver,
@@ -12,7 +12,7 @@ import { routedCopper } from "../fixtures/routed-copper"
 /** Input shared by the field solver tests. */
 async function fieldsInput(): Promise<RouteFieldsInput> {
   const { circuitJson, scope } = await routedCopper()
-  const geometry = segmentRoutes({ circuit: circuitJson, scope })
+  const geometry = sectionRoutes({ circuit: circuitJson, copperScope: scope })
   const materials = {
     maskMm: 0.02,
     maskEr: 3.3,
@@ -41,7 +41,7 @@ test("publishes frozen coefficients matching direct extraction", async () => {
   const result = solver.getOutput()
   const section = routeCrossSection({
     geometry,
-    slice: geometry.slices[0],
+    slice: geometry.sections[0],
     materials: solver.materials,
   })
   const direct = solveCrossSection({ section, options: { panelsPerEdge: 12 } })

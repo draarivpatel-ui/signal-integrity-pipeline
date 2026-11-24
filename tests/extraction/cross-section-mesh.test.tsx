@@ -4,7 +4,7 @@ import React from "react"
 import {
   channelCopperScope,
   getSourcePortConnectivityMapFromCircuitJson,
-  segmentRoutes,
+  sectionRoutes,
   sourceNetMembers,
 } from "../../src/board"
 import { routeCrossSection, solveCrossSection } from "../../src/extraction"
@@ -183,10 +183,11 @@ test("coalesces aligned conductor projections", async () => {
     railSourceIds: new Set(),
     distanceMm: 1,
   })
-  const geometry = segmentRoutes({ circuit, scope })
-  const slice = geometry.slices.find(
+  const geometry = sectionRoutes({ circuit, copperScope: scope })
+  const slice = geometry.sections.find(
     (slice) =>
-      slice.wires.length === 2 && slice.wires.every((wire) => wire.u[1] === 1),
+      slice.wires.length === 2 &&
+      slice.wires.every((wire) => wire.direction[1] === 1),
   )!
   assert.ok(slice)
   const materials = {
