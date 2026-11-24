@@ -23,7 +23,7 @@ domain:
   chevron: a mark indicating the direction of a mapped path
   dash: one mark in a dashed line
   fault: a diagnostic tied to specific contacts or copper
-  header: the text band above the board in an admission drawing
+  header: the text band above the board in a plan drawing
   ideal: an electrical connection with no extracted impedance
   legend: the explanation of a drawing's symbols and colors
   scene: the records and annotations used to draw one view
@@ -33,7 +33,6 @@ domain:
   visual: a board drawing or data used to build it
   above: toward increasing solver z in a physical stackup
   actual: read directly from the physical source-board records
-  admission: validation and derivation of one declared transient channel simulation
   admit: the check that reads declared input (board records, IBIS bytes, transient channel simulations) before anything else uses it
   aggressor: an output-capable pin coupled to a selected channel outside its endpoints
   allow: an explicit caller-selected modelling permission
@@ -191,7 +190,7 @@ domain:
   span: the range of layers a via crosses
   sparse: a matrix or realization with mostly zero couplings
   stackup: the order and thickness of the board's copper and insulating layers
-  stage: one fixed step of the routed pipeline (admission, sections, fields, bindings, network, transient)
+  stage: one fixed step of the routed pipeline (planning, sections, fields, bindings, network, transient)
   startup: the time a switching channel needs to settle after its stimulus starts
   stimulus: the bit pattern a driver sends during an experiment
   stub: the unused part of a via beyond the layer where the signal leaves it
