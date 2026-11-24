@@ -1,4 +1,9 @@
-import { Point as BoardPoint, Box, Segment } from "@flatten-js/core"
+import {
+  Point as BoardPoint,
+  Polygon as BoardPolygon,
+  Box,
+  Segment,
+} from "@flatten-js/core"
 import type { Line, Point, Polygon, Text } from "graphics-debug"
 import type { SourcePortId } from "./ids"
 import { planTextSize } from "./plan-header"
@@ -13,21 +18,25 @@ import {
   type PlanVisualScene,
   planColors,
   planCutColor,
+  planPourFills,
 } from "./plan-visual-types"
 
-/** A name anchored to a port or the visible bounds of a component. */
-interface PlanLabel {
+/** A name anchored to a board feature. */
+type PlanLabel = {
   text: string
   color: string
   anchor: Box
-  kind: "pin" | "part"
-}
+} & (
+  | { kind: "pin" | "part" }
+  | { kind: "pour"; outline: BoardPolygon; legend: string }
+)
 
 /** Board annotations to draw above the copper. */
 interface PlanLabels {
   texts: Text[]
   backgrounds: Polygon[]
   leaders: Line[]
+  pourLegend: string[]
 }
 
 /** Prefer the fault indication, then the endpoint marker, then the cut or link. */
@@ -94,11 +103,30 @@ function placeLabel({
   size: number
   window: Box
   clear: (box: Box) => boolean
-}): Box {
+}): Box | undefined {
   const { anchor, text } = label
   const width = labelWidth(text) * size
   const height = size * 1.27
   const center = anchor.center
+  if (label.kind === "pour") {
+    for (const xFraction of [0.5, 0.34, 0.66, 0.25, 0.75]) {
+      for (const yFraction of [0.27, 0.5, 0.73]) {
+        const box = labelBox({
+          x: anchor.xmin + anchor.width * xFraction,
+          y: anchor.ymin + anchor.height * yFraction,
+          width,
+          height,
+        })
+        if (
+          window.contains(box) &&
+          label.outline.contains(new BoardPolygon(box)) &&
+          clear(box)
+        )
+          return box
+      }
+    }
+    return
+  }
   const sides = label.kind === "pin" ? [1, -1] : [-1, 1]
   const margin = size * 0.19
   if (width + margin * 2 < window.width) {
@@ -183,7 +211,7 @@ export function planLabels({
   const window = new Box(box.minX, box.minY, box.maxX, box.maxY)
   const size = planTextSize(frame.width)
   const marks = polygons.flatMap((polygon) => {
-    if (polygon.layer === "board") return []
+    if (polygon.layer === "board" || polygon.layer === "pours") return []
     const bounds = markBox(polygon)
     return bounds === undefined ? [] : [{ polygon, bounds }]
   })
@@ -222,6 +250,17 @@ export function planLabels({
   })
   const parts = marks.flatMap(({ polygon, bounds }): PlanLabel[] => {
     if (polygon.layer !== "parts" || !polygon.label) return []
+    // A footprint inside a larger body reads as part of that body.
+    if (
+      bodies.some(
+        (body) =>
+          body.xmin < bounds.xmin &&
+          body.xmax > bounds.xmax &&
+          body.ymin < bounds.ymin &&
+          body.ymax > bounds.ymax,
+      )
+    )
+      return []
     return [
       {
         text: polygon.label,
@@ -231,14 +270,36 @@ export function planLabels({
       },
     ]
   })
+  const pours = polygons.flatMap((polygon): PlanLabel[] => {
+    if (polygon.layer !== "pours" || !polygon.label) return []
+    const outline = new BoardPolygon(polygon.points.map(({ x, y }) => [x, y]))
+    const hue = polygon.fill === planPourFills.pink ? "pink" : "gray"
+    return [
+      {
+        kind: "pour",
+        text: polygon.label,
+        color: planColors.quiet,
+        anchor: outline.box,
+        outline,
+        legend: `${hue} ${polygon.label}`,
+      },
+    ]
+  })
   const texts: Text[] = []
   const backgrounds: Polygon[] = []
   const leaders: Line[] = []
-  for (const label of [...pins, ...parts]) {
+  const namedPours = new Set<string>()
+  const pourLegend = new Map<string, string>()
+  for (const label of [...pins, ...parts, ...pours]) {
+    let fontSize = size
+    if (label.kind === "pour") {
+      if (namedPours.has(label.text)) continue
+      fontSize = size * 0.86
+    }
     const blocked = label.kind === "pin" ? obstacles : [...obstacles, ...bodies]
     const placement = placeLabel({
       label,
-      size,
+      size: fontSize,
       window,
       clear: (box) =>
         blocked.every((obstacle) => box.not_intersect(obstacle)) &&
@@ -257,15 +318,23 @@ export function planLabels({
           )
         }),
     })
+    if (placement === undefined) {
+      if (label.kind === "pour") pourLegend.set(label.text, label.legend)
+      continue
+    }
     const { x, y } = placement.center
-    const layer = label.kind === "pin" ? "pin labels" : "part labels"
+    const layer = `${label.kind} labels`
+    if (label.kind === "pour") {
+      namedPours.add(label.text)
+      pourLegend.delete(label.text)
+    }
     texts.push({
       x,
       y,
       text: label.text,
       color: label.color,
       anchorSide: "center",
-      fontSize: size,
+      fontSize,
       layer,
     })
     obstacles.push(placement)
@@ -285,5 +354,5 @@ export function planLabels({
       if (leader !== undefined) leaders.push(leader)
     }
   }
-  return { texts, backgrounds, leaders }
+  return { texts, backgrounds, leaders, pourLegend: [...pourLegend.values()] }
 }
