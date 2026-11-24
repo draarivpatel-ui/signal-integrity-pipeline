@@ -1,6 +1,7 @@
+import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
+import type { SourceTrace } from "circuit-json"
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
 import {
-  type CircuitJsonDb,
   type CopperScope,
   type SourceNetId,
   type SourcePortId,
@@ -45,8 +46,6 @@ export function nodeGroups<NodeId extends string>(
   )
 }
 
-type SourceTrace = ReturnType<CircuitJsonDb["source_trace"]["list"]>[number]
-
 /** Resolve a source contact to its group, retaining the contact when it is isolated. */
 export function sourceGroupId({
   groups,
@@ -79,7 +78,7 @@ function splitNamedNets({
   explicitGroups,
   cuts,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   ideal: readonly SourceTrace[]
   explicitGroups: SourceNodeGroups
   cuts: readonly RoutedTraceCut[]
@@ -170,7 +169,7 @@ function validateSplitNet({
   cuts,
   explicitGroups,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   ids: ReadonlySet<SourceNetId>
   cuts: readonly CutConnection<SourceNodeId>[]
   explicitGroups: SourceNodeGroups
@@ -230,7 +229,7 @@ export function extractedNonrailSourceTraceIds({
   db,
   copperScope,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   copperScope: Pick<
     Snapshot<CopperScope>,
     "extractedPcbTraceIds" | "nearbyRailPcbTraceIds"
@@ -257,7 +256,7 @@ export function idealSourceNodes({
   cuts,
   additionalSourceTraceIds = [],
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   cuts: readonly RoutedTraceCut[]
   additionalSourceTraceIds?: readonly SourceTraceId[]
 }): IdealSourceNodes {
