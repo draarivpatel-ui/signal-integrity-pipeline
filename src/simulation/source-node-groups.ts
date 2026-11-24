@@ -2,7 +2,6 @@ import type { CircuitJsonUtilObjects } from "@tscircuit/circuit-json-util"
 import type { SourceTrace } from "circuit-json"
 import { findConnectedNetworks } from "circuit-json-to-connectivity-map"
 import {
-  type CircuitJsonDb,
   type CopperScope,
   type SourceNetId,
   type SourcePortId,
@@ -230,7 +229,7 @@ export function extractedNonrailSourceTraceIds({
   db,
   copperScope,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   copperScope: Pick<
     Snapshot<CopperScope>,
     "extractedPcbTraceIds" | "nearbyRailPcbTraceIds"

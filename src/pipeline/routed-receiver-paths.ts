@@ -18,7 +18,7 @@ export function routedReceiverMappings({
   cuts: readonly RoutedTraceCut[]
 }): LaneMapping[] {
   const { circuit, settings, driverReceiverChannels } = prepared
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const graphs = receiverGraphs({
     db,
     circuit,

@@ -1,5 +1,5 @@
 import type {
-  CircuitJsonSnapshot,
+  CircuitJson,
   CopperScope,
   LaneMapping,
   SourcePortId,
@@ -58,7 +58,7 @@ export type RouteBuffer = Pick<
 >
 /** Immutable circuit nodes, compiled buffers and inputs for the route network. */
 export type RoutedBindings = Snapshot<{
-  circuitJson: CircuitJsonSnapshot
+  circuitJson: CircuitJson
   scope: CopperScope
   mappings: readonly LaneMapping[]
   plan: SimulationPlan

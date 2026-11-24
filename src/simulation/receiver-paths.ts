@@ -223,7 +223,7 @@ export function receiverGraphs({
   modeling: Snapshot<SimulationModeling>
   cuts: readonly RoutedTraceCut[]
   additionalSourceTraceIds?: readonly SourceTraceId[]
-  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channels: readonly SimulationPcbDriverReceiverChannel[]
 }): ReceiverGraphs {
   const idealNodes = idealSourceNodes({ db, cuts, additionalSourceTraceIds })
   const physicalCuts = cutConnections({
