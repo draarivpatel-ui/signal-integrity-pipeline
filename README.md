@@ -5,13 +5,13 @@ Signal-integrity tools for tscircuit boards.
 ## How to use it?
 
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
-`RoutedAdmissionSolver` reads PCB transient channel simulation records written by core from TSX. It checks
+`TransientChannelSimulationPlanSolver` reads PCB transient channel simulation records written by core from TSX. It checks
 channel endpoints, IBIS models, timing and patterns, including pseudo-random binary sequences (PRBS).
 Each declared channel simulation becomes immutable inputs for route sections and buffer binding.
 RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
 RouteFieldsSolver screens nearby conductor pairs and extracts coupled coefficients for each unique section.
-IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during admission.
+IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during planning.
 RouteBindingsSolver associates compiled buffers, sources and probes with the allocated circuit node map.
 
 Aggressors are output-capable pins retained by the copper scope that do not

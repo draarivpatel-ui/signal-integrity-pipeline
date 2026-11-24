@@ -2,13 +2,13 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { simulation } from "@tscircuit/core"
-import { RoutedAdmissionSolver } from "../../../src/pipeline"
+import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { RouteBindingsSolver } from "../../../src/simulation"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { Inverter, Reference } from "../../fixtures/signal-parts"
 import { renderSignals } from "../../fixtures/signal-render"
 
-test("binding separates neighboring extracted ports while admission maps the declared channel", async () => {
+test("binding separates neighboring extracted ports while planning maps the declared channel", async () => {
   const circuitJson = await renderSignals({
     tree: (
       <board
@@ -50,13 +50,13 @@ test("binding separates neighboring extracted ports while admission maps the dec
       </board>
     ),
   })
-  const admission = new RoutedAdmissionSolver({
+  const planner = new TransientChannelSimulationPlanSolver({
     circuitJson,
     ibisSources: { "models/sn74lvc1g04.ibs": routedVisualIbis },
     scopeDistanceMm: 1,
   })
-  admission.solve()
-  const [{ bindings, sections }] = admission.getOutput().value
+  planner.solve()
+  const [{ bindings, sections }] = planner.getOutput().value
   const { copperScope } = sections
   const { extractedPcbTraceIds, channelPcbTraceIds } = copperScope
   assert.equal(channelPcbTraceIds.length, 1)

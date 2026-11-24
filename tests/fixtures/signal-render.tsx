@@ -1,7 +1,7 @@
 import type React from "react"
 import type { CircuitJson } from "../../src/board"
 import type { IbisSources } from "../../src/buffers"
-import { RoutedAdmissionSolver } from "../../src/pipeline"
+import { TransientChannelSimulationPlanSolver } from "../../src/pipeline"
 import {
   listChannelSimulations,
   type PreparedChannelSimulation,
@@ -38,7 +38,7 @@ export async function renderSignals({
   }
 }
 
-/** Lower every transient channel simulation in board order, as RoutedAdmissionSolver does one channel simulation per step. */
+/** Lower every transient channel simulation in board order, as TransientChannelSimulationPlanSolver does one channel simulation per step. */
 export function prepareChannelSimulations({
   circuit,
   sources,
@@ -59,15 +59,18 @@ export function prepareChannelSimulations({
   )
 }
 
-/** The first admitted channel simulation's bindings, checked by the standalone admission solver. */
-export function admittedBindings({
+/** The first planned channel simulation's bindings, checked by the standalone plan solver. */
+export function plannedBindings({
   circuitJson,
   ibisSources,
 }: {
   circuitJson: CircuitJson
   ibisSources: IbisSources
 }): RouteBindingsInput {
-  const admission = new RoutedAdmissionSolver({ circuitJson, ibisSources })
-  admission.solve()
-  return admission.getOutput().value[0].bindings
+  const planner = new TransientChannelSimulationPlanSolver({
+    circuitJson,
+    ibisSources,
+  })
+  planner.solve()
+  return planner.getOutput().value[0].bindings
 }

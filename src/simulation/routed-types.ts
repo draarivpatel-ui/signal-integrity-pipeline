@@ -41,7 +41,7 @@ export interface RouteBindingsInput {
   readonly options: RoutedCompileOptions
   readonly artifactPrefix: string
 }
-/** Admitted binding inputs and the copper scope resolved by route sectioning. */
+/** Planned binding inputs and the copper scope resolved by route sectioning. */
 export interface ScopedRouteBindingsInput extends RouteBindingsInput {
   readonly copperScope: Snapshot<CopperScope>
 }
