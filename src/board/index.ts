@@ -1,7 +1,7 @@
 /**
  * board — everything known about the physical board, read from Circuit JSON.
  * Owns: Circuit JSON admission (zod record schemas, subcircuit scope), stackup, port selection,
- * the declared board geometry and its routed sections.
+ * scoped copper geometry and its wire sections.
  * Imports: kernel.
  */
 
@@ -16,6 +16,24 @@ export {
   sourceNetMembers,
   sourcePinTies,
 } from "./connectivity"
+export { findPadContactWire } from "./copper-geometry-contacts"
+export {
+  type CopperGeometry,
+  CopperGeometryExtractionSolver,
+} from "./copper-geometry-extraction"
+export type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
+export {
+  extractCopperGeometry,
+  stepCopperGeometryExtraction,
+} from "./copper-geometry-extraction-steps"
+export { findWireReferences } from "./copper-geometry-references"
+export type {
+  ExtractedCopper,
+  ReferenceSurface,
+  TraceWire,
+  WireSection,
+} from "./copper-geometry-types"
+export { getWirePoint } from "./copper-geometry-wire"
 export { polygonContains } from "./geometry/polygon"
 export { resolveRouteVias, selectPort } from "./geometry/ports"
 export { type CopperScope, channelCopperScope } from "./geometry/scope"
@@ -48,21 +66,6 @@ export {
   type PlanVisualScene,
   planColors,
 } from "./plan-visual-types"
-export { findContactWire } from "./route-contacts"
-export { findRouteReferences } from "./route-references"
-export type {
-  RouteReference,
-  RouteSection,
-  RouteWire,
-  SectionGeometry,
-} from "./route-section-types"
-export { sectionRoutes, stepRouteSections } from "./route-sections"
-export type { RouteSectionsInput } from "./route-sections-input"
-export {
-  type RouteSectionsOutput,
-  RouteSectionsSolver,
-} from "./route-sections-solver"
-export { getRoutePoint } from "./route-wire"
 export type {
   CircuitJson,
   SimulationExperiment,
