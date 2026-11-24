@@ -2,14 +2,13 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbCopperPour } from "circuit-json"
-import { sectionRoutes } from "../../../src/board"
+import { normalizeReferencePour } from "../../../src/board/route-references"
 import {
-  getSectionInput,
   renderSectionBoard,
   SectionTrace,
 } from "../../fixtures/route-section-board"
 
-test("sections equivalent rectangular, polygon and BRep reference pours", async () => {
+test("normalizes equivalent rectangular, polygon and BRep reference pours", async () => {
   const circuit = await renderSectionBoard({
     children: <SectionTrace name="Signal" />,
   })
@@ -33,21 +32,15 @@ test("sections equivalent rectangular, polygon and BRep reference pours", async 
     },
     pour,
   ]
-  for (const replacement of alternatives) {
-    const board = circuit.map((record) =>
-      record === pour ? replacement : record,
-    )
-    const { sections } = sectionRoutes({
-      circuit: board,
-      copperScope: getSectionInput({ circuit: board }).copperScope,
-    })
+  for (const alternative of alternatives) {
+    const [reference] = normalizeReferencePour(alternative)
+    assert(reference)
+    assert.equal(reference.pcbCopperPourId, pour.pcb_copper_pour_id)
     assert.deepEqual(
-      sections.map(({ startMm, endMm, references }) => [
-        startMm,
-        endMm,
-        references[0].pcbCopperPourId,
-      ]),
-      [[-4, 4, pour.pcb_copper_pour_id]],
+      reference.polygon[0].toSorted(([ax, ay], [bx, by]) => ax - bx || ay - by),
+      points
+        .map(({ x, y }) => [x, y])
+        .sort(([ax, ay], [bx, by]) => ax - bx || ay - by),
     )
   }
 })

@@ -167,12 +167,12 @@ function findPadWire({
   return undefined
 }
 
-/** Clamp an interpolation fraction to the original wire segment. */
+/** Clamp an interpolation fraction to the original wire. */
 function clampFraction(fraction: number): number {
   return Math.max(0, Math.min(1, fraction))
 }
 
-/** Clip a physical segment to the modeled longitudinal interval. */
+/** Clip a physical wire to the modeled longitudinal interval. */
 function getWireOutline({
   wire,
   physicalWire,

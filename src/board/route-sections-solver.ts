@@ -8,6 +8,7 @@ import type { SectionGeometry } from "./route-section-types"
 import { drawRouteSections } from "./route-section-visual"
 import { type RouteSectionProgress, stepRouteSections } from "./route-sections"
 import type { RouteSectionsInput } from "./route-sections-input"
+import { getSoldermaskThicknessMm } from "./route-soldermask"
 import { type CircuitJson, cloneCircuitJson } from "./schema"
 
 /** Completed route geometry and its outer soldermask thickness when declared. */
@@ -16,30 +17,6 @@ export interface RouteSectionsOutput {
   copperScope: Snapshot<CopperScope>
   geometry: Snapshot<SectionGeometry>
   maskThicknessMm: number | null
-}
-
-/** Validate and read the external soldermask thickness. */
-function getSoldermaskThicknessMm(db: ReturnType<typeof cju>): number | null {
-  const [stackup] = db.pcb_stackup.list()
-  const masks = stackup.layers.filter(
-    (layer) => layer.layer_type === "soldermask",
-  )
-  if (!masks.length) return null
-  const [first, second] = masks
-  if (masks.length === 1 && first.thickness === undefined) return null
-  if (masks.length === 1 && first.thickness === 0) return 0
-  if (
-    masks.length !== 2 ||
-    stackup.layers[0] !== first ||
-    stackup.layers.at(-1) !== second ||
-    first.thickness !== second.thickness
-  ) {
-    throw new Error(
-      "Asymmetric soldermask thickness requires separate outer-layer material profiles",
-    )
-  }
-  if (first.thickness === undefined) return null
-  return first.thickness
 }
 
 /** Require every input endpoint to contact modeled copper. */
@@ -71,10 +48,10 @@ function validateRequiredPorts({
   }
 }
 
-/** Check whether a planning value can be reused as an immutable input. */
-function isDeeplyFrozen(value: unknown): boolean {
-  if (value === null || typeof value !== "object") return true
-  return Object.isFrozen(value) && Object.values(value).every(isDeeplyFrozen)
+/** Check whether a planning input can be reused as an immutable input. */
+function isDeeplyFrozen(input: unknown): boolean {
+  if (input === null || typeof input !== "object") return true
+  return Object.isFrozen(input) && Object.values(input).every(isDeeplyFrozen)
 }
 
 /** Read mutable caller inputs once without duplicating already frozen planning values. */
@@ -128,7 +105,8 @@ export class RouteSectionsSolver extends BaseSolver {
     geometry: SectionGeometry
   }): void {
     const db = cju([...circuit])
-    const maskThicknessMm = getSoldermaskThicknessMm(db)
+    const [stackup] = db.pcb_stackup.list()
+    const maskThicknessMm = getSoldermaskThicknessMm(stackup.layers)
     validateRequiredPorts({ db, input: this.input, geometry })
     const { circuitJson, copperScope, artifactPrefix } = this.input
     const routeSections: RouteSectionsOutput = Object.freeze({
