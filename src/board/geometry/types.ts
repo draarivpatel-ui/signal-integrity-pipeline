@@ -1,4 +1,4 @@
-// Port selectors, lane mappings and routed copper shapes shared by board admission and the routed stages.
+// Port selectors, lane mappings and routed copper shapes shared by channel planning and the routed stages.
 import type {
   PcbTraceRoutePointVia,
   PcbTraceRoutePointWire,

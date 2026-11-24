@@ -12,13 +12,13 @@ import {
   RouteNetworkSolver,
 } from "../../src/simulation"
 import { routedRequest } from "../../src/simulation/route-transient"
-import { routedAdmissionInput } from "../fixtures/routed-fixture"
+import { channelPlanInput } from "../fixtures/routed-fixture"
 import { quietDriverIbis } from "../fixtures/routed-visual-fixture"
 import Single from "../fixtures/unit-single-ended"
 import { vendorAvailable } from "../fixtures/vendor-models"
 import { renderCoreSignals } from "../support/core-render"
 
-/** The network stage produces one routed deck per admitted channel simulation. */
+/** The network stage produces one routed deck per planned channel simulation. */
 type NetworkStage = RoutedStageSolver<RouteNetworkInput, RoutedDeck>
 
 let testNetwork: NetworkStage | undefined
@@ -26,7 +26,7 @@ let testNetwork: NetworkStage | undefined
 /** Assemble the network from the rendered fixture and the local vendor model. */
 async function routedNetwork(): Promise<NetworkStage> {
   if (testNetwork) return testNetwork
-  const input = await routedAdmissionInput()
+  const input = await channelPlanInput()
   const solverContext = {
     progress: (): void => undefined,
     runSolver: async (): Promise<never> => {

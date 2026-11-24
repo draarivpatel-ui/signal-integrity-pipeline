@@ -8,7 +8,7 @@ import { rootScope } from "../../src/kernel"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
 import { Inverter, Reference } from "../fixtures/signal-parts"
 import {
-  admittedBindings,
+  plannedBindings,
   prepareChannelSimulations,
   renderSignals,
 } from "../fixtures/signal-render"
@@ -163,7 +163,7 @@ test.skipIf(!modelDir)(signalDescription, async () => {
   signal.driver_disabled = false
   signal.pattern = "0"
   delete signal.seed
-  const bindings = admittedBindings({ circuitJson: circuit, ibisSources: ibis })
+  const bindings = plannedBindings({ circuitJson: circuit, ibisSources: ibis })
   const declarations = generalDeclarations({
     circuit: bindings.circuitJson,
     mappings: bindings.mappings,
