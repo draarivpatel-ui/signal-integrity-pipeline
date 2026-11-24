@@ -1,5 +1,4 @@
 import type { SimulationPcbDriverReceiverChannel, SourcePortId } from "../board"
-import type { Snapshot } from "../kernel"
 import {
   type SourceNodeGroups,
   type SourceNodeId,
@@ -15,7 +14,7 @@ export interface DifferentialContacts {
 
 /** List the physical contacts without losing their leg or declaration order. */
 export function differentialContacts(
-  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[],
+  channels: readonly SimulationPcbDriverReceiverChannel[],
 ): DifferentialContacts[] {
   return channels.flatMap(({ name, driver, receivers }) => {
     if ("source_port_id" in driver) return []

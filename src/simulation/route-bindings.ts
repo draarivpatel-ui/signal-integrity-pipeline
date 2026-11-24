@@ -1,5 +1,5 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
-import { circuitJsonDb } from "../board"
 import {
   type AdmittedBuffers,
   type AssemblyEntry,
@@ -55,7 +55,7 @@ export class RouteBindingsSolver extends BaseSolver {
     if (!routedTraceCuts.length)
       throw new Error("Routed compilation requires physical signal mappings")
     const additionalSourceTraceIds = extractedNonrailSourceTraceIds({
-      db: circuitJsonDb(circuitJson),
+      db: cju([...circuitJson]),
       copperScope,
     })
     const declarations = generalDeclarations({
@@ -120,15 +120,17 @@ export class RouteBindingsSolver extends BaseSolver {
       warnings,
     }
     if (this.models.length !== declarations.models.length) return
-    const bindings = snapshot<RoutedBindings>({
-      circuitJson: this.input.circuitJson,
-      scope: this.input.copperScope,
-      mappings: this.input.mappings,
-      plan: this.plan!,
-      nodeMap: declarations.nodes.mapping,
-      groundSourcePortId: declarations.nodes.groundSourcePortId,
-      electricalLines: this.electricalLines,
-      models: this.models,
+    const bindings: RoutedBindings = Object.freeze({
+      circuitJson: structuredClone(this.input.circuitJson),
+      ...snapshot({
+        scope: this.input.copperScope,
+        mappings: this.input.mappings,
+        plan: this.plan!,
+        nodeMap: declarations.nodes.mapping,
+        groundSourcePortId: declarations.nodes.groundSourcePortId,
+        electricalLines: this.electricalLines,
+        models: this.models,
+      }),
     })
     const simulationScope = rootScope("simulation").child(
       this.input.artifactPrefix,

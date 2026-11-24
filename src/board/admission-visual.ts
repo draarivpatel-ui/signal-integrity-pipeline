@@ -1,3 +1,4 @@
+import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import type {
   GraphicsObject,
   Line,
@@ -11,10 +12,9 @@ import {
   routeBoardBox,
   routeCopperStyles,
 } from "./admission-view"
-import { type CircuitJsonDb, circuitJsonDb } from "./circuit-json-db"
 import type { LaneMapping } from "./geometry/types"
 import type { SourcePortId } from "./ids"
-import type { CircuitJsonSnapshot } from "./schema"
+import type { CircuitJson } from "./schema"
 
 /** Colours for physical copper, endpoint outlines and admission diagnostics. */
 export const routeCopperTones = {
@@ -127,7 +127,7 @@ export function routeNets({
   db,
   view,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   view: Pick<RouteCopperView, "traces" | "sources">
 }): RouteDrawing["lines"] {
   const lines: Line[] = []
@@ -239,7 +239,7 @@ function routeAdmissionMarks({
   mappings,
   view,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   mappings: readonly LaneMapping[]
   view: RouteCopperView
 }): RouteDrawing["polygons"] {
@@ -359,7 +359,7 @@ export function scopedAdmissionDrawing({
   mappings,
   error,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   view: RouteCopperView
   mappings: readonly LaneMapping[]
   error: string | null
@@ -378,10 +378,10 @@ export function unscopedAdmissionDrawing({
   circuit,
   error,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   error: string | null
 }): RouteDrawing {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const traces = new Set(db.pcb_trace.list().map((trace) => trace.pcb_trace_id))
   const box = routeBoardBox(db)
   const { minX, minY, maxX, maxY } = box

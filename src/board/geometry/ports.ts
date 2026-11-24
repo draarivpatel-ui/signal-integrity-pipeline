@@ -1,8 +1,7 @@
+import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbVia } from "circuit-json"
-import type { Snapshot } from "../../kernel"
-import { circuitJsonDb } from "../circuit-json-db"
 import { fail } from "../diagnostics"
-import type { CircuitJsonSnapshot } from "../schema"
+import type { CircuitJson } from "../schema"
 import type { PcbTrace, PortSelector, RoutedPoint, SourcePort } from "./types"
 
 /** Native route points and physical via records match within this distance in millimetres. */
@@ -13,15 +12,15 @@ export function resolveRouteVias({
   circuit,
   trace,
 }: {
-  circuit: CircuitJsonSnapshot
-  trace: Snapshot<PcbTrace>
+  circuit: CircuitJson
+  trace: PcbTrace
 }): RoutedPoint[] {
-  let vias: Snapshot<PcbVia>[] | undefined
+  let vias: PcbVia[] | undefined
   return trace.route.map((point) => {
     if (point.route_type === "through_pad")
       fail("route_type", "Only wire/via routed primitives supported")
     if (point.route_type !== "via") return point
-    vias ??= circuitJsonDb(circuit).pcb_via.list()
+    vias ??= cju([...circuit]).pcb_via.list()
     const matches = vias.filter(
       (via) =>
         (via.pcb_trace_id === trace.pcb_trace_id ||
@@ -71,12 +70,12 @@ export function selectPort({
   circuit,
   selector,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   selector: PortSelector | undefined
-}): Snapshot<SourcePort> {
+}): SourcePort {
   if (!selector)
     fail("pin_mapping", "Explicit physical source port selector required")
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   if (selector.sourcePortId) {
     const ports = db.source_port.list({ source_port_id: selector.sourcePortId })
     if (ports.length !== 1) {

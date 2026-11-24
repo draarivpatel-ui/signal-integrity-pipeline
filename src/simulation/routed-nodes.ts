@@ -1,7 +1,6 @@
+import { type CircuitJsonUtilObjects, cju } from "@tscircuit/circuit-json-util"
 import {
-  type CircuitJsonDb,
-  type CircuitJsonSnapshot,
-  circuitJsonDb,
+  type CircuitJson,
   endpointPorts,
   type LaneMapping,
   type SimulationPcbDriverReceiverChannel,
@@ -31,7 +30,7 @@ import type { CircuitNodes, SimulationModeling, SpiceNodeName } from "./types"
 
 /** Board, physical cuts, and source selectors for SPICE node resolution. */
 export interface CircuitNodesInput {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   mappings: readonly LaneMapping[]
   routedTraceCuts?: readonly RoutedTraceCut[]
   additionalSourceTraceIds?: readonly SourceTraceId[]
@@ -43,7 +42,7 @@ function physicalCuts({
   db,
   mappings,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   mappings: readonly LaneMapping[]
 }): RoutedTraceCut[] {
   const cuts = new Map<SourceTraceId, RoutedTraceCut>()
@@ -107,7 +106,7 @@ function validateDifferentialLegs({
   legGroups,
   graphs,
 }: {
-  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channels: readonly SimulationPcbDriverReceiverChannel[]
   node: CircuitNodes["node"]
   legGroups: SpiceNodeGroups
   graphs: ReceiverGraphs
@@ -217,7 +216,7 @@ function validateSingleEndedGround({
   channels,
   node,
 }: {
-  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channels: readonly SimulationPcbDriverReceiverChannel[]
   node: CircuitNodes["node"]
 }): void {
   for (const { name, driver, receivers } of channels) {
@@ -246,7 +245,7 @@ function numberCircuitNodes({
   graphs,
   groundSourcePortId,
 }: {
-  db: CircuitJsonDb
+  db: CircuitJsonUtilObjects
   graphs: ReceiverGraphs
   groundSourcePortId: SourcePortId
 }): CircuitNodes {
@@ -315,7 +314,7 @@ export function resolveRoutedNodes({
   additionalSourceTraceIds,
   modeling,
 }: CircuitNodesInput): ResolvedRoutedNodes {
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   const cuts = routedTraceCuts ?? physicalCuts({ db, mappings })
   const channels = db.simulation_pcb_driver_receiver_channel.list()
   const groundSourcePortId = selectPort({
@@ -355,7 +354,7 @@ function validateRoutedNodes({
   cuts: readonly RoutedTraceCut[]
   mappings: readonly LaneMapping[]
   graphs: ReceiverGraphs
-  channels: readonly Snapshot<SimulationPcbDriverReceiverChannel>[]
+  channels: readonly SimulationPcbDriverReceiverChannel[]
   node: CircuitNodes["node"]
   mappingOnly: boolean
 }): void {

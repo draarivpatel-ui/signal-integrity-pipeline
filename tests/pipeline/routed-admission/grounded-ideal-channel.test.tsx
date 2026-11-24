@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { AdmissionChannel } from "../../fixtures/admission-channel"
@@ -18,9 +18,9 @@ test("a wholly ideal single-ended channel still rejects a grounded signal contac
   })
   solver.solve()
   const [{ bindings }] = solver.getOutput().value
-  const [{ driver }] = circuitJsonDb(
-    bindings.circuitJson,
-  ).simulation_pcb_driver_receiver_channel.list()
+  const [{ driver }] = cju([
+    ...bindings.circuitJson,
+  ]).simulation_pcb_driver_receiver_channel.list()
   assert.ok("source_port_id" in driver)
   assert.deepEqual(bindings.mappings, [])
   assert.deepEqual(bindings.routedTraceCuts, [])

@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
@@ -12,7 +12,7 @@ test("permissive routing retains the routed differential path to the short", asy
     tree: <Differential seriesPositive short="series" allowUnroutedTraces />,
     expectedErrors: ["pcb_trace_missing_error", "pcb_port_not_connected_error"],
   })
-  const db = circuitJsonDb(circuitJson)
+  const db = cju([...circuitJson])
   const resistor = db.source_component.getWhere({ name: "RS1" })
   assert.ok(resistor)
   const contact = db.source_port.getWhere({
