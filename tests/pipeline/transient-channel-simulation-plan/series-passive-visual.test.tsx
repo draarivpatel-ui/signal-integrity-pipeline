@@ -2,9 +2,9 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
-import { assertRouteVisual } from "../../fixtures/route-visual-snapshot"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
+import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 import { renderCoreSignals } from "../../support/core-render"
 
 test("draws the series passive between its two distinct routed cuts", async () => {
@@ -31,7 +31,11 @@ test("draws the series passive between its two distinct routed cuts", async () =
   assert.ok(
     drawing.texts?.some((text) => text.text.includes("RS pin 2 → RX pin A")),
   )
-  assertRouteVisual({
+  assert.equal(
+    drawing.texts?.find(({ text }) => text === "RX pin A")?.color,
+    "#b45309",
+  )
+  assertPlanDrawingSnapshot({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "series-passive-visual",

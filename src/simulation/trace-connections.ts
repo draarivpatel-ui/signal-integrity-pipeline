@@ -7,7 +7,7 @@ import {
   connectionPath,
 } from "./connection-paths"
 import { fail } from "./diagnostics"
-import type { RoutedTraceCut } from "./routed-types"
+import type { TraceContacts } from "./route-inputs"
 
 /** The physical contacts of an extracted trace or series passive. */
 export interface ChannelSegment {
@@ -17,29 +17,29 @@ export interface ChannelSegment {
 }
 
 /** The physical cut paired with the nodes it now separates. */
-export type CutConnection<NodeId> = Connection<NodeId, RoutedTraceCut>
+export type TraceConnection<NodeId> = Connection<NodeId, TraceContacts>
 
 /** Project physical cuts onto source groups or SPICE nodes for traversal. */
-export function cutConnections<NodeId>({
+export function connectTraces<NodeId>({
   cuts,
   node,
 }: {
-  cuts: readonly RoutedTraceCut[]
+  cuts: readonly TraceContacts[]
   node: (sourcePortId: SourcePortId) => NodeId
-}): CutConnection<NodeId>[] {
+}): TraceConnection<NodeId>[] {
   return cuts.map((cut) => ({
-    fromNodeId: node(cut.fromSourcePortId),
-    toNodeId: node(cut.toSourcePortId),
+    fromVertexId: node(cut.fromSourcePortId),
+    toVertexId: node(cut.toSourcePortId),
     evidence: cut,
   }))
 }
 
 /** Index physical cuts without projecting them onto ideal groups. */
-export function physicalCutGraph(
-  cuts: readonly RoutedTraceCut[],
-): ConnectionGraph<SourcePortId, RoutedTraceCut> {
+export function buildPhysicalTraceGraph(
+  cuts: readonly TraceContacts[],
+): ConnectionGraph<SourcePortId, TraceContacts> {
   return connectionGraph(
-    cutConnections({ cuts, node: (sourcePortId) => sourcePortId }),
+    connectTraces({ cuts, node: (sourcePortId) => sourcePortId }),
   )
 }
 
@@ -77,11 +77,11 @@ export function validateChannelBridge<NodeId>({
   physicalGraph: ConnectionGraph<SourcePortId, ChannelSegment>
   connection: Connection<NodeId, ChannelSegment>
 }): void {
-  const { fromNodeId, toNodeId, evidence } = connection
+  const { fromVertexId, toVertexId, evidence } = connection
   const alternate = connectionPath({
     graph,
-    fromNodeId,
-    toNodeId,
+    fromVertexId,
+    toVertexId,
     omitted: connection,
   })
   if (!alternate) return
@@ -95,8 +95,8 @@ export function validateChannelBridge<NodeId>({
     )
   const physicalAlternate = connectionPath({
     graph: physicalGraph,
-    fromNodeId: fromSourcePortId,
-    toNodeId: toSourcePortId,
+    fromVertexId: fromSourcePortId,
+    toVertexId: toSourcePortId,
     omitted: physicalGraph
       .get(fromSourcePortId)
       ?.find((edge) => edge.evidence === evidence),

@@ -1,12 +1,13 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
 import { expectPlanPcbSnapshot } from "../../fixtures/plan-pcb-snapshot"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 import { renderCoreSignals } from "../../support/core-render"
 
 test("series resistor keeps both routed segments electrically distinct", async () => {
@@ -19,19 +20,19 @@ test("series resistor keeps both routed segments electrically distinct", async (
   const [plan] = solver.getOutput().value
   const { bindings, sections } = plan
   assert.equal(sections.requiredSourcePortIds.length, 4)
-  assert.equal(bindings.mappings.length, 1)
-  const [mapping] = bindings.mappings
+  assert.equal(bindings.receiverPaths.length, 1)
+  const [mapping] = bindings.receiverPaths
   const traces = cju(circuitJson).source_trace.list()
   const driverTrace = traces.find((trace) =>
-    trace.connected_source_port_ids.includes(mapping.from),
+    trace.connected_source_port_ids.includes(mapping.fromSourcePortId),
   )
   const receiverTrace = traces.find((trace) =>
-    trace.connected_source_port_ids.includes(mapping.to),
+    trace.connected_source_port_ids.includes(mapping.toSourcePortId),
   )
   assert.ok(driverTrace && receiverTrace)
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
   for (const trace of [driverTrace, receiverTrace]) {
     const [from, to] = trace.connected_source_port_ids

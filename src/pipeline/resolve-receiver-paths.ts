@@ -1,21 +1,17 @@
 import { cju } from "@tscircuit/circuit-json-util"
-import { endpointPorts, type LaneMapping } from "../board"
-import {
-  type RoutedTraceCut,
-  receiverGraphs,
-  receiverPath,
-} from "../simulation"
+import { endpointPorts, type ReceiverTracePath } from "../board"
+import { receiverGraphs, receiverPath, type TraceContacts } from "../simulation"
 import { fail } from "./diagnostics"
 import type { PreparedChannelSimulation } from "./signals"
 
 /** Resolve each declared receiver to its ordered routed trace path. */
-export function routedReceiverMappings({
+export function resolveReceiverTracePaths({
   prepared,
   cuts,
 }: {
   prepared: PreparedChannelSimulation
-  cuts: readonly RoutedTraceCut[]
-}): LaneMapping[] {
+  cuts: readonly TraceContacts[]
+}): ReceiverTracePath[] {
   const { circuit, settings, driverReceiverChannels } = prepared
   const graphs = receiverGraphs({
     db: cju([...circuit]),
@@ -25,7 +21,7 @@ export function routedReceiverMappings({
     cuts,
     channels: driverReceiverChannels,
   })
-  const mappings: LaneMapping[] = []
+  const receiverPaths: ReceiverTracePath[] = []
   for (const { name, driver, receivers } of prepared.driverReceiverChannels) {
     const driverPorts = endpointPorts(driver)
     for (const receiver of receivers) {
@@ -55,17 +51,17 @@ export function routedReceiverMappings({
         })
         const [sourceTraceId] = sourceTraceIds
         if (sourceTraceId === undefined) continue
-        const mapping: LaneMapping = {
-          port: name,
-          from: fromSourcePortId,
-          to: toSourcePortId,
+        const receiverPathRecord: ReceiverTracePath = {
+          channelName: name,
+          fromSourcePortId,
+          toSourcePortId,
           sourceTraceId,
         }
         if (sourceTraceIds.length > 1)
-          mappings.push({ ...mapping, sourceTraceIds })
-        else mappings.push(mapping)
+          receiverPaths.push({ ...receiverPathRecord, sourceTraceIds })
+        else receiverPaths.push(receiverPathRecord)
       }
     }
   }
-  return mappings
+  return receiverPaths
 }

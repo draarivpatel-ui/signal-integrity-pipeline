@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { differentialIbis } from "../../fixtures/routed-visual-fixture"
@@ -18,15 +19,19 @@ test("names the physical driver contacts shorted between P and N", async () => {
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [positive, negative] = bindings.mappings
+  const [positive, negative] = bindings.receiverPaths
   assert.ok(positive)
   assert.ok(negative)
   assert.throws(
-    () => circuitNodes({ ...bindings, circuit: bindings.circuitJson }),
+    () =>
+      circuitNodes({
+        ...bindings,
+        circuit: cloneCircuitJson(bindings.circuitJson),
+      }),
     {
       domain: "simulation",
       code: "channel_short",
-      message: `channel_short: BUS: negative contact ${negative.from} is shorted to ${positive.from}`,
+      message: `channel_short: BUS: negative contact ${negative.fromSourcePortId} is shorted to ${positive.fromSourcePortId}`,
     },
   )
 })

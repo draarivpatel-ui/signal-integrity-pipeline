@@ -15,7 +15,6 @@ export {
 } from "./declarations"
 export {
   electricalSources,
-  hasBuiltInPassiveModel,
   namespaceSpice,
   voltageSourceTerminals,
 } from "./netlist"
@@ -24,16 +23,16 @@ export {
   receiverGraphs,
   receiverPath,
 } from "./receiver-paths"
+export type {
+  RouteBindingsInput,
+  RouteCompileOptions,
+  TraceContacts,
+} from "./route-inputs"
 export {
   circuitNodes,
   numberCircuitNodes,
   validateRoutedNodes,
 } from "./routed-nodes"
-export type {
-  RouteBindingsInput,
-  RoutedCompileOptions,
-  RoutedTraceCut,
-} from "./routed-types"
 export { type SignalRailIds, signalRailIds } from "./signal-rails"
 export { transmittedBits } from "./stimulus"
 export type {

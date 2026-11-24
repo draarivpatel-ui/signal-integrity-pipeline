@@ -1,6 +1,6 @@
 import type {
   CircuitJson,
-  LaneMapping,
+  ReceiverTracePath,
   SourcePortId,
   SourceTraceId,
 } from "../board"
@@ -9,14 +9,14 @@ import type { Snapshot } from "../kernel"
 import type { RunControls, SimulationModeling } from "./types"
 
 /** Timing and mesh settings shared by the routed simulation stages. */
-export interface RoutedCompileOptions {
-  readonly riseSeconds: number
+export interface RouteCompileOptions {
+  readonly fastestEdgeSeconds: number
   readonly refinement: number
   readonly durationSeconds: number
   readonly stepSeconds: number
 }
 /** One physical conductor removed from ideal connectivity for routed extraction. */
-export interface RoutedTraceCut {
+export interface TraceContacts {
   readonly sourceTraceId: SourceTraceId
   readonly fromSourcePortId: SourcePortId
   readonly toSourcePortId: SourcePortId
@@ -24,12 +24,12 @@ export interface RoutedTraceCut {
 
 /** Board, receiver paths and physical trace cuts for routed IBIS binding. */
 export interface RouteBindingsInput {
-  readonly circuitJson: CircuitJson
-  readonly mappings: readonly LaneMapping[]
-  readonly routedTraceCuts: readonly RoutedTraceCut[]
+  readonly circuitJson: Snapshot<CircuitJson>
+  readonly receiverPaths: readonly ReceiverTracePath[]
+  readonly traceContacts: readonly TraceContacts[]
   readonly modeling: Snapshot<SimulationModeling>
   readonly controls: Snapshot<Record<string, RunControls>>
   readonly ibisSources: Readonly<IbisSources>
-  readonly options: RoutedCompileOptions
+  readonly options: RouteCompileOptions
   readonly artifactPrefix: string
 }
