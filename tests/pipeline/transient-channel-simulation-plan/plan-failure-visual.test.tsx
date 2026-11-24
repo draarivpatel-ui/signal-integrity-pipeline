@@ -34,7 +34,7 @@ test("draws the whole board with the open differential leg diagnostic in red", a
   assert.ok(drawing.lines?.length)
   assert.ok(drawing.texts?.length)
   const fault = drawing.texts.find((text) =>
-    text.text.includes("no copper connects"),
+    text.text.includes("has no copper trace"),
   )
   assert.equal(fault?.color, "#b91c1c")
   assert.ok(header?.every((text) => text.anchorSide === "center" && text.y > 6))
@@ -45,10 +45,7 @@ test("draws the whole board with the open differential leg diagnostic in red", a
         line.label?.includes("No routed source path"),
     ),
   )
-  assert.equal(
-    fault?.text,
-    "BUS +: no copper connects TX pin A to RX pin A (red dashed line).",
-  )
+  assert.equal(fault?.text, "BUS+ has no copper trace between TX and RX.")
   assert.ok(
     drawing.rects?.some(
       (rect) =>
@@ -75,22 +72,16 @@ test("draws the whole board with the open differential leg diagnostic in red", a
   assert.ok(visibleText.includes("VCC copper (top)"))
   assert.ok(visibleText.includes("GND copper (bottom)"))
   assert.ok(
-    visibleText.some((text) =>
-      text.includes("red dashed line = missing trace"),
-    ),
+    visibleText.includes("▶ driver · ◉ receiver · ◎ via · -×- missing trace"),
   )
-  assert.ok(
-    visibleText.some((text) =>
-      text.includes("red ring = pin with the problem"),
-    ),
-  )
-  assert.ok(visibleText.some((text) => text.includes("◉ via (joins layers)")))
+  assert.ok(visibleText.includes("BUS+: TX pin A → RX pin A (missing trace)"))
+  assert.ok(visibleText.includes("BUS−: TX pin B → RX pin B (top, 10 mm)"))
   assert.ok(!visibleText.includes("RTERM"))
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "plan-failure-visual",
     caption:
-      "TX sends one RS-485 signal to RX over two lines, BUS+ and BUS−. The plan stops because only BUS− has a copper trace.",
+      "TX drives an RS-485 signal to RX over BUS+ and BUS−, with only BUS− routed. This test checks that the plan stops when a signal line has no trace.",
   })
 })
