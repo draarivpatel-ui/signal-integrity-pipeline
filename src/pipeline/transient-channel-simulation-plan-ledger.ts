@@ -3,6 +3,7 @@ import {
   type PlanHeaderRow,
   type PlanVisualEndpoint,
   type PlanVisualLink,
+  pinName,
   planColors,
   planCutColor,
   type SourcePortId,
@@ -110,30 +111,6 @@ function cutDetails(db: CircuitJsonUtilObjects): Map<SourceTraceId, string> {
       `${[...layers].join("/")} layer, ${Number(length.toFixed(2))} mm`,
     ]),
   )
-}
-
-/** Name a pin from its source records, including pins without a PCB pad. */
-function pinName({
-  id,
-  db,
-}: {
-  id: SourcePortId
-  db: CircuitJsonUtilObjects
-}): string {
-  const pin = db.source_port.get(id)
-  if (!pin) return "an unknown pin"
-  const part = db.source_component.get(pin.source_component_id || "")
-  let pinLabel = pin.name
-  const number = pinLabel.slice("pin".length)
-  if (
-    pinLabel.startsWith("pin") &&
-    number &&
-    [...number].every((digit) => "0123456789".includes(digit))
-  )
-    pinLabel = number
-  const name = `pin ${pinLabel}`
-  if (part?.name) return `${part.name} ${name}`
-  return name
 }
 
 /** Name the series part using its component record. */

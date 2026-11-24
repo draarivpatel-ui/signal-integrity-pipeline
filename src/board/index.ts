@@ -40,7 +40,7 @@ export type {
 /** @internal */
 export type { PlanHeaderRow } from "./plan-header"
 /** @internal */
-export { planPorts } from "./plan-view"
+export { pinName, planPorts } from "./plan-view"
 /** @internal */
 export { planDrawing } from "./plan-visual"
 /** @internal */

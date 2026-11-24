@@ -19,13 +19,27 @@ test("highlights an ideal connection that bypasses routed cuts", async () => {
   solver.solve()
   const drawing = solver.visualize()
   assert.equal(drawing.title, "SERIES — can't simulate")
-  assert.ok(
-    drawing.texts?.some((text) =>
-      text.text.includes(
-        "DATA is shorted: TX pin Y connects directly to RX pin A",
-      ),
-    ),
+  const diagnosticRows = new Set(
+    drawing.rects
+      ?.filter(
+        (rect) =>
+          rect.layer === "header" && rect.label?.startsWith("channel_short:"),
+      )
+      .map(({ center }) => center.y),
   )
+  const explanation = drawing.texts
+    ?.filter((text) => text.layer === "header" && diagnosticRows.has(text.y))
+    .sort((a, b) => b.y - a.y)
+  assert.equal(explanation?.length, 2)
+  assert.equal(
+    explanation.map(({ text }) => text).join(" "),
+    "DATA is shorted: TX pin Y connects directly to RX pin A, skipping the traces and resistor RS (red dashes).",
+  )
+  const scaleText = drawing.texts?.find(
+    (text) => text.layer === "header" && text.text === "2 mm",
+  )
+  assert.ok(scaleText)
+  assert.ok(explanation.every((text) => text.fontSize === scaleText.fontSize))
   assert.ok(
     drawing.lines?.some(
       (line) => line.layer === "failure" && line.label === "Ideal bypass",
