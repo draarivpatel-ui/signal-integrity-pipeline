@@ -4,9 +4,9 @@ import { cju } from "@tscircuit/circuit-json-util"
 import { extractCopperGeometry } from "../../../src/board"
 import { measureChordDistanceMm } from "../../../src/board/copper-geometry-wire"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("reduces sampled curve points within one micrometre of the route", async () => {
@@ -15,13 +15,13 @@ test("reduces sampled curve points within one micrometre of the route", async ()
     return { x, y: 0.015 * x * (8 - x) }
   })
   const circuit = await renderCopperGeometryBoard({
-    children: <SectionTrace name="Curve" points={points} />,
+    children: <CopperTrace name="Curve" points={points} />,
   })
   const [trace] = cju(circuit).pcb_trace.list()
   assert(trace.route.length >= points.length + 2)
   const { wires } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert(wires.length > 1 && wires.length < points.length / 2)
   for (const point of trace.route) {

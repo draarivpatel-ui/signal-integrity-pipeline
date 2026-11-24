@@ -4,7 +4,7 @@ import { cju } from "@tscircuit/circuit-json-util"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import { renderRoutedCopper } from "../../fixtures/routed-copper"
 
-test("stops after one trace per step and publishes its resolved sections", async () => {
+test("stops after one trace per step and publishes the extracted copper geometry", async () => {
   const { circuitJson, copperScope } = await renderRoutedCopper()
   const db = cju(circuitJson)
   const [pour] = db.pcb_copper_pour.list()
@@ -19,9 +19,9 @@ test("stops after one trace per step and publishes its resolved sections", async
   assert.equal(solver.solved, false)
   assert.equal(solver.stats.traces, 1)
   solver.solve()
-  const { value: sections, artifacts } = solver.getOutput()
+  const { value: copperGeometry, artifacts } = solver.getOutput()
   assert.deepEqual(
-    sections.geometry.wires.map(({ startPoint, endPoint, widthMm }) => [
+    copperGeometry.geometry.wires.map(({ startPoint, endPoint, widthMm }) => [
       startPoint,
       endPoint,
       widthMm,
@@ -31,8 +31,8 @@ test("stops after one trace per step and publishes its resolved sections", async
       [[-4, 0.35], [4, 0.35], 0.1],
     ],
   )
-  const [section] = sections.geometry.sections
-  assert.equal(sections.geometry.sections.length, 1)
+  const [section] = copperGeometry.geometry.sections
+  assert.equal(copperGeometry.geometry.sections.length, 1)
   assert.equal(section.startMm, -4)
   assert.equal(section.endMm, 4)
   assert.equal(section.wires.length, 2)

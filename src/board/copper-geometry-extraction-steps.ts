@@ -21,14 +21,14 @@ import { stackupFromCircuitJson } from "./stackup"
 /** One micrometre limits chord deviation below ordinary copper feature tolerances. */
 const CHORD_TOLERANCE_MM = 0.001
 
-/** Board circuit and copper kept for route sectioning. */
-interface CopperExtractionOptions {
+/** Board records and the copper scope selected for extraction. */
+interface CopperGeometryExtractionOptions {
   circuit: CircuitJson
   copperScope: Snapshot<CopperScope>
 }
 
 /** Work completed before computing sections and contacts. */
-export interface CopperExtractionProgress {
+export interface CopperGeometryExtractionProgress {
   traces: number
   wires: number
 }
@@ -39,7 +39,7 @@ function finalizeGeometry({
   copperScope,
   wires,
   embeddedVias,
-}: CopperExtractionOptions & {
+}: CopperGeometryExtractionOptions & {
   wires: TraceWire[]
   embeddedVias: CopperVia[]
 }): ExtractedCopper {
@@ -59,7 +59,7 @@ function finalizeGeometry({
   const board = db.pcb_board.get(stackup.pcbBoardId)
   const vias = collectCopperVias({
     scopedVias,
-    routeVias: embeddedVias,
+    embeddedVias,
     boardLayers: stackup.copperLayers.map(({ name }) => name).reverse(),
     allowsBlindVias: board?.allow_blind_and_buried_vias === true,
   })
@@ -98,8 +98,8 @@ function finalizeGeometry({
 export function* stepCopperGeometryExtraction({
   circuit,
   copperScope,
-}: CopperExtractionOptions): Generator<
-  CopperExtractionProgress,
+}: CopperGeometryExtractionOptions): Generator<
+  CopperGeometryExtractionProgress,
   ExtractedCopper
 > {
   const db = cju([...circuit])
@@ -123,9 +123,9 @@ export function* stepCopperGeometryExtraction({
   return finalizeGeometry({ circuit, copperScope, wires, embeddedVias })
 }
 
-/** Compute route sections synchronously when incremental progress is unnecessary. */
+/** Extract copper geometry synchronously when incremental progress is unnecessary. */
 export function extractCopperGeometry(
-  options: CopperExtractionOptions,
+  options: CopperGeometryExtractionOptions,
 ): ExtractedCopper {
   const steps = stepCopperGeometryExtraction(options)
   let step = steps.next()
