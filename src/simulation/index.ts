@@ -9,6 +9,7 @@
  */
 
 export { branchSaves } from "./branch-saves"
+export { connectionGraph, connectionPath } from "./connection-paths"
 export {
   generalDeclarations,
   modelRunDefinition,
