@@ -11,7 +11,7 @@ import type {
 } from "../board"
 import { endpointPorts } from "../board"
 import { Diagnostic } from "../kernel"
-import type { ChannelTrace, NumericalSettings } from "./modeling"
+import type { TraceContacts } from "../simulation"
 import { compareNames } from "./signal-names"
 import type { SignalPins } from "./signal-pins"
 
@@ -20,36 +20,32 @@ type TraceRejection = { sourceTrace: SourceTrace; message: string }
 
 /** Supported channel traces and rejections from auditing the scoped copper. */
 type ChannelTraceAudit = {
-  channelTraces: NumericalSettings["channelTraces"]
+  traceContacts: TraceContacts[]
   rejections: TraceRejection[]
 }
 
 /** Orient the selected trace from its driver when only one end is driven. */
-function orientChannelTrace({
+function orientTraceContacts({
   trace,
-  topology,
   driven,
 }: {
   trace: SourceTrace
-  topology: ReadonlyMap<SourcePortId | SourceNetId, string>
   driven: ReadonlySet<SourcePortId>
-}): ChannelTrace {
+}): TraceContacts {
   const ordered = trace.connected_source_port_ids.toSorted((a, b) =>
     compareNames({ a, b }),
   )
   if (driven.has(ordered[1]) && !driven.has(ordered[0])) ordered.reverse()
   const [fromSourcePortId, toSourcePortId] = ordered
-  const name = topology.get(fromSourcePortId) || "passive"
   return {
-    port: `${name}_${trace.source_trace_id}`,
-    from: { sourcePortId: fromSourcePortId },
-    to: { sourcePortId: toSourcePortId },
+    fromSourcePortId,
+    toSourcePortId,
     sourceTraceId: trace.source_trace_id,
   }
 }
 
 /** Build channel traces and report unsupported routed traces on the channel. */
-export function auditChannelTraces({
+function auditChannelTraces({
   circuit,
   channelPcbTraceIds,
   topology,
@@ -62,7 +58,7 @@ export function auditChannelTraces({
   driven: Set<SourcePortId>
   rails: Set<SourcePortId | SourceNetId>
 }): ChannelTraceAudit {
-  const channelTraces: NumericalSettings["channelTraces"] = []
+  const traceContacts: TraceContacts[] = []
   const rejections: TraceRejection[] = []
   const db = cju([...circuit])
   const selectedPcbTraceIds = new Set(channelPcbTraceIds)
@@ -98,50 +94,49 @@ export function auditChannelTraces({
         topology.get(sourcePortIds[0]) ??
         trace.name ??
         trace.display_name ??
-        trace.source_trace_id
+        "unnamed"
       rejections.push({
         sourceTrace: trace,
         message: `Signal "${name}": branched routes are not supported yet.`,
       })
       continue
     }
-    channelTraces.push(orientChannelTrace({ trace, topology, driven }))
+    traceContacts.push(orientTraceContacts({ trace, driven }))
   }
-  return { channelTraces, rejections }
+  return { traceContacts, rejections }
 }
 
 /** Require routed traces for all drivers when unrouted traces are disallowed. */
 function validateRoutedDrivers({
   channelSimulation,
   driverReceiverChannels,
-  channelTraces,
+  traceContacts,
 }: {
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
-  channelTraces: NumericalSettings["channelTraces"]
+  traceContacts: TraceContacts[]
 }): void {
   if (channelSimulation.allow_unrouted_traces) return
   for (const signal of driverReceiverChannels) {
     for (const port of endpointPorts(signal.driver)) {
       if (
-        channelTraces.some(
-          (channelTrace) =>
-            channelTrace.from.sourcePortId === port ||
-            channelTrace.to.sourcePortId === port,
+        traceContacts.some(
+          ({ fromSourcePortId, toSourcePortId }) =>
+            fromSourcePortId === port || toSourcePortId === port,
         )
       )
         continue
       throw new Error(`Signal "${signal.name}" is not routed from ${port}.`)
     }
   }
-  if (!channelTraces.length)
+  if (!traceContacts.length)
     throw new Error(
       "At least one routed conductor is required for routed extraction",
     )
 }
 
 /** Validate scoped traces and order them by stable physical endpoint identity. */
-export function prepareChannelTraces({
+export function prepareTraceContacts({
   circuit,
   copperScope,
   channelSimulation,
@@ -153,9 +148,9 @@ export function prepareChannelTraces({
   channelSimulation: SimulationPcbTransientChannelSimulation
   driverReceiverChannels: SimulationPcbDriverReceiverChannel[]
   signalPins: Pick<SignalPins, "topology" | "driven" | "rails">
-}): NumericalSettings["channelTraces"] {
+}): TraceContacts[] {
   const { topology, driven, rails } = signalPins
-  const { channelTraces, rejections } = auditChannelTraces({
+  const { traceContacts, rejections } = auditChannelTraces({
     circuit,
     channelPcbTraceIds: copperScope.channelPcbTraceIds,
     topology,
@@ -178,9 +173,9 @@ export function prepareChannelTraces({
   validateRoutedDrivers({
     channelSimulation,
     driverReceiverChannels,
-    channelTraces,
+    traceContacts,
   })
-  return channelTraces.toSorted((a, b) =>
-    compareNames({ a: a.from.sourcePortId, b: b.from.sourcePortId }),
+  return traceContacts.toSorted((a, b) =>
+    compareNames({ a: a.fromSourcePortId, b: b.fromSourcePortId }),
   )
 }

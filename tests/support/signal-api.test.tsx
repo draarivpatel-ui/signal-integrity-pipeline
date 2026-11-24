@@ -117,7 +117,7 @@ test.skipIf(!modelDir)(
       circuit: [...otherRecords, ...channels.reverse()],
       sources: ibis,
     })[0]
-    assert.equal(a.settings.channelTraces.length, 4)
+    assert.equal(a.settings.traceContacts.length, 4)
     assert.deepEqual(a.settings, b.settings)
   },
 )
