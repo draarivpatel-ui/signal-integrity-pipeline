@@ -1,12 +1,11 @@
 import { beforeAll, describe, setDefaultTimeout, test } from "bun:test"
 import assert from "node:assert/strict"
 import {
-  type RouteWire,
   type CopperPoint,
+  type RouteWire,
   sectionRoutes,
 } from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
-import type { Snapshot } from "../../src/kernel"
 import {
   type CrossSection,
   solveCrossSection,
@@ -15,12 +14,13 @@ import type {
   ExtractedRoutes,
   RouteCoefficients,
 } from "../../src/extraction/route-lines"
+import type { Snapshot } from "../../src/kernel"
 import {
   type RouteLadder,
   routeLadder,
 } from "../../src/simulation/route-ladder"
 import type { RouteEndpoint } from "../../src/simulation/route-network"
-import { routedCopper } from "../fixtures/routed-copper"
+import { renderRoutedCopper } from "../fixtures/routed-copper"
 import {
   conductorLossTolerance,
   crossingTime,
@@ -54,7 +54,7 @@ describe("large routed TSX ladder", () => {
   let result: RouteLadder
 
   beforeAll(async () => {
-    const { circuitJson, scope } = await routedCopper()
+    const { circuitJson, copperScope: scope } = await renderRoutedCopper()
     const fields = new RouteFieldsSolver({
       geometry: sectionRoutes({
         circuit: circuitJson,
@@ -175,8 +175,8 @@ function straightLine({
     startPoint: [0, conductor.xMm],
     endPoint: [lengthMm, conductor.xMm],
     direction: [1, 0],
-    startMm: 0,
-    endMm: lengthMm,
+    longitudinalMinMm: 0,
+    longitudinalMaxMm: lengthMm,
     lateralOffsetMm: conductor.xMm,
   }))
   const extracted: ExtractedRoutes = {
