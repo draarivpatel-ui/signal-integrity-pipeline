@@ -4,13 +4,11 @@ import {
   getTraceSegmentPolygon,
 } from "@tscircuit/circuit-json-util"
 import type { Snapshot } from "../kernel"
+import { CONTACT_TOLERANCE_MM } from "./copper-geometry-pad-contact"
 import type { WireChord } from "./copper-geometry-simplify"
 import type { TraceWire } from "./copper-geometry-types"
 import type { UnionedWire } from "./copper-geometry-union"
 import type { CopperScope } from "./geometry/scope"
-
-/** Physical outlines and point contacts use the same tolerance as topology validation. */
-export const CONTACT_TOLERANCE_MM = 1e-5
 
 /** Actual copper contributing to a modeled wire interval. */
 export interface WireOutline {

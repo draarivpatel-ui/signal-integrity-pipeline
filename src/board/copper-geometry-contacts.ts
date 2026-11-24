@@ -8,7 +8,7 @@ import {
   getViaPolygon,
 } from "@tscircuit/circuit-json-util"
 import type { PcbPort } from "circuit-json"
-import { hypotenuse, type Snapshot } from "../kernel"
+import type { Snapshot } from "../kernel"
 import {
   type ConnectivityMap,
   getTraceMembers,
@@ -16,10 +16,10 @@ import {
   sourceNetMembers,
 } from "./connectivity"
 import {
-  CONTACT_TOLERANCE_MM,
   getWireOutlines,
   type WireOutline,
 } from "./copper-geometry-contact-outlines"
+import { CONTACT_TOLERANCE_MM } from "./copper-geometry-pad-contact"
 import type { WireChord } from "./copper-geometry-simplify"
 import type {
   CopperVia,
@@ -30,8 +30,6 @@ import type {
 import type { UnionedWire } from "./copper-geometry-union"
 import { getViaMembers } from "./copper-geometry-vias"
 import type { CopperScope } from "./geometry/scope"
-import type { CopperPoint } from "./geometry/types"
-import type { PcbPortId } from "./ids"
 import type { LayerRef } from "./schema"
 
 /** A pad outline in contact with zero or more planar conductors. */
@@ -43,20 +41,6 @@ interface PortOutline {
 
 /** Resolved contacts on real PCB ports and tagged wire endpoints. */
 type PadContacts = Pick<ExtractedCopper, "wires" | "portContacts">
-
-/** Compare physical endpoints on the copper geometry precision grid. */
-function arePointsCoincident({
-  first,
-  second,
-}: {
-  first: Snapshot<CopperPoint>
-  second: Snapshot<CopperPoint>
-}): boolean {
-  return (
-    hypotenuse(first[0] - second[0], first[1] - second[1]) <
-    CONTACT_TOLERANCE_MM
-  )
-}
 
 /** Read physical pads and plated holes connected to PCB ports. */
 function getPortOutlines(db: ReturnType<typeof cju>): PortOutline[] {
@@ -228,27 +212,4 @@ export function resolvePadContacts({
       endTouchesPort: endContactWireIndices.has(wire.wireIndex),
     })),
   }
-}
-
-/** Locate the wire a physical PCB pad contacts, including a via on that pad. */
-export function findPadContactWire({
-  geometry,
-  layer,
-  point,
-  pcbPortId,
-}: {
-  geometry: Snapshot<ExtractedCopper>
-  layer: LayerRef
-  point: Snapshot<CopperPoint>
-  pcbPortId?: PcbPortId
-}): Snapshot<TraceWire> | undefined {
-  const contact = geometry.portContacts.find(
-    (contact) =>
-      contact.layer === layer &&
-      (pcbPortId === undefined || pcbPortId === contact.pcbPortId) &&
-      arePointsCoincident({ first: contact.point, second: point }),
-  )
-  if (!contact) return undefined
-  const wire = geometry.wires[contact.wireIndex]
-  return wire
 }
