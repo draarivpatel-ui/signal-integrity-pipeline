@@ -16,30 +16,26 @@ test.failing(
         <>
           <SectionTrace
             name="Lower"
-            startX={-5}
-            startLayer="inner1"
-            endLayer="top"
-            points={[
-              { x: -4, y: 0, via: true, fromLayer: "inner1", toLayer: "top" },
-            ]}
-          />
-          <SectionTrace
-            name="Upper"
-            startX={-5}
-            startY={2}
-            startLayer="inner1"
-            endLayer="top"
-            width={4.2}
-            points={[
-              { x: -4, y: 2, via: true, fromLayer: "inner1", toLayer: "top" },
-            ]}
-          />
-          <SectionPin name="Open" x={-4} y={-1.8} />
+            startX={0}
+          startY={-4}
+          endY={0}
+          points={[{ x: -4, y: 4 }]}
+        />
+        <SectionTrace
+          name="Upper"
+          startX={0}
+          startY={4}
+          endY={2}
+          width={4.2}
+          points={[{ x: -4, y: -2 }]}
+        />
+        <SectionPin name="Open" x={-4} y={-1.8} />
         </>
       ),
     })
     const solver = new RouteSectionsSolver(getSectionInput({ circuit }))
     solver.solve()
+
     const wire = solver
       .getOutput()
       .value.geometry.wires.find(
