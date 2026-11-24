@@ -5,17 +5,6 @@
  * Imports: kernel.
  */
 
-export type { AdmissionHeaderRow } from "./admission-header"
-export { admissionPorts } from "./admission-view"
-export { admissionDrawing } from "./admission-visual"
-export {
-  type AdmissionVisualCut,
-  type AdmissionVisualEndpoint,
-  type AdmissionVisualLink,
-  type AdmissionVisualScene,
-  admissionColors,
-  admissionCutColor,
-} from "./admission-visual-types"
 export {
   type ConnectivityMap,
   crossesDifferentialLegs,
@@ -47,6 +36,17 @@ export type {
   SourcePortId,
   SourceTraceId,
 } from "./ids"
+export type { PlanHeaderRow } from "./plan-header"
+export { planPorts } from "./plan-view"
+export { planDrawing } from "./plan-visual"
+export {
+  type PlanVisualCut,
+  type PlanVisualEndpoint,
+  type PlanVisualLink,
+  type PlanVisualScene,
+  planColors,
+  planCutColor,
+} from "./plan-visual-types"
 export {
   type RouteReference,
   type RouteSlice,
