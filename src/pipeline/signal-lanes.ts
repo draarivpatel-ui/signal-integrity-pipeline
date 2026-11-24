@@ -19,7 +19,7 @@ type RoutedLanes = {
   rejections: string[]
 }
 
-/** Orient the admitted trace from its driver when only one end is driven. */
+/** Orient the selected trace from its driver when only one end is driven. */
 function routedLane({
   trace,
   topology,

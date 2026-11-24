@@ -206,7 +206,7 @@ function channelConnections({
   )
 }
 
-/** Resolve ideal groups and index the same series connections for admission and binding. */
+/** Resolve ideal groups and index the same series connections for channel planning and binding. */
 export function receiverGraphs({
   db,
   circuit,

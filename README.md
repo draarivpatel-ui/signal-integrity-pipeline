@@ -5,7 +5,7 @@ Signal-integrity tools for tscircuit boards.
 ## How to use it?
 
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
-`RoutedAdmissionSolver` reads PCB transient channel simulation records written by core from TSX. It checks
+`TransientChannelSimulationPlanSolver` reads PCB transient channel simulation records written by core from TSX. It checks
 channel endpoints, IBIS models, timing and patterns, including pseudo-random binary sequences (PRBS).
 Each declared channel simulation becomes immutable inputs for route sections and buffer binding.
 
@@ -26,17 +26,17 @@ aggressor, measured at its declared bit rate after its offset.
 
 ```mermaid
 flowchart LR
-  board["Circuit JSON and channel declarations"] --> admit["RoutedAdmissionSolver"]
-  ibis["IBIS sources"] --> admit
-  admit --> sections["Route sectioning inputs"]
-  admit --> binding["IBIS binding inputs"]
-  admit --> manifest["Admission manifest"]
+  board["Circuit JSON and channel declarations"] --> plan["TransientChannelSimulationPlanSolver"]
+  ibis["IBIS sources"] --> plan
+  plan --> sections["Route sectioning inputs"]
+  plan --> binding["IBIS binding inputs"]
+  plan --> manifest["Transient channel simulation plan manifest"]
 ```
 
 ```mermaid
 stateDiagram-v2
   [*] --> Ready
-  Ready --> Complete: RoutedAdmissionSolver
+  Ready --> Complete: TransientChannelSimulationPlanSolver
   Ready --> Failed: invalid input, conflicting IBIS model selections or undeclared aggressors
   Complete --> [*]
   Failed --> [*]
