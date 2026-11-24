@@ -15,15 +15,20 @@ test("sections equivalent rectangular, polygon and BRep reference pours", async 
   })
   const [pour] = cju(circuit).pcb_copper_pour.list()
   assert(pour?.shape === "brep")
-  const points = pour.brep_shape.outer_ring.vertices
+  const { brep_shape, ...pourFields } = pour
+  const points = brep_shape.outer_ring.vertices
+  const minX = Math.min(...points.map(({ x }) => x))
+  const maxX = Math.max(...points.map(({ x }) => x))
+  const minY = Math.min(...points.map(({ y }) => y))
+  const maxY = Math.max(...points.map(({ y }) => y))
   const alternatives: PcbCopperPour[] = [
-    { ...pour, shape: "polygon", points },
+    { ...pourFields, shape: "polygon", points },
     {
-      ...pour,
+      ...pourFields,
       shape: "rect",
-      center: { x: 0, y: 0 },
-      width: 13.6,
-      height: 9.6,
+      center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
+      width: maxX - minX,
+      height: maxY - minY,
       rotation: 0,
     },
     pour,

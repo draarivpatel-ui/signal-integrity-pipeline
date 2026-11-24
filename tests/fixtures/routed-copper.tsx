@@ -8,14 +8,14 @@ import {
 } from "../../src/board"
 import { renderCoreSignals } from "../support/core-render"
 
-/** A rendered fixture board and the copper selected for field checks. */
+/** A rendered fixture board and the copper scoped for field checks. */
 interface RoutedCopper {
   circuitJson: CircuitJson
-  scope: CopperScope
+  copperScope: CopperScope
 }
 
 /** Real TSX geometry without vendor assets, for pure geometry and field checks. */
-export async function routedCopper(): Promise<RoutedCopper> {
+export async function renderRoutedCopper(): Promise<RoutedCopper> {
   const chips = [
     ["A", -4, 0],
     ["B", 4, 0],
@@ -75,7 +75,7 @@ export async function routedCopper(): Promise<RoutedCopper> {
   const ground = db.source_net.getWhere({ name: "GND" })
   if (!ground) throw new Error("Missing TSX ground")
   const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuitJson)
-  const scope = channelCopperScope({
+  const copperScope = channelCopperScope({
     circuit: circuitJson,
     connectivity,
     channelSourceIds: sourceNetMembers({
@@ -89,5 +89,5 @@ export async function routedCopper(): Promise<RoutedCopper> {
     distanceMm: 1,
     railSourceIds: new Set(),
   })
-  return { circuitJson, scope }
+  return { circuitJson, copperScope }
 }

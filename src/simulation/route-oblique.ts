@@ -206,8 +206,8 @@ export function routeOblique({
         ),
       )
       const lengthMm = Math.min(
-        a.endMm - a.startMm,
-        b.endMm - b.startMm,
+        a.longitudinalMaxMm - a.longitudinalMinMm,
+        b.longitudinalMaxMm - b.longitudinalMinMm,
         (2 * referenceGap) / sine,
       )
       const first = nearestRouteNode({
