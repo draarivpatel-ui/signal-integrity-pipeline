@@ -1,6 +1,10 @@
 import { beforeAll, describe, setDefaultTimeout, test } from "bun:test"
 import assert from "node:assert/strict"
-import { type RouteWire, type RouteXY, segmentRoutes } from "../../src/board"
+import {
+  type RouteWire,
+  type CopperPoint,
+  sectionRoutes,
+} from "../../src/board"
 import { RouteFieldsSolver } from "../../src/extraction"
 import type { Snapshot } from "../../src/kernel"
 import {
@@ -38,7 +42,7 @@ function endpoint({
   point,
 }: {
   wire: Snapshot<RouteWire>
-  point: Snapshot<RouteXY>
+  point: Snapshot<CopperPoint>
 }): string {
   const coordinates = point
     .map((value) => value.toFixed(COORDINATE_PRECISION))
@@ -52,9 +56,9 @@ describe("large routed TSX ladder", () => {
   beforeAll(async () => {
     const { circuitJson, scope } = await routedCopper()
     const fields = new RouteFieldsSolver({
-      geometry: segmentRoutes({
+      geometry: sectionRoutes({
         circuit: circuitJson,
-        scope,
+        copperScope: scope,
       }),
       artifactPrefix: "test",
     })
@@ -117,10 +121,11 @@ const ELEMENT_TOLERANCE = 1e-9
 function createStraightEndpoint(): RouteEndpoint {
   const interior = new Map<string, string>()
   return ({ wire, point }) => {
-    if (Math.abs(point[0]) < ENDPOINT_TOLERANCE_MM) return `near${wire.id}`
+    if (Math.abs(point[0]) < ENDPOINT_TOLERANCE_MM)
+      return `near${wire.wireIndex}`
     if (Math.abs(point[0] - lengthMm) < ENDPOINT_TOLERANCE_MM)
-      return `far${wire.id}`
-    const key = `${wire.id}:${point[0].toFixed(6)}`
+      return `far${wire.wireIndex}`
+    const key = `${wire.wireIndex}:${point[0].toFixed(6)}`
     const existing = interior.get(key)
     if (existing !== undefined) return existing
     const node = `n${interior.size}`
@@ -161,25 +166,25 @@ function straightLine({
       row.map((value) => value * lossScale),
     ),
   }
-  const wires: RouteWire[] = section.conductors.map((conductor, i) => ({
-    id: i,
-    trace: `t${i}`,
-    source: `s${i}`,
+  const wires: RouteWire[] = section.conductors.map((conductor, wireIndex) => ({
+    wireIndex,
+    pcbTraceId: `t${wireIndex}`,
+    sourceTraceId: `s${wireIndex}`,
     layer: "inner1",
-    width: conductor.widthMm,
-    a: [0, conductor.xMm],
-    b: [lengthMm, conductor.xMm],
-    u: [1, 0],
-    start: 0,
-    end: lengthMm,
-    transverse: conductor.xMm,
+    widthMm: conductor.widthMm,
+    startPoint: [0, conductor.xMm],
+    endPoint: [lengthMm, conductor.xMm],
+    direction: [1, 0],
+    startMm: 0,
+    endMm: lengthMm,
+    lateralOffsetMm: conductor.xMm,
   }))
   const extracted: ExtractedRoutes = {
     slices: [
       {
         wires,
-        start: 0,
-        end: lengthMm,
+        startMm: 0,
+        endMm: lengthMm,
         references: [],
         key: "golden",
         line,

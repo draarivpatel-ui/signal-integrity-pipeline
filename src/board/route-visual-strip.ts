@@ -1,6 +1,6 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { Viewbox } from "graphics-debug"
-import type { RouteWire } from "./route-sections"
+import type { RouteWire } from "./route-section-types"
 import {
   type RouteBuffer,
   type RouteNet,
@@ -243,13 +243,13 @@ interface UnrolledWireOffset {
 
 /** Resolve a wire position into a distance from the start of its net. */
 type RoutePositionLookup = (location: {
-  id: RouteWire["id"]
+  id: RouteWire["wireIndex"]
   position: number
 }) => UnrolledRoutePosition | undefined
 
 /** Bind a position lookup to the offsets of one unrolled route. */
 function routePositionLookup(
-  offsets: ReadonlyMap<RouteWire["id"], UnrolledWireOffset>,
+  offsets: ReadonlyMap<RouteWire["wireIndex"], UnrolledWireOffset>,
 ): RoutePositionLookup {
   return ({
     id,
@@ -267,20 +267,23 @@ export function routeUnrolled({
   wires,
 }: {
   view: RouteView
-  wires: readonly Pick<RouteWire, "id" | "trace" | "source" | "start" | "end">[]
+  wires: readonly Pick<
+    RouteWire,
+    "wireIndex" | "pcbTraceId" | "sourceTraceId" | "startMm" | "endMm"
+  >[]
 }): UnrolledRoutes {
   const lengths = new Map<RouteNet, number>()
-  const offsets = new Map<RouteWire["id"], UnrolledWireOffset>()
+  const offsets = new Map<RouteWire["wireIndex"], UnrolledWireOffset>()
   for (const wire of wires) {
-    if (!view.traces.has(wire.trace)) continue
-    const net = view.sources.get(wire.source)
+    if (!view.traces.has(wire.pcbTraceId)) continue
+    const net = view.sources.get(wire.sourceTraceId)
     if (!net) continue
-    offsets.set(wire.id, {
+    offsets.set(wire.wireIndex, {
       net,
       offset: lengths.get(net) ?? 0,
-      start: wire.start,
+      start: wire.startMm,
     })
-    lengths.set(net, (lengths.get(net) ?? 0) + wire.end - wire.start)
+    lengths.set(net, (lengths.get(net) ?? 0) + wire.endMm - wire.startMm)
   }
   return {
     lengths,

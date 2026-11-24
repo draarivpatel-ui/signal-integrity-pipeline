@@ -8,13 +8,13 @@ import {
   type Point,
   type RouteStripRow,
   type RouteWire,
-  type RouteXY,
+  type CopperPoint,
   routeBoardDrawing,
-  routeContactFrame,
+  findContactWire,
   routeDisplayItems,
   routeFailure,
   routeLengths,
-  routePosition,
+  getRoutePoint,
   routeStrip,
   routeTones,
   routeUnrolled,
@@ -104,11 +104,11 @@ export class RouteNetworkSolver extends BaseSolver {
     const known = new Map<RouteContactKey, string>()
     for (const port of ports) {
       for (const layer of port.layers) {
-        const point: RouteXY = [port.x, port.y]
+        const point: CopperPoint = [port.x, port.y]
         if (
-          !routeContactFrame({
+          !findContactWire({
             geometry,
-            scope,
+            pcbPortId: port.pcb_port_id,
             layer,
             point,
           })
@@ -132,8 +132,8 @@ export class RouteNetworkSolver extends BaseSolver {
     const endpoint = createRouteEndpoint({ scope, known })
     for (const wire of geometry.wires) {
       for (const join of wire.joins ?? []) {
-        const from = endpoint({ wire, point: join.from })
-        const to = endpoint({ wire, point: join.to })
+        const from = endpoint({ wire, point: join.fromPoint })
+        const to = endpoint({ wire, point: join.toPoint })
         if (from !== to)
           aliases.push(
             `RJOIN${aliases.length} ${from} ${to} ${JOIN_RESISTANCE}`,
@@ -265,14 +265,14 @@ export class RouteNetworkSolver extends BaseSolver {
       connectivity,
       memberId: bindings.groundSourcePortId,
     })
-    const powerReferences = geometry.slices.flatMap((slice) => {
+    const powerReferences = geometry.sections.flatMap((slice) => {
       return slice.references
-        .filter((plane) => !ground.has(plane.net))
+        .filter((plane) => !ground.has(plane.sourceNetId))
         .map((plane) => ({
           plane,
-          traces: slice.wires.map((wire) => wire.trace),
-          start: slice.start,
-          end: slice.end,
+          traces: slice.wires.map((wire) => wire.pcbTraceId),
+          start: slice.startMm,
+          end: slice.endMm,
         }))
     })
     const mapped = new Set(
@@ -280,11 +280,11 @@ export class RouteNetworkSolver extends BaseSolver {
     )
     const external = ports.filter((port) => {
       if (mapped.has(port.source_port_id)) return false
-      const point: RouteXY = [port.x, port.y]
+      const point: CopperPoint = [port.x, port.y]
       return port.layers.some((layer) =>
-        routeContactFrame({
+        findContactWire({
           geometry,
-          scope,
+          pcbPortId: port.pcb_port_id,
           layer,
           point,
         }),
@@ -373,7 +373,7 @@ export class RouteNetworkSolver extends BaseSolver {
       sections: extracted.slices.length,
       geometry_wires: geometry.wires.length,
       wires: geometry.wires,
-      via_contacts: geometry.viaContacts,
+      vias: geometry.vias,
       power_references: powerReferences,
       copper_overlap_patches: geometry.wires.filter(
         (wire) => wire.joins?.length,
@@ -388,7 +388,7 @@ export class RouteNetworkSolver extends BaseSolver {
       })),
       routes: receiverPaths.map((receiverPath) => {
         const wires = geometry.wires.filter(
-          (wire) => wire.source === receiverPath.sourceTraceId,
+          (wire) => wire.sourceTraceId === receiverPath.sourceTraceId,
         )
         const {
           channelName,
@@ -407,7 +407,7 @@ export class RouteNetworkSolver extends BaseSolver {
         return {
           ...route,
           length_mm: wires.reduce(
-            (sum, wire) => sum + wire.end - wire.start,
+            (sum, wire) => sum + wire.endMm - wire.startMm,
             0,
           ),
         }
@@ -422,13 +422,13 @@ export class RouteNetworkSolver extends BaseSolver {
         diagnostics: line.diagnostics,
       })),
       slices: extracted.slices.map((slice) => ({
-        start: slice.start,
-        end: slice.end,
-        point: routePosition({
+        start: slice.startMm,
+        end: slice.endMm,
+        point: getRoutePoint({
           wire: slice.wires[0],
-          position: (slice.start + slice.end) / 2,
+          positionMm: (slice.startMm + slice.endMm) / 2,
         }),
-        wires: slice.wires.map((wire) => wire.id),
+        wires: slice.wires.map((wire) => wire.wireIndex),
         references: slice.references,
         key: slice.key,
       })),
@@ -503,17 +503,19 @@ export class RouteNetworkSolver extends BaseSolver {
       .filter(({ a, b, k }) => {
         const visibleCoupling = k >= MINIMUM_DRAWN_COUPLING
         if (!visibleCoupling) return false
-        if (!view.traces.has(a.trace) && !view.traces.has(b.trace)) return false
-        return !built || (built.has(a.id) && built.has(b.id))
+        if (!view.traces.has(a.pcbTraceId) && !view.traces.has(b.pcbTraceId))
+          return false
+        return !built || (built.has(a.wireIndex) && built.has(b.wireIndex))
       })
       .sort((p, q) => q.k - p.k)
       .slice(0, 800)
     for (const { slice, a, b, k } of bands) {
-      const middle = (a.transverse + b.transverse) / 2
+      const middle = (a.lateralOffsetMm + b.lateralOffsetMm) / 2
       const half =
         (Math.max(
           0,
-          Math.abs(a.transverse - b.transverse) - (a.width + b.width) / 2,
+          Math.abs(a.lateralOffsetMm - b.lateralOffsetMm) -
+            (a.widthMm + b.widthMm) / 2,
         ) /
           2) *
         Math.min(1, k / 0.25)
@@ -521,22 +523,22 @@ export class RouteNetworkSolver extends BaseSolver {
         points: [
           offsetPoint({
             wire: a,
-            position: slice.start,
+            position: slice.startMm,
             transverse: middle - half,
           }),
           offsetPoint({
             wire: a,
-            position: slice.end,
+            position: slice.endMm,
             transverse: middle - half,
           }),
           offsetPoint({
             wire: a,
-            position: slice.end,
+            position: slice.endMm,
             transverse: middle + half,
           }),
           offsetPoint({
             wire: a,
-            position: slice.start,
+            position: slice.startMm,
             transverse: middle + half,
           }),
         ],
@@ -545,11 +547,11 @@ export class RouteNetworkSolver extends BaseSolver {
         label: `k ${k.toFixed(2)}`,
       })
     }
-    const wires = new Map(geometry.wires.map((wire) => [wire.id, wire]))
+    const wires = new Map(geometry.wires.map((wire) => [wire.wireIndex, wire]))
     const nodes = [...(this.ladder?.wireNodes ?? [])].flatMap(
       ([id, samples]) => {
         const wire = wires.get(id)
-        if (!view.traces.has(wire?.trace ?? "")) return []
+        if (!view.traces.has(wire?.pcbTraceId ?? "")) return []
         return samples.map((sample) => ({
           wire: wire!,
           position: sample.position,
@@ -560,14 +562,14 @@ export class RouteNetworkSolver extends BaseSolver {
       items: nodes,
       limit: 1500,
     })) {
-      const [x, y] = routePosition({ wire, position })
+      const [x, y] = getRoutePoint({ wire, positionMm: position })
       drawing.lines!.push({
         points: [-1, 1].map((sign) => ({
-          x: x - sign * wire.u[1] * wire.width * 1.4,
-          y: y + sign * wire.u[0] * wire.width * 1.4,
+          x: x - sign * wire.direction[1] * wire.widthMm * 1.4,
+          y: y + sign * wire.direction[0] * wire.widthMm * 1.4,
         })),
         strokeColor: routeTones.cell,
-        strokeWidth: wire.width * 0.3,
+        strokeWidth: wire.widthMm * 0.3,
       })
     }
     for (const record of routeDisplayItems({
@@ -594,12 +596,12 @@ export class RouteNetworkSolver extends BaseSolver {
     )
     const { minX, maxX, minY, maxY } = view.focus
     const selected = geometry.wires.filter((wire) =>
-      view.traces.has(wire.trace),
+      view.traces.has(wire.pcbTraceId),
     )
     let width = view.unit
     if (selected.length)
       width =
-        selected.reduce((sum, wire) => sum + wire.width, 0) / selected.length
+        selected.reduce((sum, wire) => sum + wire.widthMm, 0) / selected.length
     for (const record of transitions) {
       if (record.kind !== "via") continue
       const via = physical.get(String(record.id))
@@ -632,13 +634,16 @@ export class RouteNetworkSolver extends BaseSolver {
       ]),
     )
     for (const { wire, position } of nodes) {
-      const at = unrolled.along({ id: wire.id, position })
+      const at = unrolled.along({ id: wire.wireIndex, position })
       if (at) rows.get(at.net.label)?.ticks!.push(at.distance)
     }
     for (const { slice, a, b, k } of bands)
       for (const wire of [a, b]) {
-        const from = unrolled.along({ id: wire.id, position: slice.start })
-        const to = unrolled.along({ id: wire.id, position: slice.end })
+        const from = unrolled.along({
+          id: wire.wireIndex,
+          position: slice.startMm,
+        })
+        const to = unrolled.along({ id: wire.wireIndex, position: slice.endMm })
         if (from && to)
           rows
             .get(from.net.label)
@@ -676,7 +681,7 @@ function routedNode({
 /** Resolves a physical point on a routed wire to its electrical node. */
 export type RouteEndpoint = (input: {
   wire: Snapshot<RouteWire>
-  point: Snapshot<RouteXY>
+  point: Snapshot<CopperPoint>
 }) => string
 
 /** Rail wires are explicit ideal AC electrodes; all other route junctions share physical coordinates. */
@@ -689,7 +694,7 @@ function createRouteEndpoint({
 }): RouteEndpoint {
   const nodes = new Map(known)
   return ({ wire, point }) => {
-    if (scope.nearbyRailPcbTraceIds.includes(wire.trace)) return "0"
+    if (scope.nearbyRailPcbTraceIds.includes(wire.pcbTraceId)) return "0"
     const id = routeContactKey({ layer: wire.layer, point })
     const existing = nodes.get(id)
     if (existing) return existing
@@ -709,6 +714,9 @@ function offsetPoint({
   position: number
   transverse: number
 }): Point {
-  const [x, y] = routePosition({ wire: { ...wire, transverse }, position })
+  const [x, y] = getRoutePoint({
+    wire: { ...wire, lateralOffsetMm: transverse },
+    positionMm: position,
+  })
   return { x, y }
 }

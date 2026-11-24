@@ -23,7 +23,7 @@ async function routeBindings(): Promise<RouteBindingsSolver> {
   sections.solve()
   return new RouteBindingsSolver({
     ...plan.bindings,
-    copperScope: sections.getOutput().value.scope,
+    copperScope: sections.getOutput().value.copperScope,
   })
 }
 

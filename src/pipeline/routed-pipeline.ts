@@ -6,9 +6,10 @@ import {
 } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import {
+  cloneCircuitJson,
   getBoardBounds,
-  type RoutedSections,
-  RouteSectionsSolver,
+  type RouteSectionsOutput,
+  RouteSectionsStage,
   routeBoardDrawing,
   routeLengths,
   routeStrip,
@@ -55,7 +56,7 @@ export const routedStages = [
   ),
   definePipelineStep(
     "RouteSectionsSolver",
-    routedStage(RouteSectionsSolver),
+    routedStage(RouteSectionsStage),
     (p: RoutedPipelineSolver) => [
       p
         .stageOutput("TransientChannelSimulationPlanSolver")
@@ -68,8 +69,8 @@ export const routedStages = [
     (p: RoutedPipelineSolver) => [
       p.stageOutput("RouteSectionsSolver").value.map((sections, i) => ({
         geometry: sections.geometry,
-        circuitJson: sections.circuitJson,
-        scope: sections.scope,
+        circuitJson: cloneCircuitJson(sections.circuitJson),
+        scope: sections.copperScope,
         maskThicknessMm: sections.maskThicknessMm,
         materials: p.stageOutput("TransientChannelSimulationPlanSolver").value[
           i
@@ -87,7 +88,8 @@ export const routedStages = [
         .stageOutput("TransientChannelSimulationPlanSolver")
         .value.map((plan, i) => ({
           ...plan.bindings,
-          copperScope: p.stageOutput("RouteSectionsSolver").value[i].scope,
+          copperScope: p.stageOutput("RouteSectionsSolver").value[i]
+            .copperScope,
         })),
     ],
   ),
@@ -142,7 +144,7 @@ interface RoutedStageOutputs {
   TransientChannelSimulationPlanSolver: Produced<
     readonly TransientChannelSimulationPlan[]
   >
-  RouteSectionsSolver: RoutedStageOutput<RoutedSections>
+  RouteSectionsSolver: RoutedStageOutput<RouteSectionsOutput>
   RouteFieldsSolver: RoutedStageOutput<ExtractedRoutes>
   RouteBindingsSolver: RoutedStageOutput<RoutedBindings>
   RouteNetworkSolver: RoutedStageOutput<RoutedDeck>
