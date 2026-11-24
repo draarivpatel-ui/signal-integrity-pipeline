@@ -1,9 +1,7 @@
 import { cju } from "@tscircuit/circuit-json-util"
 import type { PcbVia } from "circuit-json"
-import type { Snapshot } from "../../kernel"
-import { circuitJsonDb } from "../circuit-json-db"
 import { fail } from "../diagnostics"
-import type { CircuitJson, CircuitJsonSnapshot } from "../schema"
+import type { CircuitJson } from "../schema"
 import type { PcbTrace, PortSelector, RoutedPoint, SourcePort } from "./types"
 
 /** Native route points and physical via records match within this distance in millimetres. */
@@ -72,12 +70,12 @@ export function selectPort({
   circuit,
   selector,
 }: {
-  circuit: CircuitJsonSnapshot
+  circuit: CircuitJson
   selector: PortSelector | undefined
-}): Snapshot<SourcePort> {
+}): SourcePort {
   if (!selector)
     fail("pin_mapping", "Explicit physical source port selector required")
-  const db = circuitJsonDb(circuit)
+  const db = cju([...circuit])
   if (selector.sourcePortId) {
     const ports = db.source_port.list({ source_port_id: selector.sourcePortId })
     if (ports.length !== 1) {

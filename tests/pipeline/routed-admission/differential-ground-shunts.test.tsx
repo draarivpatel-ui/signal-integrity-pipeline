@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import assert from "node:assert/strict"
-import { circuitJsonDb } from "../../../src/board"
+import { cju } from "@tscircuit/circuit-json-util"
 import { RoutedAdmissionSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { AdmissionShunts } from "../../fixtures/admission-shunts"
@@ -35,7 +35,7 @@ test("ground shunts load the partial differential path without joining it", asyn
     ...bindings,
     circuit: bindings.circuitJson,
   })
-  const db = circuitJsonDb(bindings.circuitJson)
+  const db = cju([...bindings.circuitJson])
   for (const name of ["RSHUNT_TX_A", "RSHUNT_RX_A"]) {
     const component = db.source_component.getWhere({ name })
     assert.ok(component)
