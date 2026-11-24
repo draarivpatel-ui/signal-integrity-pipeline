@@ -60,17 +60,18 @@ domain:
   capability: an operation an IBIS model supports, such as driving, receiving or disabling
   capacitance: how much charge copper stores per volt (the C in RLGC)
   capacitive: coupling between conductors through their electric field
+  calculate: compute a physical quantity or matrix from its inputs
   capture: a finite recording of voltages over time
   causal: a response that depends only on present and earlier input
   channel: everything electrical between driver and receiver: signal traces, return paths and nearby copper
-  charge: electric charge on a conductor or dielectric interface in the cross-section solve
+  charge: electric charge on a conductor or dielectric interface in the cross-section field calculation
   chord: straight approximation to a densely tessellated curve
   circuit: an electrical network; also the Circuit JSON document that describes the board
   clamp: a protection circuit that conducts when a signal crosses its reference voltage
   coefficient: a dimensionless multiplier on an IBIS pullup or pulldown current
   component: a part on the board, such as a chip, resistor or capacitor
   conductivity: how easily a material carries current, in siemens per metre
-  conductor: one piece of copper the field solver treats as a single electrical body
+  conductor: one piece of copper treated as a single electrical body in a cross-section
   constant: a bit pattern that repeats one level, so its driver never switches
   contrast: relative permittivity difference across a dielectric interface
   control: pin enable state or drive timing for a simulation
@@ -98,9 +99,10 @@ domain:
   evidence: data kept in the result that shows how a conclusion was reached
   execution: a completed invocation through the solver port
   experiment: one transient run with stimuli and probes
-  extent: horizontal reach of the discretised dielectric interfaces
-  extract: derive copper geometry from PCB records or calculate electrical fields from that geometry
-  extraction: deriving copper geometry from PCB records or electrical fields from wire cross-sections
+  extent: horizontal reach of the discretized dielectric interfaces
+  extract: derive copper geometry from PCB records
+  extraction: deriving copper geometry from PCB records
+  farad: SI unit of capacitance
   fixture: a known resistive load used to capture an IBIS switching waveform
   gate: the start of the interval compared during numerical convergence
   general: shared across supported channel experiment shapes
@@ -108,6 +110,7 @@ domain:
   ground: the zero-volt reference copper that signal current returns through
   h: inductance measured in henries
   impedance: a wire's opposition to changing current, in ohms
+  henries: SI units of inductance
   inductance: magnetic flux linkage per unit current, measured in henries
   inductive: coupling between conductors through their magnetic field
   initial: the state or value at the beginning of a simulation
@@ -127,7 +130,7 @@ domain:
   vertex: a point in a connection graph, represented by a source contact, ideal group or SPICE node
   longitudinal: along the canonical direction of a wire
   lateral: across a wire within the board plane
-  layer: one copper or insulating sheet in the stackup
+  layer: one copper or dielectric sheet in the stackup or cross-section
   ledger: the single record of every artifact path the pipeline writes; a second write to a path fails
   loss: energy dissipated in conductors or dielectrics
   mask: insulating soldermask on the outer copper layers
@@ -144,7 +147,7 @@ domain:
   observation: adaptive waveform parsing and numerical convergence
   pad: the copper area a component pin is soldered to
   pair: two conductors screened together for mutual coupling
-  panel: a small flat boundary piece of a cross-section that the 2D field solver puts charge on
+  panel: a small flat boundary piece of a cross-section that carries constant charge in the 2D field calculation
   parallel: conductors sharing a common longitudinal direction
   mesh: the set of boundary panels used to approximate the field in a cross-section
   region: the part of a cross-section electrically separated by reference planes
@@ -192,7 +195,7 @@ domain:
   simplify: reduce curve tessellation while bounding geometric displacement
   simulation: running the SPICE circuit over time with ngspice
   skin: concentration of alternating conductor current near its surface
-  slab: a flat layer of laminate or mask in a cross-section
+  wheeler: incremental inductance method for calculating skin loss from a small displacement of conductor walls
   sweep: partition geometry by visiting consecutive boundaries in order
   section: a longitudinal interval with the same wires and reference surfaces
   snapshot: a copied and frozen domain value published by a completed stage
@@ -200,7 +203,7 @@ domain:
   span: the range of layers a via crosses
   sparse: a matrix or realization with mostly zero couplings
   stackup: the order and thickness of the board's copper and insulating layers
-  stage: one fixed step of the routed pipeline (planning, copper geometry extraction, fields, bindings, network, transient)
+  stage: one fixed step of the routed pipeline (planning, copper geometry extraction, RLGC calculation, bindings, network, transient)
   startup: the time a switching channel needs to settle after its stimulus starts
   stimulus: the bit pattern a driver sends during an experiment
   stub: the unused part of a via beyond the layer where the signal leaves it
@@ -247,7 +250,7 @@ abbreviations:
   pcb: printed circuit board
   ps: picosecond
   rect: rectangle
-  rlgc: resistance, inductance, conductance, capacitance: the four wire measurements
+  rlgc: per-unit-length resistance, inductance, conductance and capacitance matrices
   sha: Secure Hash Algorithm (as in sha256)
   sm: siemens per metre, the unit of conductivity
   spice: the standard circuit simulation netlist format (run by ngspice)
@@ -294,11 +297,11 @@ general:
   - positive preceding previous primitive prior pure quiet range raw relative safe serial target threshold
   - characterization compliance valid vertical
   # quantities, electricity and units
-  - amount amplitude bit current denominator duration electrical energy factor farad fraction frequency
+  - amount amplitude bit current denominator duration electrical energy factor fraction frequency meter millimeter
   - interval material matrix measurement milliseconds ohm offset origin peak period phase plateau
   - quantity reduction sample scale seconds speed step time timeout tolerance transmission voltage zero
   # math
-  - cholesky delaunay integral magnitude interpolation multiply norm ratio sum symmetrize transpose union total
+  - cholesky delaunay evaluate integral magnitude interpolation multiply norm ratio sqrt sum symmetrize transpose union total
   # geometry
   - alignment anchor ancestor area aspect border boundary center connection coordinate curve
   - depth direction distance division edge endpoint epsilon face gap height hole left length nearest
@@ -311,7 +314,7 @@ general:
   # irregular plurals the checker cannot reduce
   - indices matrices stimuli
   # other everyday words
-  - overlap tessellate hypotenuse touch
+  - tessellate hypotenuse touch
 
 avoid:
   centre: center

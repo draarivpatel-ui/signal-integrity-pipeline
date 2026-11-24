@@ -45,9 +45,9 @@ stateDiagram-v2
   Failed --> [*]
 ```
 
-### 2D cross-section field calculation
+### 2D RLGC calculation
 
-The cross-section calculation takes rectangular conductors, reference planes and dielectric layers.
+The 2D resistance, inductance, conductance and capacitance (RLGC) calculation takes rectangular conductors, reference planes and dielectric layers.
 It returns per-unit-length capacitance, inductance, DC resistance, and coefficients for dielectric and skin loss.
 
 ```mermaid

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
-import type { CrossSection, Matrix } from "../../src/extraction"
+import type { Matrix } from "../../src/kernel"
+import type { CrossSection } from "../../src/rlgc"
 
 const DEFAULT_CONDUCTOR_COUNT = 1
 
@@ -14,7 +15,7 @@ export function sectionFixture({
   let thicknessMm = 0.001
   if (kind === "mask") thicknessMm = 0.035
   const conductors = Array.from({ length: count }, (_, i) => ({
-    id: `s${i}`,
+    conductorId: `s${i}`,
     xMm: (i - (count - 1) / 2) * 1.5,
     zMm: 1,
     widthMm: 1,
@@ -22,23 +23,23 @@ export function sectionFixture({
   }))
   const planes: CrossSection["planes"] = [{ zMm: 0 }]
   if (kind === "stripline") planes.push({ zMm: 2.001 })
-  const dielectrics: CrossSection["dielectrics"] = [
+  const dielectricLayers: CrossSection["dielectricLayers"] = [
     {
       zMm: 0,
       thicknessMm: planes[1]?.zMm ?? 1,
-      er: 4,
+      relativePermittivity: 4,
       lossTangent: 0.02,
     },
   ]
   if (kind === "mask") {
-    dielectrics.push({
+    dielectricLayers.push({
       zMm: 1,
       thicknessMm: 0.055,
-      er: 3.3,
+      relativePermittivity: 3.3,
       lossTangent: 0.025,
     })
   }
-  return { conductors, planes, dielectrics }
+  return { conductors, planes, dielectricLayers }
 }
 
 /** Speed of light in vacuum in meters per second, exact in SI. */
@@ -60,18 +61,18 @@ export function microstripFixture({
 }): CrossSection {
   return {
     conductors: Array.from({ length: count }, (_, i) => ({
-      id: String(i),
+      conductorId: String(i),
       xMm: (i - (count - 1) / 2) * (width + gap),
       zMm: 1,
       widthMm: width,
       thicknessMm: thickness,
     })),
     planes: [{ zMm: 0 }],
-    dielectrics: [
+    dielectricLayers: [
       {
         zMm: 0,
         thicknessMm: 1,
-        er,
+        relativePermittivity: er,
         lossTangent: 0,
       },
     ],

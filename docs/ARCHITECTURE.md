@@ -37,9 +37,9 @@ stateDiagram-v2
   Failed --> [*]
 ```
 
-## 2D cross-section field calculation
+## 2D RLGC calculation
 
-The internal `solveCrossSection` function in `src/extraction/` calculates the per-unit-length matrices in input conductor order.
+The internal `calculateRlgc` function in `src/rlgc/` calculates the per-unit-length matrices in input conductor order.
 Capacitance (with dielectrics and in vacuum) is in F/m, external inductance is in H/m and DC resistance is in Ω/m.
 For frequency `f` in Hz, multiply the dielectric loss coefficient (F/m) by `2πf` for conductance in S/m.
 Multiply the skin resistance coefficient (Ω/m/√Hz) by `√f` for the high-frequency skin contribution in Ω/m.

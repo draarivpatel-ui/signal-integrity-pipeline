@@ -2,7 +2,7 @@
 // DomainName: every directory src/<name>/ containing index.ts.
 export type DomainName =
   | 'adapters' | 'board' | 'buffers' | 'extraction' | 'kernel' | 'observation'
-  | 'pipeline' | 'simulation' | 'solver'
+  | 'pipeline' | 'rlgc' | 'simulation' | 'solver'
 /**
  * Union of every literal passed to diagnostics(domain, [...]) across src/.
  * Seeded from the codes today's code raises; tests/compat/codes.test.ts pins this set.
