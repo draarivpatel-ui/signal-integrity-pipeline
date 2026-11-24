@@ -75,7 +75,7 @@ flowchart TD
   chips[/"Chip models<br/>(IBIS files; coupled package admission)"/] --> s1
   s1 --> manifest["Transient channel simulation plan manifest"]
   s1 --> s2["2. Cut the scoped copper into straight sections over their reference planes<br/><small>board</small>"]
-  s2 --> s3["3. Solve each unique cross-section's coupled R, L, G and C<br/><small>extraction</small>"]
+  s2 --> s3["3. Calculate each unique cross-section's coupled RLGC matrices<br/><small>rlgc</small>"]
   chips --> s4
   s3 --> s4["4. Bind IBIS buffers, probes, sources and passives to physical ports<br/><small>buffers, simulation</small>"]
   s4 --> s5["5. Assemble delay-bounded coupled ladders with via and oblique corrections into one deck<br/><small>simulation</small>"]
@@ -139,6 +139,30 @@ local ground. Numeric offsets are seconds. Automatic duration adds 128 unit
 intervals at the slowest switching bit rate after startup. Quiet-only channel simulations use
 32 unit intervals at the slowest bit rate. Explicit durations are never extended.
 IBIS values always use the typical corner.
+
+### 2D RLGC calculation
+
+The 2D resistance, inductance, conductance and capacitance (RLGC) calculation takes rectangular conductors, reference planes and dielectric layers.
+It returns per-unit-length capacitance, inductance, DC resistance, and coefficients for dielectric and skin loss.
+
+```mermaid
+flowchart LR
+  crossSection["Cross-section geometry"] --> panels["Plan and build boundary panels"]
+  panels --> fields["Calculate electrostatic fields and loss coefficients"]
+  fields --> matrices["Check reciprocity and passivity"]
+  matrices --> coefficients["Per-unit-length matrices"]
+```
+
+```mermaid
+stateDiagram-v2
+  [*] --> CrossSectionReady
+  CrossSectionReady --> Meshed: valid geometry and panel budget
+  CrossSectionReady --> CalculationFailed: invalid geometry, options or panel budget
+  Meshed --> CoefficientsReady: finite, reciprocal and passive matrices
+  Meshed --> CalculationFailed: singular, nonfinite, nonreciprocal or nonpassive matrices
+  CoefficientsReady --> [*]
+  CalculationFailed --> [*]
+```
 
 ## Development validation
 
