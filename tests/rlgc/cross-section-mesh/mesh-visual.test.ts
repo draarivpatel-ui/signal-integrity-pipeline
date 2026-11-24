@@ -1,10 +1,10 @@
 import { test } from "bun:test"
-import { sectionFixture } from "../../fixtures/cross-section"
+import { crossSectionFixture } from "../../fixtures/cross-section"
 import { drawCrossSection } from "../../fixtures/cross-section-drawing"
 import { assertPlanDrawingSnapshot } from "../../fixtures/plan-drawing-snapshot"
 
 test("draws the graded boundary mesh of a masked microstrip pair", () => {
-  const crossSection = sectionFixture({ kind: "mask", count: 2 })
+  const crossSection = crossSectionFixture({ kind: "mask", count: 2 })
   const drawing = drawCrossSection({
     crossSection,
     halfWidthMm: 2.1,
