@@ -22,6 +22,7 @@ export default function ({
   openPositive = false,
   directNegative = false,
   children,
+  additionalChannels,
 }: {
   reversed?: boolean
   routedTermination?: boolean | "positive"
@@ -32,6 +33,7 @@ export default function ({
   openPositive?: boolean
   directNegative?: boolean
   children?: ReactNode
+  additionalChannels?: ReactNode
   partialSeriesPair?: boolean
 }): JSX.Element {
   let positive = "A"
@@ -162,6 +164,7 @@ export default function ({
           driverRef={driverRef}
           receiverRef={receiverRef}
         />
+        {additionalChannels}
       </simulation.pcbtransientchannelsimulation>
     </board>
   )
