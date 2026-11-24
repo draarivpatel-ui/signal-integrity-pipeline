@@ -7,8 +7,8 @@ Signal-integrity tools for tscircuit boards.
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
 `TransientChannelSimulationPlanSolver` reads PCB transient channel simulation records written by core from TSX. It checks
 channel endpoints, IBIS models, timing and patterns, including pseudo-random binary sequences (PRBS).
-Each declared channel simulation becomes immutable inputs for route sections and buffer binding.
-`RouteSectionsSolver` divides scoped wires into sections where nearby copper and reference surfaces stay consistent. It also resolves physical endpoint contacts.
+Each declared channel simulation becomes immutable inputs for copper geometry extraction and buffer binding.
+`CopperGeometryExtractionSolver` models scoped traces, vias, reference pours, and pad contacts. It groups wires into sections with consistent nearby copper and reference surfaces.
 
 Aggressors are output-capable pins retained by the copper scope that do not
 drive a declared channel in the simulation. This includes bidirectional
@@ -29,7 +29,7 @@ aggressor, measured at its declared bit rate after its offset.
 flowchart LR
   board["Circuit JSON and channel declarations"] --> plan["TransientChannelSimulationPlanSolver"]
   ibis["IBIS sources"] --> plan
-  plan --> sections["RouteSectionsSolver"]
+  plan --> geometry["CopperGeometryExtractionSolver"]
   plan --> binding["IBIS binding inputs"]
   plan --> manifest["Transient channel simulation plan manifest"]
 ```
@@ -38,7 +38,7 @@ flowchart LR
 stateDiagram-v2
   [*] --> Ready
   Ready --> Planned: TransientChannelSimulationPlanSolver
-  Planned --> Complete: RouteSectionsSolver
+  Planned --> Complete: CopperGeometryExtractionSolver
   Planned --> Failed: missing required contact or reference, unsupported route or soldermask
   Ready --> Failed: invalid input, conflicting IBIS model selections or undeclared aggressors
   Complete --> [*]
