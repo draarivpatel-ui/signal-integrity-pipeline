@@ -3,17 +3,17 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("keeps separate copper pour identities on the same reference net", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace name="Low" startY={-0.5} />
-        <SectionTrace name="High" startY={0.5} net="net.OTHER" />
+        <CopperTrace name="Low" startY={-0.5} />
+        <CopperTrace name="High" startY={0.5} net="net.OTHER" />
       </>
     ),
     reference: (
@@ -53,7 +53,7 @@ test("keeps separate copper pour identities on the same reference net", async ()
   assert.equal(pourIds.length, 2)
   const { sections } = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert.deepEqual(
     sections.map(({ references }) => references[0].pcbCopperPourId).sort(),

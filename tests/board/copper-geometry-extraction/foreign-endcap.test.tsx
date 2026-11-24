@@ -2,27 +2,27 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperPad,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionPin,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("does not mark an unrelated pad as a signal wire endpoint", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionTrace
+        <CopperTrace
           name="Signal"
           width={0.3}
           endY={-2}
           points={[{ x: 4, y: 0 }]}
         />
-        <SectionPin name="Foreign" x={0} net="net.OTHER" />
+        <CopperPad name="Foreign" x={0} net="net.OTHER" />
       </>
     ),
   })
-  const input = getCopperExtractionInput({ circuit })
+  const input = getCopperGeometryExtractionInput({ circuit })
   const solver = new CopperGeometryExtractionSolver(input)
   solver.solve()
   const { geometry } = solver.getOutput().value
@@ -30,5 +30,5 @@ test("does not mark an unrelated pad as a signal wire endpoint", async () => {
     ({ endPoint }) => endPoint[0] === 0 && endPoint[1] === 0,
   )
   assert(wire)
-  assert.equal(wire.endTouchesPort, false)
+  assert.equal(wire.endTouchesPad, false)
 })

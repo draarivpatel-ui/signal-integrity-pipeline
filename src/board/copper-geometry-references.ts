@@ -1,6 +1,6 @@
 import type { PolygonEdge } from "@flatten-js/core"
 import { getPourPolygon } from "@tscircuit/circuit-json-util"
-import type { PcbCopperPour } from "circuit-json"
+import type { PcbCopperPour, Ring } from "circuit-json"
 import { hypotenuse, type Snapshot } from "../kernel"
 import {
   containsReferenceInterval,
@@ -43,11 +43,8 @@ function samplePourEdge(edge: PolygonEdge): CopperPoint[] {
   })
 }
 
-type BrepPour = Extract<PcbCopperPour, { shape: "brep" }>
-type BrepRing = BrepPour["brep_shape"]["outer_ring"]
-
 /** Keep shallow arcs as chords before converting bulges to ill-conditioned circle centers. */
-function flattenShallowArcs(ring: BrepRing): BrepRing {
+function flattenShallowArcs(ring: Ring): Ring {
   return {
     ...ring,
     vertices: ring.vertices.map((start, index) => {
