@@ -2,16 +2,16 @@
 
 `RoutedPipelineSolver` is the public entry. It consumes Circuit JSON source records
 from RFC #28. `pipeline/signals.ts` (`prepareChannelSimulationById`) groups channel simulations and derives
-private settings and native declarations, one channel simulation per admission step. The lowered
+private settings and native declarations, one channel simulation per planning step. The lowered
 transient records are private and never appear in the input Circuit JSON.
 
 The stack retains Circuit JSON validation, physical stackup and stimulus helpers, IBIS asset loading and the ngspice adapter.
 Declare transient channels in Circuit JSON. Signal preparation validates endpoint topology, selected IBIS capabilities,
 timing and pseudo-random binary sequence (PRBS) patterns.
-RoutedAdmissionSolver lowers each declared channel simulation into immutable inputs for route sections and buffer binding.
+TransientChannelSimulationPlanSolver lowers each declared channel simulation into immutable inputs for route sections and buffer binding.
 Ideal wires, named nets and internal pin ties form the source groups used by SPICE.
 A named net can span the cuts connecting its own contacts, including multipoint ideal junctions.
-Admission and binding use the same receiver graph. Its paths traverse ideal junctions, physical cuts and series passives.
+Channel planning and binding use the same receiver graph. Its paths traverse ideal junctions, physical cuts and series passives.
 Rail shunts and differential terminations stay outside those paths, including terminations attached by both copper and ideal wires.
 Each cut keeps both physical contacts. Binding checks their selected models and detects signal contacts tied to ground.
 Removing a cut or series passive from the receiver graph must disconnect its two ends.
@@ -19,17 +19,17 @@ An alternate path reports the physical contacts and distinguishes an entirely ro
 RouteSectionsSolver divides scoped copper into straight slices and resolves physical endpoint contacts.
 The standalone 2D cross-section solve returns per-unit-length C/C0/L and frequency-dependent R/G.
 RouteFieldsSolver screens nearby conductor pairs and extracts coupled coefficients for each unique section.
-IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during admission.
+IBIS conversion resolves scalar or coupled package elements and validates selected package matrices during planning.
 RouteBindingsSolver associates compiled buffers, sources and probes with the allocated circuit node map.
 RouteNetworkSolver integrates route energies into a coupled ladder with via and oblique corrections and emits a deck.
 RouteTransientSolver invokes ngspice through the injected solver port and publishes complete raw-vector captures.
 
 ```mermaid
 flowchart LR
-  source["Circuit JSON SI records"] --> admit["pipeline: channel admission and declared aggressor states<br/>buffers: package admission, unlisted-pin hierarchy and passivity"]
-  modelSources["IBIS sources"] --> admit
-  admit --> manifest["Admission manifest"]
-  admit --> cuts["pipeline: physical trace cuts"]
+  source["Circuit JSON SI records"] --> plan["pipeline: channel planning and declared aggressor states<br/>buffers: package admission, unlisted-pin hierarchy and passivity"]
+  modelSources["IBIS sources"] --> plan
+  plan --> manifest["Transient channel simulation plan manifest"]
+  plan --> cuts["pipeline: physical trace cuts"]
   cuts --> sections["board: copper scope, straight sections and reference planes"]
   cuts --> groups["simulation: ideal source groups"]
   groups --> receiverPaths["pipeline: routed receiver paths"]
@@ -58,7 +58,7 @@ native runs. `adapters` supplies explicit filesystem/process IO.
 `buffers/package-model.ts` parses local IBIS package definitions;
 `package-matrix.ts` validates the complete matrices and reduces unused floating
 pins; `coupled-package.ts` emits the coupled lumped pi circuit. Admission runs
-during channel simulation admission, before extraction. Assembly records selected matrices,
+during channel simulation planning, before extraction. Assembly records selected matrices,
 original self terms, unused pins, merged rail associations and the termination policy.
 Unlisted pins follow the IBIS scalar hierarchy or implicit merged rail bus rules.
 Core only checks declaration/model bindings, capabilities and routing. The converter still
@@ -115,12 +115,12 @@ flowchart LR
 
 ## Inspectable routed compiler
 
-Stage classes live with their domain knowledge. Root admission calls
-`prepareChannelSimulationById` once per channel simulation. Each admitted
+Stage classes live with their domain knowledge. The plan solver calls
+`prepareChannelSimulationById` once per channel simulation. Each planned
 channel simulation is passed through the same six static top-level stages. The entire
-`pipelineDef` exists before admission starts; no step creates stages at runtime.
-`RoutedStageSolver` steps each domain algorithm across all admitted channel simulations in
-order, one domain item per step, and publishes an immutable array in admission
+`pipelineDef` exists before planning starts; no step creates stages at runtime.
+`RoutedStageSolver` steps each domain algorithm across all planned channel simulations in
+order, one domain item per step, and publishes an immutable array in planning
 order. It is a `BaseSolver`, with no nested pipeline or child debugger rows.
 The single `routedStages` tuple supplies the debugger order, tests, artifact
 manifest and generated docs below.
@@ -129,7 +129,7 @@ Regenerate with `bun scripts/document-routed-stages.ts`.
 <!-- routed-stages:start -->
 | # | Stage solver |
 |---|---|
-| 1 | RoutedAdmissionSolver |
+| 1 | TransientChannelSimulationPlanSolver |
 | 2 | RouteSectionsSolver |
 | 3 | RouteFieldsSolver |
 | 4 | RouteBindingsSolver |
@@ -138,12 +138,12 @@ Regenerate with `bun scripts/document-routed-stages.ts`.
 
 ```mermaid
 flowchart LR
-  s0["RoutedAdmissionSolver<br/>Admit one channel simulation per step"]
-  s1["RouteSectionsSolver<br/>All admitted channel simulations, one item per step"]
-  s2["RouteFieldsSolver<br/>All admitted channel simulations, one item per step"]
-  s3["RouteBindingsSolver<br/>All admitted channel simulations, one item per step"]
-  s4["RouteNetworkSolver<br/>All admitted channel simulations, one item per step"]
-  s5["RouteTransientSolver<br/>All admitted channel simulations, one item per step"]
+  s0["TransientChannelSimulationPlanSolver<br/>Plan one transient channel simulation per step"]
+  s1["RouteSectionsSolver<br/>All planned channel simulations, one item per step"]
+  s2["RouteFieldsSolver<br/>All planned channel simulations, one item per step"]
+  s3["RouteBindingsSolver<br/>All planned channel simulations, one item per step"]
+  s4["RouteNetworkSolver<br/>All planned channel simulations, one item per step"]
+  s5["RouteTransientSolver<br/>All planned channel simulations, one item per step"]
   s0 --> s1
   s1 --> s2
   s2 --> s3
@@ -154,14 +154,14 @@ flowchart LR
 
 ```mermaid
 stateDiagram-v2
-  [*] --> RoutedAdmissionSolver
-  RoutedAdmissionSolver --> RouteSectionsSolver: all channel simulations completed
+  [*] --> TransientChannelSimulationPlanSolver
+  TransientChannelSimulationPlanSolver --> RouteSectionsSolver: all channel simulations completed
   RouteSectionsSolver --> RouteFieldsSolver: all channel simulations completed
   RouteFieldsSolver --> RouteBindingsSolver: all channel simulations completed
   RouteBindingsSolver --> RouteNetworkSolver: all channel simulations completed
   RouteNetworkSolver --> RouteTransientSolver: all channel simulations completed
   RouteTransientSolver --> [*]
-  RoutedAdmissionSolver --> failed: invalid admission, including undeclared aggressors
+  TransientChannelSimulationPlanSolver --> failed: invalid channel simulation input, including undeclared aggressors
   RouteSectionsSolver --> failed
   RouteFieldsSolver --> failed
   RouteBindingsSolver --> failed
@@ -212,12 +212,12 @@ stages 1–6, matching table rows 01–06. Entering a number
 selects that retained stage until the next pipeline advance. Each flat stage
 retains its last completed channel simulation's domain solver and final drawing; selecting
 an earlier stage never recomputes it. Each domain solver draws its physical input
-before its first step. Stage wrappers construct that domain solver when admitted,
+before its first step. Stage wrappers construct that domain solver when the inputs are ready,
 and root transitions preview the incoming immutable input before the next step.
 Fields preview the first physical cross-section without solving coefficients.
 Pending transients show the board with probe marks and empty plot axes; curves
 appear only after complete samples arrive. Future stages whose inputs are
-incomplete draw the selected copper in neutral grey, and a problem with no admitted
+incomplete draw the selected copper in neutral grey, and a problem with no planned
 channel simulations shows the whole board with one quiet line. Values outside 0–6 are clamped silently; clicking
 a table row also selects that stage. Selection lives in fixture component state.
 The page starts with this input and the debugger; local asset loading remains,
@@ -234,7 +234,7 @@ layers hollow, bottom dimmed. Each stage draws what it produced:
 
 | Stage | Board | Pane |
 |---|---|---|
-| Admission | selected nets, drivers as dots, receivers as rings | each net's routed length, to scale |
+| Transient channel simulation plan | selected nets, drivers as dots, receivers as rings | each net's routed length, to scale |
 | Sections | sections in two tones of the net's hue, the route cut this step cased white, uncut copper grey | the same partition unrolled per net |
 | Fields | solved copper coloured by Z0, an amber cut at the slice on screen | that slice's stack at one mm scale, Z0 of selected conductors, coupling bands sized by k, the Z0 scale |
 | Bindings | bound parts outlined, ▶ at drivers and ◁ at receivers along the trace | each bound net with its buffer glyphs |

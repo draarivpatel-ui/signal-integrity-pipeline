@@ -6,7 +6,7 @@ import React from "react"
 import { convertPackaged } from "../../src/buffers/package"
 import { isDigit, lineRanges } from "../../src/buffers/text"
 import { generalDeclarations, modelRunDefinition } from "../../src/simulation"
-import { admittedBindings, renderSignals } from "../fixtures/signal-render"
+import { plannedBindings, renderSignals } from "../fixtures/signal-render"
 import Differential from "../fixtures/unit-differential"
 import Single from "../fixtures/unit-single-ended"
 
@@ -94,7 +94,7 @@ async function fixture(
     board = <Differential />
   }
   const bytes = await readFile(`${modelDir}/${file}`)
-  const bindings = admittedBindings({
+  const bindings = plannedBindings({
     circuitJson: await renderSignals({ tree: board }),
     ibisSources: { [`models/${file}`]: bytes },
   })

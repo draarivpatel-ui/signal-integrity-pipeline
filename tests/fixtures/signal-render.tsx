@@ -38,7 +38,7 @@ export async function renderSignals({
   }
 }
 
-/** Lower every transient channel simulation in board order, as RoutedAdmissionSolver does one channel simulation per step. */
+/** Lower every transient channel simulation in board order, as TransientChannelSimulationPlanSolver does one channel simulation per step. */
 export function prepareChannelSimulations({
   circuit,
   sources,
@@ -60,7 +60,7 @@ export function prepareChannelSimulations({
 }
 
 /** Gets the first channel simulation's bindings through the public solver. */
-export function admittedBindings({
+export function plannedBindings({
   circuitJson,
   ibisSources,
 }: {
@@ -71,11 +71,12 @@ export function admittedBindings({
     input: { circuitJson, ibisSources },
     context: {
       runSolver: async () => {
-        throw new Error("admission needs no native solver")
+        throw new Error("channel planning needs no native solver")
       },
       progress: () => undefined,
     },
   })
   root.solveUntilStage("RouteSectionsSolver")
-  return root.stageOutput("RoutedAdmissionSolver").value[0].bindings
+  return root.stageOutput("TransientChannelSimulationPlanSolver").value[0]
+    .bindings
 }
