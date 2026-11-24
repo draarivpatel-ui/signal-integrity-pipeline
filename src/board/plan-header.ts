@@ -36,8 +36,13 @@ function scaleLength(width: number): number {
   })
 }
 
+/** Use the same secondary text size for header lines and board labels. */
+export function planTextSize(width: number): number {
+  return width / 52
+}
+
 /** Bound the width in sans-serif ems, including wide glyphs and fallback fonts. */
-function headerWidth(text: string): number {
+function textWidth(text: string): number {
   let width = 0
   for (const char of text) {
     if (" ilI.,:;'|".includes(char)) width += 0.4
@@ -48,7 +53,29 @@ function headerWidth(text: string): number {
   return width
 }
 
-/** Center each line above the board, sizing long captions to fit the frame. */
+/** Wrap at spaces and split individual words only when they exceed the frame. */
+function wrapText({ text, width }: { text: string; width: number }): string[] {
+  const lines: string[] = []
+  let line = ""
+  for (let word of text.split(" ")) {
+    if (textWidth(line + word) <= width) {
+      line += `${word} `
+      continue
+    }
+    if (line) lines.push(line.trimEnd())
+    while (textWidth(word) > width) {
+      let end = 1
+      while (textWidth(word.slice(0, end + 1)) <= width) end++
+      lines.push(word.slice(0, end))
+      word = word.slice(end)
+    }
+    line = `${word} `
+  }
+  if (line.trimEnd()) lines.push(line.trimEnd())
+  return lines
+}
+
+/** Center each line above the board at its normal reading size. */
 export function planHeader({
   scene,
   frame,
@@ -62,7 +89,7 @@ export function planHeader({
 }): PlanHeader {
   const { width, box } = frame
   const x = (box.minX + box.maxX) / 2
-  const size = width / 52
+  const size = planTextSize(width)
   const scale = scaleLength(width)
   const scaleY = boardTop + size * 1.54
   const labelY = scaleY + size * 0.88
@@ -108,22 +135,29 @@ export function planHeader({
   ]
   const rects: Rect[] = []
   let y = labelY + size * 1.66
-  for (const row of rows.reverse()) {
-    if (!row.text) continue
-    const fontSize = Math.min(row.size, width / headerWidth(row.text))
+  const wrapped = rows.flatMap((row) => {
+    if (!row.text) return []
+    return wrapText({ text: row.text, width: width / row.size }).map(
+      (text) => ({
+        ...row,
+        text,
+      }),
+    )
+  })
+  for (const row of wrapped.reverse()) {
     texts.push({
       x,
       y,
       text: row.text,
       color: row.color || INK,
-      fontSize,
+      fontSize: row.size,
       anchorSide: "center",
       layer: "header",
     })
     if ("label" in row && row.label)
       rects.push({
         center: { x, y },
-        width: headerWidth(row.text) * fontSize,
+        width: textWidth(row.text) * row.size,
         height: size * 1.25,
         fill: "transparent",
         stroke: "none",
