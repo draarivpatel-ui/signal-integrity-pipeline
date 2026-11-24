@@ -1,11 +1,15 @@
 import type { Snapshot } from "../kernel"
-import type { LongitudinalInterval } from "./copper-geometry-reference-range"
 import {
-  findReferenceBoundariesMm,
+  findEdgeHandoffsMm,
+  type LongitudinalInterval,
+} from "./copper-geometry-reference-range"
+import {
   findWireReferences,
+  getReferenceCoverage,
 } from "./copper-geometry-references"
 import type {
   ExtractedCopper,
+  ReferencePour,
   TraceWire,
   WireSection,
 } from "./copper-geometry-types"
@@ -14,6 +18,7 @@ import {
   getDirectionKey,
   getWirePoint,
   groupWiresByGap,
+  MIN_WIRE_LENGTH_MM,
   roundWireCoordinate,
 } from "./copper-geometry-wire"
 import type { CopperScope } from "./geometry/scope"
@@ -67,6 +72,86 @@ function groupSectionReferences({
     else profiles.set(key, { wires: [wire], references })
   }
   return profiles.values()
+}
+
+/** Include vertices and endpoints of collinear edges; the sweep deduplicates shared positions. */
+function findSurfaceBoundariesMm({
+  wire,
+  pours,
+}: {
+  wire: TraceWire
+  pours: readonly ReferencePour[]
+}): number[] {
+  const [x, y] = wire.direction
+  const boundariesMm: number[] = []
+  for (const pour of pours) {
+    if (pour.layer === wire.layer) continue
+    for (const ring of pour.polygon) {
+      for (const [index, startPoint] of ring.entries()) {
+        const endPoint = ring[(index + 1) % ring.length]
+        const startOffsetMm =
+          -startPoint[0] * y + startPoint[1] * x - wire.lateralOffsetMm
+        const endOffsetMm =
+          -endPoint[0] * y + endPoint[1] * x - wire.lateralOffsetMm
+        if (Math.abs(startOffsetMm) <= MIN_WIRE_LENGTH_MM)
+          boundariesMm.push(startPoint[0] * x + startPoint[1] * y)
+        if (
+          (startOffsetMm < 0 && endOffsetMm > 0) ||
+          (startOffsetMm > 0 && endOffsetMm < 0)
+        ) {
+          const fraction = startOffsetMm / (startOffsetMm - endOffsetMm)
+          const crossingX =
+            startPoint[0] + (endPoint[0] - startPoint[0]) * fraction
+          const crossingY =
+            startPoint[1] + (endPoint[1] - startPoint[1]) * fraction
+          boundariesMm.push(crossingX * x + crossingY * y)
+        }
+      }
+    }
+  }
+  return boundariesMm.filter(
+    (positionMm) =>
+      positionMm > wire.longitudinalMinMm + MIN_WIRE_LENGTH_MM &&
+      positionMm < wire.longitudinalMaxMm - MIN_WIRE_LENGTH_MM,
+  )
+}
+
+/** Add edge handoffs only where no reference surface covers the existing interval. */
+function findReferenceBoundariesMm({
+  wire,
+  geometry,
+}: {
+  wire: TraceWire
+  geometry: SectionSweepGeometry
+}): number[] {
+  const surfaceBoundariesMm = findSurfaceBoundariesMm({
+    wire,
+    pours: geometry.pours,
+  }).sort((first, second) => first - second)
+  const positionsMm = [
+    wire.longitudinalMinMm,
+    ...surfaceBoundariesMm,
+    wire.longitudinalMaxMm,
+  ]
+  const handoffsMm: number[] = []
+  for (let index = 1; index < positionsMm.length; index++) {
+    const startMm = positionsMm[index - 1]
+    const endMm = positionsMm[index]
+    if (endMm - startMm <= MIN_WIRE_LENGTH_MM) continue
+    const interval = { startMm, endMm }
+    if (
+      findWireReferences({
+        geometry,
+        wire,
+        positionMm: (startMm + endMm) / 2,
+        interval,
+      }).length
+    )
+      continue
+    const coverage = getReferenceCoverage({ geometry, wire })
+    handoffsMm.push(...findEdgeHandoffsMm({ coverage, interval }))
+  }
+  return [...surfaceBoundariesMm, ...handoffsMm]
 }
 
 /** Partition one parallel direction at changes in nearby copper and references. */
