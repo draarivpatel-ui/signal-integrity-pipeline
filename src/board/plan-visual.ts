@@ -12,11 +12,11 @@ import {
 } from "./plan-marks"
 import { buildBoardShapes, drawPlanPolygon } from "./plan-shapes"
 import {
-  boxPoints,
   buildPlanFrame,
   clipPlanLines,
   clipPlanPolygons,
   getBoardBounds,
+  getBoxPoints,
   getCopperSearchBox,
   getPointBounds,
 } from "./plan-view"
@@ -38,7 +38,7 @@ function buildSearchEnvelope({
   unitMm: number
 }): PlanLine {
   const insetMm = unitMm * 0.6
-  const points = boxPoints({
+  const points = getBoxPoints({
     minX: Math.max(board.minX + insetMm, searchBox.minX),
     maxX: Math.min(board.maxX - insetMm, searchBox.maxX),
     minY: Math.max(board.minY + insetMm, searchBox.minY),
@@ -199,15 +199,7 @@ export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
     active.add(fromSourcePortId)
     active.add(toSourcePortId)
   }
-  const searchBox =
-    copperScope &&
-    getCopperSearchBox({
-      db,
-      board,
-      copperScope,
-      activeSourcePortIds: active,
-      ports,
-    })
+  const searchBox = copperScope && getCopperSearchBox({ board, copperScope })
   const frame = buildPlanFrame({ board, focus: searchBox })
   const { unitMm, crop } = frame
   const copper = drawCopper({ scene, ports, unitMm })
@@ -245,7 +237,7 @@ export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
     ...labels.texts,
     ...boardPolygons.flatMap(({ points }) => points),
     ...boardLines.flatMap(({ points }) => points),
-    ...boxPoints(frame.box),
+    ...getBoxPoints(frame.box),
   ])
   const rows = [...scene.rows]
   if (scene.summary) {
@@ -262,12 +254,12 @@ export function renderPlanDrawing(scene: PlanVisualScene): GraphicsObject {
       summary = scopedText
     rows.unshift({ text: summary, color: planColors.quiet })
   }
-  let boardTop = frame.box.maxY
-  if (extent) boardTop = extent.maxY
+  let boardTopMm = frame.box.maxY
+  if (extent) boardTopMm = extent.maxY
   const header = buildPlanHeader({
     scene: { ...scene, rows },
     frame,
-    boardTop,
+    boardTopMm,
     legend: [
       ...buildPlanLegend({ scene, polygons: boardPolygons, lines: boardLines }),
       ...labels.pourLegendEntries,

@@ -13,8 +13,8 @@ import type { ModelRunDefinition } from "../buffers"
 import type { Snapshot } from "../kernel"
 import { fail } from "./diagnostics"
 import {
+  collectPassiveModelContacts,
   collectRequiredContacts,
-  passiveModelContacts,
   validateRoutedContacts,
 } from "./routed-contacts"
 import { type CircuitNodesInput, resolveRoutedNodes } from "./routed-nodes"
@@ -166,7 +166,7 @@ export function generalDeclarations({
     receiverPaths,
     traceContacts: resolvedTraceContacts,
   })
-  const passiveContacts = passiveModelContacts({ db, modeling })
+  const passiveContacts = collectPassiveModelContacts({ db, modeling })
   const ports = new Map(db.source_port.list().map((e) => [e.source_port_id, e]))
   const sourceNets = new Set(
     db.source_net.list().map((net) => net.source_net_id),
