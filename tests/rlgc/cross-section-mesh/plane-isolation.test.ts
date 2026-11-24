@@ -1,10 +1,10 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { calculateRlgc } from "../../../src/rlgc"
-import { sectionFixture } from "../../fixtures/cross-section"
+import { crossSectionFixture } from "../../fixtures/cross-section"
 
 test("isolates fields across a plane", () => {
-  const crossSection = sectionFixture({ kind: "mask", count: 2 })
+  const crossSection = crossSectionFixture({ kind: "mask", count: 2 })
   const shielded = calculateRlgc({
     crossSection: {
       ...crossSection,
@@ -20,6 +20,7 @@ test("isolates fields across a plane", () => {
     shielded.vacuumCapacitanceFaradsPerMeter,
     shielded.externalInductanceHenriesPerMeter,
     shielded.totalSkinResistanceOhmsPerMeterPerSqrtHz,
+    shielded.conductorSkinResistanceOhmsPerMeterPerSqrtHz,
     shielded.dielectricLossFaradsPerMeter,
   ]) {
     assert.equal(matrix[0][1], 0)

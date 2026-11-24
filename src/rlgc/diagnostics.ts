@@ -11,6 +11,6 @@ const raise = diagnostics("rlgc", [
 ] as const)
 export type RlgcCode = Parameters<typeof raise>[0]
 /** Declared as a function so `never` narrows control flow at call sites. */
-export function fail(code: RlgcCode, text: string): never {
+export function fail({ code, text }: { code: RlgcCode; text: string }): never {
   return raise(code, text)
 }

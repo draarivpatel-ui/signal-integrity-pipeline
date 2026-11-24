@@ -1,6 +1,5 @@
 /**
- * extraction — what the channel is electrically.
- * Owns: per-route section lines and coupling (RouteFieldsSolver), and their matrix checks.
+ * Matrix checks and linear algebra for the channel model.
  * Imports: kernel, board.
  */
 

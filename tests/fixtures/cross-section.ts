@@ -5,7 +5,7 @@ import type { CrossSection } from "../../src/rlgc"
 const DEFAULT_CONDUCTOR_COUNT = 1
 
 /** Thin rectangular lines approach the zero-thickness published oracles without altering them. */
-export function sectionFixture({
+export function crossSectionFixture({
   kind,
   count = DEFAULT_CONDUCTOR_COUNT,
 }: {
