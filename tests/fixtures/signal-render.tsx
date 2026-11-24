@@ -76,7 +76,7 @@ export function plannedBindings({
       progress: () => undefined,
     },
   })
-  root.solveUntilStage("RouteSectionsSolver")
+  root.solveUntilStage("CopperGeometryExtractionSolver")
   return root.stageOutput("TransientChannelSimulationPlanSolver").value[0]
     .bindings
 }

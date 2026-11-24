@@ -2,8 +2,8 @@
 import type { GraphicsObject, Point, Viewbox } from "graphics-debug"
 import {
   type CircuitJson,
+  type CopperGeometry,
   cloneCircuitJson,
-  type RouteSectionsOutput,
   routeBoardDrawing,
   routeCanvas,
   routeFailure,
@@ -39,7 +39,7 @@ export interface ReceiverThreshold {
 
 /** Inputs for drawing a pending, completed or failed transient. */
 export interface WaveformState {
-  board?: RouteSectionsOutput
+  board?: CopperGeometry
   probes: readonly WaveformProbe[]
   capture?: RoutedCapture
   durationSeconds: number
@@ -718,7 +718,7 @@ function waveformCanvas({
   circuit,
 }: {
   frame: ReturnType<typeof routeFrame>
-  board?: RouteSectionsOutput
+  board?: CopperGeometry
   circuit?: CircuitJson
 }): GraphicsObject {
   if (board && circuit)

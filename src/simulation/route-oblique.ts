@@ -1,8 +1,8 @@
 import type {
   CopperPoint,
   CopperScope,
-  RouteWire,
-  SectionGeometry,
+  ExtractedCopper,
+  TraceWire,
 } from "../board"
 import {
   closestRoutePoints,
@@ -46,7 +46,7 @@ function nearestRouteNode({
   point,
   wireNodes,
 }: {
-  wire: Snapshot<RouteWire>
+  wire: Snapshot<TraceWire>
   point: Snapshot<CopperPoint>
   wireNodes: RouteLadder["wireNodes"]
 }): NearestRouteNode {
@@ -60,7 +60,7 @@ function nearestRouteNode({
 
 /** Report one pair of wires considered by the oblique approximation. */
 interface ObliqueEncounter {
-  wires: [RouteWire["wireIndex"], RouteWire["wireIndex"]]
+  wires: [TraceWire["wireIndex"], TraceWire["wireIndex"]]
   policy: string
   distanceMm: number
   references?: ExtractedRoutes["slices"][number]["references"]
@@ -87,7 +87,7 @@ export function routeOblique({
   materials,
   panels = DEFAULT_OBLIQUE_PANELS,
 }: {
-  geometry: Snapshot<SectionGeometry>
+  geometry: Snapshot<ExtractedCopper>
   extracted: ExtractedRoutes
   ladder: RouteLadder
   scope: Snapshot<CopperScope>

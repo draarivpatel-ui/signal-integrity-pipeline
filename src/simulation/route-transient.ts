@@ -1,6 +1,6 @@
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
-import type { RouteSectionsOutput, SourcePortId } from "../board"
+import type { CopperGeometry, SourcePortId } from "../board"
 import { type Produced, rootScope, sha256, snapshot } from "../kernel"
 import { type SpiceProbeRow, spiceProbeRows } from "../observation"
 import { invoke, type SolverContext, type SolverRequest } from "../solver"
@@ -18,7 +18,7 @@ export interface RouteTransientInput {
   compiled: RoutedDeck
   artifactPrefix: string
   context: SolverContext
-  board?: RouteSectionsOutput
+  board?: CopperGeometry
   threshold?: ReceiverThreshold
 }
 
