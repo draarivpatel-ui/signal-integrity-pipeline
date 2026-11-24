@@ -1,31 +1,17 @@
-/** @jsxRuntime automatic */
 import assert from "node:assert/strict"
-import { cju } from "@tscircuit/circuit-json-util"
 import { calculateCapacitanceMatrix } from "../../src/rlgc"
-import { renderCoreSignals } from "../support/core-render"
+import { renderCrossSectionConductor } from "./cross-section-board"
 
-const circuit = await renderCoreSignals(
-  <board width={4} height={4}>
-    <chip
-      name="Conductor"
-      pinLabels={{ pin1: "P" }}
-      footprint={
-        <footprint>
-          <smtpad portHints={["pin1"]} width={0.4} height={0.4} shape="rect" />
-        </footprint>
-      }
-    />
-  </board>,
-)
-const [pad] = cju(circuit).pcb_smtpad.list()
-assert.equal(pad.shape, "rect")
+const conductor = await renderCrossSectionConductor({
+  zMm: 0.25,
+  widthMm: 0.4,
+  thicknessMm: 0.035,
+})
 const conductorCount = 512
 const conductors = Array.from({ length: conductorCount + 1 }, (_, index) => ({
-  conductorId: `${pad.pcb_smtpad_id}-${index}`,
-  xMm: pad.x,
-  zMm: index + 0.25,
-  widthMm: pad.width,
-  thicknessMm: 0.035,
+  ...conductor,
+  conductorId: `${conductor.conductorId}-${index}`,
+  zMm: conductor.zMm + index,
 }))
 const crossSection = {
   conductors,
