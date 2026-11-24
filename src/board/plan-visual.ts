@@ -71,23 +71,20 @@ function planLegend({
   )
   const labels: string[] = []
   if (kinds.has("driver")) labels.push("▶ driver")
-  if (kinds.has("receiver")) labels.push("◎ receiver")
+  if (kinds.has("receiver")) labels.push("◉ receiver")
   if (kinds.has("ideal") && kinds.has("load"))
-    labels.push("◇ direct receiver or end of extra trace")
+    labels.push("◇ direct receiver or extra trace end")
   else if (kinds.has("ideal")) labels.push("◇ direct receiver")
   else if (kinds.has("load")) labels.push("◇ extra trace end")
   if (polygons.some(({ layer }) => layer === "mappings"))
-    labels.push("› signal direction")
-  if (lines.some(({ layer, zIndex }) => layer === "cuts" && zIndex === 3))
-    labels.push("│ trace end")
-  if (polygons.some(({ layer }) => layer === "copper"))
-    labels.push("◉ via (joins layers)")
-  if (lines.some(({ label }) => label === "Copper scope envelope"))
-    labels.push("teal dots = area checked")
-  if (lines.some(({ layer, strokeDash }) => layer === "topology" && strokeDash))
-    labels.push("purple dashes = direct connection")
+    labels.push("› direction")
+  if (polygons.some(({ layer }) => layer === "copper")) labels.push("◎ via")
   if (polygons.some(({ layer }) => layer === "topology"))
-    labels.push("amber zigzag = part in the signal path")
+    labels.push("~ series part")
+  if (lines.some(({ layer, strokeDash }) => layer === "topology" && strokeDash))
+    labels.push("-- direct connection")
+  if (lines.some(({ label }) => label === "Copper scope envelope"))
+    labels.push("▪▪ included copper")
   const faults = new Set(
     lines.filter(({ layer }) => layer === "failure").map(({ label }) => label),
   )
@@ -96,18 +93,17 @@ function planLegend({
       ({ kind, label }) => kind === "missing" && faults.has(label),
     )
   )
-    labels.push("red dashed line = missing trace")
-  if (
-    scene.links.some(({ kind, label }) => kind === "short" && faults.has(label))
+    labels.push("-×- missing trace")
+  const shortcut = scene.links.some(
+    ({ kind, label }) => kind === "short" && faults.has(label),
   )
-    labels.push("red dashed arc = shortcut")
-  if ([...faults].some((label) => label?.startsWith("Short or loop ·")))
-    labels.push("red dashes on trace = short or loop")
-  const faultMarks = polygons.filter(({ layer }) => layer === "failure")
-  if (faultMarks.some(({ label }) => label?.startsWith("Offending port ·")))
-    labels.push("red ring = pin with the problem")
-  if (faultMarks.some(({ label }) => faults.has(label)))
-    labels.push("red × = problem connection")
+  if (shortcut) labels.push("-×- shortcut")
+  if ([...faults].some((label) => label?.startsWith("Short or loop ·"))) {
+    if (shortcut) labels.push("× bypassed trace")
+    else if (scene.faultCode === "channel_fanout")
+      labels.push("× trace in loop")
+    else labels.push("× shorted trace")
+  }
   return labels
 }
 
@@ -199,8 +195,23 @@ export function planDrawing(scene: PlanVisualScene): GraphicsObject {
     ...boardLines.flatMap(({ points }) => points),
     ...boxPoints(frame.box),
   ])
+  const rows = [...scene.rows]
+  if (scene.summary) {
+    const { text, scopedText } = scene.summary
+    let summary = text
+    if (
+      scopedText &&
+      scopeBox &&
+      (scopeBox.minX > board.minX ||
+        scopeBox.maxX < board.maxX ||
+        scopeBox.minY > board.minY ||
+        scopeBox.maxY < board.maxY)
+    )
+      summary = scopedText
+    rows.unshift({ text: summary, color: planColors.quiet })
+  }
   const header = planHeader({
-    scene,
+    scene: { ...scene, rows },
     frame,
     boardTop: extent?.maxY === undefined ? frame.box.maxY : extent.maxY,
     legend: [

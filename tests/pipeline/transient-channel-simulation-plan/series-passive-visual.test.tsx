@@ -20,14 +20,22 @@ test("draws the series passive between its two distinct routed cuts", async () =
       (shape) => shape.layer === "topology" && shape.label === "Series passive",
     ),
   )
-  assert.ok(drawing.texts?.some((text) => text.text === "Series resistor RS"))
-  assert.ok(drawing.texts?.some((text) => text.text.includes("to RS pin 1")))
-  assert.ok(drawing.texts?.some((text) => text.text.includes("RS pin 2 to")))
+  assert.ok(
+    drawing.texts?.some(
+      (text) => text.text === "DATA: RS pin 1 → RS pin 2 (series resistor RS)",
+    ),
+  )
+  assert.ok(
+    drawing.texts?.some((text) => text.text.includes("TX pin Y → RS pin 1")),
+  )
+  assert.ok(
+    drawing.texts?.some((text) => text.text.includes("RS pin 2 → RX pin A")),
+  )
   assertRouteVisual({
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "series-passive-visual",
     caption:
-      "Two copper traces connect TX to RX through resistor RS. The plan follows the signal through both traces and the resistor.",
+      "Two traces connect TX to RX through series resistor RS. This test checks that the plan splits the copper at RS and follows the signal across both traces.",
   })
 })

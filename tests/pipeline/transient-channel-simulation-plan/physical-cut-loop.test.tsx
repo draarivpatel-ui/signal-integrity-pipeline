@@ -100,7 +100,7 @@ test("a pre-existing routed loop has a routed topology diagnostic", async () => 
     .sort((a, b) => b.y - a.y)
     .map(({ text }) => text)
     .join(" ")
-  assert.match(header || "", /form a loop \(red dashed traces\)/)
+  assert.match(header || "", /form a loop\./)
   assert.equal(
     drawing.polygons?.filter(
       (shape) =>
