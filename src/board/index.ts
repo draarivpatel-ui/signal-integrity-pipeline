@@ -6,7 +6,6 @@
  */
 
 /** @internal */
-/** @internal */
 export type { AdmissionHeaderRow } from "./admission-header"
 /** @internal */
 export { admissionPorts } from "./admission-view"
