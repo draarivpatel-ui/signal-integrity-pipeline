@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { type GraphicsObject, getSvgFromGraphicsObject } from "graphics-debug"
+import { withPlanCaption } from "./plan-caption"
 
 /** Round drawing coordinates at the precision shared by the supported JavaScript engines. */
 const SNAPSHOT_DECIMAL_PLACES = 6
@@ -14,10 +15,12 @@ export function assertRouteVisual({
   drawing,
   module,
   name,
+  caption,
 }: {
   drawing: GraphicsObject
   module: string
   name: string
+  caption?: string
 }): void {
   const path = join(
     import.meta.dirname,
@@ -27,7 +30,8 @@ export function assertRouteVisual({
     `${name}.snap.svg`,
   )
   // Ignore sub-micro-atlas-unit V8/JavaScriptCore rounding in display coordinates only.
-  const serialized = JSON.stringify(drawing, (_key, value) => {
+  const picture = caption ? withPlanCaption({ drawing, caption }) : drawing
+  const serialized = JSON.stringify(picture, (_key, value) => {
     if (typeof value === "number")
       return Number(value.toFixed(SNAPSHOT_DECIMAL_PLACES))
     return value

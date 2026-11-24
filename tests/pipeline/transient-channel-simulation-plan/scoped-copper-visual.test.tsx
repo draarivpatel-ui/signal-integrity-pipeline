@@ -55,7 +55,7 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
     ),
   )
   assert.equal(drawing.title, "DAISY — ready to simulate")
-  assert.equal(header?.length, 5)
+  assert.equal(header?.length, 6)
   assert.deepEqual(
     drawing.texts
       ?.filter((text) => text.layer === "pin labels")
@@ -74,5 +74,7 @@ test("admits a rendered daisy chain and visualizes the routed receiver path", as
     drawing,
     module: "pipeline/transient-channel-simulation-plan",
     name: "scoped-copper-visual",
+    caption:
+      "One trace runs from TX to MID and another continues to RX. The plan uses MID as the receiver and includes the extra trace to RX.",
   })
 })
