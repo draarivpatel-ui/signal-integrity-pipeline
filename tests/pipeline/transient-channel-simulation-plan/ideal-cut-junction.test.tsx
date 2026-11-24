@@ -1,13 +1,13 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
-import { selectPort } from "../../../src/board"
+import { cloneCircuitJson, selectPort } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
 import { expectPlanPcbSnapshot } from "../../fixtures/plan-pcb-snapshot"
-import { inverterModelPath } from "../../fixtures/routed-fixture"
 import { routedVisualIbis } from "../../fixtures/routed-visual-fixture"
 import { renderSignals } from "../../fixtures/signal-render"
+import { inverterModelPath } from "../../fixtures/two-trace-plan-input"
 
 test("an ideal wire can join successive cuts on one partial receiver path", async () => {
   const circuitJson = await renderSignals({
@@ -29,10 +29,13 @@ test("an ideal wire can join successive cuts on one partial receiver path", asyn
     circuit: circuitJson,
     selector: { component: "JOIN", port: "A" },
   })
-  const { node } = circuitNodes({ ...bindings, circuit: bindings.circuitJson })
+  const { node } = circuitNodes({
+    ...bindings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+  })
   const middleNode = node(middlePort.source_port_id)
   assert.equal(middleNode, node(junctionPort.source_port_id))
-  assert.equal(bindings.mappings[1]?.sourceTraceIds?.length, 2)
+  assert.equal(bindings.receiverPaths[1]?.sourceTraceIds?.length, 2)
   expectPlanPcbSnapshot({
     circuitJson,
     plan,

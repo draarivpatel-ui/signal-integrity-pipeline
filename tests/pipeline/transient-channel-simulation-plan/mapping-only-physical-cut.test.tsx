@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { ChannelFixture } from "../../fixtures/channel-fixture"
@@ -19,10 +20,10 @@ test("a one-trace receiver mapping preserves both physical cut contacts", async 
   solver.solve()
   const [plan] = solver.getOutput().value
   const { bindings } = plan
-  const [cut] = bindings.routedTraceCuts
-  const [mapping] = bindings.mappings
+  const [cut] = bindings.traceContacts
+  const [mapping] = bindings.receiverPaths
   assert.equal(mapping.sourceTraceId, cut.sourceTraceId)
-  assert.notEqual(mapping.from, cut.fromSourcePortId)
+  assert.notEqual(mapping.fromSourcePortId, cut.fromSourcePortId)
   expectPlanPcbSnapshot({
     circuitJson,
     plan,
@@ -31,8 +32,8 @@ test("a one-trace receiver mapping preserves both physical cut contacts", async 
     caption: "Only the receiver segment is routed",
   })
   const { node } = circuitNodes({
-    circuit: bindings.circuitJson,
-    mappings: bindings.mappings,
+    circuit: cloneCircuitJson(bindings.circuitJson),
+    receiverPaths: bindings.receiverPaths,
     modeling: bindings.modeling,
   })
   assert.notEqual(node(cut.fromSourcePortId), node(cut.toSourcePortId))

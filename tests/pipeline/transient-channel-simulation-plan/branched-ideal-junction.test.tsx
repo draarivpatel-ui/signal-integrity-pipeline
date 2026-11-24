@@ -1,5 +1,6 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
+import { cloneCircuitJson } from "../../../src/board"
 import { TransientChannelSimulationPlanSolver } from "../../../src/pipeline"
 import { circuitNodes } from "../../../src/simulation"
 import { DaisyChainFixture } from "../../fixtures/daisy-chain-fixture"
@@ -20,9 +21,9 @@ test("successive routed branches share one transitive ideal junction", async () 
   const { bindings } = plan
   const { node } = circuitNodes({
     ...bindings,
-    circuit: bindings.circuitJson,
+    circuit: cloneCircuitJson(bindings.circuitJson),
   })
-  const [driverCut, ...branchCuts] = bindings.routedTraceCuts
+  const [driverCut, ...branchCuts] = bindings.traceContacts
   assert.equal(branchCuts.length, 2)
   const junction = node(driverCut.toSourcePortId)
   assert.notEqual(node(driverCut.fromSourcePortId), junction)
@@ -32,7 +33,9 @@ test("successive routed branches share one transitive ideal junction", async () 
     )
   }
   assert.deepEqual(
-    bindings.mappings.map(({ sourceTraceIds }) => sourceTraceIds?.length ?? 1),
+    bindings.receiverPaths.map(
+      ({ sourceTraceIds }) => sourceTraceIds?.length ?? 1,
+    ),
     [1, 2, 2],
   )
 })
