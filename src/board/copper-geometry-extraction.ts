@@ -2,12 +2,12 @@ import { cju } from "@tscircuit/circuit-json-util"
 import { BaseSolver } from "@tscircuit/solver-utils"
 import type { GraphicsObject } from "graphics-debug"
 import { type Produced, rootScope, type Snapshot, snapshot } from "../kernel"
-import { findPadContactWire } from "./copper-geometry-contacts"
 import type { CopperGeometryExtractionInput } from "./copper-geometry-extraction-input"
 import {
   type CopperExtractionProgress,
   stepCopperGeometryExtraction,
 } from "./copper-geometry-extraction-steps"
+import { findPadContactWire } from "./copper-geometry-pad-contact"
 import { getSoldermaskThicknessMm } from "./copper-geometry-soldermask"
 import type { ExtractedCopper } from "./copper-geometry-types"
 import { drawCopperGeometry } from "./copper-geometry-visual"
