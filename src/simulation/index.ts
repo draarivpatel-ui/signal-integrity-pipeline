@@ -56,6 +56,7 @@ export {
   numberCircuitNodes,
   validateRoutedNodes,
 } from "./routed-nodes"
+/** @internal */
 export { type SignalRailIds, signalRailIds } from "./signal-rails"
 export { transmittedBits } from "./stimulus"
 export type {
