@@ -30,7 +30,7 @@ function drawRing({
   ]
 }
 
-/** Draw via barrels and port contact points above the wires. */
+/** Draw via barrels and pad contact points above the wires. */
 export function drawContacts({
   geometry,
   unitMm,
@@ -40,13 +40,13 @@ export function drawContacts({
 }): Circle[] {
   const borderMm = unitMm * 0.2
   return [
-    ...geometry.portContacts.flatMap(({ point, layer }) =>
+    ...geometry.padContacts.flatMap(({ point, layer }) =>
       drawRing({
         point,
         radiusMm: unitMm * 0.5,
         borderMm,
         color: planColors.ink,
-        label: `Port · ${layer}`,
+        label: `Pad · ${layer}`,
       }),
     ),
     ...geometry.vias.flatMap(({ point, layers, outerDiameterMm }) =>

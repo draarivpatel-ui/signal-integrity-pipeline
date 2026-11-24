@@ -3,10 +3,10 @@ import assert from "node:assert/strict"
 import { cju } from "@tscircuit/circuit-json-util"
 import { CopperGeometryExtractionSolver } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperPad,
+  CopperTrace,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionPin,
-  SectionTrace,
 } from "../../fixtures/copper-geometry-board"
 
 test("uses the full barrel span on a board without blind vias", async () => {
@@ -14,8 +14,8 @@ test("uses the full barrel span on a board without blind vias", async () => {
     allowBlindAndBuriedVias: false,
     children: (
       <>
-        <SectionTrace name="Signal" startLayer="inner2" />
-        <SectionPin name="Contact" x={0} />
+        <CopperTrace name="Signal" startLayer="inner2" />
+        <CopperPad name="Contact" x={0} />
         <via
           connectsTo="net.SIGNAL"
           pcbX={0}
@@ -32,7 +32,7 @@ test("uses the full barrel span on a board without blind vias", async () => {
   assert(via)
   assert(!via.layers.includes("inner2"))
   const solver = new CopperGeometryExtractionSolver(
-    getCopperExtractionInput({ circuit, required: ["Contact"] }),
+    getCopperGeometryExtractionInput({ circuit, required: ["Contact"] }),
   )
   solver.solve()
   const { vias } = solver.getOutput().value.geometry

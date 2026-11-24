@@ -2,16 +2,16 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import { extractCopperGeometry } from "../../../src/board"
 import {
-  getCopperExtractionInput,
+  CopperPad,
+  getCopperGeometryExtractionInput,
   renderCopperGeometryBoard,
-  SectionPin,
 } from "../../fixtures/copper-geometry-board"
 
 test("keeps the three sides of a closed route", async () => {
   const circuit = await renderCopperGeometryBoard({
     children: (
       <>
-        <SectionPin name="Start" x={-3} />
+        <CopperPad name="Start" x={-3} />
         <trace
           from=".Start > .P"
           to="net.SIGNAL"
@@ -27,7 +27,7 @@ test("keeps the three sides of a closed route", async () => {
   })
   const geometry = extractCopperGeometry({
     circuit,
-    copperScope: getCopperExtractionInput({ circuit }).copperScope,
+    copperScope: getCopperGeometryExtractionInput({ circuit }).copperScope,
   })
   assert.deepEqual(
     geometry.wires.map(({ startPoint, endPoint }) => [startPoint, endPoint]),
